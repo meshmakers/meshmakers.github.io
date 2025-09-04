@@ -1,0 +1,511 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Alarm-1.0.0",
+      "derivedFromCkTypeId": "Industry.Basic-1.0.0/Event-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "An industrial alam event",
+      "attributes": [
+        {
+          "id": "Industry.Basic-1.0.0/EventAlarmState-1.0.0",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-1.0.0/EventAlarmType-1.0.0",
+          "name": "Type",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-1.0.0/EventAlarmSource-1.0.0",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-1.0.0/EventAlarmPriority-1.0.0",
+          "name": "EventAlarmPriority",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-1.0.0/EventAlarmCause-1.0.0",
+          "name": "Cause",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-1.0.0/EventAlarmReactivatedCount-1.0.0",
+          "name": "ReactivatedCount",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Event-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/NamedEntity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Basic-1.0.0/EventSource-1.0.0",
+          "targetCkTypeId": "Basic-1.0.0/Asset-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "An industrial event",
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/Time-1.0.0",
+          "name": "Time",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-1.0.0/Message-1.0.0",
+          "name": "Message",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-1.0.0/TagName-1.0.0",
+          "name": "TagName",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-1.0.0/EventCategory-1.0.0",
+          "name": "Category",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Machine-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/Asset-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/NamePlate-1.0.0",
+          "name": "NamePlate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-1.0.0/OperatingHoursCounter-1.0.0",
+          "name": "OperatingHours",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-1.0.0/StandStillCounter-1.0.0",
+          "name": "StandStillCounter",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-1.0.0/MachineState-1.0.0",
+          "name": "MachineState",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "EventSource-1.0.0",
+      "inboundName": "Events",
+      "outboundName": "EventSource",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "EventAlarmCause-1.0.0",
+      "valueType": "String",
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmPriority-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmPriority-1.0.0",
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmReactivatedCount-1.0.0",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmSource-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmSource-1.0.0",
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmState-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmState-1.0.0",
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmType-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmType-1.0.0",
+      "isDataStream": true
+    },
+    {
+      "id": "EventCategory-1.0.0",
+      "valueType": "String",
+      "description": "Category of the event",
+      "isDataStream": true
+    },
+    {
+      "id": "ImportedEnergy-1.0.0",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWh"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "MachineState-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-1.0.0/MachineState-1.0.0",
+      "defaultValues": [
+        "2"
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "Message-1.0.0",
+      "valueType": "String",
+      "isDataStream": true
+    },
+    {
+      "id": "OperatingHoursCounter-1.0.0",
+      "valueType": "Int",
+      "isDataStream": true
+    },
+    {
+      "id": "Power-1.0.0",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kW"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "StandStillCounter-1.0.0",
+      "valueType": "Int",
+      "isDataStream": true
+    },
+    {
+      "id": "TagName-1.0.0",
+      "valueType": "String",
+      "description": "Tag or VariableName that is used (when available) that generated this event",
+      "isDataStream": true
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "EventAlarmPriority-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "description": "No priority has been assigned to the alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Low",
+          "description": "The alarm is of low priority.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Medium",
+          "description": "The alarm is of medium priority.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "High",
+          "description": "The alarm is of high priority.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Critical",
+          "description": "The alarm is of critical priority.",
+          "isExtension": false
+        }
+      ],
+      "description": "The priority of an alarm is a measure of its importance relative to other alarms. The priority of an alarm is used to determine the order in which alarms are presented to the operator."
+    },
+    {
+      "enumId": "EventAlarmSource-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "description": "No source has been assigned to the alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "FieldDevice",
+          "description": "The alarm is generated by a field device.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "ControlSystem",
+          "description": "The alarm is generated by a control system.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "HMI",
+          "description": "The alarm is generated by a human-machine interface.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Internal",
+          "description": "The alarm is generated by an internal source.",
+          "isExtension": false
+        }
+      ],
+      "description": "The source of an alarm is the entity that is responsible for the alarm."
+    },
+    {
+      "enumId": "EventAlarmState-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "description": "No state has been assigned to the alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Normal",
+          "description": "The normal state should not use an audible indication. The normal state visual indication should be the same as indications without alarms.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Unacknowledged",
+          "description": "The unacknowledged alarm state should use both an audible indication and visual indication. The audible indication should be silenced with a silence action or acknowledge action by the operator. The visual indication should be clearly distinguishable from the normal state indication by using colours and symbols (e.g., shape or text). The visual indication for an unacknowledged alarm should include a blinking element. There are some environments in which an audible indication is not an effective indicator of unacknowledged alarms.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Acknowledged",
+          "description": "The acknowledged alarm state should not use an audible indication. The acknowledged alarm state visual indication should be clearly distinguishable from the normal state indication by using symbols (e.g., shape or text), and should be identical in colour to the unacknowledged alarm indication. A blinking element should not be used in the visual indication for an acknowledged alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "ReturnToNormal",
+          "description": "The return-to-normal unacknowledged state should not use an audible indication. The return to-normal unacknowledged state visual indication may be the same as the normal state or it may indicate an unacknowledged status with a blinking element.",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Shelved",
+          "description": "The shelved alarm state should be visually indicated in the HMI. The visual indication for a shelved alarm should not include a blinking element. The shelved alarm state indication should be distinct. No audible indication should be used to identify shelved alarms.",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "SuppressedByDesign",
+          "description": "The suppressed-by-design alarm state should be visually indicated in the HMI. The visual indication for an alarm suppressed by design should not include a blinking element. The suppressed-by-design alarm state indication should be distinct from the unacknowledged and acknowledged state indications. No audible indication should be used to identify alarms suppressed by design.",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "OutOfService",
+          "description": "The out-of-service alarm state should be visually indicated in the HMI. The visual indication for an out-of-service alarm should not include a blinking element. The out-of-service alarm state indication should be distinct from the unacknowledged and acknowledged state indications. No audible indication should be used to identify out-of-service alarms.",
+          "isExtension": false
+        }
+      ],
+      "description": "The state of an alarm is a measure of the alarm\u0027s current status."
+    },
+    {
+      "enumId": "EventAlarmType-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "description": "No type has been assigned to the alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Absolute",
+          "description": "The alarm is based on an absolute value.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Deviation",
+          "description": "The alarm is based on a deviation from a set-point.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "RateOfChange",
+          "description": "The alarm is based on the rate of change of a value.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Discrepancy",
+          "description": "The alarm is based on a discrepancy between two values.",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Calculated",
+          "description": "The alarm is based on a calculated value.",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "RecipeDriven",
+          "description": "The alarm is based on a recipe-driven value.",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "BitPattern",
+          "description": "The alarm is based on a bit pattern.",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "ControllerOutput",
+          "description": "The alarm is based on a controller output.",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "SystemDiagnostic",
+          "description": "The alarm is based on a system diagnostic.",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "InstrumentDiagnostic",
+          "description": "The alarm is based on an instrument diagnostic.",
+          "isExtension": false
+        },
+        {
+          "key": 11,
+          "name": "Adjustable",
+          "description": "The alarm is based on an adjustable value.",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "Adaptive",
+          "description": "The alarm is based on an adaptive value.",
+          "isExtension": false
+        },
+        {
+          "key": 13,
+          "name": "ReAlarming",
+          "description": "The alarm is based on a re-alarming value.",
+          "isExtension": false
+        },
+        {
+          "key": 14,
+          "name": "Statistical",
+          "description": "The alarm is based on a statistical value.",
+          "isExtension": false
+        },
+        {
+          "key": 15,
+          "name": "FirstOut",
+          "description": "The alarm is based on a first-out value.",
+          "isExtension": false
+        },
+        {
+          "key": 16,
+          "name": "BadMeasurement",
+          "description": "The alarm is based on a bad measurement.",
+          "isExtension": false
+        }
+      ],
+      "description": "The type of an alarm is a measure of the nature of the alarm."
+    },
+    {
+      "enumId": "MachineState-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Off",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "On",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Error",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Idle",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    "Basic-1.0.0"
+  ],
+  "modelId": "Industry.Basic-1.0.0"
+}
