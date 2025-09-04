@@ -1,0 +1,624 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Adapter-1.0.0",
+      "derivedFromCkTypeId": "System.Communication-1.0.0/DeployableEntity-1.0.0",
+      "isFinal": false,
+      "isAbstract": true,
+      "associations": [
+        {
+          "id": "System.Communication-1.0.0/Manages-1.0.0",
+          "targetCkTypeId": "System.Communication-1.0.0/Pool-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.Communication-1.0.0/CommunicationStateTimestamp-1.0.0",
+          "name": "CommunicationStateTimestamp",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/CommunicationState-1.0.0",
+          "name": "CommunicationState",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/ConfigurationState-1.0.0",
+          "name": "ConfigurationState",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/Deployment.ImageName-1.0.0",
+          "name": "ImageName",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/Deployment.ImageVersion-1.0.0",
+          "name": "ImageVersion",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/AdapterConfiguration-1.0.0",
+          "name": "Configuration",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "DataPipeline-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-1.0.0/Name-1.0.0",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.0/Description-1.0.0",
+          "name": "Description",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "DataPipelineTrigger-1.0.0",
+      "derivedFromCkTypeId": "System.Communication-1.0.0/DeployableEntity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-1.0.0/Enabled-1.0.0",
+          "name": "Enabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Bot-1.0.0/CronExpression-1.0.0",
+          "name": "CronExpression",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "DeployableEntity-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.Communication-1.0.0/DeploymentState-1.0.0",
+          "name": "DeploymentState",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.0/Name-1.0.0",
+          "name": "Name",
+          "isOptional": true
+        },
+        {
+          "id": "System-1.0.0/Description-1.0.0",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/StatusMessage-1.0.0",
+          "name": "StatusMessage",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EMailSenderConfiguration-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Configuration-1.0.0",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.Communication-1.0.0/Host-1.0.0",
+          "name": "Host",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/Port-1.0.0",
+          "name": "Port",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/SenderEmail-1.0.0",
+          "name": "SenderEmail",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/Username-1.0.0",
+          "name": "Username",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/Password-1.0.0",
+          "name": "Password",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/IsSslEnabled-1.0.0",
+          "name": "IsSslEnabled",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EdgeAdapter-1.0.0",
+      "derivedFromCkTypeId": "System.Communication-1.0.0/Adapter-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EdgePipeline-1.0.0",
+      "derivedFromCkTypeId": "System.Communication-1.0.0/Pipeline-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "MeshAdapter-1.0.0",
+      "derivedFromCkTypeId": "System.Communication-1.0.0/Adapter-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "MeshPipeline-1.0.0",
+      "derivedFromCkTypeId": "System.Communication-1.0.0/Pipeline-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Communication-1.0.0/Triggers-1.0.0",
+          "targetCkTypeId": "System.Communication-1.0.0/DataPipelineTrigger-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Pipeline-1.0.0",
+      "derivedFromCkTypeId": "System.Communication-1.0.0/DeployableEntity-1.0.0",
+      "isFinal": false,
+      "isAbstract": true,
+      "associations": [
+        {
+          "id": "System-1.0.0/ParentChild-1.0.0",
+          "targetCkTypeId": "System.Communication-1.0.0/DataPipeline-1.0.0"
+        },
+        {
+          "id": "System.Communication-1.0.0/Executes-1.0.0",
+          "targetCkTypeId": "System.Communication-1.0.0/Adapter-1.0.0"
+        },
+        {
+          "id": "System.Communication-1.0.0/Uses-1.0.0",
+          "targetCkTypeId": "System-1.0.0/Configuration-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-1.0.0/Enabled-1.0.0",
+          "name": "Enabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/PipelineDefinition-1.0.0",
+          "name": "PipelineDefinition",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Pool-1.0.0",
+      "derivedFromCkTypeId": "System.Communication-1.0.0/DeployableEntity-1.0.0",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.Communication-1.0.0/CommunicationStateTimestamp-1.0.0",
+          "name": "CommunicationStateTimestamp",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/CommunicationState-1.0.0",
+          "name": "CommunicationState",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/ConfigurationState-1.0.0",
+          "name": "ConfigurationState",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "SapConfiguration-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Configuration-1.0.0",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "The SAP configuration type is used to configure the connection to an SAP system.",
+      "attributes": [
+        {
+          "id": "System.Communication-1.0.0/Host-1.0.0",
+          "name": "AppServerHost",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/SystemNumber-1.0.0",
+          "name": "SystemNumber",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/SystemId-1.0.0",
+          "name": "SystemId",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/Username-1.0.0",
+          "name": "User",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/Password-1.0.0",
+          "name": "Password",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/SapClient-1.0.0",
+          "name": "Client",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/SapLanguage-1.0.0",
+          "name": "Language",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/SapTrace-1.0.0",
+          "name": "Trace",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/SapGatewayHost-1.0.0",
+          "name": "GatewayHost",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/SapGatewayService-1.0.0",
+          "name": "GatewayService",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/SapProgramId-1.0.0",
+          "name": "ProgramId",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-1.0.0/SapRegistrationCount-1.0.0",
+          "name": "RegistrationCount",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Tag-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Communication-1.0.0/Tag-1.0.0",
+          "targetCkTypeId": "System-1.0.0/Entity-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.Communication-1.0.0/Tag-1.0.0",
+          "name": "Tag",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-1.0.0/Name-1.0.0",
+          "name": "Name",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "Executes-1.0.0",
+      "inboundName": "Executes",
+      "outboundName": "ExecutedBy",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One"
+    },
+    {
+      "id": "Manages-1.0.0",
+      "inboundName": "Manages",
+      "outboundName": "ManagedBy",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne"
+    },
+    {
+      "id": "Tag-1.0.0",
+      "inboundName": "TaggedBy",
+      "outboundName": "IsTagging",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N"
+    },
+    {
+      "id": "Triggers-1.0.0",
+      "inboundName": "Triggers",
+      "outboundName": "TriggeredBy",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne"
+    },
+    {
+      "id": "Uses-1.0.0",
+      "inboundName": "UsedBy",
+      "outboundName": "IsUsing",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AdapterConfiguration-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "CommunicationState-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Communication-1.0.0/CommunicationState-1.0.0",
+      "defaultValues": [
+        "0"
+      ]
+    },
+    {
+      "id": "CommunicationStateTimestamp-1.0.0",
+      "valueType": "DateTime"
+    },
+    {
+      "id": "ConfigurationState-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Communication-1.0.0/ConfigurationState-1.0.0",
+      "defaultValues": [
+        "0"
+      ]
+    },
+    {
+      "id": "Deployment.ImageName-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "Deployment.ImageVersion-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "DeploymentState-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Communication-1.0.0/DeploymentState-1.0.0",
+      "defaultValues": [
+        "0"
+      ]
+    },
+    {
+      "id": "Host-1.0.0",
+      "valueType": "String",
+      "description": "The host name is the name of the server on which the external system is running."
+    },
+    {
+      "id": "IsSslEnabled-1.0.0",
+      "valueType": "Boolean",
+      "description": "The Secure Sockets Layer (SSL) protocol is used to secure communication between a client and a server."
+    },
+    {
+      "id": "Name-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "Password-1.0.0",
+      "valueType": "String",
+      "description": "The password is the secret that is used to authenticate with the external system."
+    },
+    {
+      "id": "PipelineDefinition-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "Port-1.0.0",
+      "valueType": "Int",
+      "description": "The port number is the number of the port on which the external system is listening for incoming connections."
+    },
+    {
+      "id": "SapClient-1.0.0",
+      "valueType": "String",
+      "description": "A client is a tenant instance in an SAP system. SAP is multi-tenant, which means that multiple organizations or departments can work on the same system without sharing data with each other."
+    },
+    {
+      "id": "SapGatewayHost-1.0.0",
+      "valueType": "String",
+      "description": "An SAP gateway host is a server that provides communication services between SAP systems or between SAP systems and external applications."
+    },
+    {
+      "id": "SapGatewayService-1.0.0",
+      "valueType": "String",
+      "description": "An SAP gateway service provides communication services that are used between SAP systems or between SAP systems and external applications."
+    },
+    {
+      "id": "SapLanguage-1.0.0",
+      "valueType": "String",
+      "description": "The language key is a two-character code that identifies the language in which the user interface is displayed."
+    },
+    {
+      "id": "SapProgramId-1.0.0",
+      "valueType": "String",
+      "description": "A program ID is a unique identifier that is used to register a program on an SAP gateway server."
+    },
+    {
+      "id": "SapRegistrationCount-1.0.0",
+      "valueType": "Int",
+      "description": "The registration count is the number of times a program is registered on an SAP gateway server."
+    },
+    {
+      "id": "SapTrace-1.0.0",
+      "valueType": "String",
+      "defaultValues": [
+        "8"
+      ],
+      "description": "The trace level is a number that determines the amount of information that is logged during communication with the SAP system."
+    },
+    {
+      "id": "SenderEmail-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "StatusMessage-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "SystemId-1.0.0",
+      "valueType": "String",
+      "description": "The System ID (SID) is the unique technical name of an SAP system. It consists of three letters and uniquely identifies a system within a landscape."
+    },
+    {
+      "id": "SystemNumber-1.0.0",
+      "valueType": "String",
+      "description": "The system number is a two-digit number assigned to an SAP system during installation. It is used to identify the SAP service (e.g. Dispatcher) on a specific port."
+    },
+    {
+      "id": "Tag-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "Username-1.0.0",
+      "valueType": "String",
+      "description": "The username is the name of the user that is used to authenticate with the external system."
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "CommunicationState-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unregistered",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Online",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Offline",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ConfigurationState-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unconfigured",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Pending",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Configured",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Error",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "DeploymentState-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undeployed",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Pending",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Deployed",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Error",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    "System-1.0.0",
+    "System.Bot-1.0.0"
+  ],
+  "modelId": "System.Communication-1.0.0"
+}
