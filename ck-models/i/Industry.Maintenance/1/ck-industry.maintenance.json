@@ -1,0 +1,577 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "Account-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Describes an account with an account number and a cost category.",
+      "attributes": [
+        {
+          "id": "Industry.Maintenance-1.0.0/AccountNumber-1.0.0",
+          "name": "AccountNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/CostCategory-1.0.0",
+          "name": "CostCategory",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "CostCenter-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/Asset-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Describes a cost center with a cost center number."
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Employee-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/Asset-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Describes an employee with a staff number.",
+      "attributes": [
+        {
+          "id": "Industry.Maintenance-1.0.0/StaffNumber-1.0.0",
+          "name": "StaffNumber",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EnergyBalance-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Maintenance-1.0.0/RelatedMachine-1.0.0",
+          "targetCkTypeId": "Basic-1.0.0/TreeNode-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Describes an energy balance with a balance number.",
+      "attributes": [
+        {
+          "id": "Industry.Maintenance-1.0.0/EnergyBalanceGroup-1.0.0",
+          "name": "Group",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/EnergyBalanceProduct-1.0.0",
+          "name": "Product",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/EnergyBalanceUnit-1.0.0",
+          "name": "Unit",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.0/Description-1.0.0",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/Quantity-1.0.0",
+          "name": "Quantity",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/Time-1.0.0",
+          "name": "Time",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "JournalEntry-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-1.0.0/ParentChild-1.0.0",
+          "targetCkTypeId": "Industry.Maintenance-1.0.0/Account-1.0.0"
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/RelatedCostCenter-1.0.0",
+          "targetCkTypeId": "Industry.Maintenance-1.0.0/CostCenter-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Describes a journal entry with a time and a value for maintenance costs.",
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/Time-1.0.0",
+          "name": "Time",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/JournalValue-1.0.0",
+          "name": "JournalValue",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Order-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Maintenance-1.0.0/RelatedEvent-1.0.0",
+          "targetCkTypeId": "Industry.Basic-1.0.0/Event-1.0.0"
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/RelatedMachine-1.0.0",
+          "targetCkTypeId": "Industry.Basic-1.0.0/Machine-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Maintenance-1.0.0/OrderNumber-1.0.0",
+          "name": "OrderNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/ServiceType-1.0.0",
+          "name": "ServiceType",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/OrderType-1.0.0",
+          "name": "OrderType",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/CreatedAt-1.0.0",
+          "name": "CreatedAt",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/OrderText-1.0.0",
+          "name": "OrderText",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/PlannedCosts-1.0.0",
+          "name": "PlannedCosts",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/ActualCosts-1.0.0",
+          "name": "ActualCosts",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/ProjectNumber-1.0.0",
+          "name": "ProjectNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/OrderState-1.0.0",
+          "name": "OrderState",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/OrderPriority-1.0.0",
+          "name": "OrderPriority",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "OrderCosts-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Maintenance-1.0.0/Costs-1.0.0",
+          "targetCkTypeId": "Industry.Maintenance-1.0.0/Order-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Maintenance-1.0.0/TotalCosts-1.0.0",
+          "name": "TotalCosts",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/InternalCosts-1.0.0",
+          "name": "InternalCosts",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/ExternalCosts-1.0.0",
+          "name": "ExternalCosts",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/MaterialCosts-1.0.0",
+          "name": "MaterialCosts",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "OrderFeedback-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Maintenance-1.0.0/ReportingEmployee-1.0.0",
+          "targetCkTypeId": "Industry.Maintenance-1.0.0/Employee-1.0.0"
+        },
+        {
+          "id": "System-1.0.0/ParentChild-1.0.0",
+          "targetCkTypeId": "Industry.Maintenance-1.0.0/Order-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Maintenance-1.0.0/FeedbackNumber-1.0.0",
+          "name": "FeedbackNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/StartDateTime-1.0.0",
+          "name": "StartDateTime",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Maintenance-1.0.0/EndDateTime-1.0.0",
+          "name": "EndDateTime",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Workplace-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/Asset-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "Costs-1.0.0",
+      "inboundName": "Costs",
+      "outboundName": "Order",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "ZeroOrOne"
+    },
+    {
+      "id": "RelatedCostCenter-1.0.0",
+      "inboundName": "JournalEntries",
+      "outboundName": "CostCenter",
+      "inboundMultiplicity": "One",
+      "outboundMultiplicity": "N"
+    },
+    {
+      "id": "RelatedEvent-1.0.0",
+      "inboundName": "Order",
+      "outboundName": "Event",
+      "inboundMultiplicity": "One",
+      "outboundMultiplicity": "ZeroOrOne"
+    },
+    {
+      "id": "RelatedMachine-1.0.0",
+      "inboundName": "Orders",
+      "outboundName": "Machine",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One"
+    },
+    {
+      "id": "ReportingEmployee-1.0.0",
+      "inboundName": "OrderFeedbacks",
+      "outboundName": "Employee",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AccountNumber-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "ActualCosts-1.0.0",
+      "valueType": "Double"
+    },
+    {
+      "id": "AggregationDate-1.0.0",
+      "valueType": "DateTime"
+    },
+    {
+      "id": "AggregationType-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Maintenance-1.0.0/AggregationType-1.0.0"
+    },
+    {
+      "id": "CostCategory-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Maintenance-1.0.0/CostCategory-1.0.0"
+    },
+    {
+      "id": "CreatedAt-1.0.0",
+      "valueType": "DateTime"
+    },
+    {
+      "id": "EndDateTime-1.0.0",
+      "valueType": "DateTime"
+    },
+    {
+      "id": "EnergyBalanceGroup-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Maintenance-1.0.0/EnergyBalanceGroup-1.0.0"
+    },
+    {
+      "id": "EnergyBalanceProduct-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Maintenance-1.0.0/EnergyBalanceProduct-1.0.0"
+    },
+    {
+      "id": "EnergyBalanceUnit-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Maintenance-1.0.0/EnergyBalanceUnit-1.0.0"
+    },
+    {
+      "id": "ExternalCosts-1.0.0",
+      "valueType": "Double"
+    },
+    {
+      "id": "FeedbackNumber-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "InternalCosts-1.0.0",
+      "valueType": "Double"
+    },
+    {
+      "id": "JournalValue-1.0.0",
+      "valueType": "Double"
+    },
+    {
+      "id": "MaterialCosts-1.0.0",
+      "valueType": "Double"
+    },
+    {
+      "id": "OrderNumber-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "OrderPriority-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Maintenance-1.0.0/OrderPriority-1.0.0",
+      "defaultValues": [
+        "0"
+      ]
+    },
+    {
+      "id": "OrderState-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Maintenance-1.0.0/OrderState-1.0.0"
+    },
+    {
+      "id": "OrderText-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "OrderType-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Maintenance-1.0.0/OrderType-1.0.0"
+    },
+    {
+      "id": "PlannedCosts-1.0.0",
+      "valueType": "Double"
+    },
+    {
+      "id": "ProjectNumber-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "ServiceType-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Maintenance-1.0.0/ServiceType-1.0.0"
+    },
+    {
+      "id": "StaffNumber-1.0.0",
+      "valueType": "Int"
+    },
+    {
+      "id": "StartDateTime-1.0.0",
+      "valueType": "DateTime"
+    },
+    {
+      "id": "TotalCosts-1.0.0",
+      "valueType": "Double"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "AggregationType-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Week",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Month",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "FiscalYear",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "CostCategory-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Material",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "External",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Internal",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "EnergyBalanceGroup-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "EnergyBalanceProduct-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "EnergyBalanceUnit-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "OrderPriority-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "OrderState-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "OrderType-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ServiceType-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    "Industry.Basic-1.0.0"
+  ],
+  "modelId": "Industry.Maintenance-1.0.0"
+}
