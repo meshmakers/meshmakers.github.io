@@ -1,0 +1,1119 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Asset-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/TreeNode-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Basic-1.0.0/RelatedClassification-1.0.0",
+          "targetCkTypeId": "Basic-1.0.0/TreeNode-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "City-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/TreeNode-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/AddressZipcode-1.0.0",
+          "name": "Zipcode",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Country-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/TreeNode-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "District-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/TreeNode-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Document-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A document that can be used in the system.",
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/DocumentNumber-1.0.0",
+          "name": "DocumentNumber",
+          "autoIncrementReference": "BillingDocumentDocumentNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/DocumentDate-1.0.0",
+          "name": "DocumentDate",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "NamedEntity-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-1.0.0/Name-1.0.0",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.0/Description-1.0.0",
+          "name": "Description",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "State-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/TreeNode-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Tree-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/NamedEntity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "TreeNode-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/NamedEntity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-1.0.0/ParentChild-1.0.0",
+          "targetCkTypeId": "Basic-1.0.0/Tree-1.0.0"
+        },
+        {
+          "id": "System-1.0.0/ParentChild-1.0.0",
+          "targetCkTypeId": "Basic-1.0.0/TreeNode-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "RelatedClassification-1.0.0",
+      "inboundName": "RelatesFrom",
+      "outboundName": "RelatesTo",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AcademicTitlePrefix-1.0.0",
+      "valueType": "String",
+      "description": "Academic title prefix associated with the contact"
+    },
+    {
+      "id": "AcademicTitleSuffix-1.0.0",
+      "valueType": "String",
+      "description": "Academic title suffix associated with the contact"
+    },
+    {
+      "id": "AccountHolder-1.0.0",
+      "valueType": "String",
+      "description": "Name of the account holder"
+    },
+    {
+      "id": "Address-1.0.0",
+      "valueType": "Record",
+      "valueCkRecordId": "Basic-1.0.0/Address-1.0.0",
+      "description": "Record containing address information"
+    },
+    {
+      "id": "AddressCityTown-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO132#002",
+          "description": "town or city"
+        }
+      ]
+    },
+    {
+      "id": "AddressDepartment-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO127#003",
+          "description": "administrative section within an organisation where a business partner is located"
+        }
+      ]
+    },
+    {
+      "id": "AddressEMail-1.0.0",
+      "valueType": "Record",
+      "valueCkRecordId": "Basic-1.0.0/EMail-1.0.0",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAQ836#005",
+          "description": "E-mail address and encryption method"
+        }
+      ]
+    },
+    {
+      "id": "AddressFax-1.0.0",
+      "valueType": "Record",
+      "valueCkRecordId": "Basic-1.0.0/FaxNumber-1.0.0",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAQ834#005",
+          "description": "Fax number including type"
+        }
+      ]
+    },
+    {
+      "id": "AddressNationalCode-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO134#002",
+          "description": "code of a country Note: Country codes defined accord. to DIN EN ISO 3166-1"
+        }
+      ]
+    },
+    {
+      "id": "AddressOfAdditionalLink-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAQ326#002",
+          "description": "web site address where information about the product or contact is given"
+        }
+      ]
+    },
+    {
+      "id": "AddressPOBox-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO130#002",
+          "description": "P.O. box number"
+        }
+      ]
+    },
+    {
+      "id": "AddressPhone-1.0.0",
+      "valueType": "Record",
+      "valueCkRecordId": "Basic-1.0.0/PhoneNumber-1.0.0",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAQ833#005",
+          "description": "Phone number including type"
+        }
+      ]
+    },
+    {
+      "id": "AddressRemarks-1.0.0",
+      "valueType": "StringArray",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO202#003",
+          "description": "plain text characterizing address information for which there is no property"
+        }
+      ]
+    },
+    {
+      "id": "AddressStateCounty-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO133#002",
+          "description": "federal state a part of a state"
+        }
+      ]
+    },
+    {
+      "id": "AddressStreet-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO128#002",
+          "description": "street name and house number"
+        }
+      ]
+    },
+    {
+      "id": "AddressVATnumber-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO135#002",
+          "description": "VAT identification number of the business partner"
+        }
+      ]
+    },
+    {
+      "id": "AddressZipOfPOBox-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO131#002",
+          "description": "ZIP code of P.O. box address"
+        }
+      ]
+    },
+    {
+      "id": "AddressZipcode-1.0.0",
+      "valueType": "Int",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO129#002",
+          "description": "ZIP code of address"
+        }
+      ]
+    },
+    {
+      "id": "AvgTemperature-1.0.0",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "\u00B0C"
+        },
+        {
+          "key": "Type",
+          "value": "Average"
+        }
+      ]
+    },
+    {
+      "id": "BankAccount-1.0.0",
+      "valueType": "Record",
+      "valueCkRecordId": "Basic-1.0.0/BankAccount-1.0.0",
+      "description": "Bank account information"
+    },
+    {
+      "id": "BankName-1.0.0",
+      "valueType": "String",
+      "description": "Name of the bank"
+    },
+    {
+      "id": "Comment-1.0.0",
+      "valueType": "String",
+      "description": "Optional Comment on the user"
+    },
+    {
+      "id": "CompanyName-1.0.0",
+      "valueType": "String",
+      "description": "Associated company name"
+    },
+    {
+      "id": "CompanyRegisterNumber-1.0.0",
+      "valueType": "String",
+      "description": "Public registry number for the legal identification of the company"
+    },
+    {
+      "id": "Contact-1.0.0",
+      "valueType": "Record",
+      "valueCkRecordId": "Basic-1.0.0/Contact-1.0.0",
+      "description": "Contact data with name and address"
+    },
+    {
+      "id": "DocumentDate-1.0.0",
+      "valueType": "DateTime",
+      "description": "Date of a document"
+    },
+    {
+      "id": "DocumentNumber-1.0.0",
+      "valueType": "String",
+      "description": "Identifying number of a document"
+    },
+    {
+      "id": "EMailAddress-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO198#002",
+          "description": "electronic mail address of a business partner"
+        }
+      ]
+    },
+    {
+      "id": "EMailPublicKey-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO200#002",
+          "description": "public part of an unsymmetrical key pair to sign or encrypt text or messages"
+        }
+      ]
+    },
+    {
+      "id": "EMailTypeOfEmailAddress-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic-1.0.0/TypeOfTelephoneBasic-1.0.0",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO199#003",
+          "description": "characterization of an e-mail address according to its location or usage"
+        }
+      ]
+    },
+    {
+      "id": "EMailTypeOfPublicKey-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO201#002",
+          "description": "characterization of a public key according to its encryption process"
+        }
+      ]
+    },
+    {
+      "id": "File-1.0.0",
+      "valueType": "BinaryLinked"
+    },
+    {
+      "id": "FirstName-1.0.0",
+      "valueType": "String",
+      "description": "The users first name(s)"
+    },
+    {
+      "id": "From-1.0.0",
+      "valueType": "DateTime",
+      "description": "From date within a time range"
+    },
+    {
+      "id": "Iban-1.0.0",
+      "valueType": "String",
+      "description": "International Bank Account Number"
+    },
+    {
+      "id": "LastName-1.0.0",
+      "valueType": "String",
+      "description": "The users last name(s)"
+    },
+    {
+      "id": "LegalEntityType-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic-1.0.0/LegalEntityType-1.0.0",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "The legal entity type of the contact"
+    },
+    {
+      "id": "MaxTemperature-1.0.0",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "\u00B0C"
+        },
+        {
+          "key": "Type",
+          "value": "Maximum"
+        }
+      ]
+    },
+    {
+      "id": "MinTemperature-1.0.0",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "\u00B0C"
+        },
+        {
+          "key": "Type",
+          "value": "Minimum"
+        }
+      ]
+    },
+    {
+      "id": "NamePlate-1.0.0",
+      "valueType": "Record",
+      "valueCkRecordId": "Basic-1.0.0/NamePlate-1.0.0"
+    },
+    {
+      "id": "NamePlate.Address-1.0.0",
+      "valueType": "Record",
+      "valueCkRecordId": "Basic-1.0.0/Address-1.0.0",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAQ832#005",
+          "description": "Address information of a business partner"
+        }
+      ]
+    },
+    {
+      "id": "NamePlate.AssetSpecificProperties-1.0.0",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "Basic-1.0.0/Marking-1.0.0",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO856#002",
+          "description": "guideline, stipulation or legislation used for determining conformity"
+        }
+      ]
+    },
+    {
+      "id": "NamePlate.ManufacturerName-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO677#002",
+          "description": "legally valid designation of the natural or judicial person which is directly responsible for the design, production, packaging and labeling of a product in respect to its being brought into circulation"
+        }
+      ]
+    },
+    {
+      "id": "NamePlate.ManufacturerProductDesignation-1.0.0",
+      "valueType": "String",
+      "description": "Manufacturer Product Description",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAW338#001",
+          "description": "Short description of the product (short text)"
+        }
+      ]
+    },
+    {
+      "id": "NamePlate.ManufacturerProductFamily-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAU731#001",
+          "description": "2nd level of a 3 level manufacturer specific product hierarchy"
+        }
+      ]
+    },
+    {
+      "id": "NamePlate.Markings-1.0.0",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "Basic-1.0.0/Marking-1.0.0",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "NamePlate.SerialNumber-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAM556#002",
+          "description": "unique combination of numbers and letters used to identify the device once it has been manufactured"
+        }
+      ]
+    },
+    {
+      "id": "NamePlate.YearOfConstruction-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAP906#001",
+          "description": "Year as completion date of object"
+        }
+      ]
+    },
+    {
+      "id": "Quantity-1.0.0",
+      "valueType": "Double",
+      "description": "Defines the quantity of a resource"
+    },
+    {
+      "id": "Salutation-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic-1.0.0/Salutation-1.0.0",
+      "description": "Salutation associated with the contact"
+    },
+    {
+      "id": "SwiftCode-1.0.0",
+      "valueType": "String",
+      "description": "Bank Identifier Code"
+    },
+    {
+      "id": "TaxIdentificationNumber-1.0.0",
+      "valueType": "String",
+      "description": "Tax identification number of a entity"
+    },
+    {
+      "id": "TelephoneNumber-1.0.0",
+      "valueType": "String",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO136#002",
+          "description": "complete telephone number to be called to reach a business partner"
+        }
+      ]
+    },
+    {
+      "id": "Temperature-1.0.0",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "\u00B0C"
+        },
+        {
+          "key": "Type",
+          "value": "Current"
+        }
+      ]
+    },
+    {
+      "id": "Time-1.0.0",
+      "valueType": "DateTime"
+    },
+    {
+      "id": "TimeRange-1.0.0",
+      "valueType": "Record",
+      "valueCkRecordId": "Basic-1.0.0/TimeRange-1.0.0",
+      "description": "A time range with a start and end date"
+    },
+    {
+      "id": "To-1.0.0",
+      "valueType": "DateTime",
+      "description": "To date within a time range"
+    },
+    {
+      "id": "TypeOfTelephoneBasic-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic-1.0.0/TypeOfTelephoneBasic-1.0.0",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO196#003",
+          "description": "characterization of a telephone according to its location or usage"
+        }
+      ]
+    },
+    {
+      "id": "TypeOfTelephoneEnhanced-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic-1.0.0/TypeOfTelephoneEnhanced-1.0.0",
+      "metaData": [
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-AAO137#003",
+          "description": "characterization of a telephone according to its location or usage"
+        }
+      ]
+    }
+  ],
+  "records": [
+    {
+      "recordId": "Address-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/AddressDepartment-1.0.0",
+          "name": "Department",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AddressStreet-1.0.0",
+          "name": "Street",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/AddressZipcode-1.0.0",
+          "name": "Zipcode",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/AddressPOBox-1.0.0",
+          "name": "POBox",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AddressZipOfPOBox-1.0.0",
+          "name": "ZipOfPOBox",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AddressCityTown-1.0.0",
+          "name": "CityTown",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/AddressStateCounty-1.0.0",
+          "name": "StateCounty",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AddressNationalCode-1.0.0",
+          "name": "NationalCode",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/AddressVATnumber-1.0.0",
+          "name": "VATnumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AddressRemarks-1.0.0",
+          "name": "AddressRemarks",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AddressOfAdditionalLink-1.0.0",
+          "name": "AddressOfAdditionalLink",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AddressPhone-1.0.0",
+          "name": "Phone",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AddressFax-1.0.0",
+          "name": "Fax",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AddressEMail-1.0.0",
+          "name": "EMail",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "BankAccount-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "A bank account with its details",
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/Iban-1.0.0",
+          "name": "Iban",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/SwiftCode-1.0.0",
+          "name": "SwiftCode",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/BankName-1.0.0",
+          "name": "BankName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AccountHolder-1.0.0",
+          "name": "AccountHolder",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "Contact-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/LegalEntityType-1.0.0",
+          "name": "LegalEntityType",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/Salutation-1.0.0",
+          "name": "Salutation",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/FirstName-1.0.0",
+          "name": "FirstName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/LastName-1.0.0",
+          "name": "LastName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AcademicTitlePrefix-1.0.0",
+          "name": "TitlePrefix",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/AcademicTitleSuffix-1.0.0",
+          "name": "TitleSuffix",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/CompanyName-1.0.0",
+          "name": "CompanyName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/Address-1.0.0",
+          "name": "Address",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/TaxIdentificationNumber-1.0.0",
+          "name": "TaxIdentificationNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/CompanyRegisterNumber-1.0.0",
+          "name": "CompanyRegisterNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/EMailAddress-1.0.0",
+          "name": "Email",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "EMail-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/EMailAddress-1.0.0",
+          "name": "EMail",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/EMailPublicKey-1.0.0",
+          "name": "PublicKey",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/EMailTypeOfEmailAddress-1.0.0",
+          "name": "TypeOfEMail",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/EMailTypeOfPublicKey-1.0.0",
+          "name": "TypeOfPublicKey",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "FaxNumber-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/TelephoneNumber-1.0.0",
+          "name": "Number",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/TypeOfTelephoneBasic-1.0.0",
+          "name": "Type",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "Marking-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System-1.0.0/Name-1.0.0",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/File-1.0.0",
+          "name": "File",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.0/Description-1.0.0",
+          "name": "AdditionalText",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "NamePlate-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/NamePlate.ManufacturerName-1.0.0",
+          "name": "ManufacturerName",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/NamePlate.ManufacturerProductDesignation-1.0.0",
+          "name": "ManufacturerProductDesignation",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/NamePlate.Address-1.0.0",
+          "name": "Address",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/NamePlate.ManufacturerProductFamily-1.0.0",
+          "name": "ManufacturerProductFamily",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/NamePlate.SerialNumber-1.0.0",
+          "name": "SerialNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/NamePlate.YearOfConstruction-1.0.0",
+          "name": "YearOfConstruction",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/NamePlate.Markings-1.0.0",
+          "name": "Markings",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-1.0.0/NamePlate.AssetSpecificProperties-1.0.0",
+          "name": "AssetSpecificProperties",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "PhoneNumber-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/TelephoneNumber-1.0.0",
+          "name": "Number",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/TypeOfTelephoneEnhanced-1.0.0",
+          "name": "Type",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "TimeRange-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "A time range with a start and end date",
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/From-1.0.0",
+          "name": "From",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/To-1.0.0",
+          "name": "To",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "LegalEntityType-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "NaturalPerson",
+          "description": "A natural person is a human being with legal capacity, in contrast to a legal person (such as a company, organization, or government entity).",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "LegalPerson",
+          "description": "Legal structure with the characteristics of a person",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Company",
+          "description": "Actor in economic life, such as any natural or legal person with UGB relevance.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "LocalAuthority",
+          "description": "Administrative unit with sovereign power such as municipality, federal state, republic.",
+          "isExtension": false
+        }
+      ],
+      "description": "The legal entity type of a contact"
+    },
+    {
+      "enumId": "Salutation-1.0.0",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "The salutation is unknown or not defined",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Male",
+          "description": "The salutation is male",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Female",
+          "description": "The salutation is female",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "NonBinary",
+          "description": "The salutation is non-binary",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the salutation a Customer wishes to be addressed by"
+    },
+    {
+      "enumId": "TypeOfTelephoneBasic-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 1,
+          "name": "Office",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Secretary",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Substitute",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Home",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "TypeOfTelephoneEnhanced-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 1,
+          "name": "Office",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "OfficeMobile",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Secretary",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Substitute",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Home",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "PrivateMobile",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    "System-1.0.0"
+  ],
+  "modelId": "Basic-1.0.0"
+}
