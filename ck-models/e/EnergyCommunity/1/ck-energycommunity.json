@@ -1,0 +1,978 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "BillingDocument-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/Document-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyCommunity-1.0.0/AssignedBilling-1.0.0",
+          "targetCkTypeId": "EnergyCommunity-1.0.0/Customer-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A billing document entity that contains accounting information.",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/CustomerNumber-1.0.0",
+          "name": "CustomerNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/Contact-1.0.0",
+          "name": "Contact",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/TimeRange-1.0.0",
+          "name": "TimeRange",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/Comment-1.0.0",
+          "name": "Comment",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/TaxProcedureCreditNote-1.0.0",
+          "name": "TaxProcedureCreditNote",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/BillingType-1.0.0",
+          "name": "BillingType",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/BillingDocumentState-1.0.0",
+          "name": "BillingDocumentState",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/GrossTotal-1.0.0",
+          "name": "GrossTotal",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/BankAccount-1.0.0",
+          "name": "BankAccount",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "BillingDocumentLineItem-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-1.0.0/ParentChild-1.0.0",
+          "targetCkTypeId": "EnergyCommunity-1.0.0/BillingDocument-1.0.0"
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/AssignedBilling-1.0.0",
+          "targetCkTypeId": "EnergyCommunity-1.0.0/EnergyQuantity-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "An billing document line item",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/GrossAmount-1.0.0",
+          "name": "GrossAmount",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/NetAmount-1.0.0",
+          "name": "NetAmount",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/TaxAmount-1.0.0",
+          "name": "TaxAmount",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/TaxRate-1.0.0",
+          "name": "TaxRate",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/UnitPrice-1.0.0",
+          "name": "UnitPrice",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/BillingType-1.0.0",
+          "name": "BillingType",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Consumer-1.0.0",
+      "derivedFromCkTypeId": "EnergyCommunity-1.0.0/MeteringPoint-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A metering point identified as consumer metering point",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/EnergyConsumption-1.0.0",
+          "name": "EnergyConsumption",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Customer-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Represents a customer of an energy community",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/CustomerNumber-1.0.0",
+          "name": "CustomerNumber",
+          "autoIncrementReference": "CustomerNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/Contact-1.0.0",
+          "name": "Contact",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/Comment-1.0.0",
+          "name": "Comment",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/BillingCycle-1.0.0",
+          "name": "BillingCycle",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/State-1.0.0",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/BankAccount-1.0.0",
+          "name": "BankAccount",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/TaxProcedureCreditNote-1.0.0",
+          "name": "TaxProcedureCreditNote",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EdaMessage-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyCommunity-1.0.0/MessageToProcess-1.0.0",
+          "targetCkTypeId": "EnergyCommunity-1.0.0/EdaProcess-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Store messages sent and received in the Energy Data Access (EDA) system.",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/EdaMessageType-1.0.0",
+          "name": "MessageType",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaMessageProcessed-1.0.0",
+          "name": "Processed",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaSenderId-1.0.0",
+          "name": "Sender",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaReceiverId-1.0.0",
+          "name": "Receiver",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/Time-1.0.0",
+          "name": "CreationDate",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaMessageId-1.0.0",
+          "name": "MessageId",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaConversationId-1.0.0",
+          "name": "ConversationId",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/MeteringPointNumber-1.0.0",
+          "name": "MeteringPoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaRawMessage-1.0.0",
+          "name": "RawMessage",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EdaMeteringPoint-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Metering Point from EDA import",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/MeteringPointNumber-1.0.0",
+          "name": "MeteringPointNumber",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/PartitionFactor-1.0.0",
+          "name": "PartitionFactor",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/ProductionType-1.0.0",
+          "name": "ProductionType",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/IsProducer-1.0.0",
+          "name": "IsProducer",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EdaProcess-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/NamedEntity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Store started processes in the Energy Data Access (EDA) system.",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/EdaConversationId-1.0.0",
+          "name": "ConversationId",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaProcessFinished-1.0.0",
+          "name": "Finished",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/Time-1.0.0",
+          "name": "StartTime",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaSenderId-1.0.0",
+          "name": "Sender",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaReceiverId-1.0.0",
+          "name": "Receiver",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/MeteringPointNumber-1.0.0",
+          "name": "MeteringPointNumber",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaProcessSuccess-1.0.0",
+          "name": "Success",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaProcessInfo-1.0.0",
+          "name": "Info",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaResponseCode-1.0.0",
+          "name": "ResponseCode",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/EdaRawMessage-1.0.0",
+          "name": "RawMessage",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EnergyPrice-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "The price of Energy at a certain time",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/Price-1.0.0",
+          "name": "Price",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/Currency-1.0.0",
+          "name": "Currency",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EnergyQuantity-1.0.0",
+      "derivedFromCkTypeId": "System-1.0.0/Entity-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-1.0.0/ParentChild-1.0.0",
+          "targetCkTypeId": "EnergyCommunity-1.0.0/MeteringPoint-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Describes a quantity of energy, such as consumption or production.",
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/TimeRange-1.0.0",
+          "name": "TimeRange",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-1.0.0/Quantity-1.0.0",
+          "name": "Quantity",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/DataQuality-1.0.0",
+          "name": "DataQuality",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "MeteringPoint-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/NamedEntity-1.0.0",
+      "isFinal": false,
+      "isAbstract": true,
+      "associations": [
+        {
+          "id": "System-1.0.0/ParentChild-1.0.0",
+          "targetCkTypeId": "EnergyCommunity-1.0.0/OperatingFacility-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Metering Point",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/MeteringPointNumber-1.0.0",
+          "name": "MeteringPointNumber",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/State-1.0.0",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/PartitionFactor-1.0.0",
+          "name": "PartitionFactor",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "OperatingFacility-1.0.0",
+      "derivedFromCkTypeId": "Basic-1.0.0/TreeNode-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyCommunity-1.0.0/AssociatedCustomer-1.0.0",
+          "targetCkTypeId": "EnergyCommunity-1.0.0/Customer-1.0.0"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "An Operating Facility",
+      "attributes": [
+        {
+          "id": "Basic-1.0.0/Address-1.0.0",
+          "name": "Address",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/FacilityType-1.0.0",
+          "name": "FacilityType",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/State-1.0.0",
+          "name": "State",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Producer-1.0.0",
+      "derivedFromCkTypeId": "EnergyCommunity-1.0.0/MeteringPoint-1.0.0",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A metering point identified as producer metering point",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-1.0.0/EnergyProductionCapacity-1.0.0",
+          "name": "EnergyProductionCapacity",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-1.0.0/ProductionType-1.0.0",
+          "name": "ProductionType",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "AssignedBilling-1.0.0",
+      "inboundName": "Billing",
+      "outboundName": "AssignedTo",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "A billing document or line item associated with data source."
+    },
+    {
+      "id": "AssociatedCustomer-1.0.0",
+      "inboundName": "Facilities",
+      "outboundName": "Customer",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "The customer associated with the operating facilities."
+    },
+    {
+      "id": "MessageToProcess-1.0.0",
+      "inboundName": "Messages",
+      "outboundName": "Process",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Association between a message and the process it is part of."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "BillingCycle-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-1.0.0/BillingCycle-1.0.0",
+      "defaultValues": [
+        "1"
+      ],
+      "description": "Billing cycle associated with the customer"
+    },
+    {
+      "id": "BillingDocumentState-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-1.0.0/BillingDocumentState-1.0.0",
+      "description": "The state of the billing document"
+    },
+    {
+      "id": "BillingType-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-1.0.0/BillingType-1.0.0",
+      "description": "The type of the billing document or billing item"
+    },
+    {
+      "id": "Currency-1.0.0",
+      "valueType": "String",
+      "description": "The ISO 4217 representation of the used currency"
+    },
+    {
+      "id": "CustomerNumber-1.0.0",
+      "valueType": "String",
+      "description": "Internal customer number"
+    },
+    {
+      "id": "DataQuality-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-1.0.0/DataQuality-1.0.0",
+      "description": "The quality of the received data",
+      "isDataStream": true
+    },
+    {
+      "id": "EdaConversationId-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaMessageId-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaMessageProcessed-1.0.0",
+      "valueType": "Boolean"
+    },
+    {
+      "id": "EdaMessageType-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaProcessFinished-1.0.0",
+      "valueType": "Boolean"
+    },
+    {
+      "id": "EdaProcessInfo-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaProcessSuccess-1.0.0",
+      "valueType": "Boolean"
+    },
+    {
+      "id": "EdaRawMessage-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaReceiverId-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaResponseCode-1.0.0",
+      "valueType": "Int"
+    },
+    {
+      "id": "EdaSenderId-1.0.0",
+      "valueType": "String"
+    },
+    {
+      "id": "EnergyConsumption-1.0.0",
+      "valueType": "Double",
+      "description": "Energy consumed per year in kWh",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWh"
+        }
+      ]
+    },
+    {
+      "id": "EnergyProductionCapacity-1.0.0",
+      "valueType": "Double",
+      "description": "Maximal energy production capacity in kWp",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWp"
+        }
+      ]
+    },
+    {
+      "id": "FacilityName-1.0.0",
+      "valueType": "String",
+      "description": "The name of the facility"
+    },
+    {
+      "id": "FacilityType-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-1.0.0/FacilityType-1.0.0"
+    },
+    {
+      "id": "GrossAmount-1.0.0",
+      "valueType": "Double",
+      "description": "The gross amount of the billing document"
+    },
+    {
+      "id": "GrossTotal-1.0.0",
+      "valueType": "Double",
+      "description": "The gross total of the billing document"
+    },
+    {
+      "id": "IsProducer-1.0.0",
+      "valueType": "Boolean",
+      "description": "Indicates if the new metering point is a producer"
+    },
+    {
+      "id": "MeteringPointNumber-1.0.0",
+      "valueType": "String",
+      "description": "Number identifying the metering point"
+    },
+    {
+      "id": "NetAmount-1.0.0",
+      "valueType": "Double",
+      "description": "The net amount of the billing document"
+    },
+    {
+      "id": "PartitionFactor-1.0.0",
+      "valueType": "Int",
+      "description": "Partition factor for the metering point to a specific energy community"
+    },
+    {
+      "id": "Price-1.0.0",
+      "valueType": "Double",
+      "description": "The price of a given unit of energy"
+    },
+    {
+      "id": "ProductionType-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-1.0.0/ProductionType-1.0.0"
+    },
+    {
+      "id": "State-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-1.0.0/State-1.0.0",
+      "defaultValues": [
+        "1"
+      ],
+      "description": "The state of an object"
+    },
+    {
+      "id": "TaxAmount-1.0.0",
+      "valueType": "Double",
+      "description": "The tax amount of the billing document"
+    },
+    {
+      "id": "TaxProcedureCreditNote-1.0.0",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-1.0.0/TaxProcedureCreditNote-1.0.0",
+      "description": "The tax procedure credit notes associated with the billing document"
+    },
+    {
+      "id": "TaxRate-1.0.0",
+      "valueType": "Double",
+      "description": "The tax rate of the billing document"
+    },
+    {
+      "id": "UnitPrice-1.0.0",
+      "valueType": "Double",
+      "description": "The unit price of the billing document"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "BillingCycle-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Monthly",
+          "description": "The billing cycle is one month",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Quarterly",
+          "description": "The billing cycle is one quarter",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "SemiAnnually",
+          "description": "The billing cycle is six months",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Annually",
+          "description": "The billing cycle is one year",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the billing cycle"
+    },
+    {
+      "enumId": "BillingDocumentState-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Draft",
+          "description": "The billing document is a draft",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Released",
+          "description": "The billing document is released",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Sent",
+          "description": "The billing document has been sent",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Paid",
+          "description": "The billing document has been paid",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the billing state"
+    },
+    {
+      "enumId": "BillingType-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Debit",
+          "description": "The document is an invoice or the item is a debit note",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Credit",
+          "description": "The document or item is an credit note or credit",
+          "isExtension": false
+        }
+      ],
+      "description": "The type a billing document or item"
+    },
+    {
+      "enumId": "DataQuality-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "The data quality is unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "L1",
+          "description": "The data is accurate to 15 minute meter readings",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "L2",
+          "description": "The data is a linear interpolation of 2 known meter readings",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "L3",
+          "description": "The data is an estimate",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the quality of the metering data"
+    },
+    {
+      "enumId": "FacilityType-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "The facility type is unknown or not defined",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Household",
+          "description": "The facility type is a single household",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Business",
+          "description": "The facility type is a business",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Industry",
+          "description": "The facility type is a industry",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "PublicBuilding",
+          "description": "The facility type is a public building e.g. schools, public offices",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Storage",
+          "description": "The facility type is an energy storage",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the type of Facility that holds the metering points"
+    },
+    {
+      "enumId": "ProductionType-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "The production type is unknown or not defined",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Solar",
+          "description": "Solar power was used to produce the energy",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "HEP",
+          "description": "Hydroelectric power was used to produce the energy",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Wind",
+          "description": "Wind power was used to produce the energy",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Biomass",
+          "description": "Biomass was used to produce the energy",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "CHP",
+          "description": "Combined heat and power was used to produce the energy",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Other",
+          "description": "Other methods were used to produce the energy",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines what method is used to produce the energy"
+    },
+    {
+      "enumId": "State-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "New",
+          "description": "The object is just created and the state is not set",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Active",
+          "description": "The object is active and in use",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Inactive",
+          "description": "The object is inactive but may be reactivated",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Deleted",
+          "description": "The object was deleted",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the state of the object"
+    },
+    {
+      "enumId": "TaxProcedureCreditNote-1.0.0",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "SmallBusinessOwners",
+          "description": "No tax procedure is applied for small business owners",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "ReverseCharge",
+          "description": "The reverse charge procedure is applied",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "NoTaxProcedure",
+          "description": "No tax procedure is applied",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "FarmerTaxProcedure",
+          "description": "The farmer tax procedure is applied, which is a reduced tax amount for farmers",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the tax procedure credit notes for a billing document or customer"
+    }
+  ],
+  "dependencies": [
+    "Basic-1.0.0"
+  ],
+  "modelId": "EnergyCommunity-1.0.0"
+}
