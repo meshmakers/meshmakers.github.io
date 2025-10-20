@@ -1,0 +1,290 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-1.0.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "Customer-1",
+      "derivedFromCkTypeId": "System-1.0.1/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "FirstName",
+                "LastName",
+                "CompanyName",
+                "Street",
+                "City",
+                "EMailAddress"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Text",
+          "language": "en",
+          "fields": [
+            {
+              "weight": 1,
+              "attributePaths": [
+                "FirstName",
+                "Street",
+                "City",
+                "EMailAddress"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Text",
+          "language": "en",
+          "fields": [
+            {
+              "weight": 2,
+              "attributePaths": [
+                "FirstName",
+                "LastName",
+                "CompanyName",
+                "EMailAddress"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "OctoSdkDemo-1.0.0/FirstName-1",
+          "name": "FirstName",
+          "isOptional": false
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/LastName-1",
+          "name": "LastName",
+          "isOptional": false
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/CompanyName-1",
+          "name": "CompanyName",
+          "isOptional": true
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/Street-1",
+          "name": "Street",
+          "isOptional": false
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/PostalCode-1",
+          "name": "PostalCode",
+          "isOptional": false
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/City-1",
+          "name": "City",
+          "isOptional": false
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/Country-1",
+          "name": "Country",
+          "isOptional": false
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/EMailAddress-1",
+          "name": "EMailAddress",
+          "isOptional": true
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/DateOfBirth-1",
+          "name": "DateOfBirth",
+          "isOptional": true
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/PhoneNumberMobile-1",
+          "name": "PhoneNumberMobile",
+          "isOptional": true
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/PhoneNumberLandLine-1",
+          "name": "PhoneNumberLandLine",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "MeteringPoint-1",
+      "derivedFromCkTypeId": "Basic-1.0.0/Asset-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "MeteringPointNumber"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "OctoSdkDemo-1.0.0/MeteringPointNumber-1",
+          "name": "MeteringPointNumber",
+          "isOptional": false
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/MeterReading-1",
+          "name": "MeterReading",
+          "isOptional": false
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/OperatingStatus-1",
+          "name": "OperatingStatus",
+          "isOptional": false
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/NetworkOperator-1",
+          "name": "NetworkOperator",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "OperatingFacility-1",
+      "derivedFromCkTypeId": "Basic-1.0.0/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "OctoSdkDemo-1.0.0/Ownership-1",
+          "targetCkTypeId": "OctoSdkDemo-1.0.0/Customer-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "Ownership-1",
+      "inboundName": "Owns",
+      "outboundName": "OwnedBy",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "N"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "City-1",
+      "valueType": "String"
+    },
+    {
+      "id": "CompanyName-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Country-1",
+      "valueType": "String"
+    },
+    {
+      "id": "DateOfBirth-1",
+      "valueType": "DateTime"
+    },
+    {
+      "id": "EMailAddress-1",
+      "valueType": "String"
+    },
+    {
+      "id": "FirstName-1",
+      "valueType": "String"
+    },
+    {
+      "id": "LastName-1",
+      "valueType": "String"
+    },
+    {
+      "id": "MeterReading-1",
+      "valueType": "Int"
+    },
+    {
+      "id": "MeteringPointNumber-1",
+      "valueType": "String"
+    },
+    {
+      "id": "NetworkOperator-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "OctoSdkDemo-1.0.0/NetworkOperator-1"
+    },
+    {
+      "id": "OperatingStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "OctoSdkDemo-1.0.0/OperatingStatus-1"
+    },
+    {
+      "id": "PhoneNumberLandLine-1",
+      "valueType": "String"
+    },
+    {
+      "id": "PhoneNumberMobile-1",
+      "valueType": "String"
+    },
+    {
+      "id": "PostalCode-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Street-1",
+      "valueType": "String"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "NetworkOperator-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "OperatingStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "OK",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Maintenance",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "OctoSdkDemo-1.0.0"
+}
