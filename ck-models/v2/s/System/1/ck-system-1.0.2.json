@@ -1,0 +1,608 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "AutoIncrement-1",
+      "derivedFromCkTypeId": "System-1.0.2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-1.0.2/AutoIncrement.End-1",
+          "name": "End",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/AutoIncrement.Format-1",
+          "name": "Format",
+          "isOptional": true
+        },
+        {
+          "id": "System-1.0.2/AutoIncrement.CurrentValue-1",
+          "name": "CurrentValue",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Configuration-1",
+      "derivedFromCkTypeId": "System-1.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Base type for all configuration types"
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "RtWellKnownName"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "CkTypeId",
+                "_id"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-1.0.2/Related-1",
+          "targetCkTypeId": "System-1.0.2/Entity-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Query-1",
+      "derivedFromCkTypeId": "System-1.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-1.0.2/Query.CkTypeId-1",
+          "name": "QueryCkTypeId",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/Query.Types-1",
+          "name": "QueryType",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/Query.Columns-1",
+          "name": "Columns",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/Query.Sorting-1",
+          "name": "Sorting",
+          "isOptional": true
+        },
+        {
+          "id": "System-1.0.2/Query.FieldFilter-1",
+          "name": "FieldFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-1.0.2/Query.TextSearchFilter-1",
+          "name": "TextSearchFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-1.0.2/Query.AttributeSearchFilter-1",
+          "name": "AttributeSearchFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-1.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Tenant-1",
+      "derivedFromCkTypeId": "System-1.0.2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TenantId"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-1.0.2/TenantId-1",
+          "name": "TenantId",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/ParentTenantId-1",
+          "name": "ParentTenantId",
+          "isOptional": true
+        },
+        {
+          "id": "System-1.0.2/DatabaseName-1",
+          "name": "DatabaseName",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "TenantConfiguration-1",
+      "derivedFromCkTypeId": "System-1.0.2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for a tenant regarding data version of schema or identity data",
+      "attributes": [
+        {
+          "id": "System-1.0.2/ConfigurationValue-1",
+          "name": "ConfigurationValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "TenantModeConfiguration-1",
+      "derivedFromCkTypeId": "System-1.0.2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for a tenant if the tenant is in a specific mode, e.g. test mode or maintenance mode",
+      "attributes": [
+        {
+          "id": "System-1.0.2/EnvironmentMode-1",
+          "name": "EnvironmentMode",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/MaintenanceLevel-1",
+          "name": "MaintenanceLevel",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "ParentChild-1",
+      "inboundName": "Children",
+      "outboundName": "Parent",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One"
+    },
+    {
+      "id": "Related-1",
+      "inboundName": "RelatesFrom",
+      "outboundName": "RelatesTo",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AttributePath-1",
+      "valueType": "String"
+    },
+    {
+      "id": "AttributePaths-1",
+      "valueType": "StringArray"
+    },
+    {
+      "id": "AutoIncrement.CurrentValue-1",
+      "valueType": "Int"
+    },
+    {
+      "id": "AutoIncrement.End-1",
+      "valueType": "Int"
+    },
+    {
+      "id": "AutoIncrement.Format-1",
+      "valueType": "String"
+    },
+    {
+      "id": "ComparisonValue-1",
+      "valueType": "String"
+    },
+    {
+      "id": "ConfigurationValue-1",
+      "valueType": "String"
+    },
+    {
+      "id": "DatabaseName-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Description-1",
+      "valueType": "String",
+      "description": "Further information on the item."
+    },
+    {
+      "id": "DisplayName-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Enabled-1",
+      "valueType": "Boolean"
+    },
+    {
+      "id": "EnvironmentMode-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-1.0.2/EnvironmentModes-1",
+      "defaultValues": [
+        "0"
+      ]
+    },
+    {
+      "id": "FieldFilter.Operator-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-1.0.2/FieldFilterOperator-1"
+    },
+    {
+      "id": "MaintenanceLevel-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-1.0.2/MaintenanceLevels-1",
+      "defaultValues": [
+        "0"
+      ]
+    },
+    {
+      "id": "Name-1",
+      "valueType": "String"
+    },
+    {
+      "id": "ParentTenantId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Query.AttributeSearchFilter-1",
+      "valueType": "Record",
+      "valueCkRecordId": "System-1.0.2/AttributeSearchFilter-1"
+    },
+    {
+      "id": "Query.CkTypeId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Query.Columns-1",
+      "valueType": "StringArray"
+    },
+    {
+      "id": "Query.FieldFilter-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System-1.0.2/FieldFilter-1"
+    },
+    {
+      "id": "Query.Sorting-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System-1.0.2/SortOrderItem-1"
+    },
+    {
+      "id": "Query.TextSearchFilter-1",
+      "valueType": "Record",
+      "valueCkRecordId": "System-1.0.2/TextSearchFilter-1"
+    },
+    {
+      "id": "Query.Types-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-1.0.2/QueryTypes-1",
+      "defaultValues": [
+        "0"
+      ]
+    },
+    {
+      "id": "SortOrder-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-1.0.2/SortOrders-1"
+    },
+    {
+      "id": "TenantId-1",
+      "valueType": "String"
+    }
+  ],
+  "records": [
+    {
+      "recordId": "AttributeSearchFilter-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System-1.0.2/AttributePaths-1",
+          "name": "AttributePaths",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/ComparisonValue-1",
+          "name": "SearchValue",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "FieldFilter-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System-1.0.2/AttributePath-1",
+          "name": "AttributePath",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/FieldFilter.Operator-1",
+          "name": "Operator",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/ComparisonValue-1",
+          "name": "ComparisonValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "SortOrderItem-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System-1.0.2/AttributePath-1",
+          "name": "AttributePath",
+          "isOptional": false
+        },
+        {
+          "id": "System-1.0.2/SortOrder-1",
+          "name": "SortOrder",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "TextSearchFilter-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System-1.0.2/ComparisonValue-1",
+          "name": "SearchValue",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "EnvironmentModes-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Development",
+          "description": "The tenant is in development mode, used for development and testing",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Testing",
+          "description": "The tenant is in testing mode, used for quality assurance",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Staging",
+          "description": "The tenant is in staging mode, used for pre-production testing",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Production",
+          "description": "The tenant is in production mode, used for live operations",
+          "isExtension": false
+        }
+      ],
+      "description": "This enum defines the different modes a tenant can operate in."
+    },
+    {
+      "enumId": "FieldFilterOperator-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Equals",
+          "description": "Compares the specified field to the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "NotEquals",
+          "description": "Compares the specified field to the specified value and returns true if the values are not equal.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "LessThan",
+          "description": "Compares the specified field to the specified value and returns true if the field value is less than the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "LessEqualThan",
+          "description": "Compares the specified field to the specified value and returns true if the field value is less than or equal to the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "GreaterThan",
+          "description": "Compares the specified field to the specified value and returns true if the field value is greater than the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "GreaterEqualThan",
+          "description": "Compares the specified field to the specified value and returns true if the field value is greater than or equal to the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "In",
+          "description": "Compares a field to be equal any value in the specified array.",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "NotIn",
+          "description": "Compares a field to be not equal any value in the specified array.",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "Like",
+          "description": "Compares a field to the specified value using a pattern matching comparison. Use * as a wildcard character.",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "MatchRegEx",
+          "description": "Matches a field containing a value that matches the specified regular expression.",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "AnyEq",
+          "description": "Compares an array field with at least one element that matches the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 11,
+          "name": "AnyLike",
+          "description": "Compares an array field with at least one element that matches the specified value using a pattern matching comparison. Use * as a wildcard character.",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "Match",
+          "description": "Matches an array field with at least one element that matches all the specified query criteria.",
+          "isExtension": false
+        }
+      ],
+      "description": "The operator to use for filtering fields."
+    },
+    {
+      "enumId": "MaintenanceLevels-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Off",
+          "description": "The maintenance mode is off, the tenant is fully operational",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "UserApps",
+          "description": "The user apps are in maintenance mode, the tenant is operational but user apps are not available",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "FullSystem",
+          "description": "The full system is in maintenance mode, the tenant is not operational",
+          "isExtension": false
+        }
+      ],
+      "description": "This enum defines the maintenance level of a tenant."
+    },
+    {
+      "enumId": "QueryTypes-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Flat",
+          "description": "A flat query",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Tree",
+          "description": "A tree query that returns results from a tree",
+          "isExtension": false
+        }
+      ],
+      "description": "The type of query"
+    },
+    {
+      "enumId": "SortOrders-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Default",
+          "description": "Default sorting based on data source type",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Ascending",
+          "description": "Ascending order",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Descending",
+          "description": "Descending order",
+          "isExtension": false
+        }
+      ],
+      "description": "The sort order of a field."
+    }
+  ],
+  "modelId": "System-1.0.2",
+  "description": "System model library"
+}
