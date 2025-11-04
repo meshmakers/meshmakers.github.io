@@ -112,6 +112,11 @@
           "id": "Industry.Basic-1.0.0/MachineState-1",
           "name": "MachineState",
           "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-1.0.0/MachineCapabilities-1",
+          "name": "MachineCapabilities",
+          "isOptional": true
         }
       ]
     }
@@ -183,6 +188,14 @@
         }
       ],
       "isDataStream": true
+    },
+    {
+      "id": "MachineCapabilities-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-1.0.0/MachineCapabilities-1",
+      "defaultValues": [
+        "0"
+      ]
     },
     {
       "id": "MachineState-1",
@@ -473,6 +486,18 @@
         }
       ],
       "description": "The type of an alarm is a measure of the nature of the alarm."
+    },
+    {
+      "enumId": "MachineCapabilities-1",
+      "useFlags": true,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        }
+      ]
     },
     {
       "enumId": "MachineState-1",
