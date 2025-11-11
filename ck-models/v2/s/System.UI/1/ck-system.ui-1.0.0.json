@@ -1,0 +1,107 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-1.0.3"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Page-1",
+      "derivedFromCkTypeId": "System.UI-1.0.0/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.UI-1.0.0/Page.Content-1",
+          "name": "Content",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "StudioRoot-1",
+      "derivedFromCkTypeId": "System.UI-1.0.0/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.UI-1.0.0/TargetCkTypeId-1",
+          "name": "TargetCkTypeId",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-1.0.0/TargetRtId-1",
+          "name": "TargetRtId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "StudioTreeItem-1",
+      "derivedFromCkTypeId": "System.UI-1.0.0/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-1.0.3/ParentChild-1",
+          "targetCkTypeId": "System.UI-1.0.0/StudioTreeItem-1"
+        },
+        {
+          "id": "System-1.0.3/ParentChild-1",
+          "targetCkTypeId": "System.UI-1.0.0/StudioRoot-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.UI-1.0.0/TargetCkTypeId-1",
+          "name": "TargetCkTypeId",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-1.0.0/TargetRoleId-1",
+          "name": "TargetRoleId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "UIElement-1",
+      "derivedFromCkTypeId": "System-1.0.3/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "Page.Content-1",
+      "valueType": "String"
+    },
+    {
+      "id": "TargetCkTypeId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "TargetRoleId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "TargetRtId-1",
+      "valueType": "String"
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "System.UI-1.0.0"
+}
