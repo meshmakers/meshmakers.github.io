@@ -1,0 +1,117 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-1.0.3"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "ConnectionInfo-1",
+      "derivedFromCkTypeId": "System-1.0.3/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Connection Information of Reporting Services",
+      "attributes": [
+        {
+          "id": "System.Reporting-1.0.0/Provider-1",
+          "name": "Provider",
+          "isOptional": true
+        },
+        {
+          "id": "System.Reporting-1.0.0/ConnectionString-1",
+          "name": "ConnectionString",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "FileSystemContainer-1",
+      "derivedFromCkTypeId": "System.Reporting-1.0.0/FileSystemEntity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "associations": [
+        {
+          "id": "System-1.0.3/ParentChild-1",
+          "targetCkTypeId": "System.Reporting-1.0.0/Folder-1"
+        },
+        {
+          "id": "System-1.0.3/ParentChild-1",
+          "targetCkTypeId": "System.Reporting-1.0.0/FolderRoot-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "FileSystemEntity-1",
+      "derivedFromCkTypeId": "System-1.0.3/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-1.0.3/Name-1",
+          "name": "Name",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "FileSystemItem-1",
+      "derivedFromCkTypeId": "System.Reporting-1.0.0/FileSystemContainer-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.Reporting-1.0.0/Content-1",
+          "name": "Content",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Folder-1",
+      "derivedFromCkTypeId": "System.Reporting-1.0.0/FileSystemContainer-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "FolderRoot-1",
+      "derivedFromCkTypeId": "System.Reporting-1.0.0/FileSystemEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "ConnectionString-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Content-1",
+      "valueType": "BinaryLinked"
+    },
+    {
+      "id": "Provider-1",
+      "valueType": "String"
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "System.Reporting-1.0.0"
+}
