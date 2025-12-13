@@ -1,1 +1,970 @@
-Hello World
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OctoMesh Artifact Browser</title>
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <style>
+        :root {
+            --octo-mint: #64ceb9;
+            --neo-cyan: #00a8dc;
+            --indigogo: #546fbd;
+            --bg-dark: #1a1a2e;
+            --bg-card: #16213e;
+            --text-light: #eaeaea;
+            --text-muted: #a0a0a0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #0f0f23 100%);
+            color: var(--text-light);
+            min-height: 100vh;
+        }
+
+        header {
+            background: linear-gradient(90deg, var(--indigogo) 0%, var(--neo-cyan) 100%);
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+
+        header p {
+            margin-top: 0.5rem;
+            opacity: 0.9;
+        }
+
+        nav {
+            background: var(--bg-card);
+            padding: 1rem 2rem;
+            display: flex;
+            gap: 1rem;
+            border-bottom: 2px solid var(--octo-mint);
+        }
+
+        nav button {
+            background: transparent;
+            border: 2px solid var(--octo-mint);
+            color: var(--octo-mint);
+            padding: 0.5rem 1.5rem;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+        }
+
+        nav button:hover, nav button.active {
+            background: var(--octo-mint);
+            color: var(--bg-dark);
+        }
+
+        nav button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        .breadcrumb a {
+            color: var(--neo-cyan);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .breadcrumb a:hover {
+            color: var(--octo-mint);
+        }
+
+        .breadcrumb span {
+            color: var(--text-muted);
+        }
+
+        .section-title {
+            color: var(--octo-mint);
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(100, 206, 185, 0.3);
+        }
+
+        .info-bar {
+            background: var(--bg-card);
+            padding: 1rem 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .info-bar .label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .info-bar .value {
+            color: var(--neo-cyan);
+            font-weight: 500;
+        }
+
+        .models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .model-card, .chart-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .model-card::before, .chart-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--octo-mint), var(--neo-cyan));
+        }
+
+        .model-card:hover, .chart-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--octo-mint);
+            box-shadow: 0 10px 30px rgba(100, 206, 185, 0.2);
+        }
+
+        .model-card h3, .chart-card h3 {
+            color: var(--text-light);
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .chart-card .chart-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+        }
+
+        .model-card .description, .chart-card .description {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .model-card .meta, .chart-card .meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+        }
+
+        .model-card .version-badge, .chart-card .version-badge {
+            background: linear-gradient(135deg, var(--neo-cyan), var(--indigogo));
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+        }
+
+        .model-card .updated, .chart-card .updated {
+            color: var(--text-muted);
+        }
+
+        .versions-list {
+            background: var(--bg-card);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .version-item {
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: background 0.2s;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .version-item:last-child {
+            border-bottom: none;
+        }
+
+        .version-item:hover {
+            background: rgba(100, 206, 185, 0.1);
+        }
+
+        .version-item .version-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .version-item .version-number {
+            font-size: 1.1rem;
+            color: var(--octo-mint);
+            font-weight: 500;
+            min-width: 100px;
+        }
+
+        .version-item .app-version {
+            color: var(--indigogo);
+            font-size: 0.85rem;
+            background: rgba(84, 111, 189, 0.2);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .version-item .version-file {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .version-item .version-date {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .version-item .latest-badge {
+            background: var(--octo-mint);
+            color: var(--bg-dark);
+            padding: 0.2rem 0.6rem;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .version-item .download-btn {
+            background: transparent;
+            border: 1px solid var(--neo-cyan);
+            color: var(--neo-cyan);
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+
+        .version-item .download-btn:hover {
+            background: var(--neo-cyan);
+            color: var(--bg-dark);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--octo-mint);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-left: 0.5rem;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: rgba(220, 53, 69, 0.2);
+            border: 1px solid #dc3545;
+            padding: 1rem;
+            border-radius: 8px;
+            color: #ff6b6b;
+        }
+
+        .major-versions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .major-version-card {
+            background: var(--bg-card);
+            border-radius: 10px;
+            padding: 1.25rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .major-version-card:hover, .major-version-card.active {
+            border-color: var(--octo-mint);
+            background: rgba(100, 206, 185, 0.1);
+        }
+
+        .major-version-card h4 {
+            font-size: 2rem;
+            color: var(--neo-cyan);
+        }
+
+        .major-version-card p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .pagination button {
+            background: var(--bg-card);
+            border: 1px solid var(--neo-cyan);
+            color: var(--neo-cyan);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: var(--neo-cyan);
+            color: var(--bg-dark);
+        }
+
+        .pagination button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .pagination button.active {
+            background: var(--octo-mint);
+            border-color: var(--octo-mint);
+            color: var(--bg-dark);
+        }
+
+        .pagination .page-info {
+            color: var(--text-muted);
+            padding: 0 1rem;
+        }
+
+        .helm-install-box {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--indigogo);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        .helm-install-box .title {
+            color: var(--octo-mint);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .helm-install-box code {
+            color: var(--text-light);
+            word-break: break-all;
+        }
+
+        .helm-install-box .copy-btn {
+            background: transparent;
+            border: 1px solid var(--octo-mint);
+            color: var(--octo-mint);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            margin-left: 1rem;
+            transition: all 0.2s;
+        }
+
+        .helm-install-box .copy-btn:hover {
+            background: var(--octo-mint);
+            color: var(--bg-dark);
+        }
+
+        .search-box {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-box input {
+            flex: 1;
+            background: var(--bg-card);
+            border: 1px solid rgba(100, 206, 185, 0.3);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            color: var(--text-light);
+            font-size: 1rem;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--octo-mint);
+        }
+
+        .search-box input::placeholder {
+            color: var(--text-muted);
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        footer a {
+            color: var(--neo-cyan);
+            text-decoration: none;
+        }
+
+        .chart-detail-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-detail-header img {
+            width: 64px;
+            height: 64px;
+            border-radius: 12px;
+        }
+
+        .chart-detail-header .chart-info h2 {
+            color: var(--text-light);
+            font-size: 1.75rem;
+        }
+
+        .chart-detail-header .chart-info p {
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .maintainers {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .maintainer-badge {
+            background: rgba(84, 111, 189, 0.2);
+            color: var(--indigogo);
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>OctoMesh Artifact Browser</h1>
+        <p>Browse Construction Kit Model Libraries and Helm Charts</p>
+    </header>
+
+    <nav>
+        <button id="nav-ck-models" class="active" onclick="showSection('ck-models')">CK Model Library Catalog</button>
+        <button id="nav-helm-charts" onclick="showSection('helm-charts')">Helm Charts</button>
+    </nav>
+
+    <main id="content">
+        <div class="loading">Loading catalog...</div>
+    </main>
+
+    <footer>
+        <p>OctoMesh Artifact Browser | <a href="https://github.com/meshmakers" target="_blank">GitHub</a></p>
+    </footer>
+
+    <script>
+        const BASE_URL = '';
+        let currentSection = 'ck-models';
+        let catalogData = null;
+        let helmData = null;
+        let currentHelmPage = 1;
+        const ITEMS_PER_PAGE = 20;
+
+        async function fetchJson(path) {
+            try {
+                const response = await fetch(`${BASE_URL}${path}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error(`Error fetching ${path}:`, error);
+                throw error;
+            }
+        }
+
+        async function fetchYaml(path) {
+            try {
+                const response = await fetch(`${BASE_URL}${path}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const text = await response.text();
+                return jsyaml.load(text);
+            } catch (error) {
+                console.error(`Error fetching ${path}:`, error);
+                throw error;
+            }
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('de-DE', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function showSection(section) {
+            currentSection = section;
+            document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`nav-${section}`).classList.add('active');
+
+            if (section === 'ck-models') {
+                loadCatalog();
+            } else if (section === 'helm-charts') {
+                loadHelmCharts();
+            }
+        }
+
+        // ============ CK Models Functions ============
+
+        async function loadCatalog() {
+            const content = document.getElementById('content');
+            content.innerHTML = '<div class="loading">Loading catalog...</div>';
+
+            try {
+                catalogData = await fetchJson('ck-models/v2/catalog.json');
+                renderCatalog(catalogData);
+            } catch (error) {
+                content.innerHTML = `<div class="error">Failed to load catalog: ${error.message}</div>`;
+            }
+        }
+
+        function renderCatalog(data) {
+            const content = document.getElementById('content');
+
+            const modelsHtml = data.models.map(model => `
+                <div class="model-card" onclick="loadModel('${model.catalogPath}', '${model.modelName}')">
+                    <h3>${model.modelName}</h3>
+                    <div class="description">Construction Kit Model Library Package</div>
+                    <div class="meta">
+                        <span class="version-badge">View versions</span>
+                    </div>
+                </div>
+            `).join('');
+
+            content.innerHTML = `
+                <div class="breadcrumb">
+                    <a href="#" onclick="loadCatalog(); return false;">CK Model Library Catalog</a>
+                    <span>/</span>
+                    <span>v2</span>
+                </div>
+
+                <div class="info-bar">
+                    <div>
+                        <span class="label">Catalog Version:</span>
+                        <span class="value">${data.version}</span>
+                    </div>
+                    <div>
+                        <span class="label">Libraries:</span>
+                        <span class="value">${data.models.length}</span>
+                    </div>
+                    <div>
+                        <span class="label">Updated:</span>
+                        <span class="value">${formatDate(data.updatedAt)}</span>
+                    </div>
+                </div>
+
+                <h2 class="section-title">Available Model Libraries</h2>
+                <div class="models-grid">
+                    ${modelsHtml}
+                </div>
+            `;
+        }
+
+        async function loadModel(catalogPath, modelName) {
+            const content = document.getElementById('content');
+            content.innerHTML = '<div class="loading">Loading model...</div>';
+
+            try {
+                const modelData = await fetchJson(catalogPath);
+                renderModel(modelData, modelName, catalogPath);
+            } catch (error) {
+                content.innerHTML = `<div class="error">Failed to load model: ${error.message}</div>`;
+            }
+        }
+
+        function renderModel(data, modelName, catalogPath) {
+            const content = document.getElementById('content');
+
+            const majorVersionsHtml = data.majorVersions.map(mv => `
+                <div class="major-version-card" onclick="loadMajorVersion('${mv.catalogPath}', '${modelName}', ${mv.majorVersion})">
+                    <h4>v${mv.majorVersion}</h4>
+                    <p>Major Version</p>
+                </div>
+            `).join('');
+
+            content.innerHTML = `
+                <div class="breadcrumb">
+                    <a href="#" onclick="loadCatalog(); return false;">CK Model Library Catalog</a>
+                    <span>/</span>
+                    <span>v2</span>
+                    <span>/</span>
+                    <span>${modelName}</span>
+                </div>
+
+                <div class="info-bar">
+                    <div>
+                        <span class="label">Model ID:</span>
+                        <span class="value">${data.modelId}</span>
+                    </div>
+                    <div>
+                        <span class="label">Major Versions:</span>
+                        <span class="value">${data.majorVersions.length}</span>
+                    </div>
+                    <div>
+                        <span class="label">Updated:</span>
+                        <span class="value">${formatDate(data.updatedAt)}</span>
+                    </div>
+                </div>
+
+                <h2 class="section-title">Major Versions</h2>
+                <div class="major-versions-grid">
+                    ${majorVersionsHtml}
+                </div>
+            `;
+        }
+
+        async function loadMajorVersion(catalogPath, modelName, majorVersion) {
+            const content = document.getElementById('content');
+            content.innerHTML = '<div class="loading">Loading versions...</div>';
+
+            try {
+                const versionData = await fetchJson(catalogPath);
+                renderVersions(versionData, modelName, majorVersion);
+            } catch (error) {
+                content.innerHTML = `<div class="error">Failed to load versions: ${error.message}</div>`;
+            }
+        }
+
+        function renderVersions(data, modelName, majorVersion) {
+            const content = document.getElementById('content');
+
+            const versionsHtml = data.versions
+                .slice()
+                .reverse()
+                .map(v => `
+                    <div class="version-item">
+                        <div class="version-info">
+                            <span class="version-number">
+                                ${v.version}
+                                ${v.version === data.latestVersion ? '<span class="latest-badge">LATEST</span>' : ''}
+                            </span>
+                            <span class="version-file">${v.fileName}</span>
+                        </div>
+                        <div class="version-date">${formatDate(v.publishedAt)}</div>
+                        <a class="download-btn" href="${BASE_URL}${v.filePath}" target="_blank">Download</a>
+                    </div>
+                `).join('');
+
+            content.innerHTML = `
+                <div class="breadcrumb">
+                    <a href="#" onclick="loadCatalog(); return false;">CK Model Library Catalog</a>
+                    <span>/</span>
+                    <span>v2</span>
+                    <span>/</span>
+                    <a href="#" onclick="loadModel('ck-models/v2/${modelName.charAt(0).toLowerCase()}/${modelName}/catalog.json', '${modelName}'); return false;">${modelName}</a>
+                    <span>/</span>
+                    <span>v${majorVersion}</span>
+                </div>
+
+                <div class="info-bar">
+                    <div>
+                        <span class="label">Model:</span>
+                        <span class="value">${data.modelId}</span>
+                    </div>
+                    <div>
+                        <span class="label">Major Version:</span>
+                        <span class="value">${data.majorVersion}</span>
+                    </div>
+                    <div>
+                        <span class="label">Latest:</span>
+                        <span class="value">${data.latestVersion}</span>
+                    </div>
+                    <div>
+                        <span class="label">Updated:</span>
+                        <span class="value">${formatDate(data.updatedAt)}</span>
+                    </div>
+                </div>
+
+                ${data.description ? `<p style="color: var(--text-muted); margin-bottom: 1.5rem;">${data.description}</p>` : ''}
+
+                <h2 class="section-title">All Versions</h2>
+                <div class="versions-list">
+                    ${versionsHtml}
+                </div>
+            `;
+        }
+
+        // ============ Helm Charts Functions ============
+
+        async function loadHelmCharts() {
+            const content = document.getElementById('content');
+            content.innerHTML = '<div class="loading">Loading Helm repository index...</div>';
+
+            try {
+                if (!helmData) {
+                    helmData = await fetchYaml('charts/index.yaml');
+                }
+                renderHelmCharts(helmData);
+            } catch (error) {
+                content.innerHTML = `<div class="error">Failed to load Helm charts: ${error.message}</div>`;
+            }
+        }
+
+        function renderHelmCharts(data) {
+            const content = document.getElementById('content');
+            const entries = Object.entries(data.entries || {});
+
+            const chartsHtml = entries.map(([name, versions]) => {
+                const latest = versions[0];
+                return `
+                    <div class="chart-card" onclick="loadHelmChartDetail('${name}')">
+                        <h3>
+                            ${latest.icon ? `<img src="${latest.icon}" class="chart-icon" onerror="this.style.display='none'">` : ''}
+                            ${name}
+                        </h3>
+                        <div class="description">${latest.description || 'No description'}</div>
+                        <div class="meta">
+                            <span class="version-badge">v${latest.version}</span>
+                            <span class="updated">${versions.length} versions</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            content.innerHTML = `
+                <div class="breadcrumb">
+                    <a href="#" onclick="loadHelmCharts(); return false;">Helm Charts</a>
+                </div>
+
+                <div class="helm-install-box">
+                    <div class="title">Add Helm Repository</div>
+                    <code>helm repo add meshmakers https://meshmakers.github.io/charts</code>
+                    <button class="copy-btn" onclick="copyToClipboard('helm repo add meshmakers https://meshmakers.github.io/charts')">Copy</button>
+                </div>
+
+                <div class="info-bar">
+                    <div>
+                        <span class="label">API Version:</span>
+                        <span class="value">${data.apiVersion || 'v1'}</span>
+                    </div>
+                    <div>
+                        <span class="label">Charts:</span>
+                        <span class="value">${entries.length}</span>
+                    </div>
+                    <div>
+                        <span class="label">Generated:</span>
+                        <span class="value">${formatDate(data.generated)}</span>
+                    </div>
+                </div>
+
+                <h2 class="section-title">Available Charts</h2>
+                <div class="models-grid">
+                    ${chartsHtml}
+                </div>
+            `;
+        }
+
+        function loadHelmChartDetail(chartName) {
+            currentHelmPage = 1;
+            renderHelmChartDetail(chartName);
+        }
+
+        function renderHelmChartDetail(chartName, searchTerm = '') {
+            const content = document.getElementById('content');
+            const versions = helmData.entries[chartName] || [];
+            const latest = versions[0];
+
+            // Filter versions if search term provided
+            let filteredVersions = versions;
+            if (searchTerm) {
+                filteredVersions = versions.filter(v =>
+                    v.version.includes(searchTerm) ||
+                    (v.appVersion && v.appVersion.includes(searchTerm))
+                );
+            }
+
+            // Pagination
+            const totalPages = Math.ceil(filteredVersions.length / ITEMS_PER_PAGE);
+            const startIndex = (currentHelmPage - 1) * ITEMS_PER_PAGE;
+            const paginatedVersions = filteredVersions.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+            const versionsHtml = paginatedVersions.map((v, idx) => `
+                <div class="version-item">
+                    <div class="version-info">
+                        <span class="version-number">
+                            ${v.version}
+                            ${idx === 0 && currentHelmPage === 1 && !searchTerm ? '<span class="latest-badge">LATEST</span>' : ''}
+                        </span>
+                        ${v.appVersion ? `<span class="app-version">App: ${v.appVersion}</span>` : ''}
+                    </div>
+                    <div class="version-date">${formatDate(v.created)}</div>
+                    <a class="download-btn" href="${v.urls[0]}" target="_blank">Download</a>
+                </div>
+            `).join('');
+
+            const maintainersHtml = latest.maintainers ? latest.maintainers.map(m =>
+                `<span class="maintainer-badge">${m.name}</span>`
+            ).join('') : '';
+
+            const paginationHtml = totalPages > 1 ? `
+                <div class="pagination">
+                    <button onclick="changeHelmPage('${chartName}', 1, '${searchTerm}')" ${currentHelmPage === 1 ? 'disabled' : ''}>First</button>
+                    <button onclick="changeHelmPage('${chartName}', ${currentHelmPage - 1}, '${searchTerm}')" ${currentHelmPage === 1 ? 'disabled' : ''}>Prev</button>
+                    <span class="page-info">Page ${currentHelmPage} of ${totalPages} (${filteredVersions.length} versions)</span>
+                    <button onclick="changeHelmPage('${chartName}', ${currentHelmPage + 1}, '${searchTerm}')" ${currentHelmPage === totalPages ? 'disabled' : ''}>Next</button>
+                    <button onclick="changeHelmPage('${chartName}', ${totalPages}, '${searchTerm}')" ${currentHelmPage === totalPages ? 'disabled' : ''}>Last</button>
+                </div>
+            ` : '';
+
+            content.innerHTML = `
+                <div class="breadcrumb">
+                    <a href="#" onclick="loadHelmCharts(); return false;">Helm Charts</a>
+                    <span>/</span>
+                    <span>${chartName}</span>
+                </div>
+
+                <div class="chart-detail-header">
+                    ${latest.icon ? `<img src="${latest.icon}" onerror="this.style.display='none'">` : ''}
+                    <div class="chart-info">
+                        <h2>${chartName}</h2>
+                        <p>${latest.description || 'No description'}</p>
+                        ${maintainersHtml ? `<div class="maintainers">${maintainersHtml}</div>` : ''}
+                    </div>
+                </div>
+
+                <div class="helm-install-box">
+                    <div class="title">Install Chart</div>
+                    <code>helm install my-${chartName} meshmakers/${chartName}</code>
+                    <button class="copy-btn" onclick="copyToClipboard('helm install my-${chartName} meshmakers/${chartName}')">Copy</button>
+                </div>
+
+                <div class="info-bar">
+                    <div>
+                        <span class="label">Latest Version:</span>
+                        <span class="value">${latest.version}</span>
+                    </div>
+                    <div>
+                        <span class="label">App Version:</span>
+                        <span class="value">${latest.appVersion || '-'}</span>
+                    </div>
+                    <div>
+                        <span class="label">Type:</span>
+                        <span class="value">${latest.type || 'application'}</span>
+                    </div>
+                    <div>
+                        <span class="label">Total Versions:</span>
+                        <span class="value">${versions.length}</span>
+                    </div>
+                </div>
+
+                <div class="search-box">
+                    <input type="text" id="version-search" placeholder="Search versions..." value="${searchTerm}" onkeyup="handleVersionSearch(event, '${chartName}')">
+                </div>
+
+                <h2 class="section-title">All Versions</h2>
+                <div class="versions-list">
+                    ${versionsHtml.length > 0 ? versionsHtml : '<div style="padding: 1.5rem; color: var(--text-muted);">No versions found matching your search.</div>'}
+                </div>
+                ${paginationHtml}
+            `;
+        }
+
+        function changeHelmPage(chartName, page, searchTerm) {
+            currentHelmPage = page;
+            renderHelmChartDetail(chartName, searchTerm);
+        }
+
+        function handleVersionSearch(event, chartName) {
+            if (event.key === 'Enter' || event.type === 'keyup') {
+                const searchTerm = document.getElementById('version-search').value;
+                currentHelmPage = 1;
+                renderHelmChartDetail(chartName, searchTerm);
+            }
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', loadCatalog);
+    </script>
+</body>
+</html>
