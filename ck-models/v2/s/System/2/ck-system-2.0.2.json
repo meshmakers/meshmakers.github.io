@@ -1,0 +1,1062 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "AggregationRtQuery-1",
+      "derivedFromCkTypeId": "System-2.0.2/PersistentQuery-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Query type for performing aggregation operations (Count, Min, Max, Avg, Sum) on entity data without grouping.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/AggregationQueryColumns-1",
+          "name": "Columns",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Query.FieldFilter-1",
+          "name": "FieldFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.TextSearchFilter-1",
+          "name": "TextSearchFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.AttributeSearchFilter-1",
+          "name": "AttributeSearchFilter",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "AutoIncrement-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Manages auto-incrementing sequences for generating unique identifiers with configurable format and range.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/AutoIncrement.End-1",
+          "name": "End",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/AutoIncrement.Format-1",
+          "name": "Format",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/AutoIncrement.CurrentValue-1",
+          "name": "CurrentValue",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Configuration-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Base type for all configuration types"
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "RtWellKnownName"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "CkTypeId",
+                "_id"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "RtBlueprintSource"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-2.0.2/Related-1",
+          "targetCkTypeId": "System-2.0.2/Entity-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Abstract base type for all entities in the system. Provides common indexing and association capabilities.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/RtBlueprintSource-1",
+          "name": "RtBlueprintSource",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/RtBlueprintLocked-1",
+          "name": "RtBlueprintLocked",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/RtBlueprintAppliedAt-1",
+          "name": "RtBlueprintAppliedAt",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "GroupingAggregationRtQuery-1",
+      "derivedFromCkTypeId": "System-2.0.2/PersistentQuery-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Query type for performing grouped aggregation operations with GROUP BY functionality on entity data.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/Query.GroupByColumns-1",
+          "name": "GroupingColumns",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/AggregationQueryColumns-1",
+          "name": "Columns",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Query.FieldFilter-1",
+          "name": "FieldFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.TextSearchFilter-1",
+          "name": "TextSearchFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.AttributeSearchFilter-1",
+          "name": "AttributeSearchFilter",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "MigrationHistory-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "CkModelName",
+                "ExecutedAt"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "CkModelName",
+                "ToVersion"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Records executed CK model migrations per tenant. Each instance represents one migration execution from a source version to a target version.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/MigrationHistory.CkModelName-1",
+          "name": "CkModelName",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.FromVersion-1",
+          "name": "FromVersion",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.ToVersion-1",
+          "name": "ToVersion",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.ExecutedAt-1",
+          "name": "ExecutedAt",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.Success-1",
+          "name": "Success",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.EntitiesAffected-1",
+          "name": "EntitiesAffected",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.EntitiesAdded-1",
+          "name": "EntitiesAdded",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.EntitiesUpdated-1",
+          "name": "EntitiesUpdated",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.EntitiesDeleted-1",
+          "name": "EntitiesDeleted",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.DurationMs-1",
+          "name": "DurationMs",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.Errors-1",
+          "name": "Errors",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.Warnings-1",
+          "name": "Warnings",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/MigrationHistory.BackupId-1",
+          "name": "BackupId",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "PersistentQuery-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Abstract base type for all query types. Defines common query properties like name, description, and target type.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.CkTypeId-1",
+          "name": "QueryCkTypeId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Query-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Legacy query type for backward compatibility. Use SimpleRtQuery, AggregationRtQuery, or GroupingAggregationRtQuery instead.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/Query.CkTypeId-1",
+          "name": "QueryCkTypeId",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Query.Types-1",
+          "name": "QueryType",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Query.Columns-1",
+          "name": "Columns",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Query.Sorting-1",
+          "name": "Sorting",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.FieldFilter-1",
+          "name": "FieldFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.TextSearchFilter-1",
+          "name": "TextSearchFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.AttributeSearchFilter-1",
+          "name": "AttributeSearchFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "SimpleRtQuery-1",
+      "derivedFromCkTypeId": "System-2.0.2/PersistentQuery-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Query type for retrieving rows/tuples from entities with support for column selection, sorting, and filtering.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/Query.Columns-1",
+          "name": "Columns",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Query.Sorting-1",
+          "name": "Sorting",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.FieldFilter-1",
+          "name": "FieldFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.TextSearchFilter-1",
+          "name": "TextSearchFilter",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/Query.AttributeSearchFilter-1",
+          "name": "AttributeSearchFilter",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Tenant-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TenantId"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Represents a tenant in the multi-tenant system with its unique identifier, parent relationship, and database mapping.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/TenantId-1",
+          "name": "TenantId",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/ParentTenantId-1",
+          "name": "ParentTenantId",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.2/DatabaseName-1",
+          "name": "DatabaseName",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "TenantConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for a tenant regarding data version of schema or identity data",
+      "attributes": [
+        {
+          "id": "System-2.0.2/ConfigurationValue-1",
+          "name": "ConfigurationValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "TenantModeConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for a tenant if the tenant is in a specific mode, e.g. test mode or maintenance mode",
+      "attributes": [
+        {
+          "id": "System-2.0.2/EnvironmentMode-1",
+          "name": "EnvironmentMode",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/MaintenanceLevel-1",
+          "name": "MaintenanceLevel",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "ParentChild-1",
+      "inboundName": "Children",
+      "outboundName": "Parent",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Hierarchical parent-child relationship for building tree structures."
+    },
+    {
+      "id": "Related-1",
+      "inboundName": "RelatesFrom",
+      "outboundName": "RelatesTo",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Generic many-to-many relationship for linking related entities."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AggregationQueryColumn-1",
+      "valueType": "Record",
+      "valueCkRecordId": "System-2.0.2/AggregationQueryColumn-1",
+      "description": "Defines an aggregation column with its attribute path and aggregation type."
+    },
+    {
+      "id": "AggregationQueryColumns-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System-2.0.2/AggregationQueryColumn-1",
+      "description": "Defines a set of aggregation columns for the query, with its attribute path and aggregation type."
+    },
+    {
+      "id": "AggregationType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-2.0.2/AggregationTypes-1",
+      "description": "Type of aggregation function to apply (Count, Min, Max, Avg, Sum)."
+    },
+    {
+      "id": "AttributePath-1",
+      "valueType": "String",
+      "description": "Path to an attribute, supporting nested paths with dot notation."
+    },
+    {
+      "id": "AttributePaths-1",
+      "valueType": "StringArray",
+      "description": "Array of attribute paths for multi-attribute operations."
+    },
+    {
+      "id": "AutoIncrement.CurrentValue-1",
+      "valueType": "Int",
+      "description": "The current value of the auto-increment counter."
+    },
+    {
+      "id": "AutoIncrement.End-1",
+      "valueType": "Int",
+      "description": "The upper limit of the auto-increment sequence."
+    },
+    {
+      "id": "AutoIncrement.Format-1",
+      "valueType": "String",
+      "description": "Optional format string for generating formatted identifiers (e.g., \u0027INV-{0:D6}\u0027)."
+    },
+    {
+      "id": "ComparisonValue-1",
+      "valueType": "String",
+      "description": "The value to compare against in filter operations."
+    },
+    {
+      "id": "ConfigurationValue-1",
+      "valueType": "String",
+      "description": "Stores configuration data such as schema version or identity information."
+    },
+    {
+      "id": "DatabaseName-1",
+      "valueType": "String",
+      "description": "Name of the database associated with this tenant."
+    },
+    {
+      "id": "Description-1",
+      "valueType": "String",
+      "description": "Further information on the item."
+    },
+    {
+      "id": "DisplayName-1",
+      "valueType": "String",
+      "description": "Human-readable display name shown in user interfaces."
+    },
+    {
+      "id": "Enabled-1",
+      "valueType": "Boolean",
+      "description": "Indicates whether the entity is active and operational."
+    },
+    {
+      "id": "EnvironmentMode-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-2.0.2/EnvironmentModes-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Defines the operational mode of the tenant (Development, Testing, Staging, Production)."
+    },
+    {
+      "id": "FieldFilter.Operator-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-2.0.2/FieldFilterOperator-1",
+      "description": "Comparison operator for field filtering (Equals, Like, GreaterThan, etc.)."
+    },
+    {
+      "id": "MaintenanceLevel-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-2.0.2/MaintenanceLevels-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Defines the maintenance state of the tenant (Off, UserApps, FullSystem)."
+    },
+    {
+      "id": "MigrationHistory.BackupId-1",
+      "valueType": "String",
+      "description": "Identifier of the backup created before migration, if any."
+    },
+    {
+      "id": "MigrationHistory.CkModelName-1",
+      "valueType": "String",
+      "description": "Name of the CK model that was migrated (e.g., \u0027System\u0027)."
+    },
+    {
+      "id": "MigrationHistory.DurationMs-1",
+      "valueType": "Int",
+      "description": "Duration of the migration in milliseconds."
+    },
+    {
+      "id": "MigrationHistory.EntitiesAdded-1",
+      "valueType": "Int",
+      "description": "Number of entities added during migration."
+    },
+    {
+      "id": "MigrationHistory.EntitiesAffected-1",
+      "valueType": "Int",
+      "description": "Total number of entities affected by the migration."
+    },
+    {
+      "id": "MigrationHistory.EntitiesDeleted-1",
+      "valueType": "Int",
+      "description": "Number of entities deleted during migration."
+    },
+    {
+      "id": "MigrationHistory.EntitiesUpdated-1",
+      "valueType": "Int",
+      "description": "Number of entities updated during migration."
+    },
+    {
+      "id": "MigrationHistory.Errors-1",
+      "valueType": "StringArray",
+      "description": "List of error messages if migration failed or had issues."
+    },
+    {
+      "id": "MigrationHistory.ExecutedAt-1",
+      "valueType": "DateTime",
+      "description": "Timestamp when the migration was executed."
+    },
+    {
+      "id": "MigrationHistory.FromVersion-1",
+      "valueType": "String",
+      "description": "Source version of the CK model before migration."
+    },
+    {
+      "id": "MigrationHistory.Success-1",
+      "valueType": "Boolean",
+      "description": "Indicates whether the migration completed successfully."
+    },
+    {
+      "id": "MigrationHistory.ToVersion-1",
+      "valueType": "String",
+      "description": "Target version of the CK model after migration."
+    },
+    {
+      "id": "MigrationHistory.Warnings-1",
+      "valueType": "StringArray",
+      "description": "List of warning messages generated during migration."
+    },
+    {
+      "id": "Name-1",
+      "valueType": "String",
+      "description": "Unique identifier name for the entity."
+    },
+    {
+      "id": "ParentTenantId-1",
+      "valueType": "String",
+      "description": "Identifier of the parent tenant for hierarchical tenant structures."
+    },
+    {
+      "id": "Query.AttributeSearchFilter-1",
+      "valueType": "Record",
+      "valueCkRecordId": "System-2.0.2/AttributeSearchFilter-1",
+      "description": "Search filter applied to specific attributes only."
+    },
+    {
+      "id": "Query.CkTypeId-1",
+      "valueType": "String",
+      "description": "The Construction Kit type ID that this query targets."
+    },
+    {
+      "id": "Query.Columns-1",
+      "valueType": "StringArray",
+      "description": "Array of attribute paths to include in the query result."
+    },
+    {
+      "id": "Query.FieldFilter-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System-2.0.2/FieldFilter-1",
+      "description": "Array of field filters to apply conditions on specific attributes."
+    },
+    {
+      "id": "Query.GroupByColumns-1",
+      "valueType": "StringArray",
+      "description": "Array of attribute paths to group results by in aggregation queries."
+    },
+    {
+      "id": "Query.Sorting-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System-2.0.2/SortOrderItem-1",
+      "description": "Array of sort specifications defining the order of query results."
+    },
+    {
+      "id": "Query.TextSearchFilter-1",
+      "valueType": "Record",
+      "valueCkRecordId": "System-2.0.2/TextSearchFilter-1",
+      "description": "Full-text search filter applied across searchable fields."
+    },
+    {
+      "id": "Query.Types-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-2.0.2/QueryTypes-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Legacy query type selector. Deprecated - use specific query types instead."
+    },
+    {
+      "id": "RtBlueprintAppliedAt-1",
+      "valueType": "DateTime",
+      "description": "Timestamp when the blueprint was applied to create or update this entity."
+    },
+    {
+      "id": "RtBlueprintLocked-1",
+      "valueType": "Boolean",
+      "description": "If true, the entity is managed by the blueprint and will be updated when the blueprint is updated. If false, user modifications are preserved."
+    },
+    {
+      "id": "RtBlueprintSource-1",
+      "valueType": "String",
+      "description": "Identifies the blueprint that created this entity (format: \u0027BlueprintName-Version\u0027). Null if entity was created manually."
+    },
+    {
+      "id": "SortOrder-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System-2.0.2/SortOrders-1",
+      "description": "Sort direction for ordering results (Ascending, Descending, Default)."
+    },
+    {
+      "id": "TenantId-1",
+      "valueType": "String",
+      "description": "Unique identifier for the tenant in the multi-tenant system."
+    }
+  ],
+  "records": [
+    {
+      "recordId": "AggregationQueryColumn-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Defines an aggregation column specifying which attribute to aggregate and how.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/AttributePath-1",
+          "name": "AttributePath",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/AggregationType-1",
+          "name": "AggregationType",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "AttributeSearchFilter-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Defines a search filter that searches only within specified attributes.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/AttributePaths-1",
+          "name": "AttributePaths",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/ComparisonValue-1",
+          "name": "SearchValue",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "FieldFilter-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Defines a filter condition for a specific attribute with an operator and comparison value.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/AttributePath-1",
+          "name": "AttributePath",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/FieldFilter.Operator-1",
+          "name": "Operator",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/ComparisonValue-1",
+          "name": "ComparisonValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "SortOrderItem-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Specifies the sorting configuration for a single attribute in query results.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/AttributePath-1",
+          "name": "AttributePath",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/SortOrder-1",
+          "name": "SortOrder",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "TextSearchFilter-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Defines a full-text search filter that searches across all searchable fields.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/ComparisonValue-1",
+          "name": "SearchValue",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "AggregationTypes-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Count",
+          "description": "Counts the number of items",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Minimum",
+          "description": "Finds the minimum value",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Maximum",
+          "description": "Finds the maximum value",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Average",
+          "description": "Calculates the average value",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Sum",
+          "description": "Calculates the sum of values",
+          "isExtension": false
+        }
+      ],
+      "description": "This enum defines the different aggregation types available for queries."
+    },
+    {
+      "enumId": "EnvironmentModes-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Development",
+          "description": "The tenant is in development mode, used for development and testing",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Testing",
+          "description": "The tenant is in testing mode, used for quality assurance",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Staging",
+          "description": "The tenant is in staging mode, used for pre-production testing",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Production",
+          "description": "The tenant is in production mode, used for live operations",
+          "isExtension": false
+        }
+      ],
+      "description": "This enum defines the different modes a tenant can operate in."
+    },
+    {
+      "enumId": "FieldFilterOperator-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Equals",
+          "description": "Compares the specified field to the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "NotEquals",
+          "description": "Compares the specified field to the specified value and returns true if the values are not equal.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "LessThan",
+          "description": "Compares the specified field to the specified value and returns true if the field value is less than the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "LessEqualThan",
+          "description": "Compares the specified field to the specified value and returns true if the field value is less than or equal to the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "GreaterThan",
+          "description": "Compares the specified field to the specified value and returns true if the field value is greater than the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "GreaterEqualThan",
+          "description": "Compares the specified field to the specified value and returns true if the field value is greater than or equal to the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "In",
+          "description": "Compares a field to be equal any value in the specified array.",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "NotIn",
+          "description": "Compares a field to be not equal any value in the specified array.",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "Like",
+          "description": "Compares a field to the specified value using a pattern matching comparison. Use * as a wildcard character.",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "MatchRegEx",
+          "description": "Matches a field containing a value that matches the specified regular expression.",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "AnyEq",
+          "description": "Compares an array field with at least one element that matches the specified value.",
+          "isExtension": false
+        },
+        {
+          "key": 11,
+          "name": "AnyLike",
+          "description": "Compares an array field with at least one element that matches the specified value using a pattern matching comparison. Use * as a wildcard character.",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "Match",
+          "description": "Matches an array field with at least one element that matches all the specified query criteria.",
+          "isExtension": false
+        }
+      ],
+      "description": "The operator to use for filtering fields."
+    },
+    {
+      "enumId": "MaintenanceLevels-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Off",
+          "description": "The maintenance mode is off, the tenant is fully operational",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "UserApps",
+          "description": "The user apps are in maintenance mode, the tenant is operational but user apps are not available",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "FullSystem",
+          "description": "The full system is in maintenance mode, the tenant is not operational",
+          "isExtension": false
+        }
+      ],
+      "description": "This enum defines the maintenance level of a tenant."
+    },
+    {
+      "enumId": "QueryTypes-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Flat",
+          "description": "A flat query",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Tree",
+          "description": "A tree query that returns results from a tree",
+          "isExtension": false
+        }
+      ],
+      "description": "The type of query"
+    },
+    {
+      "enumId": "SortOrders-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Default",
+          "description": "Default sorting based on data source type",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Ascending",
+          "description": "Ascending order",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Descending",
+          "description": "Descending order",
+          "isExtension": false
+        }
+      ],
+      "description": "The sort order of a field."
+    }
+  ],
+  "modelId": "System-2.0.2",
+  "description": "Core system model library providing foundational types for entity management, multi-tenant configuration, auto-increment sequences, and a comprehensive query system with support for filtering, sorting, aggregations, and text search."
+}
