@@ -1,0 +1,482 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.0.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "BinaryEntity-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Test-1.1.0/Binary-1",
+          "name": "Binary",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/DataCount-1",
+          "name": "DataCount",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "City-1",
+      "derivedFromCkTypeId": "Test-1.1.0/Location-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "Test-1.1.0/Region-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Continent-1",
+      "derivedFromCkTypeId": "Test-1.1.0/Location-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Continent-2",
+      "derivedFromCkTypeId": "Test-1.1.0/Location-2",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Test-1.1.0/RecordTest-2",
+          "name": "RecordTest2",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/ConnectionState-2",
+          "name": "ConnectionState2",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Country-1",
+      "derivedFromCkTypeId": "Test-1.1.0/Location-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "Test-1.1.0/Continent-1"
+        },
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "Test-1.1.0/Ocean-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Test-1.1.0/StringArrayTests-1",
+          "name": "StringArrayTests",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/IntArrayTests-1",
+          "name": "IntArrayTests",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/RecordArrayTests-1",
+          "name": "RecordArrayTests",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "District-1",
+      "derivedFromCkTypeId": "Test-1.1.0/LocationWithSensor-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "Test-1.1.0/City-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "IndexTestEntity-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Unique",
+          "fields": [
+            {
+              "attributePaths": [
+                "Designation"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "UniqueNotDeleted",
+          "fields": [
+            {
+              "attributePaths": [
+                "Location"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Test-1.1.0/Designation-1",
+          "name": "Designation",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/Location-1",
+          "name": "Location",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/ConnectionState-1",
+          "name": "ConnectionState",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/DataCount-1",
+          "name": "DataCount",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Location-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Test-1.1.0/Designation-1",
+          "name": "Designation",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Location-2",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-2.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Description-1",
+          "name": "Description",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "LocationWithSensor-1",
+      "derivedFromCkTypeId": "Test-1.1.0/Location-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Ocean-1",
+      "derivedFromCkTypeId": "Test-1.1.0/Location-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Region-1",
+      "derivedFromCkTypeId": "Test-1.1.0/LocationWithSensor-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "Test-1.1.0/Country-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Sensor-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "Test-1.1.0/LocationWithSensor-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Test-1.1.0/Designation-1",
+          "name": "Designation",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/ConnectionState-1",
+          "name": "ConnectionState",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/DataCount-1",
+          "name": "DataCount",
+          "isOptional": true
+        },
+        {
+          "id": "Test-1.1.0/LocationX-1",
+          "name": "LocationX",
+          "isOptional": true
+        },
+        {
+          "id": "Test-1.1.0/IsEnabled-1",
+          "name": "IsEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "Test-1.1.0/RecordTest-1",
+          "name": "RecordTest",
+          "isOptional": true
+        },
+        {
+          "id": "Test-1.1.0/StringArrayTests-1",
+          "name": "StringArrayTests",
+          "isOptional": true
+        },
+        {
+          "id": "Test-1.1.0/IntArrayTests-1",
+          "name": "IntArrayTests",
+          "isOptional": true
+        },
+        {
+          "id": "Test-1.1.0/RecordArrayTests-1",
+          "name": "RecordArrayTests",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Zone-1",
+      "derivedFromCkTypeId": "Test-1.1.0/LocationWithSensor-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "Test-1.1.0/District-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "Binary-1",
+      "valueType": "BinaryLinked"
+    },
+    {
+      "id": "ConnectionState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Test-1.1.0/ConnectionState-1"
+    },
+    {
+      "id": "ConnectionState-2",
+      "valueType": "Enum",
+      "valueCkEnumId": "Test-1.1.0/ConnectionState-2"
+    },
+    {
+      "id": "DataCount-1",
+      "valueType": "Int"
+    },
+    {
+      "id": "Designation-1",
+      "valueType": "String"
+    },
+    {
+      "id": "IntArrayTests-1",
+      "valueType": "IntArray",
+      "defaultValues": [
+        "6"
+      ]
+    },
+    {
+      "id": "IsEnabled-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ]
+    },
+    {
+      "id": "Location-1",
+      "valueType": "String"
+    },
+    {
+      "id": "LocationX-1",
+      "valueType": "Double"
+    },
+    {
+      "id": "RecordArrayTests-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "Test-1.1.0/TestRecord-1"
+    },
+    {
+      "id": "RecordTest-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Test-1.1.0/TestRecord-1"
+    },
+    {
+      "id": "RecordTest-2",
+      "valueType": "Record",
+      "valueCkRecordId": "Test-1.1.0/TestRecord-2"
+    },
+    {
+      "id": "StringArrayTests-1",
+      "valueType": "StringArray",
+      "defaultValues": [
+        "a"
+      ]
+    }
+  ],
+  "records": [
+    {
+      "recordId": "TestRecord-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Test-1.1.0/Designation-1",
+          "name": "Designation",
+          "isOptional": true
+        },
+        {
+          "id": "Test-1.1.0/DataCount-1",
+          "name": "DataCount",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "TestRecord-2",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Test-1.1.0/Designation-1",
+          "name": "Designation",
+          "isOptional": true
+        },
+        {
+          "id": "Test-1.1.0/DataCount-1",
+          "name": "DataCount",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "ConnectionState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "NotConnected",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Connecting",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Connected",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ConnectionState-2",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Connecting",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Connected",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Broken",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "Test-1.1.0"
+}
