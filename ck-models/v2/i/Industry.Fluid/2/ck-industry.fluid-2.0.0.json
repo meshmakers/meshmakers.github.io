@@ -1,0 +1,164 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Industry.Basic-2.0.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "HeatMeter-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.0.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Fluid-2.0.0/Volume-1",
+          "name": "Volume",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Fluid-2.0.0/Flow-1",
+          "name": "Flow",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/Power-1",
+          "name": "Power",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/ImportedEnergy-1",
+          "name": "ImportedEnergy",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.0.0/MinTemperature-1",
+          "name": "ReturnTemperature",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.0.0/MaxTemperature-1",
+          "name": "FlowTemperature",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "WaterMeter-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.0.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Fluid-2.0.0/NetVolume-1",
+          "name": "NetVolume",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Fluid-2.0.0/Volume-1",
+          "name": "Volume",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Fluid-2.0.0/ReverseVolume-1",
+          "name": "ReverseVolume",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.0.0/AvgTemperature-1",
+          "name": "AvgWaterTemperature",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.0.0/MinTemperature-1",
+          "name": "MinWaterTemperature",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.0.0/MaxTemperature-1",
+          "name": "MaxWaterTemperature",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "Flow-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "m\u00B3/h"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "NetVolume-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "l"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        },
+        {
+          "key": "Type",
+          "value": "Net"
+        }
+      ]
+    },
+    {
+      "id": "ReverseVolume-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "l"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        },
+        {
+          "key": "Type",
+          "value": "Reverse"
+        }
+      ]
+    },
+    {
+      "id": "Volume-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "l"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        },
+        {
+          "key": "Type",
+          "value": "Current"
+        }
+      ]
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "Industry.Fluid-2.0.0"
+}
