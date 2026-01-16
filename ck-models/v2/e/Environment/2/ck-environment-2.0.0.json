@@ -1,0 +1,152 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.0.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "EnvironmentalGoal-1",
+      "derivedFromCkTypeId": "Basic-2.0.0/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.0/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Environment-2.0.0/GoalText-1",
+          "name": "GoalText",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-2.0.0/GoalState-1",
+          "name": "GoalStatus",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "WasteMeter-1",
+      "derivedFromCkTypeId": "Basic-2.0.0/Asset-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Environment-2.0.0/Weight-1",
+          "name": "Weight",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-2.0.0/TareWeight-1",
+          "name": "TareWeight",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-2.0.0/GrossWeight-1",
+          "name": "GrossWeight",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "GoalState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Environment-2.0.0/GoalState-1"
+    },
+    {
+      "id": "GoalText-1",
+      "valueType": "String"
+    },
+    {
+      "id": "GrossWeight-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        },
+        {
+          "key": "Type",
+          "value": "gross"
+        }
+      ]
+    },
+    {
+      "id": "SampleAttribute1-1",
+      "valueType": "String"
+    },
+    {
+      "id": "TareWeight-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        },
+        {
+          "key": "Type",
+          "value": "tare"
+        }
+      ]
+    },
+    {
+      "id": "Weight-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        },
+        {
+          "key": "Type",
+          "value": "net"
+        }
+      ]
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "GoalState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 1,
+          "name": "OnTrack",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "OffTrack",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "Environment-2.0.0"
+}
