@@ -1,13 +1,13 @@
 {
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [
-    "Basic-1.0.0"
+    "Basic-2.0.0"
   ],
   "types": [
     {
       "isCollectionRoot": true,
       "typeId": "Customer-1",
-      "derivedFromCkTypeId": "System-1.0.3/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -16,12 +16,12 @@
           "fields": [
             {
               "attributePaths": [
-                "FirstName",
-                "LastName",
-                "CompanyName",
-                "Street",
-                "City",
-                "EMailAddress"
+                "Contact.FirstName",
+                "Contact.LastName",
+                "Contact.CompanyName",
+                "Contact.Address.Street",
+                "Contact.Address.CityTown",
+                "Contact.Email"
               ]
             }
           ]
@@ -33,10 +33,10 @@
             {
               "weight": 1,
               "attributePaths": [
-                "FirstName",
-                "Street",
-                "City",
-                "EMailAddress"
+                "Contact.FirstName",
+                "Contact.Address.Street",
+                "Contact.Address.CityTown",
+                "Contact.Email"
               ]
             }
           ]
@@ -48,10 +48,10 @@
             {
               "weight": 2,
               "attributePaths": [
-                "FirstName",
-                "LastName",
-                "CompanyName",
-                "EMailAddress"
+                "Contact.FirstName",
+                "Contact.LastName",
+                "Contact.CompanyName",
+                "Contact.Email"
               ]
             }
           ]
@@ -61,43 +61,13 @@
       "isStreamType": false,
       "attributes": [
         {
-          "id": "OctoSdkDemo-1.0.0/FirstName-1",
-          "name": "FirstName",
+          "id": "Basic-2.0.0/Contact-1",
+          "name": "Contact",
           "isOptional": false
         },
         {
-          "id": "OctoSdkDemo-1.0.0/LastName-1",
-          "name": "LastName",
-          "isOptional": false
-        },
-        {
-          "id": "OctoSdkDemo-1.0.0/CompanyName-1",
-          "name": "CompanyName",
-          "isOptional": true
-        },
-        {
-          "id": "OctoSdkDemo-1.0.0/Street-1",
-          "name": "Street",
-          "isOptional": false
-        },
-        {
-          "id": "OctoSdkDemo-1.0.0/PostalCode-1",
-          "name": "PostalCode",
-          "isOptional": false
-        },
-        {
-          "id": "OctoSdkDemo-1.0.0/City-1",
-          "name": "City",
-          "isOptional": false
-        },
-        {
-          "id": "OctoSdkDemo-1.0.0/Country-1",
-          "name": "Country",
-          "isOptional": false
-        },
-        {
-          "id": "OctoSdkDemo-1.0.0/EMailAddress-1",
-          "name": "EMailAddress",
+          "id": "Basic-2.0.0/BankAccount-1",
+          "name": "BankAccount",
           "isOptional": true
         },
         {
@@ -114,13 +84,18 @@
           "id": "OctoSdkDemo-1.0.0/PhoneNumberLandLine-1",
           "name": "PhoneNumberLandLine",
           "isOptional": true
+        },
+        {
+          "id": "OctoSdkDemo-1.0.0/CustomerStatus-1",
+          "name": "CustomerStatus",
+          "isOptional": false
         }
       ]
     },
     {
       "isCollectionRoot": false,
       "typeId": "MeteringPoint-1",
-      "derivedFromCkTypeId": "Basic-1.0.0/Asset-1",
+      "derivedFromCkTypeId": "Basic-2.0.0/Asset-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -163,7 +138,7 @@
     {
       "isCollectionRoot": false,
       "typeId": "OperatingFacility-1",
-      "derivedFromCkTypeId": "Basic-1.0.0/TreeNode-1",
+      "derivedFromCkTypeId": "Basic-2.0.0/TreeNode-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
@@ -181,22 +156,15 @@
       "id": "Ownership-1",
       "inboundName": "Owns",
       "outboundName": "OwnedBy",
-      "inboundMultiplicity": "ZeroOrOne",
-      "outboundMultiplicity": "N"
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne"
     }
   ],
   "attributes": [
     {
-      "id": "City-1",
-      "valueType": "String"
-    },
-    {
-      "id": "CompanyName-1",
-      "valueType": "String"
-    },
-    {
-      "id": "Country-1",
-      "valueType": "String"
+      "id": "CustomerStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "OctoSdkDemo-1.0.0/CustomerStatus-1"
     },
     {
       "id": "DateOfBirth-1",
@@ -204,14 +172,6 @@
     },
     {
       "id": "EMailAddress-1",
-      "valueType": "String"
-    },
-    {
-      "id": "FirstName-1",
-      "valueType": "String"
-    },
-    {
-      "id": "LastName-1",
       "valueType": "String"
     },
     {
@@ -239,18 +199,32 @@
     {
       "id": "PhoneNumberMobile-1",
       "valueType": "String"
-    },
-    {
-      "id": "PostalCode-1",
-      "valueType": "String"
-    },
-    {
-      "id": "Street-1",
-      "valueType": "String"
     }
   ],
   "records": [],
   "enums": [
+    {
+      "enumId": "CustomerStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Pending",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Active",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Suspended",
+          "isExtension": false
+        }
+      ]
+    },
     {
       "enumId": "NetworkOperator-1",
       "useFlags": false,
