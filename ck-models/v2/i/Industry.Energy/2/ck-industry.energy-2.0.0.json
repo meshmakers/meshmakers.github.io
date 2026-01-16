@@ -1,0 +1,498 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Industry.Basic-2.0.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Battery-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.0.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-2.0.0/Voltage-1",
+          "name": "Voltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/Ampere-1",
+          "name": "Ampere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/Power-1",
+          "name": "Power",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/ImportedEnergy-1",
+          "name": "ImportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/ExportedEnergy-1",
+          "name": "ExportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/SoC-1",
+          "name": "SoC",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-2.0.0/SoH-1",
+          "name": "SoH",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/NumOfCycles-1",
+          "name": "NumOfCycles",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/Capacity-1",
+          "name": "Capacity",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.0.0/Temperature-1",
+          "name": "Temperature",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EnergyMeter-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.0.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-2.0.0/Voltage-1",
+          "name": "Voltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/Ampere-1",
+          "name": "Ampere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/Power-1",
+          "name": "Power",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-2.0.0/ApparentPower-1",
+          "name": "ApparentPower",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/ReactivePower-1",
+          "name": "ReactivePower",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/ImportedEnergy-1",
+          "name": "ImportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/ExportedEnergy-1",
+          "name": "ExportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/Frequency-1",
+          "name": "Frequency",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/PhaseInfoL1-1",
+          "name": "ACL1",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/PhaseInfoL2-1",
+          "name": "ACL2",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/PhaseInfoL3-1",
+          "name": "ACL3",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Inverter-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.0.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-2.0.0/DCVoltage-1",
+          "name": "DCVoltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/DCAmpere-1",
+          "name": "DCAmpere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-2.0.0/Voltage-1",
+          "name": "Voltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/Ampere-1",
+          "name": "Ampere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-2.0.0/MaximumPower-1",
+          "name": "MaximumPower",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/Power-1",
+          "name": "Power",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-2.0.0/PhaseInfoL1-1",
+          "name": "ACL1",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/PhaseInfoL2-1",
+          "name": "ACL2",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/PhaseInfoL3-1",
+          "name": "ACL3",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Photovoltaic-1",
+      "derivedFromCkTypeId": "Basic-2.0.0/Asset-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Photovoltaic.Module-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.0.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-2.0.0/PeakPower-1",
+          "name": "PeakPower",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/Power-1",
+          "name": "Power",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Photovoltaic.String-1",
+      "derivedFromCkTypeId": "Basic-2.0.0/Asset-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-2.0.0/NumOfModules-1",
+          "name": "NumOfModules",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/Power-1",
+          "name": "Power",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "Ampere-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "A"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "ApparentPower-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kVA"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "Capacity-1",
+      "valueType": "Double",
+      "description": "Total Capacity which the battery can store",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWh"
+        },
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-BAA564#007",
+          "description": ""
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "DCAmpere-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "A"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "DCVoltage-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "V"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "ExportedEnergy-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWh"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "Frequency-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "Hz"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "MaximumPower-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kW"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "NumOfCycles-1",
+      "valueType": "Int",
+      "description": "Number of full loading cycles since production",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": ""
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "NumOfModules-1",
+      "valueType": "Int"
+    },
+    {
+      "id": "PeakPower-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kW"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "PhaseInfoL1-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Industry.Energy-2.0.0/PhaseInfo-1"
+    },
+    {
+      "id": "PhaseInfoL2-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Industry.Energy-2.0.0/PhaseInfo-1"
+    },
+    {
+      "id": "PhaseInfoL3-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Industry.Energy-2.0.0/PhaseInfo-1"
+    },
+    {
+      "id": "ReactivePower-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kVAr"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "SoC-1",
+      "valueType": "Int",
+      "description": "State of Charge",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "%"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "SoH-1",
+      "valueType": "Int",
+      "description": "State of Health",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "%"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "Voltage-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "V"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    }
+  ],
+  "records": [
+    {
+      "recordId": "PhaseInfo-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-2.0.0/Voltage-1",
+          "name": "Voltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-2.0.0/Ampere-1",
+          "name": "Ampere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/Power-1",
+          "name": "Power",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-2.0.0/Frequency-1",
+          "name": "Frequency",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "enums": [],
+  "modelId": "Industry.Energy-2.0.0"
+}
