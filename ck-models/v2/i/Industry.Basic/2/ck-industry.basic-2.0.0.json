@@ -1,0 +1,785 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.0.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Alarm-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.0.0/Event-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "An industrial alam event",
+      "attributes": [
+        {
+          "id": "Industry.Basic-2.0.0/EventAlarmState-1",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/EventAlarmType-1",
+          "name": "Type",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/EventAlarmSource-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/EventAlarmPriority-1",
+          "name": "EventAlarmPriority",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/EventAlarmCause-1",
+          "name": "Cause",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/EventAlarmReactivatedCount-1",
+          "name": "ReactivatedCount",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Event-1",
+      "derivedFromCkTypeId": "Basic-2.0.0/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Basic-2.0.0/EventSource-1",
+          "targetCkTypeId": "Basic-2.0.0/Asset-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "An industrial event",
+      "attributes": [
+        {
+          "id": "Basic-2.0.0/Time-1",
+          "name": "Time",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/Message-1",
+          "name": "Message",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/TagName-1",
+          "name": "TagName",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/EventCategory-1",
+          "name": "Category",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Machine-1",
+      "derivedFromCkTypeId": "Basic-2.0.0/Asset-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Basic-2.0.0/NamePlate-1",
+          "name": "NamePlate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/OperatingHoursCounter-1",
+          "name": "OperatingHours",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/StandStillCounter-1",
+          "name": "StandStillCounter",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/MachineState-1",
+          "name": "MachineState",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/MachineCapabilities-1",
+          "name": "MachineCapabilities",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "RuntimeVariable-1",
+      "derivedFromCkTypeId": "Basic-2.0.0/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Basic-2.0.0/RuntimeVariableMachine-1",
+          "targetCkTypeId": "Industry.Basic-2.0.0/Machine-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A runtime variable that can hold multiple primitive data types",
+      "attributes": [
+        {
+          "id": "Industry.Basic-2.0.0/IecDataType-1",
+          "name": "IecDataType",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.0.0/IntValue-1",
+          "name": "IntValue",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/DoubleValue-1",
+          "name": "DoubleValue",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/StringValue-1",
+          "name": "StringValue",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/BooleanValue-1",
+          "name": "BooleanValue",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/DateTimeValue-1",
+          "name": "DateTimeValue",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/Int64Value-1",
+          "name": "Int64Value",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.0.0/TimeSpanValue-1",
+          "name": "TimeSpanValue",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "EventSource-1",
+      "inboundName": "Events",
+      "outboundName": "EventSource",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne"
+    },
+    {
+      "id": "RuntimeVariableMachine-1",
+      "inboundName": "RuntimeVariables",
+      "outboundName": "Machine",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Defined on RuntimeVariable \u2192 Machine. Creates: RuntimeVariable.Machine (the machine this variable belongs to) and Machine.RuntimeVariables (all runtime variables for this machine)"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "BooleanValue-1",
+      "valueType": "Boolean",
+      "description": "Boolean value of the runtime variable",
+      "isDataStream": true
+    },
+    {
+      "id": "DateTimeValue-1",
+      "valueType": "DateTime",
+      "description": "DateTime value of the runtime variable",
+      "isDataStream": true
+    },
+    {
+      "id": "DoubleValue-1",
+      "valueType": "Double",
+      "description": "Double precision floating point value of the runtime variable",
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmCause-1",
+      "valueType": "String",
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmPriority-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-2.0.0/EventAlarmPriority-1",
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmReactivatedCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmSource-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-2.0.0/EventAlarmSource-1",
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-2.0.0/EventAlarmState-1",
+      "isDataStream": true
+    },
+    {
+      "id": "EventAlarmType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-2.0.0/EventAlarmType-1",
+      "isDataStream": true
+    },
+    {
+      "id": "EventCategory-1",
+      "valueType": "String",
+      "description": "Category of the event",
+      "isDataStream": true
+    },
+    {
+      "id": "IecDataType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-2.0.0/IecDataType-1",
+      "description": "The IEC 61131-3 data type of the runtime variable in the SCADA system",
+      "isDataStream": true
+    },
+    {
+      "id": "ImportedEnergy-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWh"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "Int64Value-1",
+      "valueType": "Int64",
+      "description": "64-bit integer value of the runtime variable",
+      "isDataStream": true
+    },
+    {
+      "id": "IntValue-1",
+      "valueType": "Int",
+      "description": "Integer value of the runtime variable",
+      "isDataStream": true
+    },
+    {
+      "id": "MachineCapabilities-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-2.0.0/MachineCapabilities-1",
+      "defaultValues": [
+        "0"
+      ]
+    },
+    {
+      "id": "MachineState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Basic-2.0.0/MachineState-1",
+      "defaultValues": [
+        "2"
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "Message-1",
+      "valueType": "String",
+      "isDataStream": true
+    },
+    {
+      "id": "OperatingHoursCounter-1",
+      "valueType": "Int",
+      "isDataStream": true
+    },
+    {
+      "id": "Power-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kW"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "StandStillCounter-1",
+      "valueType": "Int",
+      "isDataStream": true
+    },
+    {
+      "id": "StringValue-1",
+      "valueType": "String",
+      "description": "String value of the runtime variable",
+      "isDataStream": true
+    },
+    {
+      "id": "TagName-1",
+      "valueType": "String",
+      "description": "Tag or VariableName that is used (when available) that generated this event",
+      "isDataStream": true
+    },
+    {
+      "id": "TimeSpanValue-1",
+      "valueType": "TimeSpan",
+      "description": "TimeSpan value of the runtime variable",
+      "isDataStream": true
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "EventAlarmPriority-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "description": "No priority has been assigned to the alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Low",
+          "description": "The alarm is of low priority.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Medium",
+          "description": "The alarm is of medium priority.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "High",
+          "description": "The alarm is of high priority.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Critical",
+          "description": "The alarm is of critical priority.",
+          "isExtension": false
+        }
+      ],
+      "description": "The priority of an alarm is a measure of its importance relative to other alarms. The priority of an alarm is used to determine the order in which alarms are presented to the operator."
+    },
+    {
+      "enumId": "EventAlarmSource-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "description": "No source has been assigned to the alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "FieldDevice",
+          "description": "The alarm is generated by a field device.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "ControlSystem",
+          "description": "The alarm is generated by a control system.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "HMI",
+          "description": "The alarm is generated by a human-machine interface.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Internal",
+          "description": "The alarm is generated by an internal source.",
+          "isExtension": false
+        }
+      ],
+      "description": "The source of an alarm is the entity that is responsible for the alarm."
+    },
+    {
+      "enumId": "EventAlarmState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "description": "No state has been assigned to the alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Normal",
+          "description": "The normal state should not use an audible indication. The normal state visual indication should be the same as indications without alarms.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Unacknowledged",
+          "description": "The unacknowledged alarm state should use both an audible indication and visual indication. The audible indication should be silenced with a silence action or acknowledge action by the operator. The visual indication should be clearly distinguishable from the normal state indication by using colours and symbols (e.g., shape or text). The visual indication for an unacknowledged alarm should include a blinking element. There are some environments in which an audible indication is not an effective indicator of unacknowledged alarms.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Acknowledged",
+          "description": "The acknowledged alarm state should not use an audible indication. The acknowledged alarm state visual indication should be clearly distinguishable from the normal state indication by using symbols (e.g., shape or text), and should be identical in colour to the unacknowledged alarm indication. A blinking element should not be used in the visual indication for an acknowledged alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "ReturnToNormal",
+          "description": "The return-to-normal unacknowledged state should not use an audible indication. The return to-normal unacknowledged state visual indication may be the same as the normal state or it may indicate an unacknowledged status with a blinking element.",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Shelved",
+          "description": "The shelved alarm state should be visually indicated in the HMI. The visual indication for a shelved alarm should not include a blinking element. The shelved alarm state indication should be distinct. No audible indication should be used to identify shelved alarms.",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "SuppressedByDesign",
+          "description": "The suppressed-by-design alarm state should be visually indicated in the HMI. The visual indication for an alarm suppressed by design should not include a blinking element. The suppressed-by-design alarm state indication should be distinct from the unacknowledged and acknowledged state indications. No audible indication should be used to identify alarms suppressed by design.",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "OutOfService",
+          "description": "The out-of-service alarm state should be visually indicated in the HMI. The visual indication for an out-of-service alarm should not include a blinking element. The out-of-service alarm state indication should be distinct from the unacknowledged and acknowledged state indications. No audible indication should be used to identify out-of-service alarms.",
+          "isExtension": false
+        }
+      ],
+      "description": "The state of an alarm is a measure of the alarm\u0027s current status."
+    },
+    {
+      "enumId": "EventAlarmType-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "description": "No type has been assigned to the alarm.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Absolute",
+          "description": "The alarm is based on an absolute value.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Deviation",
+          "description": "The alarm is based on a deviation from a set-point.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "RateOfChange",
+          "description": "The alarm is based on the rate of change of a value.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Discrepancy",
+          "description": "The alarm is based on a discrepancy between two values.",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Calculated",
+          "description": "The alarm is based on a calculated value.",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "RecipeDriven",
+          "description": "The alarm is based on a recipe-driven value.",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "BitPattern",
+          "description": "The alarm is based on a bit pattern.",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "ControllerOutput",
+          "description": "The alarm is based on a controller output.",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "SystemDiagnostic",
+          "description": "The alarm is based on a system diagnostic.",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "InstrumentDiagnostic",
+          "description": "The alarm is based on an instrument diagnostic.",
+          "isExtension": false
+        },
+        {
+          "key": 11,
+          "name": "Adjustable",
+          "description": "The alarm is based on an adjustable value.",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "Adaptive",
+          "description": "The alarm is based on an adaptive value.",
+          "isExtension": false
+        },
+        {
+          "key": 13,
+          "name": "ReAlarming",
+          "description": "The alarm is based on a re-alarming value.",
+          "isExtension": false
+        },
+        {
+          "key": 14,
+          "name": "Statistical",
+          "description": "The alarm is based on a statistical value.",
+          "isExtension": false
+        },
+        {
+          "key": 15,
+          "name": "FirstOut",
+          "description": "The alarm is based on a first-out value.",
+          "isExtension": false
+        },
+        {
+          "key": 16,
+          "name": "BadMeasurement",
+          "description": "The alarm is based on a bad measurement.",
+          "isExtension": false
+        }
+      ],
+      "description": "The type of an alarm is a measure of the nature of the alarm."
+    },
+    {
+      "enumId": "IecDataType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 1,
+          "name": "INT",
+          "description": "IEC_INT - 16Bit signed",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "UINT",
+          "description": "IEC_UINT - 16Bit unsigned",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "DINT",
+          "description": "IEC_DINT - 32Bit signed",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "UDINT",
+          "description": "IEC_UDINT - 32Bit unsigned",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "REAL",
+          "description": "IEC_REAL - 32Bit float",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "LREAL",
+          "description": "IEC_LREAL - 64Bit float",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "BOOL",
+          "description": "IEC_BOOL - 1Bit",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "USINT",
+          "description": "IEC_USINT - 8Bit unsigned",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "SINT",
+          "description": "IEC_SINT - 8Bit signed",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "STRING",
+          "description": "IEC_STRING - 8Bit*n",
+          "isExtension": false
+        },
+        {
+          "key": 17,
+          "name": "TIME",
+          "description": "IEC_TIME",
+          "isExtension": false
+        },
+        {
+          "key": 18,
+          "name": "DATE",
+          "description": "IEC_DATE",
+          "isExtension": false
+        },
+        {
+          "key": 19,
+          "name": "TOD",
+          "description": "IEC_TOD - Time of Day",
+          "isExtension": false
+        },
+        {
+          "key": 20,
+          "name": "DT",
+          "description": "IEC_DT - Date and Time",
+          "isExtension": false
+        },
+        {
+          "key": 21,
+          "name": "WSTRING",
+          "description": "IEC_WSTRING - 16Bit*n",
+          "isExtension": false
+        },
+        {
+          "key": 22,
+          "name": "BYTE",
+          "description": "IEC_BYTE - 8Bit",
+          "isExtension": false
+        },
+        {
+          "key": 23,
+          "name": "WORD",
+          "description": "IEC_WORD - 16Bit",
+          "isExtension": false
+        },
+        {
+          "key": 24,
+          "name": "DWORD",
+          "description": "IEC_DWORD - 32Bit",
+          "isExtension": false
+        },
+        {
+          "key": 25,
+          "name": "LWORD",
+          "description": "IEC_LWORD - 64Bit",
+          "isExtension": false
+        },
+        {
+          "key": 26,
+          "name": "LINT",
+          "description": "IEC_LINT - 64Bit signed",
+          "isExtension": false
+        },
+        {
+          "key": 27,
+          "name": "ULINT",
+          "description": "IEC_ULINT - 64Bit unsigned",
+          "isExtension": false
+        }
+      ],
+      "description": "IEC 61131-3 data types for SCADA runtime variables (zenon compatible)"
+    },
+    {
+      "enumId": "MachineCapabilities-1",
+      "useFlags": true,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "MachineState-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Off",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "On",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Error",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Idle",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "Industry.Basic-2.0.0"
+}
