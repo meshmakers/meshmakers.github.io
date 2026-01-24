@@ -1,0 +1,644 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.0.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Dashboard-1",
+      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A configurable dashboard containing multiple widgets arranged in a grid layout.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Description-1",
+          "name": "Description",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/Dashboard.Columns-1",
+          "name": "Columns",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/Dashboard.RowHeight-1",
+          "name": "RowHeight",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/Dashboard.Gap-1",
+          "name": "Gap",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "DashboardWidget-1",
+      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "System.UI-2.0.1/Dashboard-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A widget within a dashboard that displays data in a specific visualization format.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/DashboardWidget.Type-1",
+          "name": "Type",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/DashboardWidget.Col-1",
+          "name": "Col",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/DashboardWidget.Row-1",
+          "name": "Row",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/DashboardWidget.ColSpan-1",
+          "name": "ColSpan",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/DashboardWidget.RowSpan-1",
+          "name": "RowSpan",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/DashboardWidget.DataSourceType-1",
+          "name": "DataSourceType",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/DashboardWidget.DataSourceCkTypeId-1",
+          "name": "DataSourceCkTypeId",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/DashboardWidget.DataSourceRtId-1",
+          "name": "DataSourceRtId",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/DashboardWidget.Config-1",
+          "name": "Config",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Page-1",
+      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.UI-2.0.1/Page.Content-1",
+          "name": "Content",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ProcessDiagram-1",
+      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "HMI-style process diagram with tanks, pipes, valves, pumps, and other industrial elements.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.Version-1",
+          "name": "Version",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.CanvasWidth-1",
+          "name": "CanvasWidth",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.CanvasHeight-1",
+          "name": "CanvasHeight",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.CanvasBackgroundColor-1",
+          "name": "CanvasBackgroundColor",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.Elements-1",
+          "name": "Elements",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.Primitives-1",
+          "name": "Primitives",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.Connections-1",
+          "name": "Connections",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.Variables-1",
+          "name": "Variables",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.RefreshInterval-1",
+          "name": "RefreshInterval",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.SymbolInstances-1",
+          "name": "SymbolInstances",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.TransformProperties-1",
+          "name": "TransformProperties",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.PropertyBindings-1",
+          "name": "PropertyBindings",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/ProcessDiagram.Animations-1",
+          "name": "Animations",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "StudioRoot-1",
+      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.UI-2.0.1/TargetCkTypeId-1",
+          "name": "TargetCkTypeId",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/TargetRtId-1",
+          "name": "TargetRtId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "StudioTreeItem-1",
+      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "System.UI-2.0.1/StudioTreeItem-1"
+        },
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "System.UI-2.0.1/StudioRoot-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System.UI-2.0.1/TargetCkTypeId-1",
+          "name": "TargetCkTypeId",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/TargetRoleId-1",
+          "name": "TargetRoleId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "SymbolDefinition-1",
+      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.2/ParentChild-1",
+          "targetCkTypeId": "System.UI-2.0.1/SymbolLibrary-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A reusable symbol definition composed of primitives, belonging to a symbol library.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.Version-1",
+          "name": "Version",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.Primitives-1",
+          "name": "Primitives",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.BoundsWidth-1",
+          "name": "BoundsWidth",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.BoundsHeight-1",
+          "name": "BoundsHeight",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.ConnectionPoints-1",
+          "name": "ConnectionPoints",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.Parameters-1",
+          "name": "Parameters",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.Tags-1",
+          "name": "Tags",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.Category-1",
+          "name": "Category",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.PreviewImage-1",
+          "name": "PreviewImage",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.SymbolInstances-1",
+          "name": "SymbolInstances",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.GridSize-1",
+          "name": "GridSize",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.CanvasSizeWidth-1",
+          "name": "CanvasSizeWidth",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolDefinition.CanvasSizeHeight-1",
+          "name": "CanvasSizeHeight",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "SymbolLibrary-1",
+      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A library containing reusable symbol definitions composed of primitives for process diagrams.",
+      "attributes": [
+        {
+          "id": "System-2.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolLibrary.Version-1",
+          "name": "Version",
+          "isOptional": false
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolLibrary.Author-1",
+          "name": "Author",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolLibrary.IsBuiltIn-1",
+          "name": "IsBuiltIn",
+          "isOptional": true
+        },
+        {
+          "id": "System.UI-2.0.1/SymbolLibrary.IsReadOnly-1",
+          "name": "IsReadOnly",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "UIElement-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "Dashboard.Columns-1",
+      "valueType": "Int",
+      "description": "Number of columns in the dashboard grid layout."
+    },
+    {
+      "id": "Dashboard.Gap-1",
+      "valueType": "Int",
+      "description": "Gap between widgets in pixels."
+    },
+    {
+      "id": "Dashboard.RowHeight-1",
+      "valueType": "Int",
+      "description": "Height of each row in pixels."
+    },
+    {
+      "id": "DashboardWidget.Col-1",
+      "valueType": "Int",
+      "description": "Column position in the grid (1-based)."
+    },
+    {
+      "id": "DashboardWidget.ColSpan-1",
+      "valueType": "Int",
+      "description": "Number of columns the widget spans."
+    },
+    {
+      "id": "DashboardWidget.Config-1",
+      "valueType": "String",
+      "description": "JSON configuration for widget-specific settings."
+    },
+    {
+      "id": "DashboardWidget.DataSourceCkTypeId-1",
+      "valueType": "String",
+      "description": "Construction kit type ID for the data source."
+    },
+    {
+      "id": "DashboardWidget.DataSourceRtId-1",
+      "valueType": "String",
+      "description": "Runtime entity ID for the data source (optional)."
+    },
+    {
+      "id": "DashboardWidget.DataSourceType-1",
+      "valueType": "String",
+      "description": "Type of data source (runtimeEntity, systemQuery, static)."
+    },
+    {
+      "id": "DashboardWidget.Row-1",
+      "valueType": "Int",
+      "description": "Row position in the grid (1-based)."
+    },
+    {
+      "id": "DashboardWidget.RowSpan-1",
+      "valueType": "Int",
+      "description": "Number of rows the widget spans."
+    },
+    {
+      "id": "DashboardWidget.Type-1",
+      "valueType": "String",
+      "description": "Widget type identifier (entityCard, kpi, entityWithAssociations, table)."
+    },
+    {
+      "id": "Page.Content-1",
+      "valueType": "String"
+    },
+    {
+      "id": "ProcessDiagram.Animations-1",
+      "valueType": "String",
+      "description": "JSON array of animation definitions (rotation, blink, pulse, motion path) for diagram elements."
+    },
+    {
+      "id": "ProcessDiagram.CanvasBackgroundColor-1",
+      "valueType": "String",
+      "description": "Background color (CSS color or \u0027transparent\u0027)."
+    },
+    {
+      "id": "ProcessDiagram.CanvasHeight-1",
+      "valueType": "Int",
+      "description": "Canvas height in pixels."
+    },
+    {
+      "id": "ProcessDiagram.CanvasWidth-1",
+      "valueType": "Int",
+      "description": "Canvas width in pixels."
+    },
+    {
+      "id": "ProcessDiagram.Connections-1",
+      "valueType": "String",
+      "description": "JSON array of connection configurations between elements."
+    },
+    {
+      "id": "ProcessDiagram.Elements-1",
+      "valueType": "String",
+      "description": "JSON array of process element configurations (tanks, valves, pumps, etc.)."
+    },
+    {
+      "id": "ProcessDiagram.Primitives-1",
+      "valueType": "String",
+      "description": "JSON array of primitive shape configurations (rectangles, ellipses, lines, polygons, paths, text, images)."
+    },
+    {
+      "id": "ProcessDiagram.PropertyBindings-1",
+      "valueType": "String",
+      "description": "JSON array of property bindings connecting transform properties to element/primitive attributes with expressions."
+    },
+    {
+      "id": "ProcessDiagram.RefreshInterval-1",
+      "valueType": "Int",
+      "description": "Global refresh interval in milliseconds (0 = no auto-refresh)."
+    },
+    {
+      "id": "ProcessDiagram.SymbolInstances-1",
+      "valueType": "String",
+      "description": "JSON array of symbol instance configurations (references to symbols from libraries with position, scale, rotation)."
+    },
+    {
+      "id": "ProcessDiagram.TransformProperties-1",
+      "valueType": "String",
+      "description": "JSON array of exposed transform properties (id, name, type, defaultValue, min, max) that can be bound to runtime data."
+    },
+    {
+      "id": "ProcessDiagram.Variables-1",
+      "valueType": "String",
+      "description": "JSON array of variable definitions for parameterization."
+    },
+    {
+      "id": "ProcessDiagram.Version-1",
+      "valueType": "String",
+      "description": "Schema version for migrations (e.g., \u00221.0.0\u0022)."
+    },
+    {
+      "id": "SymbolDefinition.BoundsHeight-1",
+      "valueType": "Int",
+      "description": "Default height of the symbol in pixels."
+    },
+    {
+      "id": "SymbolDefinition.BoundsWidth-1",
+      "valueType": "Int",
+      "description": "Default width of the symbol in pixels."
+    },
+    {
+      "id": "SymbolDefinition.CanvasSizeHeight-1",
+      "valueType": "Int",
+      "description": "Preferred canvas height for the symbol editor."
+    },
+    {
+      "id": "SymbolDefinition.CanvasSizeWidth-1",
+      "valueType": "Int",
+      "description": "Preferred canvas width for the symbol editor."
+    },
+    {
+      "id": "SymbolDefinition.Category-1",
+      "valueType": "String",
+      "description": "Category for grouping symbols (e.g., \u0022Tanks\u0022, \u0022Valves\u0022, \u0022Sensors\u0022)."
+    },
+    {
+      "id": "SymbolDefinition.ConnectionPoints-1",
+      "valueType": "String",
+      "description": "JSON array of connection point definitions for wiring symbols together."
+    },
+    {
+      "id": "SymbolDefinition.GridSize-1",
+      "valueType": "Int",
+      "description": "Grid size for the symbol editor (default 10)."
+    },
+    {
+      "id": "SymbolDefinition.Parameters-1",
+      "valueType": "String",
+      "description": "JSON array of customizable parameter definitions."
+    },
+    {
+      "id": "SymbolDefinition.PreviewImage-1",
+      "valueType": "String",
+      "description": "Preview image as data URL or external URL."
+    },
+    {
+      "id": "SymbolDefinition.Primitives-1",
+      "valueType": "String",
+      "description": "JSON array of primitive configurations that make up this symbol (positions relative to 0,0)."
+    },
+    {
+      "id": "SymbolDefinition.SymbolInstances-1",
+      "valueType": "String",
+      "description": "JSON array of nested symbol instances within this symbol."
+    },
+    {
+      "id": "SymbolDefinition.Tags-1",
+      "valueType": "String",
+      "description": "Comma-separated tags for filtering and searching."
+    },
+    {
+      "id": "SymbolDefinition.Version-1",
+      "valueType": "String",
+      "description": "Symbol version for tracking changes (e.g., \u00221.0.0\u0022)."
+    },
+    {
+      "id": "SymbolLibrary.Author-1",
+      "valueType": "String",
+      "description": "Author name or identifier."
+    },
+    {
+      "id": "SymbolLibrary.IsBuiltIn-1",
+      "valueType": "Boolean",
+      "description": "Whether this is a system-provided built-in library."
+    },
+    {
+      "id": "SymbolLibrary.IsReadOnly-1",
+      "valueType": "Boolean",
+      "description": "Whether this library is read-only (cannot be modified by users)."
+    },
+    {
+      "id": "SymbolLibrary.Version-1",
+      "valueType": "String",
+      "description": "Library version for tracking changes (e.g., \u00221.0.0\u0022)."
+    },
+    {
+      "id": "TargetCkTypeId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "TargetRoleId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "TargetRtId-1",
+      "valueType": "String"
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "System.UI-2.0.1"
+}
