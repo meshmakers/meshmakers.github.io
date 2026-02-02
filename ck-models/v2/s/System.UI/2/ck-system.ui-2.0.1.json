@@ -111,22 +111,6 @@
     },
     {
       "isCollectionRoot": false,
-      "typeId": "Page-1",
-      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
-      "isFinal": false,
-      "isAbstract": false,
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
-      "attributes": [
-        {
-          "id": "System.UI-2.0.1/Page.Content-1",
-          "name": "Content",
-          "isOptional": false
-        }
-      ]
-    },
-    {
-      "isCollectionRoot": false,
       "typeId": "ProcessDiagram-1",
       "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
       "isFinal": false,
@@ -209,58 +193,6 @@
           "id": "System.UI-2.0.1/ProcessDiagram.Animations-1",
           "name": "Animations",
           "isOptional": true
-        }
-      ]
-    },
-    {
-      "isCollectionRoot": false,
-      "typeId": "StudioRoot-1",
-      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
-      "isFinal": false,
-      "isAbstract": false,
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
-      "attributes": [
-        {
-          "id": "System.UI-2.0.1/TargetCkTypeId-1",
-          "name": "TargetCkTypeId",
-          "isOptional": false
-        },
-        {
-          "id": "System.UI-2.0.1/TargetRtId-1",
-          "name": "TargetRtId",
-          "isOptional": false
-        }
-      ]
-    },
-    {
-      "isCollectionRoot": false,
-      "typeId": "StudioTreeItem-1",
-      "derivedFromCkTypeId": "System.UI-2.0.1/UIElement-1",
-      "isFinal": false,
-      "isAbstract": false,
-      "associations": [
-        {
-          "id": "System-2.0.2/ParentChild-1",
-          "targetCkTypeId": "System.UI-2.0.1/StudioTreeItem-1"
-        },
-        {
-          "id": "System-2.0.2/ParentChild-1",
-          "targetCkTypeId": "System.UI-2.0.1/StudioRoot-1"
-        }
-      ],
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
-      "attributes": [
-        {
-          "id": "System.UI-2.0.1/TargetCkTypeId-1",
-          "name": "TargetCkTypeId",
-          "isOptional": false
-        },
-        {
-          "id": "System.UI-2.0.1/TargetRoleId-1",
-          "name": "TargetRoleId",
-          "isOptional": false
         }
       ]
     },
@@ -472,10 +404,6 @@
       "description": "Widget type identifier (entityCard, kpi, entityWithAssociations, table)."
     },
     {
-      "id": "Page.Content-1",
-      "valueType": "String"
-    },
-    {
       "id": "ProcessDiagram.Animations-1",
       "valueType": "String",
       "description": "JSON array of animation definitions (rotation, blink, pulse, motion path) for diagram elements."
@@ -624,18 +552,6 @@
       "id": "SymbolLibrary.Version-1",
       "valueType": "String",
       "description": "Library version for tracking changes (e.g., \u00221.0.0\u0022)."
-    },
-    {
-      "id": "TargetCkTypeId-1",
-      "valueType": "String"
-    },
-    {
-      "id": "TargetRoleId-1",
-      "valueType": "String"
-    },
-    {
-      "id": "TargetRtId-1",
-      "valueType": "String"
     }
   ],
   "records": [],
