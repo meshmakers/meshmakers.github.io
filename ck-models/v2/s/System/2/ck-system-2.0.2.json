@@ -1,6 +1,95 @@
 {
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [],
+  "migrations": {
+    "meta": {
+      "$schema": "https://schemas.meshmakers.cloud/ck-migration-meta.schema.json",
+      "ckModelId": "System-2.0.0",
+      "migrations": [
+        {
+          "fromVersion": "1.0.3",
+          "toVersion": "2.0.0",
+          "scriptPath": "1.0.3-to-2.0.0.yaml",
+          "description": "Migrate legacy Query type to new query hierarchy (SimpleRtQuery, AggregationRtQuery, GroupingAggregationRtQuery)",
+          "breaking": true
+        }
+      ]
+    },
+    "scripts": [
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "1.0.3",
+        "targetVersion": "2.0.0",
+        "description": "Migration from System 1.0.3 to 2.0.0.\n\nThis migration transforms all legacy Query entities to the new SimpleRtQuery type.\nThe new query hierarchy introduces:\n- PersistentQuery: Abstract base type for all queries\n- SimpleRtQuery: For row/tuple queries with filtering, sorting, and column selection\n- AggregationRtQuery: For aggregation queries (Count, Min, Max, Avg, Sum)\n- GroupingAggregationRtQuery: For grouped aggregation queries with GROUP BY\n",
+        "preConditions": [
+          {
+            "type": "EntityExists",
+            "target": {
+              "ckTypeId": "System/Query",
+              "blueprintSourceOnly": false
+            }
+          }
+        ],
+        "steps": [
+          {
+            "stepId": "migrate-query-to-simple-rt-query",
+            "description": "Change CkTypeId from Query to SimpleRtQuery for all existing Query entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System/Query",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System/SimpleRtQuery"
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          },
+          {
+            "stepId": "add-description-attribute",
+            "description": "Add empty Description attribute to migrated queries",
+            "action": "Update",
+            "target": {
+              "ckTypeId": "System/SimpleRtQuery",
+              "filter": {
+                "attribute": "Description",
+                "operator": "NotExists"
+              },
+              "blueprintSourceOnly": false
+            },
+            "data": {
+              "Description": null
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          }
+        ],
+        "postValidations": [
+          {
+            "validationId": "no-legacy-queries-remain",
+            "description": "Ensure no entities with legacy Query type exist after migration",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System/Query",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "simple-rt-queries-exist",
+            "description": "Verify that SimpleRtQuery entities were created",
+            "type": "EntityExists",
+            "target": {
+              "ckTypeId": "System/SimpleRtQuery",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          }
+        ]
+      }
+    ]
+  },
   "types": [
     {
       "isCollectionRoot": false,
