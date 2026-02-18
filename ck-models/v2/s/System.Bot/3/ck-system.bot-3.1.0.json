@@ -1,0 +1,170 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.0.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "AttributeAggregateConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Bot-3.1.0/Configures-1",
+          "targetCkTypeId": "System-2.0.2/Entity-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-2.0.2/Enabled-1",
+          "name": "IsAutoCompleteEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Bot-3.1.0/AutoCompleteFilter-1",
+          "name": "AutoCompleteFilter",
+          "isOptional": false
+        },
+        {
+          "id": "System.Bot-3.1.0/AutoCompleteLimit-1",
+          "name": "AutoCompleteLimit",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Fixup-1",
+      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "System-2.0.2/Enabled-1",
+          "name": "Enabled",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Bot-3.1.0/Fixup.Order-1",
+          "name": "Order",
+          "isOptional": false
+        },
+        {
+          "id": "System.Bot-3.1.0/Fixup.Script-1",
+          "name": "Script",
+          "isOptional": false
+        },
+        {
+          "id": "System.Bot-3.1.0/Fixup.IsApplied-1",
+          "name": "IsApplied",
+          "isOptional": false
+        },
+        {
+          "id": "System.Bot-3.1.0/Fixup.AppliedAt-1",
+          "name": "AppliedAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.Bot-3.1.0/Fixup.Output-1",
+          "name": "Output",
+          "isOptional": true
+        },
+        {
+          "id": "System.Bot-3.1.0/Fixup.Error-1",
+          "name": "Error",
+          "isOptional": true
+        },
+        {
+          "id": "System.Bot-3.1.0/Fixup.IsSuccess-1",
+          "name": "IsSuccess",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "Configures-1",
+      "inboundName": "ConfiguredBy",
+      "outboundName": "Configures",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "attributes": [
+        {
+          "id": "System.Bot-3.1.0/SelectedAttributeId-1",
+          "name": "SelectedAttributeId",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AutoCompleteFilter-1",
+      "valueType": "String",
+      "description": "The filter for auto complete defined by a regex expression."
+    },
+    {
+      "id": "AutoCompleteLimit-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "50"
+      ],
+      "description": "The maximum number of items to return from the autocomplete filter and stored at the type attribute\u0027s autoCompleteValues property."
+    },
+    {
+      "id": "CronExpression-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Fixup.AppliedAt-1",
+      "valueType": "DateTime"
+    },
+    {
+      "id": "Fixup.Error-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Fixup.IsApplied-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ]
+    },
+    {
+      "id": "Fixup.IsSuccess-1",
+      "valueType": "Boolean"
+    },
+    {
+      "id": "Fixup.Order-1",
+      "valueType": "Int"
+    },
+    {
+      "id": "Fixup.Output-1",
+      "valueType": "String"
+    },
+    {
+      "id": "Fixup.Script-1",
+      "valueType": "String"
+    },
+    {
+      "id": "SelectedAttributeId-1",
+      "valueType": "String",
+      "description": "The id of the attribute that is being configured."
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "System.Bot-3.1.0"
+}
