@@ -1,0 +1,607 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Industry.Basic-2.1.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "PartialFeedback-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.7/ParentChild-1",
+          "targetCkTypeId": "Industry.Manufacturing-2.0.0/ShiftOrderItem-1"
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/FeedbackResponsible-1",
+          "targetCkTypeId": "Basic-2.0.2/Employee-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Intermediate or final production report capturing quantities (good/bad/test parts) created by an employee. Provides real-time production progress updates.",
+      "attributes": [
+        {
+          "id": "Industry.Manufacturing-2.0.0/Timestamp-1",
+          "name": "Timestamp",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/QuantityGood-1",
+          "name": "QuantityGood",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/QuantityPoor-1",
+          "name": "QuantityPoor",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/QuantityTestParts-1",
+          "name": "QuantityTestParts",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/SyncTimestamp-1",
+          "name": "SyncTimestamp",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/FeedbackSyncState-1",
+          "name": "SyncState",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ProductionOrder-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Top-level manufacturing order containing one or more order items to be produced. Tracks overall order lifecycle and production timeframes.",
+      "attributes": [
+        {
+          "id": "Industry.Manufacturing-2.0.0/OrderNumber-1",
+          "name": "OrderNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ProductionOrderState-1",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ProductionStartDateTime-1",
+          "name": "StartDateTime",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ProductionEndDateTime-1",
+          "name": "EndDateTime",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ProductionOrderItem-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.7/ParentChild-1",
+          "targetCkTypeId": "Industry.Manufacturing-2.0.0/ProductionOrder-1"
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/MachineOrderAssignment-1",
+          "targetCkTypeId": "Industry.Basic-2.1.0/Machine-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Individual line item within a production order specifying article, quantity, and machine assignment. Can span multiple shifts via ShiftOrderItems.",
+      "attributes": [
+        {
+          "id": "Industry.Manufacturing-2.0.0/ItemNumber-1",
+          "name": "ItemNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ArticleNumber-1",
+          "name": "ArticleNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ArticleText-1",
+          "name": "ArticleText",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/PlannedQuantity-1",
+          "name": "PlannedQuantity",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ProductionOrderItemState-1",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/CycleTimeForOnePiece-1",
+          "name": "CycleTimeForOnePiece",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Shift-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Specific occurrence of a work shift with actual start/end times. Aggregates employees and machines working during this period.",
+      "attributes": [
+        {
+          "id": "Industry.Manufacturing-2.0.0/StartDateTime-1",
+          "name": "StartDateTime",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/EndDateTime-1",
+          "name": "EndDateTime",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ShiftMachine-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.7/ParentChild-1",
+          "targetCkTypeId": "Industry.Manufacturing-2.0.0/Shift-1"
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/MachineAssignment-1",
+          "targetCkTypeId": "Industry.Basic-2.1.0/Machine-1"
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/MachineEmployeeAssignment-1",
+          "targetCkTypeId": "Basic-2.0.2/Employee-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Machine assignment to a shift, tracking which machines are active and their OEE performance. Supports many-to-many relationship with employees.",
+      "attributes": [
+        {
+          "id": "Industry.Manufacturing-2.0.0/OeeStatistics-1",
+          "name": "OeeStatistics",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ShiftOrderItem-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.7/ParentChild-1",
+          "targetCkTypeId": "Industry.Manufacturing-2.0.0/Shift-1"
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ShiftOrderToProductionOrder-1",
+          "targetCkTypeId": "Industry.Manufacturing-2.0.0/ProductionOrderItem-1"
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ShiftOrderItemEmployeeAssignment-1",
+          "targetCkTypeId": "Basic-2.0.2/Employee-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Production tracking per shift for an order item. Created when production spans multiple shifts to track per-shift progress, quantities produced, and OEE metrics.",
+      "attributes": [
+        {
+          "id": "Industry.Manufacturing-2.0.0/RemainingPlannedQuantity-1",
+          "name": "RemainingPlannedQuantity",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ProductionStartDateTime-1",
+          "name": "StartDateTime",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/ProductionEndDateTime-1",
+          "name": "EndDateTime",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/QuantityGood-1",
+          "name": "QuantityGood",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/QuantityPoor-1",
+          "name": "QuantityPoor",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/QuantityTestParts-1",
+          "name": "QuantityTestParts",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/OeeStatistics-1",
+          "name": "OeeStatistics",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ShiftTemplate-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Reusable shift definition specifying standard shift times (e.g., \u0027Morning Shift 6:00-14:00\u0027). Serves as template for creating actual shift instances.",
+      "attributes": [
+        {
+          "id": "Industry.Manufacturing-2.0.0/StartDateTime-1",
+          "name": "StartDateTime",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/EndDateTime-1",
+          "name": "EndDateTime",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "FeedbackResponsible-1",
+      "inboundName": "PartialFeedbacks",
+      "outboundName": "Employee",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Defined on PartialFeedback \u2192 Employee. Creates: PartialFeedback.Employee (the employee responsible for this feedback) and Employee.PartialFeedbacks (all feedback entries created by this employee)"
+    },
+    {
+      "id": "MachineAssignment-1",
+      "inboundName": "ShiftAssignments",
+      "outboundName": "Machine",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Defined on ShiftMachine \u2192 Machine. Creates: ShiftMachine.Machine (the physical machine) and Machine.ShiftAssignments (all shift assignments for this machine)"
+    },
+    {
+      "id": "MachineEmployeeAssignment-1",
+      "inboundName": "ShiftMachines",
+      "outboundName": "Employees",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Defined on ShiftMachine \u2192 Employee. Creates: ShiftMachine.AssignedEmployees (employees who have access to this machine) and Employee.MachineAssignments (machines this employee has access to)"
+    },
+    {
+      "id": "MachineOrderAssignment-1",
+      "inboundName": "OrderItems",
+      "outboundName": "Machine",
+      "inboundMultiplicity": "One",
+      "outboundMultiplicity": "N",
+      "description": "Defined on ProductionOrderItem \u2192 Machine. Creates: ProductionOrderItem.Machine (the assigned machine) and Machine.OrderItems (all order items assigned to this machine)"
+    },
+    {
+      "id": "ShiftOrderItemEmployeeAssignment-1",
+      "inboundName": "ShiftOrderItems",
+      "outboundName": "Employees",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Defined on ShiftOrderItem \u2192 Employee. Creates: ShiftOrderItem.AssignedEmployees (employees working on this order item) and Employee.AssignedMachines (order items assigned to this employee)"
+    },
+    {
+      "id": "ShiftOrderToProductionOrder-1",
+      "inboundName": "ShiftOrderItems",
+      "outboundName": "ProductionOrderItem",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Defined on ShiftOrderItem \u2192 ProductionOrderItem. Creates: ShiftOrderItem.ProductionOrderItem (what is being produced) and ProductionOrderItem.ShiftOrderItems (all shift production records for this order)"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "ArticleNumber-1",
+      "valueType": "String",
+      "description": "SKU or article identifier of the product to be manufactured"
+    },
+    {
+      "id": "ArticleText-1",
+      "valueType": "String",
+      "description": "Descriptive name or text for the article"
+    },
+    {
+      "id": "Availability-1",
+      "valueType": "Double",
+      "description": "OEE Availability metric - percentage of planned production time that operation is available (0.0 - 1.0)",
+      "isDataStream": true
+    },
+    {
+      "id": "CycleTimeForOnePiece-1",
+      "valueType": "Int",
+      "description": "Cycle time required to produce one piece, in seconds"
+    },
+    {
+      "id": "EndDateTime-1",
+      "valueType": "DateTime",
+      "description": "Date and time when the shift ends (actual or planned)"
+    },
+    {
+      "id": "FeedbackSyncState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Manufacturing-2.0.0/FeedbackSyncState-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "The sync state for synchronizing feedback to external systems"
+    },
+    {
+      "id": "ItemNumber-1",
+      "valueType": "Int",
+      "description": "Position/line number of the item within the production order"
+    },
+    {
+      "id": "OeeStatistics-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Industry.Manufacturing-2.0.0/OeeStatistics-1",
+      "description": "Complete OEE statistics bundle containing Total, Availability, Performance, and Quality metrics",
+      "isDataStream": true
+    },
+    {
+      "id": "OrderNumber-1",
+      "valueType": "String",
+      "description": "Unique identifier for the production order",
+      "isDataStream": true
+    },
+    {
+      "id": "Performance-1",
+      "valueType": "Double",
+      "description": "OEE Performance metric - speed at which work center runs as percentage of designed speed (0.0 - 1.0)",
+      "isDataStream": true
+    },
+    {
+      "id": "PlannedQuantity-1",
+      "valueType": "Int",
+      "description": "Total number of pieces planned to be produced for this order item"
+    },
+    {
+      "id": "ProductionEndDateTime-1",
+      "valueType": "DateTime",
+      "description": "Date and time when production actually ended"
+    },
+    {
+      "id": "ProductionOrderItemState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Manufacturing-2.0.0/ProductionOrderItemState-1",
+      "description": "Current lifecycle and execution state of the production order item"
+    },
+    {
+      "id": "ProductionOrderState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Manufacturing-2.0.0/ProductionOrderState-1",
+      "description": "Current lifecycle state of the production order"
+    },
+    {
+      "id": "ProductionStartDateTime-1",
+      "valueType": "DateTime",
+      "description": "Date and time when production actually started"
+    },
+    {
+      "id": "Quality-1",
+      "valueType": "Double",
+      "description": "OEE Quality metric - percentage of good parts out of total parts produced (0.0 - 1.0)",
+      "isDataStream": true
+    },
+    {
+      "id": "QuantityGood-1",
+      "valueType": "Int",
+      "description": "Number of good/acceptable parts produced"
+    },
+    {
+      "id": "QuantityPoor-1",
+      "valueType": "Int",
+      "description": "Number of defective/rejected parts produced"
+    },
+    {
+      "id": "QuantityTestParts-1",
+      "valueType": "Int",
+      "description": "Number of test parts produced during setup or quality checks"
+    },
+    {
+      "id": "RemainingPlannedQuantity-1",
+      "valueType": "Int",
+      "description": "Number of pieces still remaining to be produced from the total planned quantity"
+    },
+    {
+      "id": "StartDateTime-1",
+      "valueType": "DateTime",
+      "description": "Date and time when the shift starts (actual or planned)"
+    },
+    {
+      "id": "SyncTimestamp-1",
+      "valueType": "DateTime",
+      "description": "Date and time when the feedback was synchronized to the backend system"
+    },
+    {
+      "id": "Timestamp-1",
+      "valueType": "DateTime",
+      "description": "Date and time when the feedback was created/recorded"
+    },
+    {
+      "id": "Total-1",
+      "valueType": "Double",
+      "description": "Overall Equipment Effectiveness (OEE) total percentage (0.0 - 1.0)",
+      "isDataStream": true
+    }
+  ],
+  "records": [
+    {
+      "recordId": "OeeStatistics-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Overall Equipment Effectiveness (OEE) metrics bundle. OEE = Availability \u00D7 Performance \u00D7 Quality, measuring manufacturing productivity.",
+      "attributes": [
+        {
+          "id": "Industry.Manufacturing-2.0.0/Total-1",
+          "name": "Total",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/Availability-1",
+          "name": "Availability",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/Performance-1",
+          "name": "Performance",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Manufacturing-2.0.0/Quality-1",
+          "name": "Quality",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "FeedbackSyncState-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unsynced",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Synced",
+          "isExtension": false
+        }
+      ],
+      "description": "The sync state for synchronizing feedback to external systems"
+    },
+    {
+      "enumId": "ProductionOrderItemState-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Created",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Released",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "TechnicallyCompleted",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Delivered",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Confirmed",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Cancelled",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "InProgress",
+          "isExtension": false
+        },
+        {
+          "key": 11,
+          "name": "Paused",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "Interrupted",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle and execution states for production order items, including operational states like InProgress, Paused, and Interrupted"
+    },
+    {
+      "enumId": "ProductionOrderState-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Created",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Released",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "TechnicallyCompleted",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Delivered",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Confirmed",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Cancelled",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle states for production orders, tracking the order from creation through completion and delivery"
+    }
+  ],
+  "modelId": "Industry.Manufacturing-2.0.0"
+}
