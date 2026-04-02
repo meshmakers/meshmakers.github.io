@@ -1,0 +1,792 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.0.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Consumer-1",
+      "derivedFromCkTypeId": "Basic.Energy-1.0.1/MeteringPoint-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A metering point identified as consumer metering point"
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EdaMessage-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "MessageType",
+                "Processed"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "MessageType"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Processed"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "MeteringPoint"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "Basic.Energy-1.0.1/MessageToProcess-1",
+          "targetCkTypeId": "Basic.Energy-1.0.1/EdaProcess-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Store messages sent and received in the Energy Data Access (EDA) system.",
+      "attributes": [
+        {
+          "id": "Basic.Energy-1.0.1/EdaMessageType-1",
+          "name": "MessageType",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaMessageProcessed-1",
+          "name": "Processed",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaSenderId-1",
+          "name": "Sender",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaReceiverId-1",
+          "name": "Receiver",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.0.2/Time-1",
+          "name": "CreationDate",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaMessageId-1",
+          "name": "MessageId",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaConversationId-1",
+          "name": "ConversationId",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.0.1/MeteringPointNumber-1",
+          "name": "MeteringPoint",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaRawMessage-1",
+          "name": "RawMessage",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EdaMeteringPoint-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Metering Point from EDA import",
+      "attributes": [
+        {
+          "id": "Basic.Energy-1.0.1/MeteringPointNumber-1",
+          "name": "MeteringPointNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/ProductionType-1",
+          "name": "ProductionType",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.0.1/IsProducer-1",
+          "name": "IsProducer",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/ConsentId-1",
+          "name": "ConsentId",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EdaProcess-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Finished"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Success"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "MeteringPointNumber"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "StartTime"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "StartTime",
+                "Success"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "StartTime",
+                "Finished"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "StartTime",
+                "MeteringPointNumber"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "StartTime",
+                "Name",
+                "Finished",
+                "Success"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Store started processes in the Energy Data Access (EDA) system.",
+      "attributes": [
+        {
+          "id": "Basic.Energy-1.0.1/EdaConversationId-1",
+          "name": "ConversationId",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaProcessFinished-1",
+          "name": "Finished",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.0.2/Time-1",
+          "name": "StartTime",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaSenderId-1",
+          "name": "Sender",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaReceiverId-1",
+          "name": "Receiver",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/MeteringPointNumber-1",
+          "name": "MeteringPointNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaProcessSuccess-1",
+          "name": "Success",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaProcessInfo-1",
+          "name": "Info",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaResponseCode-1",
+          "name": "ResponseCode",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.0.1/EdaRawMessage-1",
+          "name": "RawMessage",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EnergyMeasurement-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From",
+                "TimeRange.To"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From",
+                "ObisCode"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From",
+                "TimeRange.To",
+                "ObisCode"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From",
+                "TimeRange.To",
+                "ObisCode",
+                "DataQuality"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From",
+                "TimeRange.To",
+                "DataQuality"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-2.0.7/ParentChild-1",
+          "targetCkTypeId": "Basic.Energy-1.0.1/MeteringPoint-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Describes a measurement of energy, such as consumption or production.",
+      "attributes": [
+        {
+          "id": "Basic-2.0.2/TimeRange-1",
+          "name": "TimeRange",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.0.2/Amount-1",
+          "name": "Amount",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/ObisCode-1",
+          "name": "ObisCode",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.0.1/DataQuality-1",
+          "name": "DataQuality",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "MeteringPoint-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "indexes": [
+        {
+          "indexType": "UniqueNotDeleted",
+          "fields": [
+            {
+              "attributePaths": [
+                "MeteringPointNumber"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-2.0.7/ParentChild-1",
+          "targetCkTypeId": "Basic.Energy-1.0.1/OperatingFacility-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Metering Point",
+      "attributes": [
+        {
+          "id": "Basic.Energy-1.0.1/MeteringPointNumber-1",
+          "name": "MeteringPointNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/State-1",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/ConsentId-1",
+          "name": "ConsentId",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.0.1/CarrierType-1",
+          "name": "CarrierType",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "OperatingFacility-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "An Operating Facility",
+      "attributes": [
+        {
+          "id": "Basic-2.0.2/Address-1",
+          "name": "Address",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/FacilityType-1",
+          "name": "FacilityType",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.0.1/State-1",
+          "name": "State",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Producer-1",
+      "derivedFromCkTypeId": "Basic.Energy-1.0.1/MeteringPoint-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A metering point identified as producer metering point",
+      "attributes": [
+        {
+          "id": "Basic.Energy-1.0.1/ProductionType-1",
+          "name": "ProductionType",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "MessageToProcess-1",
+      "inboundName": "Messages",
+      "outboundName": "Process",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Association between a message and the process it is part of."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "CarrierType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic.Energy-1.0.1/CarrierType-1",
+      "description": "Type of energy carrier (e.g., electricity, gas)"
+    },
+    {
+      "id": "ConsentId-1",
+      "valueType": "String",
+      "description": "Identifier for the consent associated with the metering point"
+    },
+    {
+      "id": "DataQuality-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic.Energy-1.0.1/DataQuality-1",
+      "description": "The quality of the received data",
+      "isDataStream": true
+    },
+    {
+      "id": "EdaConversationId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaMessageId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaMessageProcessed-1",
+      "valueType": "Boolean"
+    },
+    {
+      "id": "EdaMessageType-1",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaProcessFinished-1",
+      "valueType": "Boolean"
+    },
+    {
+      "id": "EdaProcessInfo-1",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaProcessSuccess-1",
+      "valueType": "Boolean"
+    },
+    {
+      "id": "EdaRawMessage-1",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaReceiverId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaResponseCode-1",
+      "valueType": "String"
+    },
+    {
+      "id": "EdaSenderId-1",
+      "valueType": "String"
+    },
+    {
+      "id": "FacilityName-1",
+      "valueType": "String",
+      "description": "The name of the facility"
+    },
+    {
+      "id": "FacilityType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic.Energy-1.0.1/FacilityType-1"
+    },
+    {
+      "id": "IsProducer-1",
+      "valueType": "Boolean",
+      "description": "Indicates if the new metering point is a producer"
+    },
+    {
+      "id": "MeteringPointNumber-1",
+      "valueType": "String",
+      "description": "Number identifying the metering point"
+    },
+    {
+      "id": "ObisCode-1",
+      "valueType": "String",
+      "description": "The OBIS code associated with the energy measurement"
+    },
+    {
+      "id": "ProductionType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic.Energy-1.0.1/ProductionType-1"
+    },
+    {
+      "id": "State-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic.Energy-1.0.1/State-1",
+      "defaultValues": [
+        "1"
+      ],
+      "description": "The state of an object"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "CarrierType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "The carrier type is unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Electricity",
+          "description": "Electricity is used as energy carrier",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Gas",
+          "description": "Gas is used as energy carrier",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the type of energy carrier"
+    },
+    {
+      "enumId": "DataQuality-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "The data quality is unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "L1",
+          "description": "The data is accurate to 15 minute meter readings",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "L2",
+          "description": "The data is a linear interpolation of 2 known meter readings",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "L3",
+          "description": "The data is an estimate",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the quality of the metering data"
+    },
+    {
+      "enumId": "FacilityType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "The facility type is unknown or not defined",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Household",
+          "description": "The facility type is a single household",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Business",
+          "description": "The facility type is a business",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Industry",
+          "description": "The facility type is a industry",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "PublicBuilding",
+          "description": "The facility type is a public building e.g. schools, public offices",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Storage",
+          "description": "The facility type is an energy storage",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the type of Facility that holds the metering points"
+    },
+    {
+      "enumId": "ProductionType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "The production type is unknown or not defined",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Solar",
+          "description": "Solar power was used to produce the energy",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "HEP",
+          "description": "Hydroelectric power was used to produce the energy",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Wind",
+          "description": "Wind power was used to produce the energy",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Other",
+          "description": "Other methods were used to produce the energy",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines what method is used to produce the energy"
+    },
+    {
+      "enumId": "State-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "New",
+          "description": "The object is just created and the state is not set",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Active",
+          "description": "The object is active and in use",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Inactive",
+          "description": "The object is inactive but may be reactivated",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the state of the object"
+    }
+  ],
+  "modelId": "Basic.Energy-1.0.1"
+}
