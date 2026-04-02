@@ -1,13 +1,13 @@
 {
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [
-    "Industry.Basic-2.0.0"
+    "Industry.Basic-2.1.0"
   ],
   "types": [
     {
       "isCollectionRoot": true,
       "typeId": "Account-1",
-      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -29,7 +29,7 @@
     {
       "isCollectionRoot": false,
       "typeId": "CostCenter-1",
-      "derivedFromCkTypeId": "Basic-2.0.0/Asset-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/Asset-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -39,7 +39,7 @@
     {
       "isCollectionRoot": false,
       "typeId": "Employee-1",
-      "derivedFromCkTypeId": "Basic-2.0.0/Asset-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/Asset-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -56,13 +56,13 @@
     {
       "isCollectionRoot": true,
       "typeId": "EnergyBalance-1",
-      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
           "id": "Industry.Maintenance-2.0.0/RelatedMachine-1",
-          "targetCkTypeId": "Basic-2.0.0/TreeNode-1"
+          "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
@@ -85,17 +85,17 @@
           "isOptional": false
         },
         {
-          "id": "System-2.0.2/Description-1",
+          "id": "System-2.0.7/Description-1",
           "name": "Description",
           "isOptional": true
         },
         {
-          "id": "Basic-2.0.0/Quantity-1",
+          "id": "Basic-2.0.2/Quantity-1",
           "name": "Quantity",
           "isOptional": false
         },
         {
-          "id": "Basic-2.0.0/Time-1",
+          "id": "Basic-2.0.2/Time-1",
           "name": "Time",
           "isOptional": false
         }
@@ -104,12 +104,12 @@
     {
       "isCollectionRoot": true,
       "typeId": "JournalEntry-1",
-      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.2/ParentChild-1",
+          "id": "System-2.0.7/ParentChild-1",
           "targetCkTypeId": "Industry.Maintenance-2.0.0/Account-1"
         },
         {
@@ -122,7 +122,7 @@
       "description": "Describes a journal entry with a time and a value for maintenance costs.",
       "attributes": [
         {
-          "id": "Basic-2.0.0/Time-1",
+          "id": "Basic-2.0.2/Time-1",
           "name": "Time",
           "isOptional": false
         },
@@ -136,7 +136,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "Order-1",
-      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -154,11 +154,11 @@
       "associations": [
         {
           "id": "Industry.Maintenance-2.0.0/RelatedEvent-1",
-          "targetCkTypeId": "Industry.Basic-2.0.0/Event-1"
+          "targetCkTypeId": "Industry.Basic-2.1.0/Event-1"
         },
         {
           "id": "Industry.Maintenance-2.0.0/RelatedMachine-1",
-          "targetCkTypeId": "Industry.Basic-2.0.0/Machine-1"
+          "targetCkTypeId": "Industry.Basic-2.1.0/Machine-1"
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
@@ -219,7 +219,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "OrderCosts-1",
-      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
@@ -256,7 +256,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "OrderFeedback-1",
-      "derivedFromCkTypeId": "System-2.0.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.7/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
@@ -265,7 +265,7 @@
           "targetCkTypeId": "Industry.Maintenance-2.0.0/Employee-1"
         },
         {
-          "id": "System-2.0.2/ParentChild-1",
+          "id": "System-2.0.7/ParentChild-1",
           "targetCkTypeId": "Industry.Maintenance-2.0.0/Order-1"
         }
       ],
@@ -292,7 +292,7 @@
     {
       "isCollectionRoot": false,
       "typeId": "Workplace-1",
-      "derivedFromCkTypeId": "Basic-2.0.0/Asset-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/Asset-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
