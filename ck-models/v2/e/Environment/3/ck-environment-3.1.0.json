@@ -1,0 +1,647 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.0.2",
+    "System-2.0.8"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "CarbonBudget-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.8/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Annual carbon budget with target tracking",
+      "attributes": [
+        {
+          "id": "Environment-3.1.0/BudgetYear-1",
+          "name": "BudgetYear",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/BudgetTotal-1",
+          "name": "BudgetTotal",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/BudgetConsumed-1",
+          "name": "BudgetConsumed",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/TargetFulfillment-1",
+          "name": "TargetFulfillment",
+          "isOptional": true
+        },
+        {
+          "id": "Environment-3.1.0/DailyEmissions-1",
+          "name": "DailyEmissions",
+          "isOptional": true
+        },
+        {
+          "id": "Environment-3.1.0/MonthlyEmissions-1",
+          "name": "MonthlyEmissions",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "CarbonEmission-1",
+      "derivedFromCkTypeId": "System-2.0.8/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From",
+                "TimeRange.To",
+                "CarbonScope"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-2.0.8/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Time-series data for CO2 emissions by scope (GHG Protocol Scope 1, 2, 3)",
+      "attributes": [
+        {
+          "id": "Basic-2.0.2/TimeRange-1",
+          "name": "TimeRange",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/EmissionAmount-1",
+          "name": "EmissionAmount",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/CarbonScope-1",
+          "name": "CarbonScope",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/EmissionSource-1",
+          "name": "EmissionSource",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "CertificateOfOrigin-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.8/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Certificate of origin (Herkunftsnachweis/HKN) for renewable energy",
+      "attributes": [
+        {
+          "id": "Environment-3.1.0/CertificateIssuer-1",
+          "name": "CertificateIssuer",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/CertificateValidFrom-1",
+          "name": "CertificateValidFrom",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/CertificateValidTo-1",
+          "name": "CertificateValidTo",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/EnergySource-1",
+          "name": "EnergySource",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/CertifiedAmount-1",
+          "name": "CertifiedAmount",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/IsVerified-1",
+          "name": "IsVerified",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ComplianceRecord-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.8/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Regulatory compliance record for standards like ISO 50001, EEffG, CSRD, NIS2",
+      "attributes": [
+        {
+          "id": "Environment-3.1.0/ComplianceCategory-1",
+          "name": "ComplianceCategory",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/ComplianceStatus-1",
+          "name": "ComplianceStatus",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/DueDate-1",
+          "name": "DueDate",
+          "isOptional": true
+        },
+        {
+          "id": "Environment-3.1.0/AuditDate-1",
+          "name": "AuditDate",
+          "isOptional": true
+        },
+        {
+          "id": "Environment-3.1.0/ComplianceNotes-1",
+          "name": "ComplianceNotes",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EnvironmentalGoal-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.8/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Environment-3.1.0/GoalText-1",
+          "name": "GoalText",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/GoalState-1",
+          "name": "GoalStatus",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "WasteMeter-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/Asset-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "attributes": [
+        {
+          "id": "Environment-3.1.0/Weight-1",
+          "name": "Weight",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/TareWeight-1",
+          "name": "TareWeight",
+          "isOptional": false
+        },
+        {
+          "id": "Environment-3.1.0/GrossWeight-1",
+          "name": "GrossWeight",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "AuditDate-1",
+      "valueType": "DateTime",
+      "description": "Date of the last audit"
+    },
+    {
+      "id": "BudgetConsumed-1",
+      "valueType": "Double",
+      "description": "Carbon budget consumed so far",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "id": "BudgetTotal-1",
+      "valueType": "Double",
+      "description": "Total carbon budget for the year",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "id": "BudgetYear-1",
+      "valueType": "Int",
+      "description": "Year of the carbon budget"
+    },
+    {
+      "id": "CarbonScope-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Environment-3.1.0/CarbonScope-1",
+      "description": "Emission scope according to GHG Protocol (Scope 1, 2, or 3)"
+    },
+    {
+      "id": "CertificateIssuer-1",
+      "valueType": "String",
+      "description": "Issuer of the certificate of origin (e.g. HKN-Austria)"
+    },
+    {
+      "id": "CertificateValidFrom-1",
+      "valueType": "DateTime",
+      "description": "Start of the certificate validity period"
+    },
+    {
+      "id": "CertificateValidTo-1",
+      "valueType": "DateTime",
+      "description": "End of the certificate validity period"
+    },
+    {
+      "id": "CertifiedAmount-1",
+      "valueType": "Double",
+      "description": "Amount of certified renewable energy",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "MWh"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "ComplianceCategory-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Environment-3.1.0/ComplianceCategory-1",
+      "description": "Category of the compliance standard"
+    },
+    {
+      "id": "ComplianceNotes-1",
+      "valueType": "String",
+      "description": "Additional notes or remarks"
+    },
+    {
+      "id": "ComplianceStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Environment-3.1.0/ComplianceStatus-1",
+      "description": "Current status of compliance"
+    },
+    {
+      "id": "DailyEmissions-1",
+      "valueType": "Double",
+      "description": "Carbon emissions for the current day",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "id": "DueDate-1",
+      "valueType": "DateTime",
+      "description": "Due date for the compliance requirement"
+    },
+    {
+      "id": "EmissionAmount-1",
+      "valueType": "Double",
+      "description": "Amount of CO2 emissions",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ],
+      "isDataStream": true
+    },
+    {
+      "id": "EmissionSource-1",
+      "valueType": "String",
+      "description": "Source of the emission (e.g. electricity, heating, transport)"
+    },
+    {
+      "id": "EnergySource-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Environment-3.1.0/EnergySource-1",
+      "description": "Type of renewable energy source"
+    },
+    {
+      "id": "GoalState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Environment-3.1.0/GoalState-1"
+    },
+    {
+      "id": "GoalText-1",
+      "valueType": "String"
+    },
+    {
+      "id": "GrossWeight-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        },
+        {
+          "key": "Type",
+          "value": "gross"
+        }
+      ]
+    },
+    {
+      "id": "IsVerified-1",
+      "valueType": "Boolean",
+      "description": "Whether the certificate has been verified"
+    },
+    {
+      "id": "MonthlyEmissions-1",
+      "valueType": "Double",
+      "description": "Carbon emissions for the current month",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "id": "SampleAttribute1-1",
+      "valueType": "String"
+    },
+    {
+      "id": "TareWeight-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        },
+        {
+          "key": "Type",
+          "value": "tare"
+        }
+      ]
+    },
+    {
+      "id": "TargetFulfillment-1",
+      "valueType": "Double",
+      "description": "Percentage of target fulfillment",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "%"
+        },
+        {
+          "key": "Decimals",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "id": "Weight-1",
+      "valueType": "Double",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "t"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        },
+        {
+          "key": "Type",
+          "value": "net"
+        }
+      ]
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "CarbonScope-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Scope1",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Scope2",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Scope3",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ComplianceCategory-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "ISO50001",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "EEffG",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "CSRD",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "NIS2",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ComplianceStatus-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Open",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "InProgress",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Submitted",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Compliant",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Passed",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "EnergySource-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Solar",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Wind",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Hydro",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Biomass",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Geothermal",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Other",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "GoalState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 1,
+          "name": "OnTrack",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "OffTrack",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "Environment-3.1.0"
+}
