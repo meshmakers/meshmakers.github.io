@@ -3,18 +3,18 @@
   "dependencies": [
     "Industry.Basic-2.1.0",
     "Basic-2.0.2",
-    "System-2.0.8"
+    "System-2.0.9"
   ],
   "types": [
     {
       "isCollectionRoot": true,
       "typeId": "PartialFeedback-1",
-      "derivedFromCkTypeId": "System-2.0.8/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.8/ParentChild-1",
+          "id": "System-2.0.9/ParentChild-1",
           "targetCkTypeId": "Industry.Manufacturing-2.0.0/ShiftOrderItem-1"
         },
         {
@@ -61,7 +61,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "ProductionOrder-1",
-      "derivedFromCkTypeId": "System-2.0.8/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -93,12 +93,12 @@
     {
       "isCollectionRoot": true,
       "typeId": "ProductionOrderItem-1",
-      "derivedFromCkTypeId": "System-2.0.8/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.8/ParentChild-1",
+          "id": "System-2.0.9/ParentChild-1",
           "targetCkTypeId": "Industry.Manufacturing-2.0.0/ProductionOrder-1"
         },
         {
@@ -145,7 +145,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "Shift-1",
-      "derivedFromCkTypeId": "System-2.0.8/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -167,12 +167,12 @@
     {
       "isCollectionRoot": true,
       "typeId": "ShiftMachine-1",
-      "derivedFromCkTypeId": "System-2.0.8/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.8/ParentChild-1",
+          "id": "System-2.0.9/ParentChild-1",
           "targetCkTypeId": "Industry.Manufacturing-2.0.0/Shift-1"
         },
         {
@@ -198,12 +198,12 @@
     {
       "isCollectionRoot": true,
       "typeId": "ShiftOrderItem-1",
-      "derivedFromCkTypeId": "System-2.0.8/Entity-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.8/ParentChild-1",
+          "id": "System-2.0.9/ParentChild-1",
           "targetCkTypeId": "Industry.Manufacturing-2.0.0/Shift-1"
         },
         {
@@ -308,8 +308,8 @@
       "id": "MachineOrderAssignment-1",
       "inboundName": "OrderItems",
       "outboundName": "Machine",
-      "inboundMultiplicity": "One",
-      "outboundMultiplicity": "N",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
       "description": "Defined on ProductionOrderItem \u2192 Machine. Creates: ProductionOrderItem.Machine (the assigned machine) and Machine.OrderItems (all order items assigned to this machine)"
     },
     {
