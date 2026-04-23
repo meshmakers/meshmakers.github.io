@@ -1,0 +1,2346 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.0.9",
+    "System.Bot-3.1.1"
+  ],
+  "migrations": {
+    "meta": {
+      "$schema": "https://schemas.meshmakers.cloud/ck-migration-meta.schema.json",
+      "ckModelId": "System.Communication-3.1.1",
+      "migrations": [
+        {
+          "fromVersion": "3.0.1",
+          "toVersion": "3.0.2",
+          "scriptPath": "3.0.1-to-3.0.2.yaml",
+          "description": "Rename DataPipeline to DataFlow for tenants already at 3.0.1 without migration",
+          "breaking": true
+        },
+        {
+          "fromVersion": "3.0.2",
+          "toVersion": "3.0.3",
+          "scriptPath": "3.0.2-to-3.0.3.yaml",
+          "description": "Rename DataPipeline to DataFlow for tenants where previous migration failed",
+          "breaking": true
+        },
+        {
+          "fromVersion": "3.0.3",
+          "toVersion": "3.1.0",
+          "scriptPath": "3.0.3-to-3.1.0.yaml",
+          "description": "Merge EdgeAdapter/MeshAdapter into Adapter, EdgePipeline/MeshPipeline into Pipeline",
+          "breaking": true
+        },
+        {
+          "fromVersion": "3.1.0",
+          "toVersion": "3.1.1",
+          "scriptPath": "3.1.0-to-3.1.1.yaml",
+          "description": "Merge EdgeAdapter/MeshAdapter into Adapter, EdgePipeline/MeshPipeline into Pipeline (retry after engine fix)",
+          "breaking": true
+        }
+      ]
+    },
+    "scripts": [
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "3.0.1",
+        "targetVersion": "3.0.2",
+        "description": "Migration from System.Communication 3.0.1 to 3.0.2.\n\nRenames DataPipeline CK type to DataFlow for tenants that were\nupdated to 3.0.1 before the migration script existed.\n\nBreaking change: The CK type ID changes from\nSystem.Communication/DataPipeline to System.Communication/DataFlow.\n",
+        "preConditions": [
+          {
+            "type": "EntityExists",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipeline",
+              "blueprintSourceOnly": false
+            }
+          }
+        ],
+        "steps": [
+          {
+            "stepId": "migrate-data-pipeline-to-data-flow",
+            "description": "Change CkTypeId from DataPipeline to DataFlow for all existing DataPipeline entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipeline",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/DataFlow"
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          }
+        ],
+        "postValidations": [
+          {
+            "validationId": "no-legacy-data-pipelines-remain",
+            "description": "Ensure no entities with legacy DataPipeline type exist after migration",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipeline",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "data-flow-entities-exist",
+            "description": "Verify that DataFlow entities were created from migrated DataPipeline entities",
+            "type": "EntityExists",
+            "target": {
+              "ckTypeId": "System.Communication/DataFlow",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          }
+        ]
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "3.0.2",
+        "targetVersion": "3.0.3",
+        "description": "Migration from System.Communication 3.0.2 to 3.0.3.\n\nRenames DataPipeline CK type to DataFlow for tenants where the\nprevious migration attempt failed or was skipped.\n",
+        "preConditions": [
+          {
+            "type": "EntityExists",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipeline",
+              "blueprintSourceOnly": false
+            }
+          }
+        ],
+        "steps": [
+          {
+            "stepId": "migrate-data-pipeline-to-data-flow",
+            "description": "Change CkTypeId from DataPipeline to DataFlow for all existing DataPipeline entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipeline",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/DataFlow"
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          }
+        ],
+        "postValidations": [
+          {
+            "validationId": "no-legacy-data-pipelines-remain",
+            "description": "Ensure no entities with legacy DataPipeline type exist after migration",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipeline",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "data-flow-entities-exist",
+            "description": "Verify that DataFlow entities were created from migrated DataPipeline entities",
+            "type": "EntityExists",
+            "target": {
+              "ckTypeId": "System.Communication/DataFlow",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          }
+        ]
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "3.0.3",
+        "targetVersion": "3.1.0",
+        "description": "Migration from System.Communication 3.0.3 to 3.1.0.\n\nThis migration unifies the adapter and pipeline type hierarchies:\n- EdgeAdapter and MeshAdapter are merged into Adapter\n- EdgePipeline and MeshPipeline are merged into Pipeline\n- DataPipelineTrigger is renamed to PipelineTrigger\n\nAll existing EdgeAdapter/MeshAdapter entities become Adapter entities.\nAll existing EdgePipeline/MeshPipeline entities become Pipeline entities.\nAll existing DataPipelineTrigger entities become PipelineTrigger entities.\n",
+        "steps": [
+          {
+            "stepId": "migrate-edge-adapter-to-adapter",
+            "description": "Change CkTypeId from EdgeAdapter to Adapter for all EdgeAdapter entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/EdgeAdapter",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/Adapter"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          },
+          {
+            "stepId": "migrate-mesh-adapter-to-adapter",
+            "description": "Change CkTypeId from MeshAdapter to Adapter for all MeshAdapter entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/MeshAdapter",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/Adapter"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          },
+          {
+            "stepId": "migrate-edge-pipeline-to-pipeline",
+            "description": "Change CkTypeId from EdgePipeline to Pipeline for all EdgePipeline entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/EdgePipeline",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/Pipeline"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          },
+          {
+            "stepId": "migrate-mesh-pipeline-to-pipeline",
+            "description": "Change CkTypeId from MeshPipeline to Pipeline for all MeshPipeline entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/MeshPipeline",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/Pipeline"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          },
+          {
+            "stepId": "migrate-data-pipeline-trigger-to-pipeline-trigger",
+            "description": "Change CkTypeId from DataPipelineTrigger to PipelineTrigger",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipelineTrigger",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/PipelineTrigger"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          }
+        ],
+        "postValidations": [
+          {
+            "validationId": "no-legacy-edge-adapters",
+            "description": "Ensure no EdgeAdapter entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/EdgeAdapter",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-mesh-adapters",
+            "description": "Ensure no MeshAdapter entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/MeshAdapter",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-edge-pipelines",
+            "description": "Ensure no EdgePipeline entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/EdgePipeline",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-mesh-pipelines",
+            "description": "Ensure no MeshPipeline entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/MeshPipeline",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-data-pipeline-triggers",
+            "description": "Ensure no DataPipelineTrigger entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipelineTrigger",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          }
+        ]
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "3.1.0",
+        "targetVersion": "3.1.1",
+        "description": "Migration from System.Communication 3.1.0 to 3.1.1.\n\nThis migration unifies the adapter and pipeline type hierarchies:\n- EdgeAdapter and MeshAdapter are merged into Adapter\n- EdgePipeline and MeshPipeline are merged into Pipeline\n- DataPipelineTrigger is renamed to PipelineTrigger\n\nAll existing EdgeAdapter/MeshAdapter entities become Adapter entities.\nAll existing EdgePipeline/MeshPipeline entities become Pipeline entities.\nAll existing DataPipelineTrigger entities become PipelineTrigger entities.\n",
+        "steps": [
+          {
+            "stepId": "migrate-edge-adapter-to-adapter",
+            "description": "Change CkTypeId from EdgeAdapter to Adapter for all EdgeAdapter entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/EdgeAdapter",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/Adapter"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          },
+          {
+            "stepId": "migrate-mesh-adapter-to-adapter",
+            "description": "Change CkTypeId from MeshAdapter to Adapter for all MeshAdapter entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/MeshAdapter",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/Adapter"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          },
+          {
+            "stepId": "migrate-edge-pipeline-to-pipeline",
+            "description": "Change CkTypeId from EdgePipeline to Pipeline for all EdgePipeline entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/EdgePipeline",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/Pipeline"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          },
+          {
+            "stepId": "migrate-mesh-pipeline-to-pipeline",
+            "description": "Change CkTypeId from MeshPipeline to Pipeline for all MeshPipeline entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/MeshPipeline",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/Pipeline"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          },
+          {
+            "stepId": "migrate-data-pipeline-trigger-to-pipeline-trigger",
+            "description": "Change CkTypeId from DataPipelineTrigger to PipelineTrigger",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipelineTrigger",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/PipelineTrigger"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          },
+          {
+            "stepId": "fix-data-pipeline-associations",
+            "description": "Update association references from DataPipeline to DataFlow",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipeline",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.Communication/DataFlow"
+            },
+            "onConflict": "Skip",
+            "continueOnError": true
+          }
+        ],
+        "postValidations": [
+          {
+            "validationId": "no-legacy-edge-adapters",
+            "description": "Ensure no EdgeAdapter entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/EdgeAdapter",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-mesh-adapters",
+            "description": "Ensure no MeshAdapter entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/MeshAdapter",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-edge-pipelines",
+            "description": "Ensure no EdgePipeline entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/EdgePipeline",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-mesh-pipelines",
+            "description": "Ensure no MeshPipeline entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/MeshPipeline",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-data-pipeline-triggers",
+            "description": "Ensure no DataPipelineTrigger entities remain",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.Communication/DataPipelineTrigger",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          }
+        ]
+      }
+    ]
+  },
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Adapter-1",
+      "derivedFromCkTypeId": "System.Communication-3.13.0/DeployableEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Communication-3.13.0/Manages-1",
+          "targetCkTypeId": "System.Communication-3.13.0/Pool-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "An external client that connects via SignalR to execute data pipelines. Adapters manage pools and receive pipeline configurations from the Communication Controller.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/CommunicationStateTimestamp-1",
+          "name": "CommunicationStateTimestamp",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/CommunicationState-1",
+          "name": "CommunicationState",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ConfigurationState-1",
+          "name": "ConfigurationState",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Deployment.ImageName-1",
+          "name": "ImageName",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/Deployment.ImageVersion-1",
+          "name": "ImageVersion",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/AdapterConfiguration-1",
+          "name": "Configuration",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/LastSyncedSequenceNumber-1",
+          "name": "LastSyncedSequenceNumber",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "DataFlow-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A logical grouping of pipelines and triggers that belong together. DataFlows organize the data integration logic within a tenant.",
+      "attributes": [
+        {
+          "id": "System-2.0.9/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.9/Description-1",
+          "name": "Description",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "DataPointMapping-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Communication-3.13.0/MapsFrom-1",
+          "targetCkTypeId": "System-2.0.9/Entity-1"
+        },
+        {
+          "id": "System.Communication-3.13.0/MapsTo-1",
+          "targetCkTypeId": "System-2.0.9/Entity-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Maps a source entity attribute to a target entity attribute with optional expression transformation",
+      "attributes": [
+        {
+          "id": "System-2.0.9/Name-1",
+          "name": "Name",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.9/Enabled-1",
+          "name": "Enabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/SourceAttributePath-1",
+          "name": "SourceAttributePath",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/MappingExpression-1",
+          "name": "MappingExpression",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/TargetAttributePath-1",
+          "name": "TargetAttributePath",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "DeployableEntity-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Abstract base type for entities that can be deployed to adapters or pools. Tracks deployment state, name, description, and status messages.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/DeploymentState-1",
+          "name": "DeploymentState",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.9/Name-1",
+          "name": "Name",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.0.9/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/StatusMessage-1",
+          "name": "StatusMessage",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "DiscordConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for Discord bot integration used by the ToDiscord pipeline node (POST /channels/{id}/messages).",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/BotToken-1",
+          "name": "BotToken",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/GuildId-1",
+          "name": "GuildId",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EMailReceiverConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "IMAP email receiver configuration for polling a mailbox",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/Host-1",
+          "name": "Host",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Port-1",
+          "name": "Port",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Username-1",
+          "name": "Username",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Password-1",
+          "name": "Password",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/IsSslEnabled-1",
+          "name": "IsSslEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Folder-1",
+          "name": "Folder",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EMailSenderConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "SMTP email sender configuration for outgoing email delivery.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/Host-1",
+          "name": "Host",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Port-1",
+          "name": "Port",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/SenderEmail-1",
+          "name": "SenderEmail",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/Username-1",
+          "name": "Username",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Password-1",
+          "name": "Password",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/IsSslEnabled-1",
+          "name": "IsSslEnabled",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EdaConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for EDA integration",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/NetworkPartnerId-1",
+          "name": "PartnerId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EnergyCommunityConfiguration-1",
+      "derivedFromCkTypeId": "System.Communication-3.13.0/EdaConfiguration-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for an energy community",
+      "attributes": [
+        {
+          "id": "System-2.0.9/Name-1",
+          "name": "Name",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/EnergyCommunityId-1",
+          "name": "EnergyCommunityId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/HeaderLogo-1",
+          "name": "HeaderLogo",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/FooterLogo-1",
+          "name": "FooterLogo",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/UiThemeColors-1",
+          "name": "Colors",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/AppTitle-1",
+          "name": "AppTitle",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/AppHeading-1",
+          "name": "AppHeading",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/BillingReportName-1",
+          "name": "BillingReportName",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/HeaderGradientStart-1",
+          "name": "HeaderGradientStart",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/HeaderGradientEnd-1",
+          "name": "HeaderGradientEnd",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/FooterGradientStart-1",
+          "name": "FooterGradientStart",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/FooterGradientEnd-1",
+          "name": "FooterGradientEnd",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/BackgroundColor-1",
+          "name": "BackgroundColor",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/Favicon-1",
+          "name": "Favicon",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/ConsumptionRecordRequestDelay-1",
+          "name": "ConsumptionRecordRequestDelay",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ConsumerPrice-1",
+          "name": "ConsumerPrice",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ProducerPrice-1",
+          "name": "ProducerPrice",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/TaxRate-1",
+          "name": "TaxRate",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/FarmerTaxRate-1",
+          "name": "FarmerTaxRate",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "FinApiConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for the finAPI banking adapter connection.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/Host-1",
+          "name": "BaseUrl",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Username-1",
+          "name": "Username",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Password-1",
+          "name": "Password",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/IsSandbox-1",
+          "name": "IsSandbox",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "GrafanaConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for Grafana integration. Used by the GrafanaProvisionTenant and GrafanaDeprovisionTenant pipeline nodes.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/GrafanaUrl-1",
+          "name": "GrafanaUrl",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/AdminUser-1",
+          "name": "AdminUser",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/AdminPassword-1",
+          "name": "AdminPassword",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/OctoMeshUrl-1",
+          "name": "OctoMeshUrl",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/IdentityServerUrl-1",
+          "name": "IdentityServerUrl",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/OAuthClientId-1",
+          "name": "OAuthClientId",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "LoxoneConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for connecting to a Loxone Miniserver via REST API",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/Host-1",
+          "name": "Host",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Port-1",
+          "name": "Port",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Username-1",
+          "name": "Username",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Password-1",
+          "name": "Password",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/IsSslEnabled-1",
+          "name": "IsSslEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/PollIntervalSeconds-1",
+          "name": "PollIntervalSeconds",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/MappingTargets-1",
+          "name": "MappingTargets",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "MicrosoftGraphConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Microsoft Graph API configuration for OAuth2 client credentials authentication",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/AzureTenantId-1",
+          "name": "AzureTenantId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Pipeline-1",
+      "derivedFromCkTypeId": "System.Communication-3.13.0/DeployableEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.9/ParentChild-1",
+          "targetCkTypeId": "System.Communication-3.13.0/DataFlow-1"
+        },
+        {
+          "id": "System.Communication-3.13.0/Executes-1",
+          "targetCkTypeId": "System.Communication-3.13.0/Adapter-1"
+        },
+        {
+          "id": "System.Communication-3.13.0/Uses-1",
+          "targetCkTypeId": "System-2.0.9/Configuration-1"
+        },
+        {
+          "id": "System.Communication-3.13.0/SendsDataTo-1",
+          "targetCkTypeId": "System.Communication-3.13.0/Pipeline-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A data processing pipeline that defines a sequence of processing nodes. Pipelines are deployed to adapters for execution and can be organized within data flows.",
+      "attributes": [
+        {
+          "id": "System-2.0.9/Enabled-1",
+          "name": "Enabled",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/PipelineDefinition-1",
+          "name": "PipelineDefinition",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/IsDebuggingEnabled-1",
+          "name": "IsDebuggingEnabled",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "PipelineExecution-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "StartedAt"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "executionId"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System.Communication-3.13.0/ExecutedPipeline-1",
+          "targetCkTypeId": "System.Communication-3.13.0/Pipeline-1"
+        },
+        {
+          "id": "System.Communication-3.13.0/ExecutingAdapter-1",
+          "targetCkTypeId": "System.Communication-3.13.0/Adapter-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Records an individual pipeline execution with its status, timing, trigger type, and optional input/output data. Linked to the executed pipeline and the adapter that performed the execution.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/ExecutionId-1",
+          "name": "ExecutionId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ExecutionStatus-1",
+          "name": "Status",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/TriggerType-1",
+          "name": "TriggerType",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/StartedAt-1",
+          "name": "StartedAt",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/CompletedAt-1",
+          "name": "CompletedAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/DurationMs-1",
+          "name": "DurationMs",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/ErrorMessage-1",
+          "name": "ErrorMessage",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/InputData-1",
+          "name": "InputData",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/OutputData-1",
+          "name": "OutputData",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "PipelineStatistics-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Communication-3.13.0/StatisticsForPipeline-1",
+          "targetCkTypeId": "System.Communication-3.13.0/Pipeline-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Aggregated execution statistics for a pipeline across multiple time windows (1h, 12h, 24h, 30d). Tracks success/failure counts and average duration per period.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/LastHourSuccessCount-1",
+          "name": "LastHourSuccessCount",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/LastHourFailureCount-1",
+          "name": "LastHourFailureCount",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/LastHourAvgDurationMs-1",
+          "name": "LastHourAvgDurationMs",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Last12HoursSuccessCount-1",
+          "name": "Last12HoursSuccessCount",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Last12HoursFailureCount-1",
+          "name": "Last12HoursFailureCount",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Last12HoursAvgDurationMs-1",
+          "name": "Last12HoursAvgDurationMs",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Last24HoursSuccessCount-1",
+          "name": "Last24HoursSuccessCount",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Last24HoursFailureCount-1",
+          "name": "Last24HoursFailureCount",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Last24HoursAvgDurationMs-1",
+          "name": "Last24HoursAvgDurationMs",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Last30DaysSuccessCount-1",
+          "name": "Last30DaysSuccessCount",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Last30DaysFailureCount-1",
+          "name": "Last30DaysFailureCount",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Last30DaysAvgDurationMs-1",
+          "name": "Last30DaysAvgDurationMs",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/LastUpdatedAt-1",
+          "name": "LastUpdatedAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/LastExecutionAt-1",
+          "name": "LastExecutionAt",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "PipelineTrigger-1",
+      "derivedFromCkTypeId": "System.Communication-3.13.0/DeployableEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.0.9/ParentChild-1",
+          "targetCkTypeId": "System.Communication-3.13.0/DataFlow-1"
+        },
+        {
+          "id": "System.Communication-3.13.0/Triggers-1",
+          "targetCkTypeId": "System.Communication-3.13.0/Pipeline-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A scheduled trigger that executes one or more pipelines based on a cron expression. Organized within data flows alongside the pipelines they trigger.",
+      "attributes": [
+        {
+          "id": "System-2.0.9/Enabled-1",
+          "name": "Enabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Bot-3.1.1/CronExpression-1",
+          "name": "CronExpression",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Pool-1",
+      "derivedFromCkTypeId": "System.Communication-3.13.0/DeployableEntity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A group of managed devices or entities. Pool operators register via SignalR to handle device communication within the pool.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/CommunicationStateTimestamp-1",
+          "name": "CommunicationStateTimestamp",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/CommunicationState-1",
+          "name": "CommunicationState",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ConfigurationState-1",
+          "name": "ConfigurationState",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "SapConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "The SAP configuration type is used to configure the connection to an SAP system.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/Host-1",
+          "name": "AppServerHost",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/SystemNumber-1",
+          "name": "SystemNumber",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/SystemId-1",
+          "name": "SystemId",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/Username-1",
+          "name": "User",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Password-1",
+          "name": "Password",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/SapClient-1",
+          "name": "Client",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/SapLanguage-1",
+          "name": "Language",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/SapTrace-1",
+          "name": "Trace",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/SapGatewayHost-1",
+          "name": "GatewayHost",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/SapGatewayService-1",
+          "name": "GatewayService",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/SapProgramId-1",
+          "name": "ProgramId",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/SapRegistrationCount-1",
+          "name": "RegistrationCount",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ServiceAccountConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Client credentials for service-to-service authentication (OAuth2 client credentials grant)",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/IssuerUri-1",
+          "name": "IssuerUri",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.9/TenantId-1",
+          "name": "TenantId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "SftpConfiguration-1",
+      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "Configuration for connecting to an SFTP server. Supports password and private key authentication.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/Host-1",
+          "name": "Host",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Port-1",
+          "name": "Port",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Username-1",
+          "name": "Username",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Password-1",
+          "name": "Password",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/PrivateKey-1",
+          "name": "PrivateKey",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/PrivateKeyPassphrase-1",
+          "name": "PrivateKeyPassphrase",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/MaxConcurrentConnections-1",
+          "name": "MaxConcurrentConnections",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Tag-1",
+      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Communication-3.13.0/Tag-1",
+          "targetCkTypeId": "System-2.0.9/Entity-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "isStreamType": false,
+      "description": "A label that can be associated with any entity for categorization and filtering purposes.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/Tag-1",
+          "name": "Tag",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/Name-1",
+          "name": "Name",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "ExecutedPipeline-1",
+      "inboundName": "ExecutedPipeline",
+      "outboundName": "PipelineExecutions",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Links a pipeline execution record to the pipeline that was executed."
+    },
+    {
+      "id": "Executes-1",
+      "inboundName": "Executes",
+      "outboundName": "ExecutedBy",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Links a pipeline to the adapter that executes it. Each pipeline is executed by exactly one adapter."
+    },
+    {
+      "id": "ExecutingAdapter-1",
+      "inboundName": "ExecutingAdapter",
+      "outboundName": "AdapterExecutions",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Links a pipeline execution record to the adapter that performed the execution."
+    },
+    {
+      "id": "Manages-1",
+      "inboundName": "Manages",
+      "outboundName": "ManagedBy",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Links an adapter to the pools it manages. A pool can be managed by at most one adapter."
+    },
+    {
+      "id": "MapsFrom-1",
+      "inboundName": "MapsFrom",
+      "outboundName": "MappedAsSource",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Links a DataPointMapping to its source data point entity"
+    },
+    {
+      "id": "MapsTo-1",
+      "inboundName": "MapsTo",
+      "outboundName": "MappedAsTarget",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Links a DataPointMapping to its target domain entity"
+    },
+    {
+      "id": "MapsToEntity-1",
+      "inboundName": "MapsTo",
+      "outboundName": "MappedFrom",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Links a data source entity to a target domain entity for value propagation"
+    },
+    {
+      "id": "SendsDataTo-1",
+      "inboundName": "SendsDataTo",
+      "outboundName": "ReceivesDataFrom",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Links a pipeline to downstream pipelines that receive its output data for chained processing."
+    },
+    {
+      "id": "StatisticsForPipeline-1",
+      "inboundName": "StatisticsForPipeline",
+      "outboundName": "PipelineStatistics",
+      "inboundMultiplicity": "One",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Links a pipeline statistics record to the pipeline it aggregates metrics for. Each pipeline has at most one statistics record."
+    },
+    {
+      "id": "Tag-1",
+      "inboundName": "TaggedBy",
+      "outboundName": "IsTagging",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Links a tag to the entities it labels for categorization and filtering."
+    },
+    {
+      "id": "Triggers-1",
+      "inboundName": "Triggers",
+      "outboundName": "TriggeredBy",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "N",
+      "description": "Links a pipeline trigger to the pipelines it starts on schedule."
+    },
+    {
+      "id": "Uses-1",
+      "inboundName": "UsedBy",
+      "outboundName": "IsUsing",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Links a pipeline to the configurations it requires for execution (e.g. connection settings for external systems)."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AdapterConfiguration-1",
+      "valueType": "String",
+      "description": "JSON-serialized adapter-specific configuration that is deployed to the adapter."
+    },
+    {
+      "id": "AdminPassword-1",
+      "valueType": "String",
+      "description": "Grafana Server Admin password."
+    },
+    {
+      "id": "AdminUser-1",
+      "valueType": "String",
+      "description": "Grafana Server Admin username for organization management API."
+    },
+    {
+      "id": "AppHeading-1",
+      "valueType": "String",
+      "description": "Heading displayed in the application header bar"
+    },
+    {
+      "id": "AppTitle-1",
+      "valueType": "String",
+      "description": "Browser tab title of the web application"
+    },
+    {
+      "id": "AzureTenantId-1",
+      "valueType": "String",
+      "description": "The Azure Active Directory tenant ID (GUID) for OAuth2 authentication."
+    },
+    {
+      "id": "BackgroundColor-1",
+      "valueType": "String",
+      "description": "Background color of the web application"
+    },
+    {
+      "id": "BillingReportName-1",
+      "valueType": "String",
+      "description": "Name of the Telerik billing report template (e.g. SBEG_Billing.trdp)"
+    },
+    {
+      "id": "BotToken-1",
+      "valueType": "String",
+      "description": "The bot token used as the \u0060Authorization: Bot {token}\u0060 header when calling the Discord REST API."
+    },
+    {
+      "id": "ClientId-1",
+      "valueType": "String",
+      "description": "OAuth2 Client ID for authenticating with the external API."
+    },
+    {
+      "id": "ClientSecret-1",
+      "valueType": "String",
+      "description": "OAuth2 Client Secret for authenticating with the external API."
+    },
+    {
+      "id": "CommunicationState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Communication-3.13.0/CommunicationState-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Current SignalR connection state of the adapter or pool operator."
+    },
+    {
+      "id": "CommunicationStateTimestamp-1",
+      "valueType": "DateTime",
+      "description": "Timestamp of the last communication state change (online/offline transition)."
+    },
+    {
+      "id": "CompletedAt-1",
+      "valueType": "DateTime",
+      "description": "Timestamp when execution completed"
+    },
+    {
+      "id": "ConfigurationState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Communication-3.13.0/ConfigurationState-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Current configuration deployment state of the adapter or pool."
+    },
+    {
+      "id": "ConsumerPrice-1",
+      "valueType": "Double",
+      "description": "Price per kWh for consumers in the energy community"
+    },
+    {
+      "id": "ConsumptionRecordRequestDelay-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "5"
+      ],
+      "description": "Delay in days before automatic consumption record requests are sent"
+    },
+    {
+      "id": "CurrentValue-1",
+      "valueType": "String",
+      "description": "Current value of the data point as a string (numeric conversion happens during mapping evaluation)"
+    },
+    {
+      "id": "Deployment.ImageName-1",
+      "valueType": "String",
+      "description": "Docker image name of the adapter container (e.g. octo-mesh-adapter)."
+    },
+    {
+      "id": "Deployment.ImageVersion-1",
+      "valueType": "String",
+      "description": "Docker image version tag of the adapter container."
+    },
+    {
+      "id": "DeploymentState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Communication-3.13.0/DeploymentState-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Current deployment state of the entity (undeployed, pending, deployed, or error)."
+    },
+    {
+      "id": "DurationMs-1",
+      "valueType": "Int",
+      "description": "Execution duration in milliseconds"
+    },
+    {
+      "id": "EnergyCommunityId-1",
+      "valueType": "String",
+      "description": "ID of the energy community"
+    },
+    {
+      "id": "ErrorMessage-1",
+      "valueType": "String",
+      "description": "Error message if execution failed"
+    },
+    {
+      "id": "ExecutionId-1",
+      "valueType": "String",
+      "description": "Unique identifier (GUID) for this execution"
+    },
+    {
+      "id": "ExecutionStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Communication-3.13.0/PipelineExecutionStatus-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Current status of the pipeline execution (Running, Completed, Failed, Interrupted, Cancelled)."
+    },
+    {
+      "id": "ExternalId-1",
+      "valueType": "String",
+      "description": "External identifier of the data point (e.g. Loxone State UUID, MQTT Topic, OPC-UA NodeId, Modbus Register)"
+    },
+    {
+      "id": "FarmerTaxRate-1",
+      "valueType": "Double",
+      "defaultValues": [
+        "13.0"
+      ],
+      "description": "Tax rate applied to farmers in the energy community"
+    },
+    {
+      "id": "Favicon-1",
+      "valueType": "BinaryLinked",
+      "description": "Favicon icon for the web application"
+    },
+    {
+      "id": "Folder-1",
+      "valueType": "String",
+      "description": "The mailbox folder to monitor for incoming emails (e.g. INBOX)."
+    },
+    {
+      "id": "FooterGradientEnd-1",
+      "valueType": "String",
+      "description": "End color of the footer gradient"
+    },
+    {
+      "id": "FooterGradientStart-1",
+      "valueType": "String",
+      "description": "Start color of the footer gradient"
+    },
+    {
+      "id": "FooterLogo-1",
+      "valueType": "BinaryLinked",
+      "description": "Icon for the app footer"
+    },
+    {
+      "id": "GrafanaUrl-1",
+      "valueType": "String",
+      "description": "Base URL of the Grafana instance."
+    },
+    {
+      "id": "GuildId-1",
+      "valueType": "String",
+      "description": "The Discord guild (server) snowflake ID. Reserved for future channel-name resolution; not read by the ToDiscord node in v1."
+    },
+    {
+      "id": "HeaderGradientEnd-1",
+      "valueType": "String",
+      "description": "End color of the header gradient"
+    },
+    {
+      "id": "HeaderGradientStart-1",
+      "valueType": "String",
+      "description": "Start color of the header gradient"
+    },
+    {
+      "id": "HeaderLogo-1",
+      "valueType": "BinaryLinked",
+      "description": "Icon for the app header"
+    },
+    {
+      "id": "Host-1",
+      "valueType": "String",
+      "description": "The host name is the name of the server on which the external system is running."
+    },
+    {
+      "id": "IdentityServerUrl-1",
+      "valueType": "String",
+      "description": "URL of the OctoMesh Identity Server for provisioned datasource OAuth configuration."
+    },
+    {
+      "id": "InputData-1",
+      "valueType": "String",
+      "description": "Optional input data (JSON) for debugging"
+    },
+    {
+      "id": "IsDebuggingEnabled-1",
+      "valueType": "Boolean",
+      "description": "Whether debugging is enabled for this pipeline"
+    },
+    {
+      "id": "IsSandbox-1",
+      "valueType": "Boolean",
+      "description": "If true, the adapter connects to the sandbox environment instead of production."
+    },
+    {
+      "id": "IsSslEnabled-1",
+      "valueType": "Boolean",
+      "description": "The Secure Sockets Layer (SSL) protocol is used to secure communication between a client and a server."
+    },
+    {
+      "id": "IssuerUri-1",
+      "valueType": "String",
+      "description": "URI of the OAuth2/OpenID Connect authorization server (e.g. https://identity.example.com)"
+    },
+    {
+      "id": "Last12HoursAvgDurationMs-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Average execution duration in the last 12 hours (ms)"
+    },
+    {
+      "id": "Last12HoursFailureCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Failed executions in the last 12 hours"
+    },
+    {
+      "id": "Last12HoursSuccessCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Successful executions in the last 12 hours"
+    },
+    {
+      "id": "Last24HoursAvgDurationMs-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Average execution duration in the last 24 hours (ms)"
+    },
+    {
+      "id": "Last24HoursFailureCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Failed executions in the last 24 hours"
+    },
+    {
+      "id": "Last24HoursSuccessCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Successful executions in the last 24 hours"
+    },
+    {
+      "id": "Last30DaysAvgDurationMs-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Average execution duration in the last 30 days (ms)"
+    },
+    {
+      "id": "Last30DaysFailureCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Failed executions in the last 30 days"
+    },
+    {
+      "id": "Last30DaysSuccessCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Successful executions in the last 30 days"
+    },
+    {
+      "id": "LastExecutionAt-1",
+      "valueType": "DateTime",
+      "description": "Timestamp of the most recent execution"
+    },
+    {
+      "id": "LastHourAvgDurationMs-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Average execution duration in the last hour (ms)"
+    },
+    {
+      "id": "LastHourFailureCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Failed executions in the last hour"
+    },
+    {
+      "id": "LastHourSuccessCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Successful executions in the last hour"
+    },
+    {
+      "id": "LastSyncedSequenceNumber-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Last synced sequence number for offline sync"
+    },
+    {
+      "id": "LastUpdate-1",
+      "valueType": "DateTime",
+      "description": "Timestamp of the last value update for this data point"
+    },
+    {
+      "id": "LastUpdatedAt-1",
+      "valueType": "DateTime",
+      "description": "When statistics were last calculated"
+    },
+    {
+      "id": "MappingExpression-1",
+      "valueType": "String",
+      "description": "Optional mXparser expression to transform the source value. Variable value contains the source value."
+    },
+    {
+      "id": "MappingTargets-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Communication-3.13.0/MappingTarget-1",
+      "description": "Resolved mapping targets for data acquisition. Populated automatically by the BuildMappingTargets pipeline node from DataPointMappings."
+    },
+    {
+      "id": "MaxConcurrentConnections-1",
+      "valueType": "Int",
+      "description": "The maximum number of concurrent connections is the maximum number of connections that can be established with an external system at the same time."
+    },
+    {
+      "id": "Name-1",
+      "valueType": "String",
+      "description": "Optional display name for the tag."
+    },
+    {
+      "id": "NetworkPartnerId-1",
+      "valueType": "String",
+      "description": "ID of the network partner (Marktpartner"
+    },
+    {
+      "id": "NeutralColor-1",
+      "valueType": "String",
+      "description": "The neutral color of the theme"
+    },
+    {
+      "id": "OAuthClientId-1",
+      "valueType": "String",
+      "description": "OAuth client ID for the Grafana datasource plugin."
+    },
+    {
+      "id": "OctoMeshUrl-1",
+      "valueType": "String",
+      "description": "URL of the OctoMesh Asset Repository for provisioned datasource configuration."
+    },
+    {
+      "id": "OutputData-1",
+      "valueType": "String",
+      "description": "Optional output data (JSON) from pipeline execution result"
+    },
+    {
+      "id": "Password-1",
+      "valueType": "String",
+      "description": "The password is the secret that is used to authenticate with the external system."
+    },
+    {
+      "id": "PipelineDefinition-1",
+      "valueType": "String",
+      "defaultValues": [
+        ""
+      ],
+      "description": "JSON-serialized pipeline node graph that defines the data processing logic."
+    },
+    {
+      "id": "PollIntervalSeconds-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "30"
+      ],
+      "description": "Interval in seconds between polling cycles."
+    },
+    {
+      "id": "Port-1",
+      "valueType": "Int",
+      "description": "The port number is the number of the port on which the external system is listening for incoming connections."
+    },
+    {
+      "id": "PrimaryColor-1",
+      "valueType": "String",
+      "description": "The primary color of the theme"
+    },
+    {
+      "id": "PrivateKey-1",
+      "valueType": "String",
+      "description": "The private key is a secret key that is used in asymmetric encryption to authenticate with the external system."
+    },
+    {
+      "id": "PrivateKeyPassphrase-1",
+      "valueType": "String",
+      "description": "The private key passphrase is a secret that is used to protect the private key."
+    },
+    {
+      "id": "ProducerPrice-1",
+      "valueType": "Double",
+      "description": "Price per kWh for producers in the energy community"
+    },
+    {
+      "id": "SapClient-1",
+      "valueType": "String",
+      "description": "A client is a tenant instance in an SAP system. SAP is multi-tenant, which means that multiple organizations or departments can work on the same system without sharing data with each other."
+    },
+    {
+      "id": "SapGatewayHost-1",
+      "valueType": "String",
+      "description": "An SAP gateway host is a server that provides communication services between SAP systems or between SAP systems and external applications."
+    },
+    {
+      "id": "SapGatewayService-1",
+      "valueType": "String",
+      "description": "An SAP gateway service provides communication services that are used between SAP systems or between SAP systems and external applications."
+    },
+    {
+      "id": "SapLanguage-1",
+      "valueType": "String",
+      "description": "The language key is a two-character code that identifies the language in which the user interface is displayed."
+    },
+    {
+      "id": "SapProgramId-1",
+      "valueType": "String",
+      "description": "A program ID is a unique identifier that is used to register a program on an SAP gateway server."
+    },
+    {
+      "id": "SapRegistrationCount-1",
+      "valueType": "Int",
+      "description": "The registration count is the number of times a program is registered on an SAP gateway server."
+    },
+    {
+      "id": "SapTrace-1",
+      "valueType": "String",
+      "defaultValues": [
+        "8"
+      ],
+      "description": "The trace level is a number that determines the amount of information that is logged during communication with the SAP system."
+    },
+    {
+      "id": "SecondaryColor-1",
+      "valueType": "String",
+      "description": "The secondary color of the theme"
+    },
+    {
+      "id": "SenderEmail-1",
+      "valueType": "String",
+      "description": "Email address used as the sender (From) for outgoing emails."
+    },
+    {
+      "id": "SourceAttributePath-1",
+      "valueType": "String",
+      "description": "Path to the source attribute to read (e.g., CurrentValue, or nested record.field). If not set, the adapter determines the default."
+    },
+    {
+      "id": "SourceIdentifier-1",
+      "valueType": "String",
+      "description": "Identifier of the source entity (e.g. Loxone Control UUID, MQTT device ID)"
+    },
+    {
+      "id": "StartedAt-1",
+      "valueType": "DateTime",
+      "description": "Timestamp when execution started"
+    },
+    {
+      "id": "StatusMessage-1",
+      "valueType": "String",
+      "description": "Human-readable status or error message from the last deployment or configuration attempt."
+    },
+    {
+      "id": "SystemId-1",
+      "valueType": "String",
+      "description": "The System ID (SID) is the unique technical name of an SAP system. It consists of three letters and uniquely identifies a system within a landscape."
+    },
+    {
+      "id": "SystemNumber-1",
+      "valueType": "String",
+      "description": "The system number is a two-digit number assigned to an SAP system during installation. It is used to identify the SAP service (e.g. Dispatcher) on a specific port."
+    },
+    {
+      "id": "Tag-1",
+      "valueType": "String",
+      "description": "The tag value used for categorization and filtering."
+    },
+    {
+      "id": "TargetAttributePath-1",
+      "valueType": "String",
+      "description": "Path to the target attribute to update on the mapped entity (e.g., Temperature, Humidity, or nested record.field)"
+    },
+    {
+      "id": "TaxRate-1",
+      "valueType": "Double",
+      "defaultValues": [
+        "20.0"
+      ],
+      "description": "Tax rate applied to energy transactions in the community"
+    },
+    {
+      "id": "TertiaryColor-1",
+      "valueType": "String",
+      "description": "The tertiary color of the theme"
+    },
+    {
+      "id": "TriggerType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Communication-3.13.0/PipelineTriggerType-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "How this pipeline execution was initiated (Manual, Scheduled, Event, or Startup)."
+    },
+    {
+      "id": "UiThemeColors-1",
+      "valueType": "Record",
+      "valueCkRecordId": "System.Communication-3.13.0/UiThemeColors-1",
+      "description": "Theme color configuration for an application"
+    },
+    {
+      "id": "Username-1",
+      "valueType": "String",
+      "description": "The username is the name of the user that is used to authenticate with the external system."
+    }
+  ],
+  "records": [
+    {
+      "recordId": "DataPoint-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "description": "Generic data point record for adapter data acquisition. Used in RecordArray attributes to store multiple named data points with their external identifiers and current values.",
+      "attributes": [
+        {
+          "id": "System-2.0.9/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/ExternalId-1",
+          "name": "ExternalId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/CurrentValue-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/LastUpdate-1",
+          "name": "LastUpdate",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "MappingTarget-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "description": "Resolved mapping target for data acquisition. Built from DataPointMappings by the BuildMappingTargets node. Contains the source identifier, optional state name, and the external ID to poll/subscribe.",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/SourceIdentifier-1",
+          "name": "SourceIdentifier",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.0.9/Name-1",
+          "name": "Name",
+          "isOptional": true
+        },
+        {
+          "id": "System.Communication-3.13.0/ExternalId-1",
+          "name": "ExternalId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "UiThemeColors-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Theme information for an app",
+      "attributes": [
+        {
+          "id": "System.Communication-3.13.0/PrimaryColor-1",
+          "name": "PrimaryColor",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/SecondaryColor-1",
+          "name": "SecondaryColor",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/TertiaryColor-1",
+          "name": "TertiaryColor",
+          "isOptional": false
+        },
+        {
+          "id": "System.Communication-3.13.0/NeutralColor-1",
+          "name": "NeutralColor",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "CommunicationState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unregistered",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Online",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Offline",
+          "isExtension": false
+        }
+      ],
+      "description": "Indicates the current SignalR connection state of an adapter or pool operator."
+    },
+    {
+      "enumId": "ConfigurationState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unconfigured",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Pending",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Configured",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Error",
+          "isExtension": false
+        }
+      ],
+      "description": "Indicates whether a deployable entity has been successfully configured with its pipeline definitions and settings."
+    },
+    {
+      "enumId": "DeploymentState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undeployed",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Pending",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Deployed",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Error",
+          "isExtension": false
+        }
+      ],
+      "description": "Tracks whether a deployable entity (adapter, pipeline, pool, or trigger) is currently deployed and active."
+    },
+    {
+      "enumId": "PipelineExecutionStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Running",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Completed",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Failed",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Interrupted",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Cancelled",
+          "isExtension": false
+        }
+      ],
+      "description": "Status of a pipeline execution lifecycle, from running through completion or failure."
+    },
+    {
+      "enumId": "PipelineTriggerType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Manual",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Scheduled",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Event",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Startup",
+          "isExtension": false
+        }
+      ],
+      "description": "Indicates how a pipeline execution was initiated."
+    }
+  ],
+  "modelId": "System.Communication-3.13.0",
+  "description": "Construction kit model for the OctoMesh Communication Controller. Defines adapters, pipelines, pools, triggers, configurations, and execution tracking for data ingress and egress."
+}
