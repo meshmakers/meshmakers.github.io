@@ -11,7 +11,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "An industrial alam event",
       "attributes": [
         {
@@ -59,7 +58,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "An industrial event",
       "attributes": [
         {
@@ -91,7 +89,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "Basic-1.0.0/NamePlate-1",
@@ -133,46 +130,39 @@
   "attributes": [
     {
       "id": "EventAlarmCause-1",
-      "valueType": "String",
-      "isDataStream": true
+      "valueType": "String"
     },
     {
       "id": "EventAlarmPriority-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmPriority-1",
-      "isDataStream": true
+      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmPriority-1"
     },
     {
       "id": "EventAlarmReactivatedCount-1",
       "valueType": "Int",
       "defaultValues": [
         "0"
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "EventAlarmSource-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmSource-1",
-      "isDataStream": true
+      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmSource-1"
     },
     {
       "id": "EventAlarmState-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmState-1",
-      "isDataStream": true
+      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmState-1"
     },
     {
       "id": "EventAlarmType-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmType-1",
-      "isDataStream": true
+      "valueCkEnumId": "Industry.Basic-1.0.0/EventAlarmType-1"
     },
     {
       "id": "EventCategory-1",
       "valueType": "String",
-      "description": "Category of the event",
-      "isDataStream": true
+      "description": "Category of the event"
     },
     {
       "id": "ImportedEnergy-1",
@@ -186,8 +176,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "MachineCapabilities-1",
@@ -203,18 +192,15 @@
       "valueCkEnumId": "Industry.Basic-1.0.0/MachineState-1",
       "defaultValues": [
         "2"
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "Message-1",
-      "valueType": "String",
-      "isDataStream": true
+      "valueType": "String"
     },
     {
       "id": "OperatingHoursCounter-1",
-      "valueType": "Int",
-      "isDataStream": true
+      "valueType": "Int"
     },
     {
       "id": "Power-1",
@@ -228,19 +214,16 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "StandStillCounter-1",
-      "valueType": "Int",
-      "isDataStream": true
+      "valueType": "Int"
     },
     {
       "id": "TagName-1",
       "valueType": "String",
-      "description": "Tag or VariableName that is used (when available) that generated this event",
-      "isDataStream": true
+      "description": "Tag or VariableName that is used (when available) that generated this event"
     }
   ],
   "records": [],
@@ -375,7 +358,7 @@
           "isExtension": false
         }
       ],
-      "description": "The state of an alarm is a measure of the alarm\u0027s current status."
+      "description": "The state of an alarm is a measure of the alarm's current status."
     },
     {
       "enumId": "EventAlarmType-1",
