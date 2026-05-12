@@ -2,7 +2,7 @@
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [
     "Basic-2.0.2",
-    "System-2.0.9"
+    "System-2.1.0"
   ],
   "migrations": {
     "meta": {
@@ -99,7 +99,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "An industrial alarm event",
       "attributes": [
         {
@@ -167,7 +166,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "An industrial event",
       "attributes": [
         {
@@ -199,7 +197,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "A machine is a physical device that performs work, typically powered by electricity or other energy sources. Machines can range from simple tools to complex systems used in manufacturing, construction, and various industries. They often consist of mechanical, electrical, and electronic components that work together to accomplish specific tasks efficiently and effectively.",
       "attributes": [
         {
@@ -242,7 +239,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "A runtime variable that can hold multiple primitive data types",
       "attributes": [
         {
@@ -309,100 +305,84 @@
     {
       "id": "AlarmAcknowledged-1",
       "valueType": "DateTime",
-      "description": "Timestamp when the alarm was acknowledged by an operator (UTC). Null if not yet acknowledged.",
-      "isDataStream": true
+      "description": "Timestamp when the alarm was acknowledged by an operator (UTC). Null if not yet acknowledged."
     },
     {
       "id": "AlarmCause-1",
-      "valueType": "String",
-      "isDataStream": true
+      "valueType": "String"
     },
     {
       "id": "AlarmCleared-1",
       "valueType": "DateTime",
-      "description": "Timestamp when the alarm returned to normal (UTC). Null if still active.",
-      "isDataStream": true
+      "description": "Timestamp when the alarm returned to normal (UTC). Null if still active."
     },
     {
       "id": "AlarmLastModified-1",
       "valueType": "DateTime",
-      "description": "Timestamp of the last modification to this alarm (UTC).",
-      "isDataStream": true
+      "description": "Timestamp of the last modification to this alarm (UTC)."
     },
     {
       "id": "AlarmPriority-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmPriority-1",
-      "isDataStream": true
+      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmPriority-1"
     },
     {
       "id": "AlarmReactivated-1",
       "valueType": "DateTime",
-      "description": "Timestamp when the alarm reoccurred after being cleared (UTC). Null if never reactivated.",
-      "isDataStream": true
+      "description": "Timestamp when the alarm reoccurred after being cleared (UTC). Null if never reactivated."
     },
     {
       "id": "AlarmReactivatedCount-1",
       "valueType": "Int",
       "defaultValues": [
         "0"
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "AlarmSourceType-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmSourceType-1",
-      "isDataStream": true
+      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmSourceType-1"
     },
     {
       "id": "AlarmState-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmState-1",
-      "isDataStream": true
+      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmState-1"
     },
     {
       "id": "AlarmType-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmType-1",
-      "isDataStream": true
+      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmType-1"
     },
     {
       "id": "BooleanValue-1",
       "valueType": "Boolean",
-      "description": "Boolean value of the runtime variable",
-      "isDataStream": true
+      "description": "Boolean value of the runtime variable"
     },
     {
       "id": "DateTimeValue-1",
       "valueType": "DateTime",
-      "description": "DateTime value of the runtime variable",
-      "isDataStream": true
+      "description": "DateTime value of the runtime variable"
     },
     {
       "id": "DoubleValue-1",
       "valueType": "Double",
-      "description": "Double precision floating point value of the runtime variable",
-      "isDataStream": true
+      "description": "Double precision floating point value of the runtime variable"
     },
     {
       "id": "EventCategory-1",
       "valueType": "String",
-      "description": "Category of the event",
-      "isDataStream": true
+      "description": "Category of the event"
     },
     {
       "id": "EventReceived-1",
       "valueType": "DateTime",
-      "description": "Timestamp when the event was first received (UTC). Null if not applicable.",
-      "isDataStream": true
+      "description": "Timestamp when the event was first received (UTC). Null if not applicable."
     },
     {
       "id": "IecDataType-1",
       "valueType": "Enum",
       "valueCkEnumId": "Industry.Basic-2.1.0/IecDataType-1",
-      "description": "The IEC 61131-3 data type of the runtime variable in the SCADA system",
-      "isDataStream": true
+      "description": "The IEC 61131-3 data type of the runtime variable in the SCADA system"
     },
     {
       "id": "ImportedEnergy-1",
@@ -416,20 +396,17 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "Int64Value-1",
       "valueType": "Int64",
-      "description": "64-bit integer value of the runtime variable",
-      "isDataStream": true
+      "description": "64-bit integer value of the runtime variable"
     },
     {
       "id": "IntValue-1",
       "valueType": "Int",
-      "description": "Integer value of the runtime variable",
-      "isDataStream": true
+      "description": "Integer value of the runtime variable"
     },
     {
       "id": "MachineCapabilities-1",
@@ -445,18 +422,15 @@
       "valueCkEnumId": "Industry.Basic-2.1.0/MachineState-1",
       "defaultValues": [
         "2"
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "Message-1",
-      "valueType": "String",
-      "isDataStream": true
+      "valueType": "String"
     },
     {
       "id": "OperatingHoursCounter-1",
-      "valueType": "Int",
-      "isDataStream": true
+      "valueType": "Int"
     },
     {
       "id": "Power-1",
@@ -470,31 +444,26 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "StandStillCounter-1",
-      "valueType": "Int",
-      "isDataStream": true
+      "valueType": "Int"
     },
     {
       "id": "StringValue-1",
       "valueType": "String",
-      "description": "String value of the runtime variable",
-      "isDataStream": true
+      "description": "String value of the runtime variable"
     },
     {
       "id": "TagName-1",
       "valueType": "String",
-      "description": "Tag or VariableName that is used (when available) that generated this event",
-      "isDataStream": true
+      "description": "Tag or VariableName that is used (when available) that generated this event"
     },
     {
       "id": "TimeSpanValue-1",
       "valueType": "TimeSpan",
-      "description": "TimeSpan value of the runtime variable",
-      "isDataStream": true
+      "description": "TimeSpan value of the runtime variable"
     }
   ],
   "records": [],
