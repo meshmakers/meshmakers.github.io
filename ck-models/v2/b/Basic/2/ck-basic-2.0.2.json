@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [
-    "System-2.0.9"
+    "System-2.1.0"
   ],
   "types": [
     {
@@ -16,8 +16,7 @@
           "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
         }
       ],
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false
+      "enableChangeStreamPreAndPostImages": false
     },
     {
       "isCollectionRoot": false,
@@ -26,7 +25,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "Basic-2.0.2/AddressZipcode-1",
@@ -41,8 +39,7 @@
       "derivedFromCkTypeId": "Basic-2.0.2/TreeNode-1",
       "isFinal": false,
       "isAbstract": false,
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false
+      "enableChangeStreamPreAndPostImages": false
     },
     {
       "isCollectionRoot": false,
@@ -50,17 +47,15 @@
       "derivedFromCkTypeId": "Basic-2.0.2/TreeNode-1",
       "isFinal": false,
       "isAbstract": false,
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false
+      "enableChangeStreamPreAndPostImages": false
     },
     {
       "isCollectionRoot": true,
       "typeId": "Document-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": true,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "A document that can be used in the system.",
       "attributes": [
         {
@@ -79,11 +74,10 @@
     {
       "isCollectionRoot": true,
       "typeId": "Employee-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "Basic-2.0.2/FirstName-1",
@@ -110,19 +104,18 @@
     {
       "isCollectionRoot": true,
       "typeId": "NamedEntity-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": true,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
-          "id": "System-2.0.9/Name-1",
+          "id": "System-2.1.0/Name-1",
           "name": "Name",
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/Description-1",
+          "id": "System-2.1.0/Description-1",
           "name": "Description",
           "isOptional": true
         }
@@ -134,8 +127,7 @@
       "derivedFromCkTypeId": "Basic-2.0.2/TreeNode-1",
       "isFinal": false,
       "isAbstract": false,
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false
+      "enableChangeStreamPreAndPostImages": false
     },
     {
       "isCollectionRoot": false,
@@ -143,8 +135,7 @@
       "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
       "isFinal": false,
       "isAbstract": false,
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false
+      "enableChangeStreamPreAndPostImages": false
     },
     {
       "isCollectionRoot": false,
@@ -154,16 +145,15 @@
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Basic-2.0.2/Tree-1"
         },
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
         }
       ],
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false
+      "enableChangeStreamPreAndPostImages": false
     }
   ],
   "associationRoles": [
@@ -962,7 +952,7 @@
       "isAbstract": false,
       "attributes": [
         {
-          "id": "System-2.0.9/Name-1",
+          "id": "System-2.1.0/Name-1",
           "name": "Name",
           "isOptional": false
         },
@@ -972,7 +962,7 @@
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/Description-1",
+          "id": "System-2.1.0/Description-1",
           "name": "AdditionalText",
           "isOptional": true
         }
