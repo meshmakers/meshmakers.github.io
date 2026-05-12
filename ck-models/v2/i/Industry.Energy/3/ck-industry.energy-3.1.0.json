@@ -3,7 +3,7 @@
   "dependencies": [
     "Industry.Basic-2.1.0",
     "Basic-2.0.2",
-    "System-2.0.9"
+    "System-2.1.0"
   ],
   "types": [
     {
@@ -14,12 +14,11 @@
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "A demand response event representing participation in energy flexibility markets",
       "attributes": [
         {
@@ -61,7 +60,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Energy consuming equipment with nominal power and load tracking",
       "attributes": [
         {
@@ -89,7 +87,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "EnergyCost-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -118,12 +116,11 @@
       ],
       "associations": [
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Time-series data for energy costs including actual and forecasted amounts",
       "attributes": [
         {
@@ -151,7 +148,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "EnergyForecast-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -168,12 +165,11 @@
       ],
       "associations": [
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "AI-generated load forecast data for energy consumption prediction",
       "attributes": [
         {
@@ -205,7 +201,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "Industry.Energy-3.1.0/Voltage-1",
@@ -284,12 +279,11 @@
       ],
       "associations": [
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Basic-2.0.2/TreeNode-1"
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Energy Performance Indicator (EnPI) for tracking energy efficiency metrics like kWh/unit",
       "attributes": [
         {
@@ -321,7 +315,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "Industry.Energy-3.1.0/Voltage-1",
@@ -382,7 +375,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "Industry.Energy-3.1.0/DCVoltage-1",
@@ -437,8 +429,7 @@
       "derivedFromCkTypeId": "Basic-2.0.2/Asset-1",
       "isFinal": false,
       "isAbstract": false,
-      "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false
+      "enableChangeStreamPreAndPostImages": false
     },
     {
       "isCollectionRoot": false,
@@ -447,7 +438,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "Industry.Energy-3.1.0/PeakPower-1",
@@ -468,7 +458,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "Industry.Energy-3.1.0/NumOfModules-1",
@@ -497,8 +486,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "ApparentPower-1",
@@ -512,8 +500,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "Capacity-1",
@@ -529,8 +516,7 @@
           "value": "0173-1#02-BAA564#007",
           "description": ""
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "Confidence-1",
@@ -545,8 +531,7 @@
           "key": "Decimals",
           "value": "1"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "CostAmount-1",
@@ -561,8 +546,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "DCAmpere-1",
@@ -576,8 +560,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "DCVoltage-1",
@@ -591,8 +574,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "DemandResponseEndTime-1",
@@ -626,8 +608,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "ForecastAmount-1",
@@ -642,8 +623,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "ForecastModel-1",
@@ -662,8 +642,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "IndicatorUnit-1",
@@ -673,8 +652,7 @@
     {
       "id": "IndicatorValue-1",
       "valueType": "Double",
-      "description": "Current value of the energy performance indicator",
-      "isDataStream": true
+      "description": "Current value of the energy performance indicator"
     },
     {
       "id": "LoadPercent-1",
@@ -689,8 +667,7 @@
           "key": "Decimals",
           "value": "0"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "MaximumPower-1",
@@ -704,8 +681,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "NominalPower-1",
@@ -731,8 +707,7 @@
           "key": "Unit",
           "value": ""
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "NumOfModules-1",
@@ -750,8 +725,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "PhaseInfoL1-1",
@@ -781,8 +755,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "ReactivePower-1",
@@ -796,8 +769,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "ReductionKw-1",
@@ -817,8 +789,7 @@
     {
       "id": "ReferenceValue-1",
       "valueType": "Double",
-      "description": "Reference or baseline value for comparison",
-      "isDataStream": true
+      "description": "Reference or baseline value for comparison"
     },
     {
       "id": "Revenue-1",
@@ -844,8 +815,7 @@
           "key": "Unit",
           "value": "%"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "SoH-1",
@@ -856,8 +826,7 @@
           "key": "Unit",
           "value": "%"
         }
-      ],
-      "isDataStream": true
+      ]
     },
     {
       "id": "TariffType-1",
@@ -876,8 +845,7 @@
           "key": "Decimals",
           "value": "2"
         }
-      ],
-      "isDataStream": true
+      ]
     }
   ],
   "records": [
