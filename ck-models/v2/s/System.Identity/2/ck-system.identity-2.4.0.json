@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [
-    "System-2.0.9"
+    "System-2.1.0"
   ],
   "types": [
     {
@@ -11,7 +11,6 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/RequireResourceIndicator-1",
@@ -42,7 +41,6 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/IsEmphasized-1",
@@ -63,10 +61,9 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
-          "id": "System-2.0.9/TenantId-1",
+          "id": "System-2.1.0/TenantId-1",
           "name": "TenantId",
           "isOptional": false
         },
@@ -90,14 +87,13 @@
     {
       "isCollectionRoot": true,
       "typeId": "Client-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
-          "id": "System-2.0.9/Enabled-1",
+          "id": "System-2.1.0/Enabled-1",
           "name": "Enabled",
           "isOptional": false
         },
@@ -122,12 +118,12 @@
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/Name-1",
+          "id": "System-2.1.0/Name-1",
           "name": "ClientName",
           "isOptional": true
         },
         {
-          "id": "System-2.0.9/Description-1",
+          "id": "System-2.1.0/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -366,7 +362,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "EmailDomainGroupRule-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": true,
       "isAbstract": false,
       "indexes": [
@@ -382,7 +378,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Maps an email domain pattern to a group for automatic group assignment on user login.",
       "attributes": [
         {
@@ -396,7 +391,7 @@
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/Description-1",
+          "id": "System-2.1.0/Description-1",
           "name": "Description",
           "isOptional": true
         }
@@ -405,7 +400,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "ExternalTenantUserMapping-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": true,
       "isAbstract": false,
       "indexes": [
@@ -422,7 +417,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Maps a user from a parent tenant to roles in this (child) tenant.",
       "attributes": [
         {
@@ -454,7 +448,6 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/ClientId-1",
@@ -475,7 +468,6 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/ClientId-1",
@@ -492,7 +484,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "Group-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": true,
       "isAbstract": false,
       "indexes": [
@@ -526,7 +518,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "A group that can be assigned roles. Users and other groups can be members.",
       "attributes": [
         {
@@ -549,29 +540,28 @@
     {
       "isCollectionRoot": true,
       "typeId": "IdentityProvider-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": true,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
-          "id": "System-2.0.9/Name-1",
+          "id": "System-2.1.0/Name-1",
           "name": "Name",
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/Enabled-1",
+          "id": "System-2.1.0/Enabled-1",
           "name": "IsEnabled",
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/DisplayName-1",
+          "id": "System-2.1.0/DisplayName-1",
           "name": "DisplayName",
           "isOptional": true
         },
         {
-          "id": "System-2.0.9/Description-1",
+          "id": "System-2.1.0/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -594,7 +584,6 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/IsEmphasized-1",
@@ -611,11 +600,10 @@
     {
       "isCollectionRoot": false,
       "typeId": "MailNotificationConfiguration-1",
-      "derivedFromCkTypeId": "System-2.0.9/Configuration-1",
+      "derivedFromCkTypeId": "System-2.1.0/Configuration-1",
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/EnableEmailNotifications-1",
@@ -636,7 +624,6 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/Host-1",
@@ -672,7 +659,6 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/ClientId-1",
@@ -693,7 +679,6 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Identity provider that delegates authentication to a parent tenant.",
       "attributes": [
         {
@@ -710,7 +695,6 @@
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/Host-1",
@@ -742,11 +726,10 @@
     {
       "isCollectionRoot": true,
       "typeId": "Permission-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/PermissionId-1",
@@ -763,14 +746,13 @@
     {
       "isCollectionRoot": true,
       "typeId": "PermissionRole-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
-          "id": "System-2.0.9/Name-1",
+          "id": "System-2.1.0/Name-1",
           "name": "Name",
           "isOptional": false
         },
@@ -794,11 +776,10 @@
     {
       "isCollectionRoot": true,
       "typeId": "PersistedGrant-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/GrantKey-1",
@@ -826,7 +807,7 @@
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/Description-1",
+          "id": "System-2.1.0/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -855,29 +836,28 @@
     {
       "isCollectionRoot": true,
       "typeId": "Resource-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": true,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
-          "id": "System-2.0.9/Enabled-1",
+          "id": "System-2.1.0/Enabled-1",
           "name": "Enabled",
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/Name-1",
+          "id": "System-2.1.0/Name-1",
           "name": "Name",
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/DisplayName-1",
+          "id": "System-2.1.0/DisplayName-1",
           "name": "DisplayName",
           "isOptional": true
         },
         {
-          "id": "System-2.0.9/Description-1",
+          "id": "System-2.1.0/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -896,14 +876,13 @@
     {
       "isCollectionRoot": true,
       "typeId": "Role-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
-          "id": "System-2.0.9/Name-1",
+          "id": "System-2.1.0/Name-1",
           "name": "Name",
           "isOptional": false
         },
@@ -932,7 +911,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "User-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": true,
       "isAbstract": false,
       "indexes": [
@@ -964,7 +943,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "attributes": [
         {
           "id": "System.Identity-2.4.0/UserName-1",
@@ -987,7 +965,7 @@
           "isOptional": true
         },
         {
-          "id": "System-2.0.9/Description-1",
+          "id": "System-2.1.0/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -1880,7 +1858,7 @@
       "isAbstract": false,
       "attributes": [
         {
-          "id": "System-2.0.9/Description-1",
+          "id": "System-2.1.0/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -1961,7 +1939,7 @@
           "isOptional": false
         },
         {
-          "id": "System-2.0.9/Name-1",
+          "id": "System-2.1.0/Name-1",
           "name": "Name",
           "isOptional": false
         },
