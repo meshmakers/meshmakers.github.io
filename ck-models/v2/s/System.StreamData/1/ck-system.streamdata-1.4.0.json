@@ -1,0 +1,457 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.1.0"
+  ],
+  "migrations": {
+    "meta": {
+      "$schema": "https://schemas.meshmakers.cloud/ck-migration-meta.schema.json",
+      "ckModelId": "System.StreamData-1.4.0",
+      "migrations": [
+        {
+          "fromVersion": "1.1.0",
+          "toVersion": "1.2.0",
+          "scriptPath": "1.1.0-to-1.2.0.yaml",
+          "description": "Rename CkArchive (concrete raw-archive default) to CkRawArchive. CkArchive becomes the abstract base for raw / rollup / time-range subtypes.",
+          "breaking": true
+        }
+      ]
+    },
+    "scripts": [
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "1.1.0",
+        "targetVersion": "1.2.0",
+        "description": "Migration from System.StreamData 1.1.0 to 1.2.0.\n\nType renames (Phase 2 of the time-range concept \u2014 see\nocto-construction-kit-engine/docs/concept-time-range-archives.md):\n- CkArchive (was a concrete raw archive default) is split:\n  - Archive becomes the abstract base.\n  - RawArchive (new concrete subtype) inherits the today\u0027s raw-archive\n    semantics. Existing entities are rewritten to RawArchive.\n- CkRollupArchive is renamed RollupArchive. No semantic change; the\n  type just drops the misleading Ck prefix (Ck was for the CK type\n  system itself, not for runtime entity types).\n\nRecords (CkArchiveColumn, CkRollupAggregation) and enums\n(CkArchiveStatus, CkRollupFunction) keep their Ck-prefixed names in\nthis migration. Renaming them requires a \u0060ChangeCkRecordId\u0060 /\n\u0060ChangeCkEnumId\u0060 migration action which the engine doesn\u0027t yet\nsupport; that cleanup lands in Phase 2.5 once the framework is\nextended.\n\nThe per-archive CrateDB tables are unaffected: the physical table\nname is derived from the entity rtid only, not from the CK type\ndiscriminator.\n\nBreaking changes:\n- Callers of the auto-generated \u0060runtime.systemStreamDataCkArchives\n  .create\u0060 GraphQL mutation must switch to\n  \u0060runtime.systemStreamDataRawArchives.create\u0060. The CkRollupArchive\n  create mutation is replaced by \u0060systemStreamDataRollupArchives\u0060.\n- C# code that instantiates \u0060new RtCkArchive { ... }\u0060 or\n  \u0060new RtCkRollupArchive { ... }\u0060 must switch to \u0060new RtRawArchive\u0060\n  / \u0060new RtRollupArchive\u0060. The abstract \u0060Archive\u0060 base cannot be\n  instantiated.\n",
+        "steps": [
+          {
+            "stepId": "rename-ckarchive-to-rawarchive",
+            "description": "Promote existing CkArchive entities to the new concrete RawArchive subtype.",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.StreamData/CkArchive",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.StreamData/RawArchive"
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          },
+          {
+            "stepId": "rename-ckrollupArchive-to-rollupArchive",
+            "description": "Strip the Ck prefix from existing CkRollupArchive entities \u2014 no semantic change, just a rename.",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.StreamData/CkRollupArchive",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.StreamData/RollupArchive"
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          }
+        ],
+        "postValidations": [
+          {
+            "validationId": "no-legacy-ckarchive-entities",
+            "description": "Verify no entities remain with the old abstract-base ckTypeId.",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.StreamData/CkArchive",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-ckrollupArchive-entities",
+            "description": "Verify no entities remain with the old CkRollupArchive ckTypeId.",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.StreamData/CkRollupArchive",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          }
+        ]
+      }
+    ]
+  },
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "Archive-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base for a CrateDB-backed time-series archive. Concrete subtypes: RawArchive (instant measurements with a single timestamp), RollupArchive (system-orchestrated bucket aggregations of another archive), TimeRangeArchive (externally aggregated values with [from, to) windows \u2014 added in a later concept). Shared attributes: TargetCkTypeId, Columns, Status, optional RawRetentionMs. Subtypes add their own time-axis semantics.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.4.0/Archive.TargetCkTypeId-1",
+          "name": "TargetCkTypeId",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/Archive.Columns-1",
+          "name": "Columns",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/Archive.Status-1",
+          "name": "Status",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/Archive.RawRetentionMs-1",
+          "name": "RawRetentionMs",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "RawArchive-1",
+      "derivedFromCkTypeId": "System.StreamData-1.4.0/Archive-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Concrete Archive subtype for instant time-series measurements \u2014 one row per data point with a single timestamp. External callers (MeshAdapter pipelines, REST clients) push StreamDataPoints via SaveStreamDataInArchive@1 / IStreamDataRepository.InsertAsync. No source archive, no orchestrator. The 1.1.0 de-facto raw-archive shape, lifted out of what\u0027s now the abstract Archive base."
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "RollupArchive-1",
+      "derivedFromCkTypeId": "System.StreamData-1.4.0/Archive-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Concrete Archive subtype for derived bucketed aggregations of another archive (raw or rollup-of-rollup). Columns are generated from Aggregations[] at activation time and immutable afterwards. Inserts happen exclusively through the system-internal rollup orchestrator. The inherited Columns attribute is populated automatically; direct edits are rejected by validation.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.4.0/RollupArchive.SourceArchiveRtId-1",
+          "name": "SourceArchiveRtId",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/RollupArchive.BucketSizeMs-1",
+          "name": "BucketSizeMs",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/RollupArchive.WatermarkLagMs-1",
+          "name": "WatermarkLagMs",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/RollupArchive.LastAggregatedBucketEnd-1",
+          "name": "LastAggregatedBucketEnd",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.4.0/RollupArchive.Aggregations-1",
+          "name": "Aggregations",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/RollupArchive.FrozenUntil-1",
+          "name": "FrozenUntil",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.4.0/RollupArchive.BucketAlignment-1",
+          "name": "BucketAlignment",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "TimeRangeArchive-1",
+      "derivedFromCkTypeId": "System.StreamData-1.4.0/Archive-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Concrete Archive subtype for externally pre-aggregated time-range data. Each row carries an explicit [from, to) window (a System/TimeRange record on the time axis at the storage layer) instead of a single timestamp. External systems (EDA reports, smart meters, weather APIs) push data directly via SaveTimeRangeStreamDataInArchive@1 / IStreamDataRepository.InsertTimeRangeAsync \u2014 there is no source archive and no system orchestrator on this path. Concept doc: docs/concept-time-range-archives.md.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.4.0/TimeRangeArchive.Period-1",
+          "name": "Period",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "Archive.Columns-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.StreamData-1.4.0/CkArchiveColumn-1",
+      "description": "Set of columns (attribute paths) the archive captures. At least one column is required."
+    },
+    {
+      "id": "Archive.RawRetentionMs-1",
+      "valueType": "Int",
+      "description": "Retention window for raw data points in milliseconds. When set, the partition pruner may drop source partitions older than (now - RawRetentionMs), but never ahead of the slowest attached rollup\u0027s watermark. Null means keep forever."
+    },
+    {
+      "id": "Archive.Status-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.4.0/CkArchiveStatus-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Lifecycle status of the archive. Defaults to Created."
+    },
+    {
+      "id": "Archive.TargetCkTypeId-1",
+      "valueType": "String",
+      "description": "Construction Kit type ID that this archive captures time-series data for."
+    },
+    {
+      "id": "CkArchiveColumn.Indexed-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "description": "When true (default), the generated CrateDB column is indexed by the standard rules; when false, the column is created with INDEX OFF. Disable only for columns that are read but never filtered."
+    },
+    {
+      "id": "CkArchiveColumn.Path-1",
+      "valueType": "String",
+      "description": "Attribute path captured by this column. Supports nested record traversal (e.g. \u0027sensor.reading.value\u0027) and array projection (e.g. \u0027readings[*].value\u0027)."
+    },
+    {
+      "id": "CkArchiveColumn.Required-1",
+      "valueType": "Boolean",
+      "description": "When true, every insert must supply a non-null value for this path; missing values cause an exception. When false, missing values are stored as NULL and preserved across upserts via COALESCE."
+    },
+    {
+      "id": "CkRollupAggregation.Function-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.4.0/CkRollupFunction-1",
+      "description": "Aggregation function applied to SourcePath within each bucket."
+    },
+    {
+      "id": "CkRollupAggregation.SourcePath-1",
+      "valueType": "String",
+      "description": "Attribute path on the source archive (must exist in the source\u0027s Columns list at activation time). For chained rollups referencing a stored AVG, use the explicit _sum / _count column names."
+    },
+    {
+      "id": "CkRollupAggregation.TargetColumnName-1",
+      "valueType": "String",
+      "description": "Optional explicit storage column name. Default is \u0027{sourcePath}_{function}\u0027 lower-cased; for AVG, two columns are created with suffixes _sum and _count derived from this base name."
+    },
+    {
+      "id": "RollupArchive.Aggregations-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.StreamData-1.4.0/CkRollupAggregation-1",
+      "description": "List of aggregation definitions. At least one entry is required at activation time. Immutable after activation; schema changes require creating a new rollup."
+    },
+    {
+      "id": "RollupArchive.BucketAlignment-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.4.0/BucketAlignment-1",
+      "defaultValues": [
+        "0"
+      ],
+      "description": "Bucket-boundary alignment. FixedSize (default, key 0) preserves the legacy \u0027LastAggregatedBucketEnd \u002B BucketSizeMs\u0027 arithmetic. Calendar/Iso8601 values align bucket boundaries to wall-clock UTC boundaries so monthly / weekly / yearly rollups become expressible without forcing BucketSizeMs into a single TimeSpan. Pre-1.4.0 entities resolve to FixedSize at read time. Immutable after activation."
+    },
+    {
+      "id": "RollupArchive.BucketSizeMs-1",
+      "valueType": "Int",
+      "description": "Width of the aggregation bucket in milliseconds. Each output row covers the half-open interval [bucketEnd - BucketSizeMs, bucketEnd). Must be positive and a multiple of the source rollup\u0027s bucket size when chaining. Immutable after activation."
+    },
+    {
+      "id": "RollupArchive.FrozenUntil-1",
+      "valueType": "DateTime",
+      "description": "When set, the rollup is read-only up to this timestamp: the orchestrator will not produce new buckets whose bucketEnd is \u2264 FrozenUntil. Set automatically when the source archive is truncated for the covered range, so the already-aggregated history is preserved. Monotonic; can only move forward."
+    },
+    {
+      "id": "RollupArchive.LastAggregatedBucketEnd-1",
+      "valueType": "DateTime",
+      "description": "Exclusive end timestamp of the most recently committed bucket. Null before the first run. Maintained exclusively by the rollup orchestrator; manual edits go through the rewindRollupWatermark mutation."
+    },
+    {
+      "id": "RollupArchive.SourceArchiveRtId-1",
+      "valueType": "String",
+      "description": "Runtime id of the source Archive this rollup aggregates from. May reference another RollupArchive to form a chain (e.g. raw \u2192 1 min \u2192 1 h). Immutable after the rollup is activated."
+    },
+    {
+      "id": "RollupArchive.WatermarkLagMs-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "300000"
+      ],
+      "description": "Lower bound on how far behind real-time the orchestrator stays before closing a bucket, in milliseconds. Absorbs late-arriving source inserts. Default 300000 (five minutes). Mutable."
+    },
+    {
+      "id": "TimeRangeArchive.Period-1",
+      "valueType": "TimeSpan",
+      "description": "Advisory window length for the rows this archive holds (e.g. PT15M, PT1H, P1D). Optional and descriptive only \u2014 the engine does not enforce that incoming [from, to) windows match the declared period. Used by the studio to label the archive (\u0027EDA 15-min\u0027) and by chained-rollup recommendations. Variable-period archives are allowed (leave null)."
+    }
+  ],
+  "records": [
+    {
+      "recordId": "CkArchiveColumn-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Single column definition inside a CkArchive: the attribute path to capture and whether it is required and indexed.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.4.0/CkArchiveColumn.Path-1",
+          "name": "Path",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/CkArchiveColumn.Required-1",
+          "name": "Required",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/CkArchiveColumn.Indexed-1",
+          "name": "Indexed",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "CkRollupAggregation-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Single aggregation definition for a CkRollupArchive. Maps a source archive column (SourcePath) to one or more storage columns via Function. AVG materialises as two stored columns (sum \u002B count); the other functions map 1:1.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.4.0/CkRollupAggregation.SourcePath-1",
+          "name": "SourcePath",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/CkRollupAggregation.Function-1",
+          "name": "Function",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.4.0/CkRollupAggregation.TargetColumnName-1",
+          "name": "TargetColumnName",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "BucketAlignment-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "FixedSize",
+          "description": "Default. Each bucket spans exactly BucketSizeMs; boundaries are LastAggregatedBucketEnd, LastAggregatedBucketEnd \u002B BucketSizeMs, ...",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "CalendarDay",
+          "description": "Bucket boundaries align to UTC calendar days (00:00:00 UTC). BucketSizeMs is informational only.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Iso8601Week",
+          "description": "Bucket boundaries align to ISO-8601 weeks (Monday 00:00:00 UTC to next Monday 00:00:00 UTC). BucketSizeMs is informational only.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "CalendarMonth",
+          "description": "Bucket boundaries align to UTC calendar months (first day of month 00:00:00 UTC). BucketSizeMs is informational only; month lengths vary 28-31 days.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "CalendarYear",
+          "description": "Bucket boundaries align to UTC calendar years (Jan 1 00:00:00 UTC). BucketSizeMs is informational only.",
+          "isExtension": false
+        }
+      ],
+      "description": "Bucket-boundary alignment for a RollupArchive. FixedSize (default) uses the legacy LastAggregatedBucketEnd \u002B BucketSizeMs arithmetic. The other values align to calendar boundaries \u2014 BucketSizeMs is interpreted as a lower bound (e.g. 28d for monthly) but the actual boundary comes from the calendar so monthly/weekly EDA rollups become expressible. Concept-time-range \u00A77."
+    },
+    {
+      "enumId": "CkArchiveStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Created",
+          "description": "Archive definition exists, but no Crate table has been provisioned. Inserts and queries are rejected.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Activated",
+          "description": "Crate table exists, schema is frozen, inserts and queries are accepted.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Disabled",
+          "description": "Crate table exists, but inserts and queries are rejected. Data is preserved.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Failed",
+          "description": "Activation failed; manual retry required. Inserts and queries are rejected.",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle status of a CkArchive instance."
+    },
+    {
+      "enumId": "CkRollupFunction-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Avg",
+          "description": "Arithmetic mean. Stored as sum and count columns; the average is computed on read.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Min",
+          "description": "Minimum value in the bucket.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Max",
+          "description": "Maximum value in the bucket.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Sum",
+          "description": "Sum of values in the bucket.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Count",
+          "description": "Number of non-null values in the bucket.",
+          "isExtension": false
+        }
+      ],
+      "description": "Aggregation function used by a CkRollupAggregation. AVG is stored as two columns (sum \u002B count) so chained rollups stay numerically correct."
+    }
+  ],
+  "modelId": "System.StreamData-1.4.0",
+  "description": "StreamData model. Defines the abstract Archive base, RawArchive (instant measurements), RollupArchive (derived bucketed-aggregation archives), TimeRangeArchive (externally pre-aggregated [from, to) windowed data), and supporting enum/record types. 1.1.0 \u2192 1.2.0 renamed CkArchive \u2192 Archive (abstract) \u002B introduced RawArchive; 1.2.0 \u2192 1.3.0 adds TimeRangeArchive (additive, no entity migration needed); 1.3.0 \u2192 1.4.0 adds RollupArchive.BucketAlignment \u002B the BucketAlignment enum so monthly / weekly / yearly rollups are expressible (additive, pre-1.4.0 entities resolve to FixedSize). Loaded only when StreamData is enabled at the instance level."
+}
