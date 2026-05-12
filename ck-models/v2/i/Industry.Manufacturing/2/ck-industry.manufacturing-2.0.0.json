@@ -3,18 +3,18 @@
   "dependencies": [
     "Industry.Basic-2.1.0",
     "Basic-2.0.2",
-    "System-2.0.9"
+    "System-2.1.0"
   ],
   "types": [
     {
       "isCollectionRoot": true,
       "typeId": "PartialFeedback-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Industry.Manufacturing-2.0.0/ShiftOrderItem-1"
         },
         {
@@ -23,7 +23,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Intermediate or final production report capturing quantities (good/bad/test parts) created by an employee. Provides real-time production progress updates.",
       "attributes": [
         {
@@ -61,11 +60,10 @@
     {
       "isCollectionRoot": true,
       "typeId": "ProductionOrder-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Top-level manufacturing order containing one or more order items to be produced. Tracks overall order lifecycle and production timeframes.",
       "attributes": [
         {
@@ -93,12 +91,12 @@
     {
       "isCollectionRoot": true,
       "typeId": "ProductionOrderItem-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Industry.Manufacturing-2.0.0/ProductionOrder-1"
         },
         {
@@ -107,7 +105,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Individual line item within a production order specifying article, quantity, and machine assignment. Can span multiple shifts via ShiftOrderItems.",
       "attributes": [
         {
@@ -145,11 +142,10 @@
     {
       "isCollectionRoot": true,
       "typeId": "Shift-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Specific occurrence of a work shift with actual start/end times. Aggregates employees and machines working during this period.",
       "attributes": [
         {
@@ -167,12 +163,12 @@
     {
       "isCollectionRoot": true,
       "typeId": "ShiftMachine-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Industry.Manufacturing-2.0.0/Shift-1"
         },
         {
@@ -185,7 +181,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Machine assignment to a shift, tracking which machines are active and their OEE performance. Supports many-to-many relationship with employees.",
       "attributes": [
         {
@@ -198,12 +193,12 @@
     {
       "isCollectionRoot": true,
       "typeId": "ShiftOrderItem-1",
-      "derivedFromCkTypeId": "System-2.0.9/Entity-1",
+      "derivedFromCkTypeId": "System-2.1.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.0.9/ParentChild-1",
+          "id": "System-2.1.0/ParentChild-1",
           "targetCkTypeId": "Industry.Manufacturing-2.0.0/Shift-1"
         },
         {
@@ -216,7 +211,6 @@
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Production tracking per shift for an order item. Created when production spans multiple shifts to track per-shift progress, quantities produced, and OEE metrics.",
       "attributes": [
         {
@@ -263,7 +257,6 @@
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
-      "isStreamType": false,
       "description": "Reusable shift definition specifying standard shift times (e.g., \u0027Morning Shift 6:00-14:00\u0027). Serves as template for creating actual shift instances.",
       "attributes": [
         {
@@ -343,8 +336,7 @@
     {
       "id": "Availability-1",
       "valueType": "Double",
-      "description": "OEE Availability metric - percentage of planned production time that operation is available (0.0 - 1.0)",
-      "isDataStream": true
+      "description": "OEE Availability metric - percentage of planned production time that operation is available (0.0 - 1.0)"
     },
     {
       "id": "CycleTimeForOnePiece-1",
@@ -374,20 +366,17 @@
       "id": "OeeStatistics-1",
       "valueType": "Record",
       "valueCkRecordId": "Industry.Manufacturing-2.0.0/OeeStatistics-1",
-      "description": "Complete OEE statistics bundle containing Total, Availability, Performance, and Quality metrics",
-      "isDataStream": true
+      "description": "Complete OEE statistics bundle containing Total, Availability, Performance, and Quality metrics"
     },
     {
       "id": "OrderNumber-1",
       "valueType": "String",
-      "description": "Unique identifier for the production order",
-      "isDataStream": true
+      "description": "Unique identifier for the production order"
     },
     {
       "id": "Performance-1",
       "valueType": "Double",
-      "description": "OEE Performance metric - speed at which work center runs as percentage of designed speed (0.0 - 1.0)",
-      "isDataStream": true
+      "description": "OEE Performance metric - speed at which work center runs as percentage of designed speed (0.0 - 1.0)"
     },
     {
       "id": "PlannedQuantity-1",
@@ -419,8 +408,7 @@
     {
       "id": "Quality-1",
       "valueType": "Double",
-      "description": "OEE Quality metric - percentage of good parts out of total parts produced (0.0 - 1.0)",
-      "isDataStream": true
+      "description": "OEE Quality metric - percentage of good parts out of total parts produced (0.0 - 1.0)"
     },
     {
       "id": "QuantityGood-1",
@@ -460,8 +448,7 @@
     {
       "id": "Total-1",
       "valueType": "Double",
-      "description": "Overall Equipment Effectiveness (OEE) total percentage (0.0 - 1.0)",
-      "isDataStream": true
+      "description": "Overall Equipment Effectiveness (OEE) total percentage (0.0 - 1.0)"
     }
   ],
   "records": [
