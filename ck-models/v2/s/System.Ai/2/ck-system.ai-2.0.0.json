@@ -1,0 +1,214 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "Message-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.2.0/ParentChild-1",
+          "targetCkTypeId": "System.Ai-2.0.0/NodeContext-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents a single message in a conversation with content, user flag, and timestamp",
+      "attributes": [
+        {
+          "id": "System.Ai-2.0.0/Content-1",
+          "name": "Content",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-2.0.0/IsUser-1",
+          "name": "IsUser",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-2.0.0/Timestamp-1",
+          "name": "Timestamp",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Node-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.2.0/ParentChild-1",
+          "targetCkTypeId": "System.Ai-2.0.0/Workspace-1"
+        },
+        {
+          "id": "System.Ai-2.0.0/AssociatedNodes-1",
+          "targetCkTypeId": "System.Ai-2.0.0/Node-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents a conversation node with navigation, interaction type, and optional metadata",
+      "attributes": [
+        {
+          "id": "System-2.2.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-2.0.0/Type-1",
+          "name": "Type",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-2.0.0/InteractionType-1",
+          "name": "InteractionType",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-2.0.0/Metadata-1",
+          "name": "Metadata",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "NodeContext-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.2.0/ParentChild-1",
+          "targetCkTypeId": "System.Ai-2.0.0/Node-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents the context of a conversation node, containing associated messages",
+      "attributes": [
+        {
+          "id": "System.Ai-2.0.0/NodeId-1",
+          "name": "NodeId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Workspace-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents a conversation workspace containing multiple interconnected nodes",
+      "attributes": [
+        {
+          "id": "System-2.2.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-2.0.0/UserId-1",
+          "name": "UserId",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "AssociatedNodes-1",
+      "inboundName": "NextNodes",
+      "outboundName": "PreviousNodes",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Association between a Nodes"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "Content-1",
+      "valueType": "String",
+      "description": "The text content of a message"
+    },
+    {
+      "id": "InteractionType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-2.0.0/InteractionType-1",
+      "description": "The type of interaction for a node (chat, detail, config, custom)"
+    },
+    {
+      "id": "IsUser-1",
+      "valueType": "Boolean",
+      "description": "Flag indicating if the message is from a user (true) or system/AI (false)"
+    },
+    {
+      "id": "Metadata-1",
+      "valueType": "String",
+      "description": "Additional metadata information stored as string"
+    },
+    {
+      "id": "NodeId-1",
+      "valueType": "String",
+      "description": "Unique identifier for a conversation node"
+    },
+    {
+      "id": "Timestamp-1",
+      "valueType": "DateTime",
+      "description": "The date and time when the message was created"
+    },
+    {
+      "id": "Type-1",
+      "valueType": "String",
+      "description": "Generic type classification for entities"
+    },
+    {
+      "id": "UserId-1",
+      "valueType": "String",
+      "description": "The user identifier associated with the workspace"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "InteractionType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Chat",
+          "description": "Standard chat interaction for conversational nodes",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Detail",
+          "description": "Detailed information display nodes",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Config",
+          "description": "Configuration or settings nodes",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Custom",
+          "description": "Custom interaction type for specialized nodes",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the type of interaction available for a conversation node"
+    }
+  ],
+  "modelId": "System.Ai-2.0.0",
+  "description": "Construction Kit model for AI Services - Graph-based conversation system with nodes, messages, and contexts"
+}
