@@ -305,30 +305,36 @@
     {
       "id": "AlarmAcknowledged-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp when the alarm was acknowledged by an operator (UTC). Null if not yet acknowledged."
     },
     {
       "id": "AlarmCause-1",
-      "valueType": "String"
+      "valueType": "String",
+      "isRuntimeState": false
     },
     {
       "id": "AlarmCleared-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp when the alarm returned to normal (UTC). Null if still active."
     },
     {
       "id": "AlarmLastModified-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp of the last modification to this alarm (UTC)."
     },
     {
       "id": "AlarmPriority-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmPriority-1"
+      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmPriority-1",
+      "isRuntimeState": false
     },
     {
       "id": "AlarmReactivated-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp when the alarm reoccurred after being cleared (UTC). Null if never reactivated."
     },
     {
@@ -336,57 +342,68 @@
       "valueType": "Int",
       "defaultValues": [
         "0"
-      ]
+      ],
+      "isRuntimeState": false
     },
     {
       "id": "AlarmSourceType-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmSourceType-1"
+      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmSourceType-1",
+      "isRuntimeState": false
     },
     {
       "id": "AlarmState-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmState-1"
+      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmState-1",
+      "isRuntimeState": false
     },
     {
       "id": "AlarmType-1",
       "valueType": "Enum",
-      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmType-1"
+      "valueCkEnumId": "Industry.Basic-2.1.0/AlarmType-1",
+      "isRuntimeState": false
     },
     {
       "id": "BooleanValue-1",
       "valueType": "Boolean",
+      "isRuntimeState": false,
       "description": "Boolean value of the runtime variable"
     },
     {
       "id": "DateTimeValue-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "DateTime value of the runtime variable"
     },
     {
       "id": "DoubleValue-1",
       "valueType": "Double",
+      "isRuntimeState": false,
       "description": "Double precision floating point value of the runtime variable"
     },
     {
       "id": "EventCategory-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Category of the event"
     },
     {
       "id": "EventReceived-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp when the event was first received (UTC). Null if not applicable."
     },
     {
       "id": "IecDataType-1",
       "valueType": "Enum",
       "valueCkEnumId": "Industry.Basic-2.1.0/IecDataType-1",
+      "isRuntimeState": false,
       "description": "The IEC 61131-3 data type of the runtime variable in the SCADA system"
     },
     {
       "id": "ImportedEnergy-1",
       "valueType": "Double",
+      "isRuntimeState": false,
       "metaData": [
         {
           "key": "Unit",
@@ -401,11 +418,13 @@
     {
       "id": "Int64Value-1",
       "valueType": "Int64",
+      "isRuntimeState": false,
       "description": "64-bit integer value of the runtime variable"
     },
     {
       "id": "IntValue-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Integer value of the runtime variable"
     },
     {
@@ -414,7 +433,8 @@
       "valueCkEnumId": "Industry.Basic-2.1.0/MachineCapabilities-1",
       "defaultValues": [
         "0"
-      ]
+      ],
+      "isRuntimeState": false
     },
     {
       "id": "MachineState-1",
@@ -422,19 +442,23 @@
       "valueCkEnumId": "Industry.Basic-2.1.0/MachineState-1",
       "defaultValues": [
         "2"
-      ]
+      ],
+      "isRuntimeState": false
     },
     {
       "id": "Message-1",
-      "valueType": "String"
+      "valueType": "String",
+      "isRuntimeState": false
     },
     {
       "id": "OperatingHoursCounter-1",
-      "valueType": "Int"
+      "valueType": "Int",
+      "isRuntimeState": false
     },
     {
       "id": "Power-1",
       "valueType": "Double",
+      "isRuntimeState": false,
       "metaData": [
         {
           "key": "Unit",
@@ -448,21 +472,25 @@
     },
     {
       "id": "StandStillCounter-1",
-      "valueType": "Int"
+      "valueType": "Int",
+      "isRuntimeState": false
     },
     {
       "id": "StringValue-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "String value of the runtime variable"
     },
     {
       "id": "TagName-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Tag or VariableName that is used (when available) that generated this event"
     },
     {
       "id": "TimeSpanValue-1",
       "valueType": "TimeSpan",
+      "isRuntimeState": false,
       "description": "TimeSpan value of the runtime variable"
     }
   ],
