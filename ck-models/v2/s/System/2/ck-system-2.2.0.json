@@ -814,178 +814,213 @@
       "id": "AggregationQueryColumn-1",
       "valueType": "Record",
       "valueCkRecordId": "System-2.2.0/AggregationQueryColumn-1",
+      "isRuntimeState": false,
       "description": "Defines an aggregation column with its attribute path and aggregation type."
     },
     {
       "id": "AggregationQueryColumns-1",
       "valueType": "RecordArray",
       "valueCkRecordId": "System-2.2.0/AggregationQueryColumn-1",
+      "isRuntimeState": false,
       "description": "Defines a set of aggregation columns for the query, with its attribute path and aggregation type."
     },
     {
       "id": "AggregationType-1",
       "valueType": "Enum",
       "valueCkEnumId": "System-2.2.0/AggregationTypes-1",
+      "isRuntimeState": false,
       "description": "Type of aggregation function to apply (Count, Min, Max, Avg, Sum)."
     },
     {
       "id": "AttributePath-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Path to an attribute, supporting nested paths with dot notation."
     },
     {
       "id": "AttributePaths-1",
       "valueType": "StringArray",
+      "isRuntimeState": false,
       "description": "Array of attribute paths for multi-attribute operations."
     },
     {
       "id": "AutoIncrement.CurrentValue-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "The current value of the auto-increment counter."
     },
     {
       "id": "AutoIncrement.End-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "The upper limit of the auto-increment sequence."
     },
     {
       "id": "AutoIncrement.Format-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Optional format string for generating formatted identifiers (e.g., \u0027INV-{0:D6}\u0027)."
     },
     {
       "id": "BlueprintBackup.BlueprintName-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Name of the blueprint whose pre-apply state this backup captures."
     },
     {
       "id": "BlueprintBackup.BlueprintVersion-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Version of the blueprint at the time the backup was taken."
     },
     {
       "id": "BlueprintBackup.CreatedAt-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp when this backup was created (before the corresponding apply)."
     },
     {
       "id": "BlueprintBackup.SnapshotJson-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Serialized snapshot of seed entities (and their attributes) that existed before the apply, used to support rollback."
     },
     {
       "id": "BlueprintHistory.ApplicationMode-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "How the blueprint was applied: Install, Update, Rollback, or Reapply."
     },
     {
       "id": "BlueprintHistory.AppliedAt-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp when the apply operation completed."
     },
     {
       "id": "BlueprintHistory.BlueprintName-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Name of the blueprint involved in this history entry."
     },
     {
       "id": "BlueprintHistory.BlueprintVersion-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Version of the blueprint involved in this history entry."
     },
     {
       "id": "BlueprintHistory.EntitiesCreated-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of seed entities created by this apply."
     },
     {
       "id": "BlueprintHistory.EntitiesDeleted-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of seed entities deleted by this apply."
     },
     {
       "id": "BlueprintHistory.EntitiesUpdated-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of seed entities updated by this apply."
     },
     {
       "id": "BlueprintHistory.PreviousBlueprintName-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Name of the previously installed blueprint version, if this entry represents an update or rollback."
     },
     {
       "id": "BlueprintHistory.PreviousVersion-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Previously installed version, if this entry represents an update or rollback."
     },
     {
       "id": "BlueprintHistory.SeedDataChecksum-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Checksum of the seed-data files applied in this operation."
     },
     {
       "id": "BlueprintInstallation.BlueprintName-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Name of the installed blueprint (without version)."
     },
     {
       "id": "BlueprintInstallation.BlueprintVersion-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Semantic version of the installed blueprint."
     },
     {
       "id": "BlueprintInstallation.InstalledAt-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp when the blueprint was first installed in this tenant."
     },
     {
       "id": "BlueprintInstallation.IsDependency-1",
       "valueType": "Boolean",
+      "isRuntimeState": false,
       "description": "True when this blueprint was installed transitively to satisfy another blueprint\u0027s dependency, false when it was requested explicitly."
     },
     {
       "id": "BlueprintInstallation.LastUpdatedAt-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp of the most recent apply (install, update, re-apply, or rollback)."
     },
     {
       "id": "BlueprintInstallation.ResolvedDependencies-1",
       "valueType": "StringArray",
+      "isRuntimeState": false,
       "description": "Full blueprint identifiers (Name-Version) of dependencies that were resolved and installed alongside this blueprint."
     },
     {
       "id": "BlueprintInstallation.SeedDataChecksum-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Checksum of the seed-data files applied at the most recent apply, used to detect drift on re-apply."
     },
     {
       "id": "ComparisonValue-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "The value to compare against in filter operations."
     },
     {
       "id": "ConfigurationValue-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Stores configuration data such as schema version or identity information."
     },
     {
       "id": "DatabaseName-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Name of the database associated with this tenant."
     },
     {
       "id": "Description-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Further information on the item."
     },
     {
       "id": "DisplayName-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Human-readable display name shown in user interfaces."
     },
     {
       "id": "Enabled-1",
       "valueType": "Boolean",
+      "isRuntimeState": false,
       "description": "Indicates whether the entity is active and operational."
     },
     {
@@ -995,17 +1030,20 @@
       "defaultValues": [
         "0"
       ],
+      "isRuntimeState": false,
       "description": "Defines the operational mode of the tenant (Development, Testing, Staging, Production)."
     },
     {
       "id": "FieldFilter.Operator-1",
       "valueType": "Enum",
       "valueCkEnumId": "System-2.2.0/FieldFilterOperator-1",
+      "isRuntimeState": false,
       "description": "Comparison operator for field filtering (Equals, Like, GreaterThan, etc.)."
     },
     {
       "id": "From-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Inclusive start of a TimeRange (UTC)."
     },
     {
@@ -1015,108 +1053,129 @@
       "defaultValues": [
         "0"
       ],
+      "isRuntimeState": false,
       "description": "Defines the maintenance state of the tenant (Off, UserApps, FullSystem)."
     },
     {
       "id": "MigrationHistory.BackupId-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Identifier of the backup created before migration, if any."
     },
     {
       "id": "MigrationHistory.CkModelName-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Name of the CK model that was migrated (e.g., \u0027System\u0027)."
     },
     {
       "id": "MigrationHistory.DurationMs-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Duration of the migration in milliseconds."
     },
     {
       "id": "MigrationHistory.EntitiesAdded-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of entities added during migration."
     },
     {
       "id": "MigrationHistory.EntitiesAffected-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Total number of entities affected by the migration."
     },
     {
       "id": "MigrationHistory.EntitiesDeleted-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of entities deleted during migration."
     },
     {
       "id": "MigrationHistory.EntitiesUpdated-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of entities updated during migration."
     },
     {
       "id": "MigrationHistory.Errors-1",
       "valueType": "StringArray",
+      "isRuntimeState": false,
       "description": "List of error messages if migration failed or had issues."
     },
     {
       "id": "MigrationHistory.ExecutedAt-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp when the migration was executed."
     },
     {
       "id": "MigrationHistory.FromVersion-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Source version of the CK model before migration."
     },
     {
       "id": "MigrationHistory.Success-1",
       "valueType": "Boolean",
+      "isRuntimeState": false,
       "description": "Indicates whether the migration completed successfully."
     },
     {
       "id": "MigrationHistory.ToVersion-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Target version of the CK model after migration."
     },
     {
       "id": "MigrationHistory.Warnings-1",
       "valueType": "StringArray",
+      "isRuntimeState": false,
       "description": "List of warning messages generated during migration."
     },
     {
       "id": "Name-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Unique identifier name for the entity."
     },
     {
       "id": "ParentTenantId-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Identifier of the parent tenant for hierarchical tenant structures."
     },
     {
       "id": "Query.AttributeSearchFilter-1",
       "valueType": "Record",
       "valueCkRecordId": "System-2.2.0/AttributeSearchFilter-1",
+      "isRuntimeState": false,
       "description": "Search filter applied to specific attributes only."
     },
     {
       "id": "Query.CkTypeId-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "The Construction Kit type ID that this query targets."
     },
     {
       "id": "Query.Columns-1",
       "valueType": "StringArray",
+      "isRuntimeState": false,
       "description": "Array of attribute paths to include in the query result."
     },
     {
       "id": "Query.FieldFilter-1",
       "valueType": "RecordArray",
       "valueCkRecordId": "System-2.2.0/FieldFilter-1",
+      "isRuntimeState": false,
       "description": "Array of field filters to apply conditions on specific attributes."
     },
     {
       "id": "Query.GroupByColumns-1",
       "valueType": "StringArray",
+      "isRuntimeState": false,
       "description": "Array of attribute paths to group results by in aggregation queries."
     },
     {
@@ -1126,18 +1185,21 @@
       "defaultValues": [
         "0"
       ],
+      "isRuntimeState": false,
       "description": "Controls how navigation properties affect the result set."
     },
     {
       "id": "Query.Sorting-1",
       "valueType": "RecordArray",
       "valueCkRecordId": "System-2.2.0/SortOrderItem-1",
+      "isRuntimeState": false,
       "description": "Array of sort specifications defining the order of query results."
     },
     {
       "id": "Query.TextSearchFilter-1",
       "valueType": "Record",
       "valueCkRecordId": "System-2.2.0/TextSearchFilter-1",
+      "isRuntimeState": false,
       "description": "Full-text search filter applied across searchable fields."
     },
     {
@@ -1147,73 +1209,87 @@
       "defaultValues": [
         "0"
       ],
+      "isRuntimeState": false,
       "description": "Legacy query type selector. Deprecated - use specific query types instead."
     },
     {
       "id": "RtBlueprintAppliedAt-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Timestamp when the blueprint was applied to create or update this entity."
     },
     {
       "id": "RtBlueprintLocked-1",
       "valueType": "Boolean",
+      "isRuntimeState": false,
       "description": "If true, the entity is managed by the blueprint and will be updated when the blueprint is updated. If false, user modifications are preserved."
     },
     {
       "id": "RtBlueprintSource-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Identifies the blueprint that created this entity (format: \u0027BlueprintName-Version\u0027). Null if entity was created manually."
     },
     {
       "id": "SortOrder-1",
       "valueType": "Enum",
       "valueCkEnumId": "System-2.2.0/SortOrders-1",
+      "isRuntimeState": false,
       "description": "Sort direction for ordering results (Ascending, Descending, Default)."
     },
     {
       "id": "StreamDataQuery.ArchiveRtId-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Runtime id of the CkArchive (concept \u00A73) this query targets at execution time. Stored as OctoObjectId string."
     },
     {
       "id": "StreamDataQuery.Columns-1",
       "valueType": "StringArray",
+      "isRuntimeState": false,
       "description": "Array of attribute paths to project from the archive table."
     },
     {
       "id": "StreamDataQuery.From-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Start of the time window for the stream data query. Can be overridden at execution time."
     },
     {
       "id": "StreamDataQuery.Limit-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Maximum number of rows to return."
     },
     {
       "id": "StreamDataQuery.RtIds-1",
       "valueType": "StringArray",
+      "isRuntimeState": false,
       "description": "Optional list of runtime entity IDs to scope the stream data query."
     },
     {
       "id": "StreamDataQuery.To-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "End of the time window for the stream data query. Can be overridden at execution time."
     },
     {
       "id": "TenantId-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Unique identifier for the tenant in the multi-tenant system."
     },
     {
       "id": "TimeRange-1",
       "valueType": "Record",
       "valueCkRecordId": "System-2.2.0/TimeRange-1",
+      "isRuntimeState": false,
       "description": "A time range with an inclusive start and exclusive end date (UTC)."
     },
     {
       "id": "To-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Exclusive end of a TimeRange (UTC)."
     }
   ],
