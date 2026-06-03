@@ -326,26 +326,31 @@
     {
       "id": "ArticleNumber-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "SKU or article identifier of the product to be manufactured"
     },
     {
       "id": "ArticleText-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Descriptive name or text for the article"
     },
     {
       "id": "Availability-1",
       "valueType": "Double",
+      "isRuntimeState": false,
       "description": "OEE Availability metric - percentage of planned production time that operation is available (0.0 - 1.0)"
     },
     {
       "id": "CycleTimeForOnePiece-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Cycle time required to produce one piece, in seconds"
     },
     {
       "id": "EndDateTime-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Date and time when the shift ends (actual or planned)"
     },
     {
@@ -355,99 +360,118 @@
       "defaultValues": [
         "0"
       ],
+      "isRuntimeState": false,
       "description": "The sync state for synchronizing feedback to external systems"
     },
     {
       "id": "ItemNumber-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Position/line number of the item within the production order"
     },
     {
       "id": "OeeStatistics-1",
       "valueType": "Record",
       "valueCkRecordId": "Industry.Manufacturing-2.0.0/OeeStatistics-1",
+      "isRuntimeState": false,
       "description": "Complete OEE statistics bundle containing Total, Availability, Performance, and Quality metrics"
     },
     {
       "id": "OrderNumber-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Unique identifier for the production order"
     },
     {
       "id": "Performance-1",
       "valueType": "Double",
+      "isRuntimeState": false,
       "description": "OEE Performance metric - speed at which work center runs as percentage of designed speed (0.0 - 1.0)"
     },
     {
       "id": "PlannedQuantity-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Total number of pieces planned to be produced for this order item"
     },
     {
       "id": "ProductionEndDateTime-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Date and time when production actually ended"
     },
     {
       "id": "ProductionOrderItemState-1",
       "valueType": "Enum",
       "valueCkEnumId": "Industry.Manufacturing-2.0.0/ProductionOrderItemState-1",
+      "isRuntimeState": false,
       "description": "Current lifecycle and execution state of the production order item"
     },
     {
       "id": "ProductionOrderState-1",
       "valueType": "Enum",
       "valueCkEnumId": "Industry.Manufacturing-2.0.0/ProductionOrderState-1",
+      "isRuntimeState": false,
       "description": "Current lifecycle state of the production order"
     },
     {
       "id": "ProductionStartDateTime-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Date and time when production actually started"
     },
     {
       "id": "Quality-1",
       "valueType": "Double",
+      "isRuntimeState": false,
       "description": "OEE Quality metric - percentage of good parts out of total parts produced (0.0 - 1.0)"
     },
     {
       "id": "QuantityGood-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of good/acceptable parts produced"
     },
     {
       "id": "QuantityPoor-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of defective/rejected parts produced"
     },
     {
       "id": "QuantityTestParts-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of test parts produced during setup or quality checks"
     },
     {
       "id": "RemainingPlannedQuantity-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Number of pieces still remaining to be produced from the total planned quantity"
     },
     {
       "id": "StartDateTime-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Date and time when the shift starts (actual or planned)"
     },
     {
       "id": "SyncTimestamp-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Date and time when the feedback was synchronized to the backend system"
     },
     {
       "id": "Timestamp-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Date and time when the feedback was created/recorded"
     },
     {
       "id": "Total-1",
       "valueType": "Double",
+      "isRuntimeState": false,
       "description": "Overall Equipment Effectiveness (OEE) total percentage (0.0 - 1.0)"
     }
   ],
