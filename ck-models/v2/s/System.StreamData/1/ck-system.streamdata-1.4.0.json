@@ -190,11 +190,13 @@
       "id": "Archive.Columns-1",
       "valueType": "RecordArray",
       "valueCkRecordId": "System.StreamData-1.4.0/CkArchiveColumn-1",
+      "isRuntimeState": false,
       "description": "Set of columns (attribute paths) the archive captures. At least one column is required."
     },
     {
       "id": "Archive.RawRetentionMs-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Retention window for raw data points in milliseconds. When set, the partition pruner may drop source partitions older than (now - RawRetentionMs), but never ahead of the slowest attached rollup\u0027s watermark. Null means keep forever."
     },
     {
@@ -204,11 +206,13 @@
       "defaultValues": [
         "0"
       ],
+      "isRuntimeState": false,
       "description": "Lifecycle status of the archive. Defaults to Created."
     },
     {
       "id": "Archive.TargetCkTypeId-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Construction Kit type ID that this archive captures time-series data for."
     },
     {
@@ -217,38 +221,45 @@
       "defaultValues": [
         "true"
       ],
+      "isRuntimeState": false,
       "description": "When true (default), the generated CrateDB column is indexed by the standard rules; when false, the column is created with INDEX OFF. Disable only for columns that are read but never filtered."
     },
     {
       "id": "CkArchiveColumn.Path-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Attribute path captured by this column. Supports nested record traversal (e.g. \u0027sensor.reading.value\u0027) and array projection (e.g. \u0027readings[*].value\u0027)."
     },
     {
       "id": "CkArchiveColumn.Required-1",
       "valueType": "Boolean",
+      "isRuntimeState": false,
       "description": "When true, every insert must supply a non-null value for this path; missing values cause an exception. When false, missing values are stored as NULL and preserved across upserts via COALESCE."
     },
     {
       "id": "CkRollupAggregation.Function-1",
       "valueType": "Enum",
       "valueCkEnumId": "System.StreamData-1.4.0/CkRollupFunction-1",
+      "isRuntimeState": false,
       "description": "Aggregation function applied to SourcePath within each bucket."
     },
     {
       "id": "CkRollupAggregation.SourcePath-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Attribute path on the source archive (must exist in the source\u0027s Columns list at activation time). For chained rollups referencing a stored AVG, use the explicit _sum / _count column names."
     },
     {
       "id": "CkRollupAggregation.TargetColumnName-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Optional explicit storage column name. Default is \u0027{sourcePath}_{function}\u0027 lower-cased; for AVG, two columns are created with suffixes _sum and _count derived from this base name."
     },
     {
       "id": "RollupArchive.Aggregations-1",
       "valueType": "RecordArray",
       "valueCkRecordId": "System.StreamData-1.4.0/CkRollupAggregation-1",
+      "isRuntimeState": false,
       "description": "List of aggregation definitions. At least one entry is required at activation time. Immutable after activation; schema changes require creating a new rollup."
     },
     {
@@ -258,26 +269,31 @@
       "defaultValues": [
         "0"
       ],
+      "isRuntimeState": false,
       "description": "Bucket-boundary alignment. FixedSize (default, key 0) preserves the legacy \u0027LastAggregatedBucketEnd \u002B BucketSizeMs\u0027 arithmetic. Calendar/Iso8601 values align bucket boundaries to wall-clock UTC boundaries so monthly / weekly / yearly rollups become expressible without forcing BucketSizeMs into a single TimeSpan. Pre-1.4.0 entities resolve to FixedSize at read time. Immutable after activation."
     },
     {
       "id": "RollupArchive.BucketSizeMs-1",
       "valueType": "Int",
+      "isRuntimeState": false,
       "description": "Width of the aggregation bucket in milliseconds. Each output row covers the half-open interval [bucketEnd - BucketSizeMs, bucketEnd). Must be positive and a multiple of the source rollup\u0027s bucket size when chaining. Immutable after activation."
     },
     {
       "id": "RollupArchive.FrozenUntil-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "When set, the rollup is read-only up to this timestamp: the orchestrator will not produce new buckets whose bucketEnd is \u2264 FrozenUntil. Set automatically when the source archive is truncated for the covered range, so the already-aggregated history is preserved. Monotonic; can only move forward."
     },
     {
       "id": "RollupArchive.LastAggregatedBucketEnd-1",
       "valueType": "DateTime",
+      "isRuntimeState": false,
       "description": "Exclusive end timestamp of the most recently committed bucket. Null before the first run. Maintained exclusively by the rollup orchestrator; manual edits go through the rewindRollupWatermark mutation."
     },
     {
       "id": "RollupArchive.SourceArchiveRtId-1",
       "valueType": "String",
+      "isRuntimeState": false,
       "description": "Runtime id of the source Archive this rollup aggregates from. May reference another RollupArchive to form a chain (e.g. raw \u2192 1 min \u2192 1 h). Immutable after the rollup is activated."
     },
     {
@@ -286,11 +302,13 @@
       "defaultValues": [
         "300000"
       ],
+      "isRuntimeState": false,
       "description": "Lower bound on how far behind real-time the orchestrator stays before closing a bucket, in milliseconds. Absorbs late-arriving source inserts. Default 300000 (five minutes). Mutable."
     },
     {
       "id": "TimeRangeArchive.Period-1",
       "valueType": "TimeSpan",
+      "isRuntimeState": false,
       "description": "Advisory window length for the rows this archive holds (e.g. PT15M, PT1H, P1D). Optional and descriptive only \u2014 the engine does not enforce that incoming [from, to) windows match the declared period. Used by the studio to label the archive (\u0027EDA 15-min\u0027) and by chained-rollup recommendations. Variable-period archives are allowed (leave null)."
     }
   ],
