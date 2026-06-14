@@ -1,0 +1,1702 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.0",
+    "System.Communication-3.22.0",
+    "System.Bot-3.1.1"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "AiAgentConfig-1",
+      "derivedFromCkTypeId": "System-2.2.0/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Tenant-level configuration of the AI Adapter \u2014 auth mode, default model, workspace lifecycle, hibernation timeout, worker image track. The single AiAgentConfig instance per tenant owns the rest of the AI configuration graph (quota, knowledge sources, prompt templates, tool policies, credential bindings, token lease, audit history) via OwnsAiResource associations, and optionally links to a System.Communication.AiConfiguration via UsesAiConfiguration for API-key reuse.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/DefaultModel-1",
+          "name": "DefaultModel",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/AuthMode-1",
+          "name": "AuthMode",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/SubscriptionScope-1",
+          "name": "SubscriptionScope",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/WorkspaceMode-1",
+          "name": "WorkspaceMode",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/HibernationIdleMinutes-1",
+          "name": "HibernationIdleMinutes",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/WorkerImageTag-1",
+          "name": "WorkerImageTag",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/DevBridgeEnabled-1",
+          "name": "DevBridgeEnabled",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "AiAgentJob-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Ai-3.1.2/OwnsAiResource-1",
+          "targetCkTypeId": "System.Ai-3.1.2/AiAgentSession-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A user-formulated goal that the agent works towards across one or more AiAgentSession instances. Most goals complete in a single session, but long or multi-step goals (e.g. \u0022build the full asset-management subdomain\u0022) may span several. The job is the unit shown in the Refinery Studio job list and the unit of audit / billing reporting.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/Goal-1",
+          "name": "Goal",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/JobStatus-1",
+          "name": "Status",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/StartedAt-1",
+          "name": "StartedAt",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/CompletedAt-1",
+          "name": "CompletedAt",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "AiAgentSession-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One concrete agent execution inside an AiAgentJob \u2014 corresponds to a single Claude Code CLI subprocess in the workspace pod, a single git worktree under the session id, and a single OwnerUserId. Sessions stream events to AiSessionEvent, accumulate cost in AiUsageRecord, may pause on AiApprovalRequest, and can resume across browser disconnects.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/GoalSummary-1",
+          "name": "GoalSummary",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/SessionStatus-1",
+          "name": "Status",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/StartedAt-1",
+          "name": "StartedAt",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/CompletedAt-1",
+          "name": "CompletedAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-3.1.2/TokensConsumed-1",
+          "name": "TokensConsumed",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/OwnerUserId-1",
+          "name": "OwnerUserId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/LastEventSequence-1",
+          "name": "LastEventSequence",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/WorkspaceBranchRef-1",
+          "name": "WorkspaceBranchRef",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-3.1.2/WorkspaceWorktreePath-1",
+          "name": "WorkspaceWorktreePath",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-3.1.2/SessionJobKind-1",
+          "name": "JobKind",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-3.1.2/SessionSourceRepo-1",
+          "name": "SourceRepo",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-3.1.2/SessionBaseBranch-1",
+          "name": "BaseBranch",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "AiApprovalRequest-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A pending approval gate raised by the worker PreToolUse hook before executing a high-risk tool, a conflict-escalated CK write, a quota-override request, or a UI-manual prompt. The session pauses until DecidedBy is set (Approved or Rejected) or ExpiresAt passes (TimedOut). Payload carries the JSON snapshot of the proposed tool call so the UI can render a diff.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/ToolName-1",
+          "name": "ToolName",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/Payload-1",
+          "name": "Payload",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ApprovalStatus-1",
+          "name": "Status",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ApprovalReason-1",
+          "name": "Reason",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/DecidedBy-1",
+          "name": "DecidedBy",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-3.1.2/DecidedAt-1",
+          "name": "DecidedAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-3.1.2/ApprovalComment-1",
+          "name": "Comment",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-3.1.2/ExpiresAt-1",
+          "name": "ExpiresAt",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "AiAuditEvent-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Append-only audit record for security- and lifecycle-relevant events outside the per-session stream \u2014 credential registrations, refresh failures, revokes, approval decisions, quota threshold crossings, admin actions. Tenant-scoped. EventType uses dot-namespaced identifiers (e.g. \u0022credential.refreshed\u0022, \u0022quota.exceeded\u0022). Detail carries an EventType-specific JSON payload.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/At-1",
+          "name": "At",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/EventType-1",
+          "name": "EventType",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ActorRef-1",
+          "name": "ActorRef",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/TargetRef-1",
+          "name": "TargetRef",
+          "isOptional": true
+        },
+        {
+          "id": "System.Ai-3.1.2/Detail-1",
+          "name": "Detail",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "AiCredentialBinding-1",
+      "derivedFromCkTypeId": "System-2.2.0/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Encrypted credential the worker needs at runtime \u2014 GitHub PAT for tenant repo push, SSH key for the dev-bridge sshd, etc. EncryptedValue is written through IWorkloadEncryptionService so the on-disk form is always the AES-256-GCM ciphertext. Subscription tokens for Anthropic do NOT live here \u2014 they have a dedicated AiTokenLease type because of the refresh-with-rotation lifecycle.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/CredentialKind-1",
+          "name": "Kind",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/EncryptedValue-1",
+          "name": "EncryptedValue",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/Scope-1",
+          "name": "Scope",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "AiCredentialTicket-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One-time code minted in Refinery Studio that authorises a single credential-registration action (subscription token via bastion, or developer SSH key via UI). Short TTL (5 min default), scope-bound, tenant-bound. Redeemed by the bastion CLI / UI handler in exchange for accepting the credential payload, which the adapter then encrypts and persists in AiTokenLease or AiCredentialBinding.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/Code-1",
+          "name": "Code",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ExpiresAt-1",
+          "name": "ExpiresAt",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/TicketScope-1",
+          "name": "Scope",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/IssuedByUserId-1",
+          "name": "IssuedByUserId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/TicketStatus-1",
+          "name": "Status",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "AiKnowledgeSource-1",
+      "derivedFromCkTypeId": "System-2.2.0/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A piece of tenant-specific knowledge the worker materialises into the Claude Code session context at start. Phase 1 supports ClaudeMd, Url and McpResource kinds; RagDoc is reserved for Phase 2. Filtered per job by AppliesToScopes so domain-specific guidance only loads for the matching JobKind.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/Title-1",
+          "name": "Title",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/KnowledgeKind-1",
+          "name": "Kind",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/Path-1",
+          "name": "Path",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/AppliesToScopes-1",
+          "name": "AppliesToScopes",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "AiPromptTemplate-1",
+      "derivedFromCkTypeId": "System-2.2.0/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Tenant-defined system-prompt fragment that the worker prepends to its system prompt when the session\u0027s JobKind matches AppliesTo. ExampleGoals surface in the new-session dialog as suggested prompts. Use to encode domain conventions, naming rules, or compliance constraints (e.g. voestalpine asset-naming guideline).",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/AppliesTo-1",
+          "name": "AppliesTo",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/SystemPromptFragment-1",
+          "name": "SystemPromptFragment",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ExampleGoals-1",
+          "name": "ExampleGoals",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "AiQuotaLimit-1",
+      "derivedFromCkTypeId": "System-2.2.0/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Hard limits the tenant cannot exceed \u2014 token budgets, monthly cost cap, concurrent-session ceiling, max session duration, queue depth. Enforced by the QuotaManager before every Anthropic API call (CentralKey / ByoKey) and at session-create time (all auth modes). One AiQuotaLimit per AiAgentConfig.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/TokensPerDay-1",
+          "name": "TokensPerDay",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/TokensPerJob-1",
+          "name": "TokensPerJob",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/CostCapMonthlyEUR-1",
+          "name": "CostCapMonthlyEUR",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ConcurrentJobs-1",
+          "name": "ConcurrentJobs",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/MaxSessionDurationMinutes-1",
+          "name": "MaxSessionDurationMinutes",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/MaxSessionsQueued-1",
+          "name": "MaxSessionsQueued",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "AiSessionEvent-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Append-only entry in the per-session event stream. Polymorphic via Kind \u2014 Message tokens, ToolCall / ToolResult pairs, StatusChange transitions, Hook firings, Error frames all share the type. Sequence is monotonic per session and drives resume after reconnect. Payload is JSON whose schema depends on Kind. Subject to retention via the CK-Engine TTL policy.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/SessionEventKind-1",
+          "name": "Kind",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/At-1",
+          "name": "At",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ActorRef-1",
+          "name": "ActorRef",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/Payload-1",
+          "name": "Payload",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/Sequence-1",
+          "name": "Sequence",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "AiTokenLease-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "The current Anthropic OAuth subscription token state for a tenant. Owned by TokenLeaseService; AccessToken and RefreshToken are encrypted at rest via IWorkloadEncryptionService. Refreshed proactively ~10 min before AccessExpiresAt; the Generation counter is bumped on each refresh and used as the atomic update precondition so concurrent refresh attempts do not race.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/AccessToken-1",
+          "name": "AccessToken",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/RefreshToken-1",
+          "name": "RefreshToken",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/AccessExpiresAt-1",
+          "name": "AccessExpiresAt",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/RefreshExpiresAt-1",
+          "name": "RefreshExpiresAt",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/LeaseStatus-1",
+          "name": "Status",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/Generation-1",
+          "name": "Generation",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/Scopes-1",
+          "name": "Scopes",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/SubscriptionType-1",
+          "name": "SubscriptionType",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/RateLimitTier-1",
+          "name": "RateLimitTier",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/TrustedDeviceToken-1",
+          "name": "TrustedDeviceToken",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "AiToolPolicy-1",
+      "derivedFromCkTypeId": "System-2.2.0/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Tenant-side override of the default risk and conflict handling for a single MCP or local tool. ApprovalMode chooses whether the approval gate fires (Auto = bypass, Required = always, Disabled = block tool entirely). ConflictMode chooses how ConflictError is reconciled (AutoRetry, RetryThenApprove, AlwaysApprove). Risk re-classifies the tool against the MCP default if needed.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/ToolName-1",
+          "name": "ToolName",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/Risk-1",
+          "name": "Risk",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ApprovalMode-1",
+          "name": "ApprovalMode",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ConflictMode-1",
+          "name": "ConflictMode",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/ApprovalTimeoutMinutes-1",
+          "name": "ApprovalTimeoutMinutes",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "AiUsageRecord-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One Anthropic API call\u0027s billed token usage and computed cost. Written by the worker PostToolUse / PostApiCall hook for every API round-trip. Aggregated by the QuotaManager to enforce TokensPerDay / TokensPerJob / CostCapMonthlyEUR. SessionRef is denormalised onto the record for cheap per-session and per-tenant aggregation.",
+      "attributes": [
+        {
+          "id": "System.Ai-3.1.2/At-1",
+          "name": "At",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/Model-1",
+          "name": "Model",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/InputTokens-1",
+          "name": "InputTokens",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/OutputTokens-1",
+          "name": "OutputTokens",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/CostCents-1",
+          "name": "CostCents",
+          "isOptional": false
+        },
+        {
+          "id": "System.Ai-3.1.2/SessionRef-1",
+          "name": "SessionRef",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "OwnsAiResource-1",
+      "inboundName": "AiResources",
+      "outboundName": "OwnedByAiResource",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Generic ownership / parent-child association inside the System.Ai model. The runtime uses\ninstances of this role to wire:\n\n- AiAgentConfig -\u003E AiQuotaLimit, AiKnowledgeSource, AiPromptTemplate, AiToolPolicy,\n  AiCredentialBinding, AiTokenLease, AiCredentialTicket, AiAuditEvent\n- AiAgentJob   -\u003E AiAgentSession\n- AiAgentSession -\u003E AiApprovalRequest, AiSessionEvent, AiUsageRecord\n\nThe owner has a fan-out (N) of resources; each resource has at most one owner (ZeroOrOne) so\na session event or approval can never be claimed by two sessions.\n"
+    },
+    {
+      "id": "UsesAiConfiguration-1",
+      "inboundName": "UsedByAiAgent",
+      "outboundName": "UsesAiConfiguration",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Cross-model link from an AiAgentConfig (System.Ai) to a System.Communication.AiConfiguration\nthat supplies the Anthropic API credentials and default model settings for the API-key auth\nmodes (CentralKey, ByoKey). Subscription mode does not use this link \u2014 the credential lives\nin AiTokenLease instead.\n"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AccessExpiresAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Expiry timestamp of the current access token. TokenLeaseService refreshes ~10 min before this moment."
+    },
+    {
+      "id": "AccessToken-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Anthropic OAuth access token, encrypted at rest via IWorkloadEncryptionService. Materialised in the worker pod tmpfs at session start."
+    },
+    {
+      "id": "ActorRef-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Actor that produced an event. Either an OctoMesh user-rtId, the literal \u0022agent\u0022 for the worker, or \u0022system\u0022 for adapter-internal transitions."
+    },
+    {
+      "id": "AppliesTo-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/JobKind-1",
+      "defaultValues": [
+        "4"
+      ],
+      "isRuntimeState": false,
+      "description": "Which JobKind this template applies to. The worker selects matching templates and prepends them to the system prompt at session start."
+    },
+    {
+      "id": "AppliesToScopes-1",
+      "valueType": "String",
+      "defaultValues": [
+        "*"
+      ],
+      "isRuntimeState": false,
+      "description": "Semicolon-separated list of JobKind values the knowledge applies to (e.g. \u0022DataModel;Application\u0022) or the literal \u0022*\u0022 for all jobs. The worker merges all matching entries into CLAUDE.md at session start."
+    },
+    {
+      "id": "ApprovalComment-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional free-text comment the user attached to their approval decision."
+    },
+    {
+      "id": "ApprovalMode-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/ApprovalMode-1",
+      "defaultValues": [
+        "1"
+      ],
+      "isRuntimeState": false,
+      "description": "How the worker handles approval for this tool (Auto = bypass gate, Required = always ask, Disabled = block entirely)."
+    },
+    {
+      "id": "ApprovalReason-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/ApprovalReason-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Why the approval was requested (Risk, Conflict, QuotaOverride, Manual)."
+    },
+    {
+      "id": "ApprovalStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/ApprovalStatus-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Lifecycle of the approval request (Pending, Approved, Rejected, TimedOut)."
+    },
+    {
+      "id": "ApprovalTimeoutMinutes-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Per-tool override for the global AiApprovalOptions.PendingTimeoutMinutes. When set, a Pending AiApprovalRequest for this tool times out after this many minutes; otherwise the adapter-wide default applies. Useful for tools whose decisions need more deliberation (database drops) or less (read-only diagnostics)."
+    },
+    {
+      "id": "At-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Event timestamp on stream-type entries (AiSessionEvent, AiUsageRecord, AiAuditEvent)."
+    },
+    {
+      "id": "AuthMode-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/AuthMode-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "How the AI Adapter authenticates against Anthropic for this tenant (Subscription, CentralKey, ByoKey)."
+    },
+    {
+      "id": "Code-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "One-time code shown to the tenant admin in Refinery Studio and entered on the bastion CLI. Should be short (6 chars) and entropic."
+    },
+    {
+      "id": "CompletedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Timestamp when a session or job reached a terminal state."
+    },
+    {
+      "id": "ConcurrentJobs-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "2"
+      ],
+      "isRuntimeState": false,
+      "description": "Maximum number of AiAgentSession instances with Status Running or Queued allowed simultaneously for this tenant. Hard cap for parallel sessions across all auth modes."
+    },
+    {
+      "id": "ConflictMode-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/ConflictMode-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "How the worker handles ConflictError from the MCP server (AutoRetry, RetryThenApprove, AlwaysApprove)."
+    },
+    {
+      "id": "CostCapMonthlyEUR-1",
+      "valueType": "Double",
+      "defaultValues": [
+        "100.0"
+      ],
+      "isRuntimeState": false,
+      "description": "Hard upper bound on rolled-up Anthropic cost in EUR per calendar month, calculated from AiUsageRecord aggregation against the configured model price list."
+    },
+    {
+      "id": "CostCents-1",
+      "valueType": "Double",
+      "defaultValues": [
+        "0.0"
+      ],
+      "isRuntimeState": false,
+      "description": "Computed cost of the API call in EUR cents, derived from token counts and the configured model price list at the time of writing."
+    },
+    {
+      "id": "CredentialKind-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/CredentialKind-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Kind of credential stored (GitHubPat, SshKey, DevSshAuthorizedKey)."
+    },
+    {
+      "id": "DecidedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Timestamp of the approval decision."
+    },
+    {
+      "id": "DecidedBy-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "OctoMesh user-rtId of the user whose Approve/Reject action moved the request out of Pending. Empty until a decision is made."
+    },
+    {
+      "id": "DefaultModel-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/ModelTier-1",
+      "defaultValues": [
+        "1"
+      ],
+      "isRuntimeState": false,
+      "description": "Default Claude model tier used by the agent worker. Adapter resolves the concrete model alias from the tier at runtime."
+    },
+    {
+      "id": "Detail-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "JSON-encoded structured detail for the event. Schema depends on EventType."
+    },
+    {
+      "id": "DevBridgeEnabled-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Whether developers may SSH-connect (via Tailscale) to the tenant workspace pod and drive a local Claude Code CLI against the MCP server."
+    },
+    {
+      "id": "EncryptedValue-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The credential value encrypted at rest via IWorkloadEncryptionService (AES-256-GCM, sentinel \u0022enc:v1:...\u0022). The adapter encrypts on write, decrypts on read; the runtime sees only the encrypted form."
+    },
+    {
+      "id": "EventType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Dot-separated event type identifying the audited action, e.g. \u0022session.created\u0022, \u0022approval.decided\u0022, \u0022credential.refreshed\u0022, \u0022quota.exceeded\u0022."
+    },
+    {
+      "id": "ExampleGoals-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Newline-separated example user goals that this template covers. Surfaced in the new-session dialog as suggested prompts."
+    },
+    {
+      "id": "ExpiresAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When the AiApprovalRequest auto-times-out if no decision is made."
+    },
+    {
+      "id": "Generation-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Monotonic counter incremented on every refresh. Used as the optimistic-concurrency precondition for atomic updates so parallel refresh attempts cannot race."
+    },
+    {
+      "id": "Goal-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "User-supplied high-level goal of the job (e.g. \u0022Add an Asset CK type with name, location and a status enum\u0022)."
+    },
+    {
+      "id": "GoalSummary-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "One-sentence summary of the session\u0027s working goal (derived from the parent job\u0027s Goal at start, may be refined by the agent)."
+    },
+    {
+      "id": "HibernationIdleMinutes-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "30"
+      ],
+      "isRuntimeState": false,
+      "description": "Minutes of inactivity before KEDA scales the workspace pod to zero. 0 disables hibernation (Enterprise option for constant low latency)."
+    },
+    {
+      "id": "InputTokens-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Number of input tokens billed by Anthropic for the API call."
+    },
+    {
+      "id": "IssuedByUserId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "OctoMesh user-rtId of the user who minted the ticket from the UI. Recorded for audit."
+    },
+    {
+      "id": "JobStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/JobStatus-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Lifecycle status of the job (Active, Completed, Cancelled, Failed)."
+    },
+    {
+      "id": "KnowledgeKind-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/KnowledgeKind-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Source format of the knowledge entry (ClaudeMd, Url, McpResource, RagDoc)."
+    },
+    {
+      "id": "LastEventSequence-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Sequence number of the most recently persisted AiSessionEvent for this session. Used to optimise resume after reconnect."
+    },
+    {
+      "id": "LeaseStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/LeaseStatus-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Health of the lease (Active, Expired, Revoked, RefreshFailed)."
+    },
+    {
+      "id": "MaxSessionDurationMinutes-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "240"
+      ],
+      "isRuntimeState": false,
+      "description": "Watchdog timeout after which a running AiAgentSession is paused with resume-state persisted. 0 disables the watchdog."
+    },
+    {
+      "id": "MaxSessionsQueued-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "10"
+      ],
+      "isRuntimeState": false,
+      "description": "How many sessions may sit in the Queued state behind a full ConcurrentJobs cap before further CreateSession requests are rejected."
+    },
+    {
+      "id": "Model-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Concrete Claude model alias used for the API call (e.g. \u0022claude-opus-4-7\u0022, \u0022claude-sonnet-4-6\u0022). Resolved by the worker from AiAgentConfig.DefaultModel \u002B per-session overrides."
+    },
+    {
+      "id": "Name-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Human-readable name of the entity. Tenant-administered for config types, auto-generated for runtime/ephemeral types."
+    },
+    {
+      "id": "OutputTokens-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Number of output tokens billed by Anthropic for the API call."
+    },
+    {
+      "id": "OwnerUserId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "OctoMesh user-rtId of the user who started the session. Used for SignalR group routing, approval decisions and audit."
+    },
+    {
+      "id": "Path-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Locator for the knowledge content. For ClaudeMd this is the path under the workspace; for Url this is the absolute URL; for McpResource this is the MCP resource URI; for RagDoc this is the rtId of the source AiKnowledgeChunk (Phase 2)."
+    },
+    {
+      "id": "Payload-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "JSON-encoded event-specific payload. Schema depends on the parent enum kind (SessionEventKind / ApprovalReason)."
+    },
+    {
+      "id": "RateLimitTier-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Anthropic rate-limit tier name (e.g. \u0022default_claude_max_20x\u0022). Round-tripped verbatim into the workspace credentials.json so the CLI\u0027s quota math matches what the operator sees in the Anthropic console."
+    },
+    {
+      "id": "RefreshExpiresAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Expiry timestamp of the current refresh token. Re-registration via the bastion flow is required after this passes."
+    },
+    {
+      "id": "RefreshToken-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Anthropic OAuth refresh token, encrypted at rest via IWorkloadEncryptionService. Rotated by TokenLeaseService and never leaves the adapter pod plaintext."
+    },
+    {
+      "id": "Risk-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/RiskLevel-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Tenant-overridden risk classification for the tool. Defaults to the MCP server\u0027s intrinsic risk if unset."
+    },
+    {
+      "id": "Scope-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Free-form scope label for the credential (e.g. \u0022github:repo:tenant-acme\u0022, \u0022ssh:dev:gerald\u0022). Surfaced in the UI for revocation decisions; not interpreted by the runtime."
+    },
+    {
+      "id": "Scopes-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Comma-separated OAuth scope list returned by Anthropic at login (e.g. user:inference, user:sessions:claude_code, user:mcp_servers). Materialised verbatim into the worker workspace credentials.json so the headless Claude CLI accepts the bearer token. Persisted in plaintext \u2014 the scope list is not itself a secret."
+    },
+    {
+      "id": "Sequence-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Monotonic per-session sequence number on AiSessionEvent. Drives resume after reconnect \u2014 the UI reports last-seen Sequence and the adapter replays everything after it."
+    },
+    {
+      "id": "SessionBaseBranch-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Base branch the worker passes to git clone --branch. Null = repo default branch. Persisted on the session so resume picks up the same base the original turn worked against."
+    },
+    {
+      "id": "SessionEventKind-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/SessionEventKind-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Polymorphic kind of the event entry (Message, ToolCall, ToolResult, StatusChange, Hook, Error)."
+    },
+    {
+      "id": "SessionJobKind-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/JobKind-1",
+      "isRuntimeState": false,
+      "description": "Job classification persisted on the session so resume can reconstruct the orchestrator spawn context (CLAUDE.md role section, prompt template selection) without consulting the parent Job."
+    },
+    {
+      "id": "SessionRef-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "rtId of the AiAgentSession this usage record belongs to. Denormalised onto the record for cheap per-session aggregation."
+    },
+    {
+      "id": "SessionSourceRepo-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The owner/repo OR full HTTPS URL of the git repository the worker clones into ./repo at the start of every run. Persisted on the session so a resume re-clones deterministically \u2014 the alternative (rely on the on-disk ./repo from the prior run) drifts if the user pushes to the source branch in between turns. Null when the session ran with no source tree."
+    },
+    {
+      "id": "SessionStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/SessionStatus-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Lifecycle status of the session (Queued, Running, Paused, Completed, Failed, Cancelled, QuotaBlocked, RateLimited)."
+    },
+    {
+      "id": "StartedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Timestamp when a session or job started."
+    },
+    {
+      "id": "SubscriptionScope-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/SubscriptionScope-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "When AuthMode is Subscription, where the Anthropic OAuth identity is sourced from (ServiceAccount, PerUser, MeshmakersPool)."
+    },
+    {
+      "id": "SubscriptionType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Anthropic subscription tier reported by the OAuth response (e.g. \u0022max\u0022, \u0022pro\u0022). The headless Claude CLI uses this to choose the correct rate-limit \u002B tool surface and rejects requests when the field is absent on a Max-grade endpoint."
+    },
+    {
+      "id": "SystemPromptFragment-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Markdown fragment that is prepended to the worker\u0027s system prompt when AppliesTo matches the JobKind of the started session."
+    },
+    {
+      "id": "TargetRef-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional rtId of the entity the event refers to (session, approval, lease, etc.). Empty for tenant-wide events."
+    },
+    {
+      "id": "TicketScope-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/TicketScope-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "What the ticket authorises (CredentialRegister, DevSshKeyRegister)."
+    },
+    {
+      "id": "TicketStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/TicketStatus-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Lifecycle of the ticket (Open, Redeemed, Expired)."
+    },
+    {
+      "id": "Title-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Display title of the knowledge source as shown in the Refinery Studio agent console."
+    },
+    {
+      "id": "TokensConsumed-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Running total of Anthropic tokens (input \u002B output) consumed by this session so far. Aggregated from AiUsageRecord entries by the QuotaManager."
+    },
+    {
+      "id": "TokensPerDay-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "500000"
+      ],
+      "isRuntimeState": false,
+      "description": "Hard upper bound on total Anthropic tokens consumed per UTC day for this tenant (CentralKey and ByoKey modes only). 0 disables the cap."
+    },
+    {
+      "id": "TokensPerJob-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "100000"
+      ],
+      "isRuntimeState": false,
+      "description": "Hard upper bound on tokens consumed by a single AiAgentSession (CentralKey and ByoKey modes only). 0 disables the cap."
+    },
+    {
+      "id": "ToolName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of the MCP or local tool this policy applies to (e.g. \u0022create_ck_type\u0022). Matches the MCP \u0060tools/list\u0060 name verbatim."
+    },
+    {
+      "id": "TrustedDeviceToken-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Long-lived per-device authentication token Anthropic issues alongside the OAuth pair. Encrypted at rest via IInstanceSecretEncryptionService just like AccessToken / RefreshToken. The headless CLI presents this in addition to the bearer token to satisfy the \u0022trusted device\u0022 check on protected endpoints."
+    },
+    {
+      "id": "WorkerImageTag-1",
+      "valueType": "String",
+      "defaultValues": [
+        "stable"
+      ],
+      "isRuntimeState": false,
+      "description": "Image tag for \u0060octo-mesh-ai-worker\u0060. Use \u0022stable\u0022 for the monthly-promoted release, \u0022canary\u0022 for early-adopter access to the latest Claude Code CLI, or \u0022pinned:\u003Ctag\u003E\u0022 for a fixed version."
+    },
+    {
+      "id": "WorkspaceBranchRef-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Git branch name used by the session in the per-session git worktree (e.g. \u0022agent/{session-id}\u0022). Restored on resume."
+    },
+    {
+      "id": "WorkspaceMode-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Ai-3.1.2/WorkspaceMode-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "How the per-tenant agent workspace pod is managed (PersistentHibernating, Pool, PerSession)."
+    },
+    {
+      "id": "WorkspaceWorktreePath-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Filesystem path of the session\u0027s git worktree inside the workspace pod (e.g. \u0022/workspace/sessions/{session-id}\u0022). Set by WorkspaceService at session start."
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "ApprovalMode-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Auto",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Required",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Disabled",
+          "isExtension": false
+        }
+      ],
+      "description": "Tenant-side override of the default risk-driven approval gate for a tool. Auto bypasses the gate (own risk, audit-logged). Required forces an approval modal regardless of the tool\u0027s default risk. Disabled blocks the tool entirely for this tenant."
+    },
+    {
+      "enumId": "ApprovalReason-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Risk",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Conflict",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "QuotaOverride",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Manual",
+          "isExtension": false
+        }
+      ],
+      "description": "Why an approval was requested. Risk is the default high-risk-tool path. Conflict is escalated from the MCP ConflictError flow when ConflictMode is RetryThenApprove or AlwaysApprove. QuotaOverride covers admin-requested temporary quota bumps. Manual is an explicit user-triggered request from the UI."
+    },
+    {
+      "enumId": "ApprovalStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Pending",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Approved",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Rejected",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "TimedOut",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle of a single AiApprovalRequest. Pending is the initial state. Approved or Rejected reflect a user decision (DecidedBy is set). TimedOut is set by the adapter watchdog after the request\u0027s expiry."
+    },
+    {
+      "enumId": "AuthMode-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Subscription",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "CentralKey",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "ByoKey",
+          "isExtension": false
+        }
+      ],
+      "description": "How the AI Adapter authenticates against Anthropic for this tenant. Subscription uses the OAuth-based Claude Code subscription (default). CentralKey uses the Meshmakers-owned Anthropic API key with usage metering. ByoKey uses a tenant-supplied Anthropic API key."
+    },
+    {
+      "enumId": "ConflictMode-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "AutoRetry",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "RetryThenApprove",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "AlwaysApprove",
+          "isExtension": false
+        }
+      ],
+      "description": "How the worker reacts when the MCP server returns ConflictError because another session wrote the same CK type or instance concurrently. AutoRetry re-reads and re-applies up to 3 times (default for additive tools). RetryThenApprove tries once then escalates to UI approval (default for update_* tools). AlwaysApprove escalates immediately (default for delete_* tools)."
+    },
+    {
+      "enumId": "CredentialKind-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "GitHubPat",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "SshKey",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "DevSshAuthorizedKey",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "EnvSecret",
+          "isExtension": false
+        }
+      ],
+      "description": "Kind of secret stored in an AiCredentialBinding. GitHubPat is the Personal Access Token used by the worker for the tenant Git host. SshKey is an SSH private key (reserved for future scenarios). DevSshAuthorizedKey is a developer\u0027s public key registered on the workspace pod sshd for the dev bridge. EnvSecret is a per-tenant (name, value) pair injected into every agent session\u0027s spawn environment (M3 B-2b-3) \u2014 first consumer is the Telerik Kendo license required by the template-repo\u0027s prebuild:prod script."
+    },
+    {
+      "enumId": "JobKind-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "DataModel",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "RuntimeData",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Admin",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Application",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "FreeForm",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "BlueprintAuthoring",
+          "isExtension": false
+        }
+      ],
+      "description": "High-level classification of an agent job, used to select prompt templates and tool policies. DataModel covers CK type / enum / association engineering (Phase 1). RuntimeData covers instance CRUD (Phase 2). Admin covers octo-cli wrapped operations (Phase 2). Application covers Angular app generation (Phase 2). BlueprintAuthoring covers writing blueprint.yaml \u002B seed-data files for the blueprint engine (M2). FreeForm is the unconstrained catch-all for ad-hoc requests."
+    },
+    {
+      "enumId": "JobStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Active",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Completed",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Cancelled",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Failed",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle status of an AiAgentJob (a goal that may span one or more sessions). Active means at least one session is running or queued. Completed / Cancelled / Failed are terminal."
+    },
+    {
+      "enumId": "KnowledgeKind-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "ClaudeMd",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Url",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "McpResource",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "RagDoc",
+          "isExtension": false
+        }
+      ],
+      "description": "Source format of an AI knowledge entry that the worker materialises into the Claude Code session context. ClaudeMd is a Markdown CLAUDE.md snippet (phase 1 default). Url points to a fetchable HTTP resource. McpResource is exposed by the MCP server. RagDoc is reserved for phase 2 vector-retrieved chunks."
+    },
+    {
+      "enumId": "LeaseStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Active",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Expired",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Revoked",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "RefreshFailed",
+          "isExtension": false
+        }
+      ],
+      "description": "Health of an AiTokenLease (the encrypted Anthropic OAuth token lease maintained by TokenLeaseService). Active means the access token is current. Expired means the access token is past its TTL and a refresh is due. Revoked means the admin invalidated the token via the UI. RefreshFailed means the refresh token rejected at Anthropic (re-registration required)."
+    },
+    {
+      "enumId": "ModelTier-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Opus",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Sonnet",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Haiku",
+          "isExtension": false
+        }
+      ],
+      "description": "Default Claude model tier used by the agent worker when starting a session. The specific model alias (e.g. claude-opus-4-7) is resolved by the adapter from the tier at runtime so the CK config stays stable across upstream model releases."
+    },
+    {
+      "enumId": "RiskLevel-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Low",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Medium",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "High",
+          "isExtension": false
+        }
+      ],
+      "description": "Default risk classification of an agent tool. Low tools run without approval. Medium tools log without blocking. High tools block on PreToolUse and require explicit approval via the SignalR \u002B UI flow. The default per tool comes from the MCP server; the tenant may override per-tool via AiToolPolicy."
+    },
+    {
+      "enumId": "SessionEventKind-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Message",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "ToolCall",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "ToolResult",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "StatusChange",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Hook",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Error",
+          "isExtension": false
+        }
+      ],
+      "description": "Polymorphic kind of an AiSessionEvent entry in the append-only session stream. Message is a chat token from the agent. ToolCall is the agent invoking a tool. ToolResult is the tool\u0027s response. StatusChange records a session lifecycle transition. Hook records a pre/post-tool hook firing. Error is an unrecoverable failure event."
+    },
+    {
+      "enumId": "SessionStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Queued",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Running",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Paused",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Completed",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Failed",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Cancelled",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "QuotaBlocked",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "RateLimited",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle status of an AiAgentSession. Queued means the session is waiting for a ConcurrentJobs slot. Running is the active state. Paused means a hook is blocking (approval, quota, rate-limit). Completed / Cancelled / Failed are terminal states. QuotaBlocked and RateLimited are paused sub-states that auto-resume on quota reset or rate-limit window expiry."
+    },
+    {
+      "enumId": "SubscriptionScope-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "ServiceAccount",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "PerUser",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "MeshmakersPool",
+          "isExtension": false
+        }
+      ],
+      "description": "When AuthMode is Subscription, where the Anthropic OAuth identity lives. ServiceAccount means a dedicated Anthropic account per tenant. PerUser means the credential is forwarded from the user starting the session. MeshmakersPool means a shared pool of Meshmakers-owned subscriptions."
+    },
+    {
+      "enumId": "TicketScope-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "CredentialRegister",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "DevSshKeyRegister",
+          "isExtension": false
+        }
+      ],
+      "description": "What an AiCredentialTicket authorises. CredentialRegister scopes the ticket to the Bastion subscription-registration flow. DevSshKeyRegister scopes it to dev-bridge SSH-key registration. Tickets are one-time codes with short TTL bound to a single tenant."
+    },
+    {
+      "enumId": "TicketStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Open",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Redeemed",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Expired",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle of an AiCredentialTicket. Open is the initial state. Redeemed means the ticket was consumed by the bastion CLI / dev-key UI. Expired is set when the ticket\u0027s TTL passes without redemption."
+    },
+    {
+      "enumId": "WorkspaceMode-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "PersistentHibernating",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Pool",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "PerSession",
+          "isExtension": false
+        }
+      ],
+      "description": "How the per-tenant agent workspace pod is managed. PersistentHibernating keeps one pod per tenant with KEDA scale-to-zero after the configured idle window (default). Pool keeps M warm pods. PerSession spawns one pod per session (highest isolation, slowest cold-start)."
+    }
+  ],
+  "modelId": "System.Ai-3.1.2",
+  "description": "Construction kit model for the OctoMesh AI Adapter. Defines configuration, runtime, stream and ephemeral types that back the agent-based engineering features. All AI Adapter persistence flows through these CK types - no ad-hoc MongoDB collections. Major version 3 replaces the deprecated 2.x prototype types with the agent-engineering schema documented in docs/concepts/octo-ai-adapter.md."
+}
