@@ -327,20 +327,6 @@ entries:
     version: 3.3.4
   octo-mesh:
   - apiVersion: v2
-    appVersion: 3.4.14.0
-    created: "2026-06-16T06:59:37.889816471Z"
-    description: OctoMesh Data refinery helm chart
-    digest: 43b0195d354ee1a5350b94f97abf3933937d85ba4e702d412cd73c9562f2268e
-    icon: https://raw.githubusercontent.com/meshmakers/octo-helm/main/assets/meshmakers64.png
-    maintainers:
-    - email: support@meshmakers.io
-      name: meshmakers
-    name: octo-mesh
-    type: application
-    urls:
-    - https://meshmakers.github.io/charts/octo-mesh-3.4.14.tgz
-    version: 3.4.14
-  - apiVersion: v2
     appVersion: 3.4.13.0
     created: "2026-06-16T06:59:37.886852783Z"
     description: OctoMesh Data refinery helm chart
@@ -9404,17 +9390,6 @@ entries:
   octo-mesh-ai:
   - apiVersion: v2
     appVersion: 3.4.13.0
-    created: "2026-06-16T06:59:38.427611746Z"
-    description: Helm chart for OctoMesh AI Adapter + Worker Pool (MCP Server moved
-      to octo-mesh-mcp chart)
-    digest: 94eb11cbc886fa4e78f1ff88add0080f7cd54c68c4af613046e29d6f68bed5da
-    name: octo-mesh-ai
-    type: application
-    urls:
-    - https://meshmakers.github.io/charts/octo-mesh-ai-3.4.14.tgz
-    version: 3.4.14
-  - apiVersion: v2
-    appVersion: 3.4.13.0
     created: "2026-06-16T06:59:38.424953115Z"
     description: Helm chart for OctoMesh AI Adapter + Worker Pool (MCP Server moved
       to octo-mesh-mcp chart)
@@ -11448,25 +11423,6 @@ entries:
     - https://meshmakers.github.io/charts/octo-mesh-app-template-3.2.25.tgz
     version: 3.2.25
   octo-mesh-communication-operator:
-  - apiVersion: v2
-    appVersion: 3.4.13.0
-    created: "2026-06-16T06:59:39.759992266Z"
-    dependencies:
-    - condition: octo-mesh-crds.enabled
-      name: octo-mesh-crds
-      repository: file://../octo-mesh-crds
-      version: ~3.2.1
-    description: The OctoMesh Communication Operator that manages plugs and sockets
-    digest: e38e71316f4d6ae72c29cd9afa05a56a8f1bcb422d744fd266dd3e4f84b453cb
-    icon: https://raw.githubusercontent.com/meshmakers/octo-helm/main/assets/meshmakers64.png
-    maintainers:
-    - email: support@meshmakers.io
-      name: meshmakers
-    name: octo-mesh-communication-operator
-    type: application
-    urls:
-    - https://meshmakers.github.io/charts/octo-mesh-communication-operator-3.4.14.tgz
-    version: 3.4.14
   - apiVersion: v2
     appVersion: 3.4.13.0
     created: "2026-06-16T06:59:39.745997135Z"
@@ -17359,19 +17315,6 @@ entries:
     version: 0.0.0
   octo-mesh-crds:
   - apiVersion: v2
-    appVersion: 3.4.14.0
-    created: "2026-06-16T06:59:40.011375486Z"
-    description: Custom Resource Definitions for OctoMesh
-    digest: afd2d715da3425fff69de47ee8fd271a817ef7925ca1f05c3d6f9abba3c96951
-    maintainers:
-    - email: support@meshmakers.io
-      name: meshmakers
-    name: octo-mesh-crds
-    type: application
-    urls:
-    - https://meshmakers.github.io/charts/octo-mesh-crds-3.4.14.tgz
-    version: 3.4.14
-  - apiVersion: v2
     appVersion: 3.4.13.0
     created: "2026-06-16T06:59:40.010963449Z"
     description: Custom Resource Definitions for OctoMesh
@@ -21403,16 +21346,6 @@ entries:
     version: 0.0.0
   octo-mesh-demo-app:
   - apiVersion: v2
-    appVersion: 3.4.14.0
-    created: "2026-06-16T06:59:40.091911839Z"
-    description: A Helm chart for Kubernetes
-    digest: 5cd46b5084784c890a4c23574de551e4f585923ee8dbc40a94f37940fe512812
-    name: octo-mesh-demo-app
-    type: application
-    urls:
-    - https://meshmakers.github.io/charts/octo-mesh-demo-app-3.4.14.tgz
-    version: 3.4.14
-  - apiVersion: v2
     appVersion: 3.4.13.0
     created: "2026-06-16T06:59:40.091314297Z"
     description: A Helm chart for Kubernetes
@@ -22115,16 +22048,6 @@ entries:
   octo-mesh-mcp:
   - apiVersion: v2
     appVersion: 3.4.13.0
-    created: "2026-06-16T06:59:40.110889979Z"
-    description: Helm chart for OctoMesh MCP Server (Model Context Protocol)
-    digest: 5ce8b0174fd38f71d35e952b826c10948a24f9c608d4764345a28b055e722c1d
-    name: octo-mesh-mcp
-    type: application
-    urls:
-    - https://meshmakers.github.io/charts/octo-mesh-mcp-3.4.14.tgz
-    version: 3.4.14
-  - apiVersion: v2
-    appVersion: 3.4.13.0
     created: "2026-06-16T06:59:40.097018347Z"
     description: Helm chart for OctoMesh MCP Server (Model Context Protocol)
     digest: 077c9e3f5f15a5b86edc81b4fc5111b9c7a18b73e6139c796918383c42eb9d9c
@@ -22154,20 +22077,6 @@ entries:
     - https://meshmakers.github.io/charts/octo-mesh-mcp-3.4.10.tgz
     version: 3.4.10
   octo-mesh-office:
-  - apiVersion: v2
-    appVersion: 3.4.14.0
-    created: "2026-06-16T06:59:40.215781062Z"
-    description: A Helm chart for the OctoMesh Office Add-In Backend Application
-    digest: 2a7c3c6fb7ba0d1ab1ce06020fa6ec754e20b544ee285dd5bc17b50dd5a8b4ad
-    icon: https://raw.githubusercontent.com/meshmakers/octo-helm/main/assets/meshmakers64.png
-    maintainers:
-    - email: support@meshmakers.io
-      name: meshmakers
-    name: octo-mesh-office
-    type: application
-    urls:
-    - https://meshmakers.github.io/charts/octo-mesh-office-3.4.14.tgz
-    version: 3.4.14
   - apiVersion: v2
     appVersion: 3.4.13.0
     created: "2026-06-16T06:59:40.215029258Z"
@@ -23543,20 +23452,6 @@ entries:
   octo-mesh-reporting:
   - apiVersion: v2
     appVersion: 3.4.13.0
-    created: "2026-06-16T06:59:40.281889345Z"
-    description: A Helm chart for OctoMesh reporting services
-    digest: 394341a0b16615692eb173c77be1f458bb1dc0bff8f4f3427dfe429bdaf548e2
-    icon: https://raw.githubusercontent.com/meshmakers/octo-helm/main/assets/meshmakers64.png
-    maintainers:
-    - email: support@meshmakers.io
-      name: meshmakers
-    name: octo-mesh-reporting
-    type: application
-    urls:
-    - https://meshmakers.github.io/charts/octo-mesh-reporting-3.4.14.tgz
-    version: 3.4.14
-  - apiVersion: v2
-    appVersion: 3.4.13.0
     created: "2026-06-16T06:59:40.28091461Z"
     description: A Helm chart for OctoMesh reporting services
     digest: fc70a9fd86a856c7cb38f3e274e9ba82b1c231aaa7a07d982fad17d3ce996329
@@ -24354,16 +24249,6 @@ entries:
     - https://meshmakers.github.io/charts/octo-mesh-reporting-3.2.13.tgz
     version: 3.2.13
   octo-mesh-schema-provider:
-  - apiVersion: v2
-    appVersion: 3.4.14.0
-    created: "2026-06-16T06:59:40.480208164Z"
-    description: A Helm chart for Kubernetes
-    digest: 842bc42028361381876982daffed23a9479da186c525c7c0c162722fb2845a07
-    name: octo-mesh-schema-provider
-    type: application
-    urls:
-    - https://meshmakers.github.io/charts/octo-mesh-schema-provider-3.4.14.tgz
-    version: 3.4.14
   - apiVersion: v2
     appVersion: 3.4.13.0
     created: "2026-06-16T06:59:40.479629707Z"
