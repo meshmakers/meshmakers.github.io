@@ -1,0 +1,2513 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.0"
+  ],
+  "migrations": {
+    "meta": {
+      "$schema": "https://schemas.meshmakers.cloud/ck-migration-meta.schema.json",
+      "ckModelId": "System.Identity-2.10.0",
+      "migrations": [
+        {
+          "fromVersion": "2.8.0",
+          "toVersion": "2.9.0",
+          "scriptPath": "2.8.0-to-2.9.0.yaml",
+          "description": "Lift Client URI list attributes from StringArray to RecordArray\u003CClientUriEntry\u003E (AB#4209 Step 1)",
+          "breaking": false
+        }
+      ]
+    },
+    "scripts": [
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.8.0",
+        "targetVersion": "2.9.0",
+        "description": "Lift Client URI list attributes from StringArray to RecordArray\u003CClientUriEntry\u003E.\n\nPhase 3 follow-up (AB#4209): the three URI lists on Client \u2014 RedirectUris,\nPostLogoutRedirectUris, AllowedCorsOrigins \u2014 become record lists so each entry\ncan carry a Source marker. Existing scalar URI entries become records with\nSource = \u0022base\u0022 (i.e. they were managed by the blueprint seed and may be\nrewritten by the cleanup gate on the next re-apply). REST-API-added URIs going\nforward carry Source = \u0022api\u0022; overlay cmdlets write Source = \u0022overlay:\u003Cname\u003E\u0022.\n\nSee the concept doc at\nocto-platform-services/docs/concepts/phase-3-followup-identity-local-dev-overlay.md\n\u00A74.5 for the full source taxonomy.\n",
+        "steps": [
+          {
+            "stepId": "wrap-redirect-uris",
+            "description": "Lift Client.RedirectUris scalar entries into ClientUriEntry records (Source=base)",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Identity/Client",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "WrapScalarInRecord",
+              "sourceAttribute": "RedirectUris",
+              "targetRecordCkRecordId": "System.Identity/ClientUriEntry",
+              "recordValueAttribute": "Uri",
+              "recordDefaults": {
+                "Source": "base"
+              }
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          },
+          {
+            "stepId": "wrap-post-logout-redirect-uris",
+            "description": "Lift Client.PostLogoutRedirectUris scalar entries into ClientUriEntry records (Source=base)",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Identity/Client",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "WrapScalarInRecord",
+              "sourceAttribute": "PostLogoutRedirectUris",
+              "targetRecordCkRecordId": "System.Identity/ClientUriEntry",
+              "recordValueAttribute": "Uri",
+              "recordDefaults": {
+                "Source": "base"
+              }
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          },
+          {
+            "stepId": "wrap-allowed-cors-origins",
+            "description": "Lift Client.AllowedCorsOrigins scalar entries into ClientUriEntry records (Source=base)",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.Identity/Client",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "WrapScalarInRecord",
+              "sourceAttribute": "AllowedCorsOrigins",
+              "targetRecordCkRecordId": "System.Identity/ClientUriEntry",
+              "recordValueAttribute": "Uri",
+              "recordDefaults": {
+                "Source": "base"
+              }
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          }
+        ]
+      }
+    ]
+  },
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "ApiResource-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/Resource-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/RequireResourceIndicator-1",
+          "name": "RequireResourceIndicator",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/Secrets-1",
+          "name": "ApiSecrets",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/Scopes-1",
+          "name": "Scopes",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowedAccessTokenSigningAlgorithms-1",
+          "name": "AllowedAccessTokenSigningAlgorithms",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ApiScope-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/Resource-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/IsEmphasized-1",
+          "name": "IsEmphasized",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/IsRequired-1",
+          "name": "IsRequired",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "AzureEntraIdIdentityProvider-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/IdentityProvider-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System-2.2.0/TenantId-1",
+          "name": "TenantId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/Authority-1",
+          "name": "Authority",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Client-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Identity-2.10.0/AssignedRole-1",
+          "targetCkTypeId": "System.Identity-2.10.0/Role-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System-2.2.0/Enabled-1",
+          "name": "Enabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ProtocolType-1",
+          "name": "ProtocolType",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/Secrets-1",
+          "name": "ClientSecrets",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/RequireClientSecret-1",
+          "name": "RequireClientSecret",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.0/Name-1",
+          "name": "ClientName",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.2.0/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientUri-1",
+          "name": "ClientUri",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/LogoUri-1",
+          "name": "LogoUri",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/RequireConsent-1",
+          "name": "RequireConsent",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowRememberConsent-1",
+          "name": "AllowRememberConsent",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowedGrantTypes-1",
+          "name": "AllowedGrantTypes",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/RequirePkce-1",
+          "name": "RequirePkce",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowPlainTextPkce-1",
+          "name": "AllowPlainTextPkce",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/RequireRequestObject-1",
+          "name": "RequireRequestObject",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowAccessTokensViaBrowser-1",
+          "name": "AllowAccessTokensViaBrowser",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/RequireDPoP-1",
+          "name": "RequireDPoP",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/DPoPValidationMode-1",
+          "name": "DPoPValidationMode",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/DPoPClockSkew-1",
+          "name": "DPoPClockSkew",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/RedirectUris-1",
+          "name": "RedirectUris",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/PostLogoutRedirectUris-1",
+          "name": "PostLogoutRedirectUris",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/FrontChannelLogoutUri-1",
+          "name": "FrontChannelLogoutUri",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/FrontChannelLogoutSessionRequired-1",
+          "name": "FrontChannelLogoutSessionRequired",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/BackChannelLogoutUri-1",
+          "name": "BackChannelLogoutUri",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/BackChannelLogoutSessionRequired-1",
+          "name": "BackChannelLogoutSessionRequired",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowOfflineAccess-1",
+          "name": "AllowOfflineAccess",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowedScopes-1",
+          "name": "AllowedScopes",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AlwaysIncludeUserClaimsInIdToken-1",
+          "name": "AlwaysIncludeUserClaimsInIdToken",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/IdentityTokenLifetime-1",
+          "name": "IdentityTokenLifetime",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowedIdentityTokenSigningAlgorithms-1",
+          "name": "AllowedIdentityTokenSigningAlgorithms",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AccessTokenLifetime-1",
+          "name": "AccessTokenLifetime",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AuthorizationCodeLifetime-1",
+          "name": "AuthorizationCodeLifetime",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AbsoluteRefreshTokenLifetime-1",
+          "name": "AbsoluteRefreshTokenLifetime",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SlidingRefreshTokenLifetime-1",
+          "name": "SlidingRefreshTokenLifetime",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ConsentLifetime-1",
+          "name": "ConsentLifetime",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/UpdateAccessTokenClaimsOnRefresh-1",
+          "name": "UpdateAccessTokenClaimsOnRefresh",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/RefreshTokenExpiration-1",
+          "name": "RefreshTokenExpiration",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AccessTokenType-1",
+          "name": "AccessTokenType",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/EnableLocalLogin-1",
+          "name": "EnableLocalLogin",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/IdentityProviderRestrictions-1",
+          "name": "IdentityProviderRestrictions",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/IncludeJwtId-1",
+          "name": "IncludeJwtId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientClaims-1",
+          "name": "ClientClaims",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AlwaysSendClientClaims-1",
+          "name": "AlwaysSendClientClaims",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientClaimsPrefix-1",
+          "name": "ClientClaimsPrefix",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/PairWiseSubjectSalt-1",
+          "name": "PairWiseSubjectSalt",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/UserSsoLifetime-1",
+          "name": "UserSsoLifetime",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/UserCodeType-1",
+          "name": "UserCodeType",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/DeviceCodeLifetime-1",
+          "name": "DeviceCodeLifetime",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/CibaLifetime-1",
+          "name": "CibaLifetime",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/PollingInterval-1",
+          "name": "PollingInterval",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/CoordinateLifetimeWithUserSession-1",
+          "name": "CoordinateLifetimeWithUserSession",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowedCorsOrigins-1",
+          "name": "AllowedCorsOrigins",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/InitiateLoginUri-1",
+          "name": "InitiateLoginUri",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/AutoProvisionInChildTenants-1",
+          "name": "AutoProvisionInChildTenants",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ProvisionedByParentTenantId-1",
+          "name": "ProvisionedByParentTenantId",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ClientMirror-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Unique",
+          "fields": [
+            {
+              "attributePaths": [
+                "ParentClientId",
+                "ChildTenantId"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "ChildTenantId"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Tracks a ClientCredentials client that the parent tenant has auto-provisioned into a child tenant. Lives in the parent tenant\u0027s database. One row per (parentClientId \u00D7 childTenantId) pair.",
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/ClientId-1",
+          "name": "ParentClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ParentTenantId-1",
+          "name": "ParentTenantId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ChildTenantId-1",
+          "name": "ChildTenantId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ProvisionedAt-1",
+          "name": "ProvisionedAt",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SecretHashVersion-1",
+          "name": "SecretHashVersion",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "DataProtectionKey-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Unique",
+          "fields": [
+            {
+              "attributePaths": [
+                "FriendlyName"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "ASP.NET Data Protection key-ring element. Service-global data persisted in the system tenant so every identity pod shares one key ring (replaces the file-system/PVC key store).",
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/FriendlyName-1",
+          "name": "FriendlyName",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/XmlData-1",
+          "name": "XmlData",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/CreationDateTime-1",
+          "name": "CreationDateTime",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EmailDomainGroupRule-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "EmailDomainPattern"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Maps an email domain pattern to a group for automatic group assignment on user login.",
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/EmailDomainPattern-1",
+          "name": "EmailDomainPattern",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/TargetGroupRtId-1",
+          "name": "TargetGroupRtId",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.0/Description-1",
+          "name": "Description",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ExternalTenantUserMapping-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "SourceTenantId",
+                "SourceUserId"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Maps a user from a parent tenant to roles in this (child) tenant.",
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/SourceTenantId-1",
+          "name": "SourceTenantId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SourceUserId-1",
+          "name": "SourceUserId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SourceUserName-1",
+          "name": "SourceUserName",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/MappedRoleIds-1",
+          "name": "MappedRoleIds",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "FacebookIdentityProvider-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/IdentityProvider-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "GoogleIdentityProvider-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/IdentityProvider-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Group-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "NormalizedGroupName"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System.Identity-2.10.0/AssignedRole-1",
+          "targetCkTypeId": "System.Identity-2.10.0/Role-1"
+        },
+        {
+          "id": "System.Identity-2.10.0/GroupMember-1",
+          "targetCkTypeId": "System.Identity-2.10.0/User-1"
+        },
+        {
+          "id": "System.Identity-2.10.0/GroupMember-1",
+          "targetCkTypeId": "System.Identity-2.10.0/ExternalTenantUserMapping-1"
+        },
+        {
+          "id": "System.Identity-2.10.0/GroupMember-1",
+          "targetCkTypeId": "System.Identity-2.10.0/Client-1"
+        },
+        {
+          "id": "System.Identity-2.10.0/ChildGroup-1",
+          "targetCkTypeId": "System.Identity-2.10.0/Group-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A group that can be assigned roles. Users and other groups can be members.",
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/GroupName-1",
+          "name": "GroupName",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/NormalizedGroupName-1",
+          "name": "NormalizedGroupName",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/GroupDescription-1",
+          "name": "GroupDescription",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "IdentityProvider-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System-2.2.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.0/Enabled-1",
+          "name": "IsEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.0/DisplayName-1",
+          "name": "DisplayName",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.2.0/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/AllowSelfRegistration-1",
+          "name": "AllowSelfRegistration",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/DefaultGroupRtId-1",
+          "name": "DefaultGroupRtId",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "IdentityResource-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/Resource-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/IsEmphasized-1",
+          "name": "IsEmphasized",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/IsRequired-1",
+          "name": "IsRequired",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "MicrosoftAdIdentityProvider-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/IdentityProvider-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/Host-1",
+          "name": "Host",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/UseTls-1",
+          "name": "UseTls",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/Port-1",
+          "name": "Port",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/UserBaseDn-1",
+          "name": "UserBaseDn",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/UserNameAttribute-1",
+          "name": "UserNameAttribute",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "MicrosoftIdentityProvider-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/IdentityProvider-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "OctoTenantIdentityProvider-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/IdentityProvider-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Identity provider that delegates authentication to a parent tenant.",
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/ParentTenantId-1",
+          "name": "ParentTenantId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "OpenLdapIdentityProvider-1",
+      "derivedFromCkTypeId": "System.Identity-2.10.0/IdentityProvider-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/Host-1",
+          "name": "Host",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/UseTls-1",
+          "name": "UseTls",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/Port-1",
+          "name": "Port",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/UserBaseDn-1",
+          "name": "UserBaseDn",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/UserNameAttribute-1",
+          "name": "UserNameAttribute",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Permission-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/PermissionId-1",
+          "name": "PermissionId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/IdentityRoleIds-1",
+          "name": "IdentityRoleIds",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "PermissionRole-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System-2.2.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/RoleId-1",
+          "name": "RoleId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SubjectIds-1",
+          "name": "SubjectIds",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/IdentityRoleIds-1",
+          "name": "IdentityRoleIds",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "PersistedGrant-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/GrantKey-1",
+          "name": "GrantKey",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/GrantType-1",
+          "name": "GrantType",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SubjectId-1",
+          "name": "SubjectId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SessionId-1",
+          "name": "SessionId",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.0/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/CreationDateTime-1",
+          "name": "CreationDateTime",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ExpirationDateTime-1",
+          "name": "ExpirationDateTime",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/ConsumedDateTime-1",
+          "name": "ConsumedDateTime",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/Data-1",
+          "name": "Data",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Resource-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System-2.2.0/Enabled-1",
+          "name": "Enabled",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.0/DisplayName-1",
+          "name": "DisplayName",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.2.0/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/ResourceClaims-1",
+          "name": "Claims",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ShowInDiscoveryDocument-1",
+          "name": "ShowInDiscoveryDocument",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Role-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System-2.2.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/NormalizedName-1",
+          "name": "NormalizedName",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SubjectIds-1",
+          "name": "SubjectIds",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/IdentityRoleIds-1",
+          "name": "IdentityRoleIds",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/RoleClaims-1",
+          "name": "Claims",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ServerSideSession-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Unique",
+          "fields": [
+            {
+              "attributePaths": [
+                "SessionKey"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "SubjectId"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "SessionId"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "ExpirationDateTime"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Duende IdentityServer server-side session. Holds the data-protected authentication ticket server-side so the per-tenant browser cookie only carries a session key (fixes multi-KB cookie bloat).",
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/SessionKey-1",
+          "name": "SessionKey",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/Scheme-1",
+          "name": "Scheme",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SubjectId-1",
+          "name": "SubjectId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/SessionId-1",
+          "name": "SessionId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/DisplayName-1",
+          "name": "DisplayName",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/CreationDateTime-1",
+          "name": "CreationDateTime",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/RenewalDateTime-1",
+          "name": "RenewalDateTime",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ExpirationDateTime-1",
+          "name": "ExpirationDateTime",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/Ticket-1",
+          "name": "Ticket",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "User-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "NormalizedEmail"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "NormalizedUserName"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System.Identity-2.10.0/AssignedRole-1",
+          "targetCkTypeId": "System.Identity-2.10.0/Role-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/UserName-1",
+          "name": "UserName",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/NormalizedUserName-1",
+          "name": "NormalizedUserName",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/FirstName-1",
+          "name": "FirstName",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/LastName-1",
+          "name": "LastName",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.2.0/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/Email-1",
+          "name": "Email",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/NormalizedEmail-1",
+          "name": "NormalizedEmail",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/EmailConfirmed-1",
+          "name": "EmailConfirmed",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/PasswordHash-1",
+          "name": "PasswordHash",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/SecurityStamp-1",
+          "name": "SecurityStamp",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/PhoneNumber-1",
+          "name": "PhoneNumber",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/PhoneNumberConfirmed-1",
+          "name": "PhoneNumberConfirmed",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/TwoFactorEnabled-1",
+          "name": "TwoFactorEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/LockoutEnd-1",
+          "name": "LockoutEnd",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/LockoutEnabled-1",
+          "name": "LockoutEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/AccessFailedCount-1",
+          "name": "AccessFailedCount",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ResetPasswordOnLogin-1",
+          "name": "ResetPasswordOnLogin",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/UserClaims-1",
+          "name": "Claims",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/UserLogins-1",
+          "name": "UserLogins",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/UserTokens-1",
+          "name": "UserTokens",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "AssignedRole-1",
+      "inboundName": "AssignedEntities",
+      "outboundName": "AssignedRoles",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Links an entity (User, Client or Group) to an assigned Role."
+    },
+    {
+      "id": "ChildGroup-1",
+      "inboundName": "ParentGroups",
+      "outboundName": "ChildGroups",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Links a parent Group to a nested child Group."
+    },
+    {
+      "id": "GroupMember-1",
+      "inboundName": "MemberOfGroups",
+      "outboundName": "Members",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Links a Group to its member entities (Users, Clients or ExternalTenantUserMappings)."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AbsoluteRefreshTokenLifetime-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "2592000"
+      ],
+      "isRuntimeState": false,
+      "description": "Maximum lifetime of a refresh token in seconds. Defaults to 2592000 seconds / 30 days"
+    },
+    {
+      "id": "AccessFailedCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "The number of failed login attempts for the current user."
+    },
+    {
+      "id": "AccessTokenLifetime-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "3600"
+      ],
+      "isRuntimeState": false,
+      "description": "Lifetime of access token in seconds (defaults to 3600 seconds / 1 hour)"
+    },
+    {
+      "id": "AccessTokenType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Identity-2.10.0/TokenType-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether the access token is a reference token or a self contained JWT token (defaults to Jwt)."
+    },
+    {
+      "id": "AllowAccessTokensViaBrowser-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Controls whether access tokens are transmitted via the browser for this client"
+    },
+    {
+      "id": "AllowOfflineAccess-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether this client can request refresh tokens (defaults to false)"
+    },
+    {
+      "id": "AllowPlainTextPkce-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether a proof key can be sent using plain method (not recommended and defaults to false)."
+    },
+    {
+      "id": "AllowRememberConsent-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether user can choose to store consent decisions (defaults to true)"
+    },
+    {
+      "id": "AllowSelfRegistration-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Controls whether new users can self-register via this identity provider. When false, only existing users can authenticate."
+    },
+    {
+      "id": "AllowedAccessTokenSigningAlgorithms-1",
+      "valueType": "StringArray",
+      "defaultValues": [],
+      "isRuntimeState": false,
+      "description": "Signing algorithm for access token. If empty, will use the server default signing algorithm."
+    },
+    {
+      "id": "AllowedCorsOrigins-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Identity-2.10.0/ClientUriEntry-1",
+      "defaultValues": [],
+      "isRuntimeState": false,
+      "description": "Gets or sets the allowed CORS origins for JavaScript clients. Each entry carries a Source marker (see RedirectUris)."
+    },
+    {
+      "id": "AllowedGrantTypes-1",
+      "valueType": "StringArray",
+      "isRuntimeState": false,
+      "description": "Specifies the allowed grant types (legal combinations of AuthorizationCode, Implicit, Hybrid, ResourceOwner, ClientCredentials). Defaults to Implicit."
+    },
+    {
+      "id": "AllowedIdentityTokenSigningAlgorithms-1",
+      "valueType": "StringArray",
+      "defaultValues": [],
+      "isRuntimeState": false,
+      "description": "Signing algorithm for identity token. If empty, will use the server default signing algorithm."
+    },
+    {
+      "id": "AllowedScopes-1",
+      "valueType": "StringArray",
+      "defaultValues": [],
+      "isRuntimeState": false,
+      "description": "Specifies the api scopes that the client is allowed to request. If empty, the client can\u0027t access any scope"
+    },
+    {
+      "id": "AlwaysIncludeUserClaimsInIdToken-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "When requesting both an id token and access token, should the user claims always be added to the id token instead of requiring the client to use the userinfo endpoint."
+    },
+    {
+      "id": "AlwaysSendClientClaims-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Gets or sets a value indicating whether client claims should be always included in the access tokens - or only for client credentials flow."
+    },
+    {
+      "id": "Authority-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Gets or sets the URI of the provider, or discovery endpoint for OpenID Connect discovery."
+    },
+    {
+      "id": "AuthorizationCodeLifetime-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "300"
+      ],
+      "isRuntimeState": false,
+      "description": "Lifetime of authorization code in seconds (defaults to 300 seconds / 5 minutes)"
+    },
+    {
+      "id": "AutoProvisionInChildTenants-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "When true, the client is auto-provisioned (mirrored) into every new child tenant of the tenant it lives in. Enables a single client identity (e.g. CI/CD service) to reach many tenants without per-tenant manual setup."
+    },
+    {
+      "id": "BackChannelLogoutSessionRequired-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies if the user\u0027s session id should be sent to the BackChannelLogoutUri. Defaults to true."
+    },
+    {
+      "id": "BackChannelLogoutUri-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Specifies logout URI at client for HTTP back-channel based logout."
+    },
+    {
+      "id": "ChildTenantId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The tenant ID of the child tenant in a parent-child mirror relationship."
+    },
+    {
+      "id": "CibaLifetime-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "The backchannel authentication request lifetime in seconds."
+    },
+    {
+      "id": "ClaimType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The type of the claim."
+    },
+    {
+      "id": "ClaimValue-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The value of the claim."
+    },
+    {
+      "id": "ClaimValueType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The value type of the claim."
+    },
+    {
+      "id": "ClientClaims-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Identity-2.10.0/ClientClaim-1",
+      "defaultValues": [],
+      "isRuntimeState": false,
+      "description": "Gets or sets the client claims to be sent to the user info endpoint."
+    },
+    {
+      "id": "ClientClaimsPrefix-1",
+      "valueType": "String",
+      "defaultValues": [
+        "client_"
+      ],
+      "isRuntimeState": false,
+      "description": "Gets or sets a value to prefix it on client claim types. Defaults to client_."
+    },
+    {
+      "id": "ClientId-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ClientSecret-1",
+      "valueType": "String",
+      "defaultValues": [],
+      "isRuntimeState": false,
+      "description": "Gets or sets the client secret of the application."
+    },
+    {
+      "id": "ClientUri-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "URI to further information about client (used on consent screen)"
+    },
+    {
+      "id": "ConsentLifetime-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Lifetime of a user consent in seconds. Defaults to null (no expiration)"
+    },
+    {
+      "id": "ConsumedDateTime-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false
+    },
+    {
+      "id": "CoordinateLifetimeWithUserSession-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "When enabled, the client\u0027s token lifetimes (e.g. refresh tokens) will be tied to the user\u0027s session lifetime."
+    },
+    {
+      "id": "CreationDateTime-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false
+    },
+    {
+      "id": "DPoPClockSkew-1",
+      "valueType": "TimeSpan",
+      "defaultValues": [
+        "00:05:00"
+      ],
+      "isRuntimeState": false,
+      "description": "Clock skew used in validating the client\u0027s DPoP proof token \u0027iat\u0027 claim value. Defaults to 5 minutes."
+    },
+    {
+      "id": "DPoPValidationMode-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "1"
+      ],
+      "isRuntimeState": false,
+      "description": "Enum setting to control validation for the DPoP proof token expiration."
+    },
+    {
+      "id": "Data-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "DefaultGroupRtId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional RtId of a group to which new users are automatically added on first login via this provider."
+    },
+    {
+      "id": "DeviceCodeLifetime-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "300"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies the lifetime (in seconds) of the device code. Defaults to 300 seconds / 5 minutes."
+    },
+    {
+      "id": "DisplayName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional display name of the user owning the session."
+    },
+    {
+      "id": "Email-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The email address of the user."
+    },
+    {
+      "id": "EmailConfirmed-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Indicates if the email address of the user has been confirmed."
+    },
+    {
+      "id": "EmailDomainPattern-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Email domain pattern to match (e.g., \u0022meshmakers.com\u0022). Matched against the domain part of the user\u0027s email."
+    },
+    {
+      "id": "EnableLocalLogin-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies if this client can use local accounts. Defaults to true."
+    },
+    {
+      "id": "ExpirationDateTime-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false
+    },
+    {
+      "id": "FirstName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The first name of the user."
+    },
+    {
+      "id": "FriendlyName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Friendly name of an ASP.NET Data Protection key-ring element (format key-{guid})."
+    },
+    {
+      "id": "FrontChannelLogoutSessionRequired-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies if the user\u0027s session id should be sent to the FrontChannelLogoutUri. Defaults to true."
+    },
+    {
+      "id": "FrontChannelLogoutUri-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Specifies logout URI at client for HTTP front-channel based logout."
+    },
+    {
+      "id": "GrantKey-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "GrantType-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "GroupDescription-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "An optional description of the group\u0027s purpose."
+    },
+    {
+      "id": "GroupName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The display name of the group."
+    },
+    {
+      "id": "Host-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Gets or sets the host address of the identity provider."
+    },
+    {
+      "id": "IdentityProviderRestrictions-1",
+      "valueType": "StringArray",
+      "defaultValues": [],
+      "isRuntimeState": false,
+      "description": "Specifies which external IdPs can be used with this client (if list is empty all IdPs are allowed). Defaults to empty."
+    },
+    {
+      "id": "IdentityRoleIds-1",
+      "valueType": "StringArray",
+      "defaultValues": [],
+      "isRuntimeState": false
+    },
+    {
+      "id": "IdentityTokenLifetime-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "300"
+      ],
+      "isRuntimeState": false,
+      "description": "Lifetime of identity token in seconds (defaults to 300 seconds / 5 minutes)"
+    },
+    {
+      "id": "IncludeJwtId-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Value indicating whether JWT access tokens should include an identifier. Defaults to true."
+    },
+    {
+      "id": "InitiateLoginUri-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Gets of sets a URI that can be used to initiate login from the IdentityServer host or a third party."
+    },
+    {
+      "id": "IsEmphasized-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether the consent screen will emphasize this scope (if the consent screen wants to implement such a feature). Defaults to false."
+    },
+    {
+      "id": "IsRequired-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether the user can de-select the scope on the consent screen (if the consent screen wants to implement such a feature). Defaults to false."
+    },
+    {
+      "id": "LastName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The last name of the user."
+    },
+    {
+      "id": "LockoutEnabled-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Flag indicating if the user could be locked out."
+    },
+    {
+      "id": "LockoutEnd-1",
+      "valueType": "DateTimeOffset",
+      "isRuntimeState": false,
+      "description": "The date and time, in UTC, when any user lockout ends."
+    },
+    {
+      "id": "LoginProvider-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "LogoUri-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "URI to client logo (used on consent screen)"
+    },
+    {
+      "id": "MappedRoleIds-1",
+      "valueType": "StringArray",
+      "isRuntimeState": false,
+      "description": "The role IDs assigned to the mapped user in this tenant."
+    },
+    {
+      "id": "NormalizedEmail-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The normalized email address of the user."
+    },
+    {
+      "id": "NormalizedGroupName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The normalized (uppercase) group name for case-insensitive lookup."
+    },
+    {
+      "id": "NormalizedName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The normalized name."
+    },
+    {
+      "id": "NormalizedUserName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The normalized user name."
+    },
+    {
+      "id": "PairWiseSubjectSalt-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Gets or sets a salt value used in pair-wise subjectId generation for users of this client."
+    },
+    {
+      "id": "ParentTenantId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The tenant ID of the parent tenant that provides user authentication."
+    },
+    {
+      "id": "PasswordHash-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The salted and hashed representation of the password for this user."
+    },
+    {
+      "id": "PermissionId-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PhoneNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The phone number of the user."
+    },
+    {
+      "id": "PhoneNumberConfirmed-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Indicates if the phone number of the user has been confirmed."
+    },
+    {
+      "id": "PollingInterval-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "The backchannel authentication request polling interval in seconds."
+    },
+    {
+      "id": "Port-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "636"
+      ],
+      "isRuntimeState": false,
+      "description": "Gets or sets the host port of the identity provider."
+    },
+    {
+      "id": "PostLogoutRedirectUris-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Identity-2.10.0/ClientUriEntry-1",
+      "defaultValues": [],
+      "isRuntimeState": false,
+      "description": "Specifies allowed URIs to redirect to after logout. Each entry carries a Source marker (see RedirectUris)."
+    },
+    {
+      "id": "ProtocolType-1",
+      "valueType": "String",
+      "defaultValues": [
+        "oidc"
+      ],
+      "isRuntimeState": false
+    },
+    {
+      "id": "ProviderDisplayName-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ProviderKey-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ProvisionedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "UTC timestamp when the mirror was provisioned."
+    },
+    {
+      "id": "ProvisionedByParentTenantId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "When set on a Client living in a child tenant, marks this record as a mirror of a parent-tenant client identified by the given tenant id. Sub-tenant admins surface this as a read-only \u0022Provisioned by parent tenant\u0022 indicator; the operator cannot edit the client locally \u2014 changes must go through the parent."
+    },
+    {
+      "id": "RedirectUris-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Identity-2.10.0/ClientUriEntry-1",
+      "defaultValues": [],
+      "isRuntimeState": false,
+      "description": "Specifies allowed URIs to return tokens or authorization codes to. Each entry carries a Source marker so local-dev / operator overlay URIs can coexist with base (blueprint) URIs."
+    },
+    {
+      "id": "RefreshTokenExpiration-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Identity-2.10.0/TokenExpiration-1",
+      "defaultValues": [
+        "1"
+      ],
+      "isRuntimeState": false,
+      "description": "Gets or sets a value indicating whether the access token (and its claims) should be updated on a refresh token request."
+    },
+    {
+      "id": "RefreshTokenUsage-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Identity-2.10.0/TokenUsage-1",
+      "isRuntimeState": false,
+      "description": "Gets or sets a value indicating whether the refresh token should be updated on a refresh token request."
+    },
+    {
+      "id": "RenewalDateTime-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "UTC timestamp of the last sliding-expiration renewal of the session."
+    },
+    {
+      "id": "RequireClientSecret-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false
+    },
+    {
+      "id": "RequireConsent-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether a consent screen is required. Defaults to false."
+    },
+    {
+      "id": "RequireDPoP-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether a DPoP (Demonstrating Proof-of-Possession) token is required to be used by this client (defaults to false)"
+    },
+    {
+      "id": "RequirePkce-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether a proof key is required for authorization code based token requests (defaults to true)."
+    },
+    {
+      "id": "RequireRequestObject-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Specifies whether the client must use a request object on authorize requests (defaults to false)."
+    },
+    {
+      "id": "RequireResourceIndicator-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false
+    },
+    {
+      "id": "ResetPasswordOnLogin-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Force the user to change the password after the next login."
+    },
+    {
+      "id": "ResourceClaims-1",
+      "valueType": "StringArray",
+      "defaultValues": [],
+      "isRuntimeState": false
+    },
+    {
+      "id": "RoleClaims-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Identity-2.10.0/RoleClaim-1",
+      "isRuntimeState": false,
+      "description": "The claims of a role."
+    },
+    {
+      "id": "RoleId-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "RoleIds-1",
+      "valueType": "StringArray",
+      "isRuntimeState": false,
+      "description": "The id of roles the user is a member of."
+    },
+    {
+      "id": "Scheme-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The ASP.NET authentication scheme that produced the session ticket."
+    },
+    {
+      "id": "Scopes-1",
+      "valueType": "StringArray",
+      "isRuntimeState": false,
+      "description": "Models the scopes this API resource allows."
+    },
+    {
+      "id": "SecretHashVersion-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Monotonic counter incremented on every secret rotation of the parent client. Used to detect mirrors that fell behind on a rotation."
+    },
+    {
+      "id": "SecretType-1",
+      "valueType": "String",
+      "defaultValues": [
+        "SharedSecret"
+      ],
+      "isRuntimeState": false
+    },
+    {
+      "id": "Secrets-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Identity-2.10.0/Secret-1",
+      "defaultValues": [],
+      "isRuntimeState": false
+    },
+    {
+      "id": "SecurityStamp-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "A random value that should change whenever a users credentials have been compromised."
+    },
+    {
+      "id": "SessionId-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "SessionKey-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Unique key of a Duende server-side session (the only value stored in the browser cookie)."
+    },
+    {
+      "id": "ShowInDiscoveryDocument-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Gets or sets a value indicating whether the client will be shown in the discovery document. Defaults to true."
+    },
+    {
+      "id": "SlidingRefreshTokenLifetime-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "1296000"
+      ],
+      "isRuntimeState": false,
+      "description": "Sliding lifetime of a refresh token in seconds. Defaults to 1296000 seconds / 15 days"
+    },
+    {
+      "id": "Source-1",
+      "valueType": "String",
+      "defaultValues": [
+        "base"
+      ],
+      "isRuntimeState": false,
+      "description": "Provenance marker on a ClientUriEntry. \u0022base\u0022 entries were authored by the blueprint seed (or by the cross-service identity-bootstrap consumer) and get rewritten on every blueprint re-apply. \u0022api\u0022 entries were added by an operator through the public REST API and survive re-applies. \u0022overlay:\u003Cname\u003E\u0022 entries were added by a local-dev or operator overlay cmdlet and also survive re-applies; they are filtered out of \u0060DumpTenant --clean\u0060 exports while base \u002B api survive the export."
+    },
+    {
+      "id": "SourceTenantId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The tenant ID where the user\u0027s account resides."
+    },
+    {
+      "id": "SourceUserId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The RtId of the user in the source tenant."
+    },
+    {
+      "id": "SourceUserName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The username for display purposes."
+    },
+    {
+      "id": "SubjectId-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "SubjectIds-1",
+      "valueType": "StringArray",
+      "defaultValues": [],
+      "isRuntimeState": false
+    },
+    {
+      "id": "TargetGroupRtId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "RtId of the group to which matching users are added."
+    },
+    {
+      "id": "Ticket-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The serialized, data-protected ASP.NET authentication ticket of a server-side session."
+    },
+    {
+      "id": "TwoFactorEnabled-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Indicates if two factor authentication is enabled for the user."
+    },
+    {
+      "id": "UpdateAccessTokenClaimsOnRefresh-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Indicates whether the access token (and its claims) should be updated on a refresh token request."
+    },
+    {
+      "id": "Uri-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "A single URI value carried by a ClientUriEntry record."
+    },
+    {
+      "id": "UseTls-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Gets or sets if the connection to the identity provider should use TLS. Defaults to true."
+    },
+    {
+      "id": "UserBaseDn-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Gets or sets the base DN of the user."
+    },
+    {
+      "id": "UserClaims-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Identity-2.10.0/UserClaim-1",
+      "isRuntimeState": false,
+      "description": "The claims of the user."
+    },
+    {
+      "id": "UserCodeType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Specifies the user code type for the device flow. Defaults to null."
+    },
+    {
+      "id": "UserId-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "UserLogins-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Identity-2.10.0/UserLogin-1",
+      "isRuntimeState": false,
+      "description": "The existing logins of the user."
+    },
+    {
+      "id": "UserName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The user name."
+    },
+    {
+      "id": "UserNameAttribute-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Gets or sets the name of the user attribute."
+    },
+    {
+      "id": "UserSsoLifetime-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Lifetime of user\u0027s single sign-on session (in seconds). Defaults to null (no expiration)."
+    },
+    {
+      "id": "UserTokens-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Identity-2.10.0/UserToken-1",
+      "isRuntimeState": false,
+      "description": "The tokens of the user."
+    },
+    {
+      "id": "Value-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "XmlData-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The raw XML payload of a Data Protection key-ring element."
+    }
+  ],
+  "records": [
+    {
+      "recordId": "ClientClaim-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/ClaimType-1",
+          "name": "ClaimType",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClaimValue-1",
+          "name": "ClaimValue",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClaimValueType-1",
+          "name": "ClaimValueType",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "ClientUriEntry-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/Uri-1",
+          "name": "Uri",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/Source-1",
+          "name": "Source",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "RoleClaim-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/ClaimType-1",
+          "name": "ClaimType",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClaimValue-1",
+          "name": "ClaimValue",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "Secret-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System-2.2.0/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/ExpirationDateTime-1",
+          "name": "ExpirationDateTime",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/Value-1",
+          "name": "Value",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/SecretType-1",
+          "name": "Type",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "UserClaim-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/ClaimType-1",
+          "name": "ClaimType",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ClaimValue-1",
+          "name": "ClaimValue",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/UserId-1",
+          "name": "UserId",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "UserLogin-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/LoginProvider-1",
+          "name": "LoginProvider",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ProviderKey-1",
+          "name": "ProviderKey",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/ProviderDisplayName-1",
+          "name": "ProviderDisplayName",
+          "isOptional": true
+        },
+        {
+          "id": "System.Identity-2.10.0/UserId-1",
+          "name": "UserId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "UserToken-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "System.Identity-2.10.0/LoginProvider-1",
+          "name": "LoginProvider",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/UserId-1",
+          "name": "UserId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Identity-2.10.0/Value-1",
+          "name": "Value",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "TokenExpiration-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Sliding",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Absolute",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "TokenType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Jwt",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Reference",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "TokenUsage-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "ReUse",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "OneTimeOnly",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "System.Identity-2.10.0"
+}
