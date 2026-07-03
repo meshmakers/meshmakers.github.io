@@ -1,0 +1,1109 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.0"
+  ],
+  "migrations": {
+    "meta": {
+      "$schema": "https://schemas.meshmakers.cloud/ck-migration-meta.schema.json",
+      "ckModelId": "System.StreamData-1.6.0",
+      "migrations": [
+        {
+          "fromVersion": "1.1.0",
+          "toVersion": "1.2.0",
+          "scriptPath": "1.1.0-to-1.2.0.yaml",
+          "description": "Rename CkArchive (concrete raw-archive default) to CkRawArchive. CkArchive becomes the abstract base for raw / rollup / time-range subtypes.",
+          "breaking": true
+        }
+      ]
+    },
+    "scripts": [
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "1.1.0",
+        "targetVersion": "1.2.0",
+        "description": "Migration from System.StreamData 1.1.0 to 1.2.0.\n\nType renames (Phase 2 of the time-range concept \u2014 see\nocto-construction-kit-engine/docs/concept-time-range-archives.md):\n- CkArchive (was a concrete raw archive default) is split:\n  - Archive becomes the abstract base.\n  - RawArchive (new concrete subtype) inherits the today\u0027s raw-archive\n    semantics. Existing entities are rewritten to RawArchive.\n- CkRollupArchive is renamed RollupArchive. No semantic change; the\n  type just drops the misleading Ck prefix (Ck was for the CK type\n  system itself, not for runtime entity types).\n\nRecords (CkArchiveColumn, CkRollupAggregation) and enums\n(CkArchiveStatus, CkRollupFunction) keep their Ck-prefixed names in\nthis migration. Renaming them requires a \u0060ChangeCkRecordId\u0060 /\n\u0060ChangeCkEnumId\u0060 migration action which the engine doesn\u0027t yet\nsupport; that cleanup lands in Phase 2.5 once the framework is\nextended.\n\nThe per-archive CrateDB tables are unaffected: the physical table\nname is derived from the entity rtid only, not from the CK type\ndiscriminator.\n\nBreaking changes:\n- Callers of the auto-generated \u0060runtime.systemStreamDataCkArchives\n  .create\u0060 GraphQL mutation must switch to\n  \u0060runtime.systemStreamDataRawArchives.create\u0060. The CkRollupArchive\n  create mutation is replaced by \u0060systemStreamDataRollupArchives\u0060.\n- C# code that instantiates \u0060new RtCkArchive { ... }\u0060 or\n  \u0060new RtCkRollupArchive { ... }\u0060 must switch to \u0060new RtRawArchive\u0060\n  / \u0060new RtRollupArchive\u0060. The abstract \u0060Archive\u0060 base cannot be\n  instantiated.\n",
+        "steps": [
+          {
+            "stepId": "rename-ckarchive-to-rawarchive",
+            "description": "Promote existing CkArchive entities to the new concrete RawArchive subtype.",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.StreamData/CkArchive",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.StreamData/RawArchive"
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          },
+          {
+            "stepId": "rename-ckrollupArchive-to-rollupArchive",
+            "description": "Strip the Ck prefix from existing CkRollupArchive entities \u2014 no semantic change, just a rename.",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "System.StreamData/CkRollupArchive",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "ChangeCkType",
+              "newCkTypeId": "System.StreamData/RollupArchive"
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          }
+        ],
+        "postValidations": [
+          {
+            "validationId": "no-legacy-ckarchive-entities",
+            "description": "Verify no entities remain with the old abstract-base ckTypeId.",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.StreamData/CkArchive",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          },
+          {
+            "validationId": "no-legacy-ckrollupArchive-entities",
+            "description": "Verify no entities remain with the old CkRollupArchive ckTypeId.",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "System.StreamData/CkRollupArchive",
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          }
+        ]
+      }
+    ]
+  },
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "Archive-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base for a CrateDB-backed time-series archive. Concrete subtypes: RawArchive (instant measurements with a single timestamp), RollupArchive (system-orchestrated bucket aggregations of another archive), TimeRangeArchive (externally aggregated values with [from, to) windows \u2014 added in a later concept). Shared attributes: TargetCkTypeId, Columns, Status, optional RawRetentionMs. Subtypes add their own time-axis semantics.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.6.4/Archive.TargetCkTypeId-1",
+          "name": "TargetCkTypeId",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.Columns-1",
+          "name": "Columns",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.Status-1",
+          "name": "Status",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.RawRetentionMs-1",
+          "name": "RawRetentionMs",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.DirtyWindows-1",
+          "name": "DirtyWindows",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.PendingRecomputeRanges-1",
+          "name": "PendingRecomputeRanges",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.RecomputeInProgress-1",
+          "name": "RecomputeInProgress",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.LastRecomputeStartedAt-1",
+          "name": "LastRecomputeStartedAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.LastRecomputeSuccessAt-1",
+          "name": "LastRecomputeSuccessAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.LastRecomputeFailureAt-1",
+          "name": "LastRecomputeFailureAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/Archive.LastRecomputeFailureReason-1",
+          "name": "LastRecomputeFailureReason",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "RawArchive-1",
+      "derivedFromCkTypeId": "System.StreamData-1.6.4/Archive-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Concrete Archive subtype for instant time-series measurements \u2014 one row per data point with a single timestamp. External callers (MeshAdapter pipelines, REST clients) push StreamDataPoints via SaveStreamDataInArchive@1 / IStreamDataRepository.InsertAsync. No source archive, no orchestrator. The 1.1.0 de-facto raw-archive shape, lifted out of what\u0027s now the abstract Archive base."
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "RecomputeJob-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Persistent history record of a single archive recompute run (AB#4184). Kept as its own entity (not embedded on the archive) so the job history is queryable via recomputeJobsFor(archiveRtId) and prunable independently of the archive document. Captures enough context \u2014 state, trigger, range, scope, counts, timings, error reason, staging table \u2014 to debug a failed recompute after the fact.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.ArchiveRtId-1",
+          "name": "ArchiveRtId",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.State-1",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.Trigger-1",
+          "name": "Trigger",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.RangeStart-1",
+          "name": "RangeStart",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.RangeEnd-1",
+          "name": "RangeEnd",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.RtIdScope-1",
+          "name": "RtIdScope",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.RowsProcessed-1",
+          "name": "RowsProcessed",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.WindowsProcessed-1",
+          "name": "WindowsProcessed",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.StartedAt-1",
+          "name": "StartedAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.FinishedAt-1",
+          "name": "FinishedAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.DurationMs-1",
+          "name": "DurationMs",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.ErrorReason-1",
+          "name": "ErrorReason",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RecomputeJob.StagingTableName-1",
+          "name": "StagingTableName",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "RollupArchive-1",
+      "derivedFromCkTypeId": "System.StreamData-1.6.4/Archive-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Concrete Archive subtype for derived bucketed aggregations of another archive (raw or rollup-of-rollup). Columns are generated from Aggregations[] at activation time and immutable afterwards. Inserts happen exclusively through the system-internal rollup orchestrator. The inherited Columns attribute is populated automatically; direct edits are rejected by validation.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.6.4/RollupArchive.SourceArchiveRtId-1",
+          "name": "SourceArchiveRtId",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/RollupArchive.BucketSizeMs-1",
+          "name": "BucketSizeMs",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/RollupArchive.WatermarkLagMs-1",
+          "name": "WatermarkLagMs",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/RollupArchive.LastAggregatedBucketEnd-1",
+          "name": "LastAggregatedBucketEnd",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RollupArchive.Aggregations-1",
+          "name": "Aggregations",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/RollupArchive.FrozenUntil-1",
+          "name": "FrozenUntil",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RollupArchive.BucketAlignment-1",
+          "name": "BucketAlignment",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/RollupArchive.ReferenceTimeZone-1",
+          "name": "ReferenceTimeZone",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "TimeRangeArchive-1",
+      "derivedFromCkTypeId": "System.StreamData-1.6.4/Archive-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Concrete Archive subtype for externally pre-aggregated time-range data. Each row carries an explicit [from, to) window (a System/TimeRange record on the time axis at the storage layer) instead of a single timestamp. External systems (EDA reports, smart meters, weather APIs) push data directly via SaveTimeRangeStreamDataInArchive@1 / IStreamDataRepository.InsertTimeRangeAsync \u2014 there is no source archive and no system orchestrator on this path. Concept doc: docs/concept-time-range-archives.md.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.6.4/TimeRangeArchive.Period-1",
+          "name": "Period",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "Archive.Columns-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.StreamData-1.6.4/CkArchiveColumn-1",
+      "isRuntimeState": false,
+      "description": "Set of columns (attribute paths) the archive captures. At least one column is required."
+    },
+    {
+      "id": "Archive.DirtyWindows-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.StreamData-1.6.4/CkArchiveDirtyWindow-1",
+      "isRuntimeState": true,
+      "description": "Information A: windows on this archive whose data changed retroactively and that still need to propagate into dependent recomputes. Maintained by the storage layer on retroactive writes and cleared once consumed. Empty in the steady state."
+    },
+    {
+      "id": "Archive.LastRecomputeFailureAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": true,
+      "description": "Timestamp of the most recent failed recompute run. Null if the last run succeeded. Engine-maintained."
+    },
+    {
+      "id": "Archive.LastRecomputeFailureReason-1",
+      "valueType": "String",
+      "isRuntimeState": true,
+      "description": "Human-readable reason for the most recent recompute failure, for debugging. Null if the last run succeeded. Engine-maintained."
+    },
+    {
+      "id": "Archive.LastRecomputeStartedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": true,
+      "description": "Start timestamp of the most recent recompute run. Null before the first run. Engine-maintained."
+    },
+    {
+      "id": "Archive.LastRecomputeSuccessAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": true,
+      "description": "Finish timestamp of the most recent successfully committed recompute run. Null before the first success. Engine-maintained."
+    },
+    {
+      "id": "Archive.PendingRecomputeRanges-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.StreamData-1.6.4/CkArchiveRecomputeRange-1",
+      "isRuntimeState": true,
+      "description": "Information B: the recompute work list for this archive\u0027s dependents, derived by propagating DirtyWindows through the rollup dependency graph. Consumed by the recompute orchestrator. Empty in the steady state."
+    },
+    {
+      "id": "Archive.RawRetentionMs-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Retention window for raw data points in milliseconds. When set, the partition pruner may drop source partitions older than (now - RawRetentionMs), but never ahead of the slowest attached rollup\u0027s watermark. Null means keep forever."
+    },
+    {
+      "id": "Archive.RecomputeInProgress-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": true,
+      "description": "True while a recompute job for this archive is running or swapping. Lets readers show a soft \u0027recompute in progress\u0027 hint without being required to. Engine-maintained."
+    },
+    {
+      "id": "Archive.Status-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.6.4/CkArchiveStatus-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Lifecycle status of the archive. Defaults to Created."
+    },
+    {
+      "id": "Archive.TargetCkTypeId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Construction Kit type ID that this archive captures time-series data for."
+    },
+    {
+      "id": "CkArchiveColumn.ComputedState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.6.4/CkComputedColumnState-1",
+      "isRuntimeState": true,
+      "description": "Engine-managed lifecycle state of a computed column (Pending / Backfilling / Active / Failed). Null for ingested columns."
+    },
+    {
+      "id": "CkArchiveColumn.ComputedVersion-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": true,
+      "description": "Engine-managed physical-column version of a computed column (AB#4189 Phase 7). 0 (default) means the physical column carries the column\u0027s base name; a formula change writes the new values into a versioned physical column ({base}__v{N}) and flips this pointer atomically on backfill completion, so readers keep seeing the previous formula\u0027s values until the swap. 0 for ingested columns and for computed columns that have never been re-formulated."
+    },
+    {
+      "id": "CkArchiveColumn.Formula-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "When set, this is a computed column: an mXparser formula referencing one or more other columns of the same row by name (e.g. \u0027activePower / apparentPower\u0027). Mutually exclusive with Path. See the Formula Expressions reference for the supported language."
+    },
+    {
+      "id": "CkArchiveColumn.Indexed-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "When true (default), the generated CrateDB column is indexed by the standard rules; when false, the column is created with INDEX OFF. Disable only for columns that are read but never filtered."
+    },
+    {
+      "id": "CkArchiveColumn.Name-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Explicit output column name. For a computed column this is the formula-referenceable identifier and is required; for an ingested column it is optional and the name is derived from Path."
+    },
+    {
+      "id": "CkArchiveColumn.Path-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Attribute path captured by this column. Supports nested record traversal (e.g. \u0027sensor.reading.value\u0027) and array projection (e.g. \u0027readings[*].value\u0027)."
+    },
+    {
+      "id": "CkArchiveColumn.PendingFormula-1",
+      "valueType": "String",
+      "isRuntimeState": true,
+      "description": "Engine-managed transient marker for an in-progress formula change on a computed column (AB#4189 Phase 7). While set, the column keeps serving its previous formula\u0027s values (Formula at ComputedVersion N) and a backfill populates the new formula into the versioned physical column {base}__v{N\u002B1}; ingest dual-writes both. Null in steady state. On backfill completion the engine swaps Formula \u003C- PendingFormula, ComputedVersion \u003C- N\u002B1, and clears this field atomically."
+    },
+    {
+      "id": "CkArchiveColumn.Required-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "When true, every insert must supply a non-null value for this path; missing values cause an exception. When false, missing values are stored as NULL and preserved across upserts via COALESCE."
+    },
+    {
+      "id": "CkArchiveColumn.ResultType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.6.4/CkComputedColumnResultType-1",
+      "isRuntimeState": false,
+      "description": "Declared output type a computed column\u0027s formula result is cast back to. Required for computed columns, null for ingested columns."
+    },
+    {
+      "id": "CkArchiveDirtyWindow.ChangeKind-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.6.4/CkRecomputeChangeKind-1",
+      "isRuntimeState": false,
+      "description": "Whether the change was a forward Append or a RetroactiveModify (only the latter makes dependents dirty)."
+    },
+    {
+      "id": "CkArchiveDirtyWindow.DetectedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When the storage layer detected and recorded the change (UTC)."
+    },
+    {
+      "id": "CkArchiveDirtyWindow.Source-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.6.4/CkRecomputeChangeSource-1",
+      "isRuntimeState": false,
+      "description": "Through which path the change arrived (Manual / Pipeline / Import)."
+    },
+    {
+      "id": "CkArchiveDirtyWindow.WindowEnd-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Exclusive end of the changed window (UTC)."
+    },
+    {
+      "id": "CkArchiveDirtyWindow.WindowStart-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Inclusive start of the changed window (UTC)."
+    },
+    {
+      "id": "CkArchiveRecomputeRange.DependentArchiveRtId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Runtime id of the dependent archive that must be recomputed for this range."
+    },
+    {
+      "id": "CkArchiveRecomputeRange.EnqueuedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When this obligation was enqueued (UTC)."
+    },
+    {
+      "id": "CkArchiveRecomputeRange.RangeEnd-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Exclusive, bucket-aligned end of the range to recompute on the dependent (UTC)."
+    },
+    {
+      "id": "CkArchiveRecomputeRange.RangeStart-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Inclusive, bucket-aligned start of the range to recompute on the dependent (UTC)."
+    },
+    {
+      "id": "CkArchiveRecomputeRange.RtIdScope-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional single rtId (metering point / stream) the recompute is restricted to. Null means all rtIds in the range."
+    },
+    {
+      "id": "CkRollupAggregation.Function-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.6.4/CkRollupFunction-1",
+      "isRuntimeState": false,
+      "description": "Aggregation function applied to SourcePath within each bucket."
+    },
+    {
+      "id": "CkRollupAggregation.SourcePath-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Attribute path on the source archive (must exist in the source\u0027s Columns list at activation time). For chained rollups referencing a stored AVG, use the explicit _sum / _count column names."
+    },
+    {
+      "id": "CkRollupAggregation.TargetColumnName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional explicit storage column name. Default is \u0027{sourcePath}_{function}\u0027 lower-cased; for AVG, two columns are created with suffixes _sum and _count derived from this base name."
+    },
+    {
+      "id": "RecomputeJob.ArchiveRtId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Runtime id of the archive this job recomputed. Back-reference used by recomputeJobsFor(archiveRtId)."
+    },
+    {
+      "id": "RecomputeJob.DurationMs-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Wall-clock duration from StartedAt to FinishedAt in milliseconds. Null while running."
+    },
+    {
+      "id": "RecomputeJob.ErrorReason-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Failure reason when State is Failed; null otherwise."
+    },
+    {
+      "id": "RecomputeJob.FinishedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When the job reached a terminal state (Completed / Failed / Coalesced) (UTC). Null while running."
+    },
+    {
+      "id": "RecomputeJob.RangeEnd-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Exclusive end of the recomputed range (UTC)."
+    },
+    {
+      "id": "RecomputeJob.RangeStart-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Inclusive start of the recomputed range (UTC)."
+    },
+    {
+      "id": "RecomputeJob.RowsProcessed-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of rows written into the staging table during compute."
+    },
+    {
+      "id": "RecomputeJob.RtIdScope-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional single rtId the job was scoped to. Null means all rtIds in the range."
+    },
+    {
+      "id": "RecomputeJob.StagingTableName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of the per-job CrateDB staging table used for the compute, for post-mortem inspection. Null once swept."
+    },
+    {
+      "id": "RecomputeJob.StartedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When compute started (UTC)."
+    },
+    {
+      "id": "RecomputeJob.State-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.6.4/CkRecomputeJobState-1",
+      "isRuntimeState": false,
+      "description": "Current lifecycle state of the job."
+    },
+    {
+      "id": "RecomputeJob.Trigger-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.6.4/CkRecomputeTrigger-1",
+      "isRuntimeState": false,
+      "description": "What initiated the job (Manual / Periodic / ChainPropagation)."
+    },
+    {
+      "id": "RecomputeJob.WindowsProcessed-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of buckets / windows recomputed."
+    },
+    {
+      "id": "RollupArchive.Aggregations-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.StreamData-1.6.4/CkRollupAggregation-1",
+      "isRuntimeState": false,
+      "description": "List of aggregation definitions. At least one entry is required at activation time. Immutable after activation; schema changes require creating a new rollup."
+    },
+    {
+      "id": "RollupArchive.BucketAlignment-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.StreamData-1.6.4/BucketAlignment-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Bucket-boundary alignment. FixedSize (default, key 0) preserves the legacy \u0027LastAggregatedBucketEnd \u002B BucketSizeMs\u0027 arithmetic. Calendar/Iso8601 values align bucket boundaries to wall-clock UTC boundaries so monthly / weekly / yearly rollups become expressible without forcing BucketSizeMs into a single TimeSpan. Pre-1.4.0 entities resolve to FixedSize at read time. Immutable after activation."
+    },
+    {
+      "id": "RollupArchive.BucketSizeMs-1",
+      "valueType": "Int64",
+      "isRuntimeState": false,
+      "description": "Width of the aggregation bucket in milliseconds. Each output row covers the half-open interval [bucketEnd - BucketSizeMs, bucketEnd). Must be positive and a multiple of the source rollup\u0027s bucket size when chaining. Immutable after activation. Int64 (AB#4281): calendar-month (2,419,200,000) and calendar-year (31,536,000,000) bucket widths exceed Int32.MaxValue (\u224824.85 days), so the value type is 64-bit."
+    },
+    {
+      "id": "RollupArchive.FrozenUntil-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When set, the rollup is read-only up to this timestamp: the orchestrator will not produce new buckets whose bucketEnd is \u2264 FrozenUntil. Set automatically when the source archive is truncated for the covered range, so the already-aggregated history is preserved. Monotonic; can only move forward."
+    },
+    {
+      "id": "RollupArchive.LastAggregatedBucketEnd-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Exclusive end timestamp of the most recently committed bucket. Null before the first run. Maintained exclusively by the rollup orchestrator; manual edits go through the rewindRollupWatermark mutation."
+    },
+    {
+      "id": "RollupArchive.ReferenceTimeZone-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional IANA time-zone id (e.g. \u0027Europe/Vienna\u0027) used to align calendar bucket boundaries (day / week / month / year) to local wall-clock time so they are DST-correct across countries. Null (the default) keeps UTC calendar boundaries \u2014 the pre-1.6.4 behaviour. Only meaningful for calendar BucketAlignment variants; ignored for FixedSize. AB#4290 / decision O6."
+    },
+    {
+      "id": "RollupArchive.SourceArchiveRtId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Runtime id of the source Archive this rollup aggregates from. May reference another RollupArchive to form a chain (e.g. raw \u2192 1 min \u2192 1 h). Immutable after the rollup is activated."
+    },
+    {
+      "id": "RollupArchive.WatermarkLagMs-1",
+      "valueType": "Int64",
+      "defaultValues": [
+        "300000"
+      ],
+      "isRuntimeState": false,
+      "description": "Lower bound on how far behind real-time the orchestrator stays before closing a bucket, in milliseconds. Absorbs late-arriving source inserts. Default 300000 (five minutes). Mutable. Int64 (AB#4281) for consistency with BucketSizeMs \u2014 a lag can legitimately be sized against a calendar bucket."
+    },
+    {
+      "id": "TimeRangeArchive.Period-1",
+      "valueType": "TimeSpan",
+      "isRuntimeState": false,
+      "description": "Advisory window length for the rows this archive holds (e.g. PT15M, PT1H, P1D). Optional and descriptive only \u2014 the engine does not enforce that incoming [from, to) windows match the declared period. Used by the studio to label the archive (\u0027EDA 15-min\u0027) and by chained-rollup recommendations. Variable-period archives are allowed (leave null)."
+    }
+  ],
+  "records": [
+    {
+      "recordId": "CkArchiveColumn-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Single column definition inside a CkArchive. Either an ingested column (Path set) or a computed column (Formula set): a formula referencing other columns of the same row by name, producing a typed value.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveColumn.Path-1",
+          "name": "Path",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveColumn.Required-1",
+          "name": "Required",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveColumn.Indexed-1",
+          "name": "Indexed",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveColumn.Name-1",
+          "name": "Name",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveColumn.Formula-1",
+          "name": "Formula",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveColumn.ResultType-1",
+          "name": "ResultType",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveColumn.ComputedState-1",
+          "name": "ComputedState",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveColumn.ComputedVersion-1",
+          "name": "ComputedVersion",
+          "isOptional": true
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveColumn.PendingFormula-1",
+          "name": "PendingFormula",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "CkArchiveDirtyWindow-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Information A of the recompute model (AB#4184): a window on a source archive whose data changed retroactively. Holds the affected half-open interval plus how (ChangeKind) and through which path (Source) the change arrived. Consumed and cleared by the recompute orchestrator once the covered range has been recomputed for all dependents.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveDirtyWindow.WindowStart-1",
+          "name": "WindowStart",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveDirtyWindow.WindowEnd-1",
+          "name": "WindowEnd",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveDirtyWindow.ChangeKind-1",
+          "name": "ChangeKind",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveDirtyWindow.Source-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveDirtyWindow.DetectedAt-1",
+          "name": "DetectedAt",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "CkArchiveRecomputeRange-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Information B of the recompute model (AB#4184): one pending recompute obligation, derived by propagating a dirty window through the rollup dependency graph. Identifies a dependent archive and the bucket-aligned range to recompute, optionally scoped to a single rtId. Held on the source archive\u0027s ledger until the recompute orchestrator picks it up.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveRecomputeRange.DependentArchiveRtId-1",
+          "name": "DependentArchiveRtId",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveRecomputeRange.RangeStart-1",
+          "name": "RangeStart",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveRecomputeRange.RangeEnd-1",
+          "name": "RangeEnd",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveRecomputeRange.RtIdScope-1",
+          "name": "RtIdScope",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkArchiveRecomputeRange.EnqueuedAt-1",
+          "name": "EnqueuedAt",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "CkRollupAggregation-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Single aggregation definition for a CkRollupArchive. Maps a source archive column (SourcePath) to one or more storage columns via Function. AVG materialises as two stored columns (sum \u002B count); the other functions map 1:1.",
+      "attributes": [
+        {
+          "id": "System.StreamData-1.6.4/CkRollupAggregation.SourcePath-1",
+          "name": "SourcePath",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkRollupAggregation.Function-1",
+          "name": "Function",
+          "isOptional": false
+        },
+        {
+          "id": "System.StreamData-1.6.4/CkRollupAggregation.TargetColumnName-1",
+          "name": "TargetColumnName",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "BucketAlignment-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "FixedSize",
+          "description": "Default. Each bucket spans exactly BucketSizeMs; boundaries are LastAggregatedBucketEnd, LastAggregatedBucketEnd \u002B BucketSizeMs, ...",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "CalendarDay",
+          "description": "Bucket boundaries align to UTC calendar days (00:00:00 UTC). BucketSizeMs is informational only.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Iso8601Week",
+          "description": "Bucket boundaries align to ISO-8601 weeks (Monday 00:00:00 UTC to next Monday 00:00:00 UTC). BucketSizeMs is informational only.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "CalendarMonth",
+          "description": "Bucket boundaries align to UTC calendar months (first day of month 00:00:00 UTC). BucketSizeMs is informational only; month lengths vary 28-31 days.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "CalendarYear",
+          "description": "Bucket boundaries align to UTC calendar years (Jan 1 00:00:00 UTC). BucketSizeMs is informational only.",
+          "isExtension": false
+        }
+      ],
+      "description": "Bucket-boundary alignment for a RollupArchive. FixedSize (default) uses the legacy LastAggregatedBucketEnd \u002B BucketSizeMs arithmetic. The other values align to calendar boundaries \u2014 BucketSizeMs is interpreted as a lower bound (e.g. 28d for monthly) but the actual boundary comes from the calendar so monthly/weekly EDA rollups become expressible. Concept-time-range \u00A77."
+    },
+    {
+      "enumId": "CkArchiveStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Created",
+          "description": "Archive definition exists, but no Crate table has been provisioned. Inserts and queries are rejected.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Activated",
+          "description": "Crate table exists, schema is frozen, inserts and queries are accepted.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Disabled",
+          "description": "Crate table exists, but inserts and queries are rejected. Data is preserved.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Failed",
+          "description": "Activation failed; manual retry required. Inserts and queries are rejected.",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle status of a CkArchive instance."
+    },
+    {
+      "enumId": "CkComputedColumnResultType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Boolean",
+          "description": "Non-zero result is true. Stored as BOOLEAN.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Int",
+          "description": "Result truncated to a 32-bit integer. Stored as INTEGER.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Int64",
+          "description": "Result truncated to a 64-bit integer. Stored as BIGINT.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Double",
+          "description": "Stored as DOUBLE PRECISION.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "DateTime",
+          "description": "Result interpreted as ticks. Stored as TIMESTAMP WITH TIME ZONE.",
+          "isExtension": false
+        }
+      ],
+      "description": "Declared output type a computed column\u0027s formula result is cast back to. The formula engine computes with double; booleans round-trip as 0/1 and DateTimes as ticks. String and non-scalar types are intentionally absent. Key values match the FormulaResultType code enum so the snapshot maps by a direct cast."
+    },
+    {
+      "enumId": "CkComputedColumnState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Pending",
+          "description": "A backfill has been scheduled for this computed column but has not started yet. Consumers still see the previous archive state.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Backfilling",
+          "description": "The backfill is running. Consumers still see the previous archive state until it completes and is committed atomically.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Active",
+          "description": "The computed column is live: new rows include the value on ingest and readers see it.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Failed",
+          "description": "The backfill failed mid-run. The previous archive state is intact; consumers never see partial computed data.",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle state of a computed column on a CkArchive. Engine-managed (not set by the author): a computed column created together with its archive starts Active; one added to an already-active archive runs Pending -\u003E Backfilling -\u003E Active, or Failed if the backfill fails."
+    },
+    {
+      "enumId": "CkRecomputeChangeKind-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Append",
+          "description": "A forward write at or after the high-water mark already consumed by dependents. Does not, by itself, make a dependent stale.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "RetroactiveModify",
+          "description": "A write into a window at or before the consumed high-water mark (correction, late value, re-ingest). Marks the covering window dirty so dependents are recomputed.",
+          "isExtension": false
+        }
+      ],
+      "description": "How a write touched an archive window, used to drive recompute of derived archives (AB#4184). Append is a normal forward write past the consumed high-water mark; RetroactiveModify is a correction / late value / re-ingest into an already-consumed window and is what marks dependents dirty."
+    },
+    {
+      "enumId": "CkRecomputeChangeSource-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Manual",
+          "description": "An operator changed the data directly (manual correction).",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Pipeline",
+          "description": "A mesh-adapter pipeline re-ingested or corrected the data (e.g. a corrected DATEN_CRMSG from EDA).",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Import",
+          "description": "A bulk archive-data import wrote the change.",
+          "isExtension": false
+        }
+      ],
+      "description": "Through which path a retroactive archive change arrived (AB#4184). Kept separately from CkRecomputeChangeKind so the audit trail can distinguish a manual operator edit from an automated pipeline re-ingest or a bulk import."
+    },
+    {
+      "enumId": "CkRecomputeJobState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Pending",
+          "description": "The job is scheduled but compute has not started yet.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Running",
+          "description": "Recomputed buckets are being written into the per-job staging table. Readers still see the previous state.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Swapping",
+          "description": "Staging is complete and the atomic commit (full-archive SWAP TABLE or per-window generation-pointer flip) is in progress.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Completed",
+          "description": "The recompute committed atomically; readers now see the new values.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Failed",
+          "description": "The job failed before committing. Staging is discarded; the previous archive state is intact and consumers never saw a partial result.",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Coalesced",
+          "description": "The triggering request was merged into an already-active job for the same archive (its range was folded into that job).",
+          "isExtension": false
+        }
+      ],
+      "description": "Lifecycle state of a single archive recompute run (AB#4184). Engine-managed. A job computes into a staging table (Running), commits via SWAP TABLE / generation-pointer flip (Swapping), then Completed; Failed leaves the previous archive state intact; Coalesced marks a trigger merged into an already-active job for the same archive."
+    },
+    {
+      "enumId": "CkRecomputeTrigger-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Manual",
+          "description": "An operator forced the recompute via API / admin UI / octo-cli.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Periodic",
+          "description": "The recompute orchestrator picked up dirty windows on its scheduled tick.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "ChainPropagation",
+          "description": "A successful recompute of an upstream archive marked this archive dirty and propagated downstream.",
+          "isExtension": false
+        }
+      ],
+      "description": "What initiated an archive recompute run (AB#4184), recorded on each job for observability."
+    },
+    {
+      "enumId": "CkRollupFunction-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Avg",
+          "description": "Arithmetic mean. Stored as sum and count columns; the average is computed on read.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Min",
+          "description": "Minimum value in the bucket.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Max",
+          "description": "Maximum value in the bucket.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Sum",
+          "description": "Sum of values in the bucket.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Count",
+          "description": "Number of non-null values in the bucket.",
+          "isExtension": false
+        }
+      ],
+      "description": "Aggregation function used by a CkRollupAggregation. AVG is stored as two columns (sum \u002B count) so chained rollups stay numerically correct."
+    }
+  ],
+  "modelId": "System.StreamData-1.6.4",
+  "description": "StreamData model. Defines the abstract Archive base, RawArchive (instant measurements), RollupArchive (derived bucketed-aggregation archives), TimeRangeArchive (externally pre-aggregated [from, to) windowed data), and supporting enum/record types. 1.1.0 \u2192 1.2.0 renamed CkArchive \u2192 Archive (abstract) \u002B introduced RawArchive; 1.2.0 \u2192 1.3.0 adds TimeRangeArchive (additive, no entity migration needed); 1.3.0 \u2192 1.4.0 adds RollupArchive.BucketAlignment \u002B the BucketAlignment enum so monthly / weekly / yearly rollups are expressible (additive, pre-1.4.0 entities resolve to FixedSize); 1.4.0 \u2192 1.5.0 adds computed columns on CkArchiveColumn (Name \u002B Formula \u002B ResultType \u002B ComputedState) and the CkComputedColumnResultType / CkComputedColumnState enums (additive, pre-1.5.0 columns have null computed fields); 1.5.0 \u2192 1.6.0 adds the optimistic recompute model (AB#4184): Archive dirty-tracking \u002B observability attributes (DirtyWindows, PendingRecomputeRanges, RecomputeInProgress, Last* fields, all runtime-state), the CkArchiveDirtyWindow / CkArchiveRecomputeRange records, the RecomputeJob history entity, and the CkRecomputeChangeKind / CkRecomputeChangeSource / CkRecomputeJobState / CkRecomputeTrigger enums (additive, pre-1.6.0 entities have null/empty recompute state); 1.6.0 \u2192 1.6.1 adds CkArchiveColumn.ComputedVersion (AB#4189 Phase 7) \u2014 the engine-managed physical-column version pointer that lets a computed column\u0027s formula change on an active archive via a versioned physical column ({base}__v{N}) \u002B atomic pointer flip, and marks CkArchiveColumn.ComputedState runtime-state too (additive, pre-1.6.1 computed columns are version 0); 1.6.1 \u2192 1.6.2 adds CkArchiveColumn.PendingFormula (AB#4189 Phase 7) \u2014 the transient in-progress marker for a formula change that drives the ingest dual-write and is cleared on the atomic swap (additive, null in steady state); 1.6.2 \u2192 1.6.3 widens RollupArchive.BucketSizeMs and RollupArchive.WatermarkLagMs from Int32 to Int64 (AB#4281) so calendar-month (2,419,200,000 ms) and calendar-year (31,536,000,000 ms) bucket widths \u2014 which exceed Int32.MaxValue \u2248 24.85 days \u2014 persist as numbers instead of being coerced to strings on ImportRt (additive value-type widening; existing Int32 values still load as Int64, no data migration required); 1.6.3 \u2192 1.6.4 adds RollupArchive.ReferenceTimeZone (AB#4290) \u2014 an optional IANA time-zone id that makes calendar (day/week/month/year) bucket boundaries DST-correct in a reference zone instead of UTC; used by the resolution-aware series resolver\u0027s grain probe (additive, null keeps the pre-1.6.4 UTC behaviour, no data migration required). Loaded only when StreamData is enabled at the instance level."
+}
