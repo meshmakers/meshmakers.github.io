@@ -1,0 +1,70 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "Ticket-1",
+      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A one-time secret voucher. Created by a developer, redeemable exactly once over HTTP.",
+      "attributes": [
+        {
+          "id": "Demo.Tickets-1.0.0/TicketName-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "Demo.Tickets-1.0.0/TicketSecret-1",
+          "name": "Secret",
+          "isOptional": false
+        },
+        {
+          "id": "Demo.Tickets-1.0.0/TicketRedeemed-1",
+          "name": "Redeemed",
+          "isOptional": false
+        },
+        {
+          "id": "Demo.Tickets-1.0.0/TicketRedeemedAt-1",
+          "name": "RedeemedAt",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "TicketName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Human-readable label of the ticket (e.g. \u0022API key for ACME staging\u0022)"
+    },
+    {
+      "id": "TicketRedeemed-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Whether this ticket has already been redeemed. A redeemed ticket never reveals its secret again."
+    },
+    {
+      "id": "TicketRedeemedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Timestamp of the (single) successful redeem. Unset while the ticket is open."
+    },
+    {
+      "id": "TicketSecret-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The secret delivered on a successful redeem (e.g. an API key). Cleared after redemption."
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "Demo.Tickets-1.0.0",
+  "description": "One-time secret tickets for the OctoMesh capability demo."
+}
