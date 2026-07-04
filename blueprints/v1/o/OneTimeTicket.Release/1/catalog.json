@@ -2,14 +2,19 @@
   "version": "1.0",
   "blueprintId": "OneTimeTicket.Release",
   "majorVersion": 1,
-  "latestVersion": "1.0.0",
+  "latestVersion": "1.0.1",
   "description": "One-Time Ticket \u2014 a complete OctoMesh demo app in a single installable bundle.\nStaging/production channel variant (mirrors System.Communication.Release).\n\nA developer creates a \u0022ticket\u0022 holding a secret (e.g. an API key) and shares a\nredeem link. The secret can be fetched over HTTP exactly once; afterwards the\nticket is burned (redeemed flag set, secret cleared in the data mesh).\n\nWhat this blueprint installs:\n- the Demo.Tickets construction kit model (auto-imported from the catalog)\n- a DataFlow with 3 HTTP pipelines hosted by the tenant\u0027s Mesh Adapter:\n    POST /tickets   create a ticket  -\u003E { ticketId }\n    GET  /tickets   list tickets     -\u003E { tickets: [...] } (never the secret)\n    GET  /redeem    ?id=\u003CticketId\u003E   -\u003E { secret } once, then { error }\n- the One-Time Ticket web app as an Application workload, rolled out to\n  Kubernetes by the Communication Operator as a Helm release, pulling the\n  one-time-ticket-app chart from the meshmakers-apps release Helm repo.\n\nPREREQUISITE: communication must be enabled on the target tenant. The\nservice-managed System.Communication.Release blueprint seeds the Pool\n(670000000000000000000001), Mesh Adapter (670000000000000000000002) and the\napps release Helm repo (670000000000000000000005) this seed associates to.\nWe point at that pre-seeded repo rather than seeding our own.\n\nInstall only seeds entities \u2014 trigger the rollout afterwards with\nDeployDataFlow (the pipelines) \u002B DeployWorkload (the web app).\n\nNOTE: the dev/test variant is OneTimeTicket.MainLatest. Keep the seed-data of\nthe two variants in sync \u2014 they differ only in the Application\u0027s HelmRepository\nassociation (003 dev vs 005 apps).\n",
   "versions": [
     {
       "version": "1.0.0",
       "directoryPath": "blueprints/v1/o/OneTimeTicket.Release/1/OneTimeTicket.Release-1.0.0",
       "publishedAt": "2026-07-04T08:12:58.090905Z"
+    },
+    {
+      "version": "1.0.1",
+      "directoryPath": "blueprints/v1/o/OneTimeTicket.Release/1/OneTimeTicket.Release-1.0.1",
+      "publishedAt": "2026-07-04T09:06:16.2059575Z"
     }
   ],
-  "updatedAt": "2026-07-04T08:12:58.0932834Z"
+  "updatedAt": "2026-07-04T09:06:16.2106612Z"
 }
