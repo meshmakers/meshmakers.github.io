@@ -1,0 +1,44 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: OneTimeTicket.MainLatest-1.0.1
+description: |
+  One-Time Ticket — a complete OctoMesh demo app in a single installable bundle.
+  Dev/test channel variant (mirrors System.Communication.MainLatest).
+
+  A developer creates a "ticket" holding a secret (e.g. an API key) and shares a
+  redeem link. The secret can be fetched over HTTP exactly once; afterwards the
+  ticket is burned (redeemed flag set, secret cleared in the data mesh).
+
+  What this blueprint installs:
+  - the Demo.Tickets construction kit model (auto-imported from the catalog)
+  - a DataFlow with 3 HTTP pipelines hosted by the tenant's Mesh Adapter:
+      POST /tickets   create a ticket  -> { ticketId }
+      GET  /tickets   list tickets     -> { tickets: [...] } (never the secret)
+      GET  /redeem    ?id=<ticketId>   -> { secret } once, then { error }
+  - the One-Time Ticket web app as an Application workload, rolled out to
+    Kubernetes by the Communication Operator as a Helm release, pulling the
+    one-time-ticket-app chart from the meshmakers-dev Helm repo.
+
+  PREREQUISITE: communication must be enabled on the target tenant. The
+  service-managed System.Communication.MainLatest blueprint seeds the Pool
+  (670000000000000000000001), Mesh Adapter (670000000000000000000002) and dev
+  Helm repo (670000000000000000000003) this seed associates to. We point at
+  that pre-seeded repo rather than seeding our own.
+
+  Install only seeds entities — trigger the rollout afterwards with
+  DeployDataFlow (the pipelines) + DeployWorkload (the web app).
+
+  NOTE: the staging/production variant is OneTimeTicket.Release. Keep the
+  seed-data of the two variants in sync — they differ only in the Application's
+  HelmRepository association (003 dev vs 005 apps).
+
+ckModelDependencies:
+  - Demo.Tickets-[1.0.0,2.0.0)
+
+seedDataPath: seed-data/entities.yaml
+
+# Dev/test channel: meshmakers-dev Helm repo (003) seeded by
+# System.Communication.MainLatest, which is gated to the same environments.
+requires:
+  octo.environment:
+    - dev
+    - test
