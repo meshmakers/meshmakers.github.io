@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [
-    "System-2.2.0"
+    "System-2.2.2"
   ],
   "types": [
     {
@@ -14,12 +14,12 @@
       "description": "Per-tenant UI branding and theming for a frontend app (app names, logos, favicon, light/dark palettes, gradients). Singleton per tenant via rtWellKnownName = \u0027Branding\u0027. Derives from UIElement (same as Dashboard, ProcessDiagram, SymbolDefinition, SymbolLibrary) \u2014 consistent with SystemUiCkModel convention.",
       "attributes": [
         {
-          "id": "System-2.2.0/Name-1",
+          "id": "System-2.2.2/Name-1",
           "name": "Name",
           "isOptional": true
         },
         {
-          "id": "System-2.2.0/Description-1",
+          "id": "System-2.2.2/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -70,12 +70,12 @@
       "description": "A configurable dashboard containing multiple widgets arranged in a grid layout.",
       "attributes": [
         {
-          "id": "System-2.2.0/Name-1",
+          "id": "System-2.2.2/Name-1",
           "name": "Name",
           "isOptional": false
         },
         {
-          "id": "System-2.2.0/Description-1",
+          "id": "System-2.2.2/Description-1",
           "name": "Description",
           "isOptional": false
         },
@@ -104,7 +104,7 @@
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.2.0/ParentChild-1",
+          "id": "System-2.2.2/ParentChild-1",
           "targetCkTypeId": "System.UI-2.4.0/Dashboard-1"
         }
       ],
@@ -112,7 +112,7 @@
       "description": "A widget within a dashboard that displays data in a specific visualization format.",
       "attributes": [
         {
-          "id": "System-2.2.0/Name-1",
+          "id": "System-2.2.2/Name-1",
           "name": "Name",
           "isOptional": false
         },
@@ -173,12 +173,12 @@
       "description": "Per-tenant configuration for the Mapping Coverage page (communication data-mappings). Stores which CK types act as mapping-source catalogues in the Orphan Sources tab (e.g. Loxone/Control, MQTT/Topic, OpcUa/Node) so the selection is shared by all operators of the tenant instead of living in browser localStorage. Singleton per tenant via rtWellKnownName = \u0027MappingCoverage\u0027. Optional: when absent the Orphan Sources tab starts empty. Derives from UIElement (same as Branding, Dashboard, TreeNavigationConfiguration) \u2014 consistent with SystemUiCkModel convention.",
       "attributes": [
         {
-          "id": "System-2.2.0/Name-1",
+          "id": "System-2.2.2/Name-1",
           "name": "Name",
           "isOptional": true
         },
         {
-          "id": "System-2.2.0/Description-1",
+          "id": "System-2.2.2/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -199,12 +199,12 @@
       "description": "HMI-style process diagram with tanks, pipes, valves, pumps, and other industrial elements.",
       "attributes": [
         {
-          "id": "System-2.2.0/Name-1",
+          "id": "System-2.2.2/Name-1",
           "name": "Name",
           "isOptional": false
         },
         {
-          "id": "System-2.2.0/Description-1",
+          "id": "System-2.2.2/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -283,7 +283,7 @@
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.2.0/ParentChild-1",
+          "id": "System-2.2.2/ParentChild-1",
           "targetCkTypeId": "System.UI-2.4.0/SymbolLibrary-1"
         }
       ],
@@ -291,12 +291,12 @@
       "description": "A reusable symbol definition composed of primitives, belonging to a symbol library.",
       "attributes": [
         {
-          "id": "System-2.2.0/Name-1",
+          "id": "System-2.2.2/Name-1",
           "name": "Name",
           "isOptional": false
         },
         {
-          "id": "System-2.2.0/Description-1",
+          "id": "System-2.2.2/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -377,12 +377,12 @@
       "description": "A library containing reusable symbol definitions composed of primitives for process diagrams.",
       "attributes": [
         {
-          "id": "System-2.2.0/Name-1",
+          "id": "System-2.2.2/Name-1",
           "name": "Name",
           "isOptional": false
         },
         {
-          "id": "System-2.2.0/Description-1",
+          "id": "System-2.2.2/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -418,12 +418,12 @@
       "description": "Per-tenant configuration for the entity trees (repository browser \u002B communication data-mappings). Overrides which auto-discovered association roles are shown, their label, order, grouping and icon (Roles), and defines additional switchable tree perspectives with their own root (Perspectives). Singleton per tenant via rtWellKnownName = \u0027TreeNavigation\u0027. Optional: when absent the trees fall back to pure auto-discovery and the spatial perspective only. Derives from UIElement (same as Branding, Dashboard) \u2014 consistent with SystemUiCkModel convention.",
       "attributes": [
         {
-          "id": "System-2.2.0/Name-1",
+          "id": "System-2.2.2/Name-1",
           "name": "Name",
           "isOptional": true
         },
         {
-          "id": "System-2.2.0/Description-1",
+          "id": "System-2.2.2/Description-1",
           "name": "Description",
           "isOptional": true
         },
@@ -442,7 +442,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "UIElement-1",
-      "derivedFromCkTypeId": "System-2.2.0/Entity-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
       "isFinal": false,
       "isAbstract": true,
       "enableChangeStreamPreAndPostImages": false
