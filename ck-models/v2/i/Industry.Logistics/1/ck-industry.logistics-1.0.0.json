@@ -1,0 +1,725 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.0.2",
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Article-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "An article / product master record.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-1.0.0/ArticleNumber-1",
+          "name": "ArticleNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/Ean-1",
+          "name": "Ean",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/Weight-1",
+          "name": "Weight",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/ArticleType-1",
+          "name": "ArticleType",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Customer-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A customer who places logistics/fulfillment orders.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-1.0.0/CustomerNumber-1",
+          "name": "CustomerNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.0.2/Contact-1",
+          "name": "Contact",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Order-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Logistics-1.0.0/OrderCustomer-1",
+          "targetCkTypeId": "Industry.Logistics-1.0.0/Customer-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A logistics order placed by a customer for fulfillment.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-1.0.0/OrderNumber-1",
+          "name": "OrderNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/ExternalOrderNumber-1",
+          "name": "ExternalOrderNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/OrderDate-1",
+          "name": "OrderDate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/DeliveryDate-1",
+          "name": "DeliveryDate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/Carrier-1",
+          "name": "Carrier",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/OrderStatus-1",
+          "name": "Status",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.0.2/Address-1",
+          "name": "DeliveryAddress",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "OrderItem-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Logistics-1.0.0/OrderItemOrder-1",
+          "targetCkTypeId": "Industry.Logistics-1.0.0/Order-1"
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/OrderItemArticle-1",
+          "targetCkTypeId": "Industry.Logistics-1.0.0/Article-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A line item of a logistics order.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-1.0.0/PositionNumber-1",
+          "name": "PositionNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.0.2/Quantity-1",
+          "name": "Quantity",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.0.2/Amount-1",
+          "name": "UnitPriceNet",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Parcel-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Logistics-1.0.0/ParcelShipment-1",
+          "targetCkTypeId": "Industry.Logistics-1.0.0/Shipment-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A parcel / colli within a shipment; carries tracking and carrier.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-1.0.0/TrackingNumber-1",
+          "name": "TrackingNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/Carrier-1",
+          "name": "Carrier",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/PackagingType-1",
+          "name": "PackagingType",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/ServiceType-1",
+          "name": "ServiceType",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/Weight-1",
+          "name": "Weight",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Shipment-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Logistics-1.0.0/ShipmentOrder-1",
+          "targetCkTypeId": "Industry.Logistics-1.0.0/Order-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A dispatch / order feedback for an order; carries totals and completeness.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-1.0.0/ShipmentNumber-1",
+          "name": "ShipmentNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/ShipmentDate-1",
+          "name": "ShipmentDate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/Completeness-1",
+          "name": "Completeness",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/ParcelCount-1",
+          "name": "ParcelCount",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/Weight-1",
+          "name": "TotalWeight",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ShipmentItem-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Logistics-1.0.0/ShipmentItemShipment-1",
+          "targetCkTypeId": "Industry.Logistics-1.0.0/Shipment-1"
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/ShipmentItemArticle-1",
+          "targetCkTypeId": "Industry.Logistics-1.0.0/Article-1"
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/ShipmentItemParcel-1",
+          "targetCkTypeId": "Industry.Logistics-1.0.0/Parcel-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A dispatched line within a shipment.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-1.0.0/PositionNumber-1",
+          "name": "PositionNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/DeliveredQuantity-1",
+          "name": "DeliveredQuantity",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/OpenQuantity-1",
+          "name": "OpenQuantity",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Stock-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Logistics-1.0.0/StockArticle-1",
+          "targetCkTypeId": "Industry.Logistics-1.0.0/Article-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Stock level of an article (stock overview).",
+      "attributes": [
+        {
+          "id": "Basic-2.0.2/Quantity-1",
+          "name": "Quantity",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-1.0.0/StockStatus-1",
+          "name": "Status",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "OrderCustomer-1",
+      "inboundName": "Orders",
+      "outboundName": "Customer",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Order -\u003E Customer. Creates Order.Customer (one) and Customer.Orders (many)."
+    },
+    {
+      "id": "OrderItemArticle-1",
+      "inboundName": "OrderItems",
+      "outboundName": "Article",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "OrderItem -\u003E Article. Creates OrderItem.Article (one) and Article.OrderItems (many)."
+    },
+    {
+      "id": "OrderItemOrder-1",
+      "inboundName": "OrderItems",
+      "outboundName": "Order",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "OrderItem -\u003E Order. Creates OrderItem.Order (one) and Order.OrderItems (many)."
+    },
+    {
+      "id": "ParcelShipment-1",
+      "inboundName": "Parcels",
+      "outboundName": "Shipment",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Parcel -\u003E Shipment. Creates Parcel.Shipment (one) and Shipment.Parcels (many)."
+    },
+    {
+      "id": "ShipmentItemArticle-1",
+      "inboundName": "ShipmentItems",
+      "outboundName": "Article",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "ShipmentItem -\u003E Article. Creates ShipmentItem.Article (one) and Article.ShipmentItems (many)."
+    },
+    {
+      "id": "ShipmentItemParcel-1",
+      "inboundName": "ShipmentItems",
+      "outboundName": "Parcel",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "ShipmentItem -\u003E Parcel. Creates ShipmentItem.Parcel (zeroOrOne) and Parcel.ShipmentItems (many)."
+    },
+    {
+      "id": "ShipmentItemShipment-1",
+      "inboundName": "ShipmentItems",
+      "outboundName": "Shipment",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "ShipmentItem -\u003E Shipment. Creates ShipmentItem.Shipment (one) and Shipment.ShipmentItems (many)."
+    },
+    {
+      "id": "ShipmentOrder-1",
+      "inboundName": "Shipments",
+      "outboundName": "Order",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Shipment -\u003E Order. Creates Shipment.Order (one) and Order.Shipments (many)."
+    },
+    {
+      "id": "StockArticle-1",
+      "inboundName": "Stocks",
+      "outboundName": "Article",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Stock -\u003E Article. Creates Stock.Article (one) and Article.Stocks (many)."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "ArticleNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ArticleType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-1.0.0/ArticleType-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "Carrier-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-1.0.0/Carrier-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "Completeness-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-1.0.0/Completeness-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "CustomerNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "DeliveredQuantity-1",
+      "valueType": "Double",
+      "isRuntimeState": false
+    },
+    {
+      "id": "DeliveryDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false
+    },
+    {
+      "id": "Ean-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ExternalOrderNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Reference number from the source system (shop/ERP)"
+    },
+    {
+      "id": "OpenQuantity-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Undelivered quantity; negative = over-delivery"
+    },
+    {
+      "id": "OrderDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false
+    },
+    {
+      "id": "OrderNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Primary order identifier"
+    },
+    {
+      "id": "OrderStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-1.0.0/OrderStatus-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PackagingType-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ParcelCount-1",
+      "valueType": "Int",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PositionNumber-1",
+      "valueType": "Int",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ServiceType-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ShipmentDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ShipmentNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Dispatch / forwarding number"
+    },
+    {
+      "id": "StockStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-1.0.0/StockStatus-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "TrackingNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Parcel / tracking number"
+    },
+    {
+      "id": "Weight-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kg"
+        },
+        {
+          "key": "Decimals",
+          "value": "3"
+        }
+      ]
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "ArticleType-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Single",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Serial",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Batch",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "BestBefore",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "Carrier-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "DHL",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "UPS",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "GLS",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "DPD",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Post",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "FedEx",
+          "isExtension": false
+        },
+        {
+          "key": 99,
+          "name": "Other",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "Completeness-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Complete",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Partial",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "OrderStatus-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Offered",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Ordered",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Confirmed",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Paid",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Packed",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "InFulfillment",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "Shipped",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "Complaint",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "Deleted",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "Completed",
+          "isExtension": false
+        },
+        {
+          "key": 11,
+          "name": "Cancelled",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "Archived",
+          "isExtension": false
+        },
+        {
+          "key": 13,
+          "name": "PaymentReminder",
+          "isExtension": false
+        },
+        {
+          "key": 14,
+          "name": "Reminder1",
+          "isExtension": false
+        },
+        {
+          "key": 15,
+          "name": "Reminder2",
+          "isExtension": false
+        },
+        {
+          "key": 16,
+          "name": "Return",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "StockStatus-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Available",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Blocked",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "Industry.Logistics-1.0.0"
+}
