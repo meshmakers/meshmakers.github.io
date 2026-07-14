@@ -1,0 +1,103 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "Registration-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "An interest pre-registration for the energy-communities offering \u2014 contact data plus consent bookkeeping.",
+      "attributes": [
+        {
+          "id": "EnergyLanding.Community-1.0.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyLanding.Community-1.0.0/Email-1",
+          "name": "Email",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyLanding.Community-1.0.0/Organization-1",
+          "name": "Organization",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyLanding.Community-1.0.0/Message-1",
+          "name": "Message",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyLanding.Community-1.0.0/RegisteredAt-1",
+          "name": "RegisteredAt",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyLanding.Community-1.0.0/AcceptedTerms-1",
+          "name": "AcceptedTerms",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyLanding.Community-1.0.0/ConsentVersion-1",
+          "name": "ConsentVersion",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "AcceptedTerms-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Registrant accepted the privacy notice, which includes consent that we will contact them about the energy-communities offering (GDPR Art. 6(1)(a)). Mandatory condition of registration; the pipeline rejects registrations without it."
+    },
+    {
+      "id": "ConsentVersion-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Version label of the privacy notice shown to the registrant at registration time, stamped server-side (proof of what was consented to)."
+    },
+    {
+      "id": "Email-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Contact e-mail address of the registrant. Deduplication key \u2014 trimmed and lowercased server-side before storage."
+    },
+    {
+      "id": "Message-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional free-text note describing the registrant\u0027s interest."
+    },
+    {
+      "id": "Name-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of the contact person registering interest."
+    },
+    {
+      "id": "Organization-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional company, energy community, or municipality the registrant belongs to."
+    },
+    {
+      "id": "RegisteredAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Server-side timestamp of the registration."
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "EnergyLanding.Community-1.0.0",
+  "description": "Energy-communities landing page \u2014 interest pre-registrations (contact and consent data)."
+}
