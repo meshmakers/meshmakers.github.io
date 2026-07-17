@@ -1,0 +1,341 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# ---------------------------------------------------------------------------
+# Seed data for the OneTimeTicket blueprint.
+#
+# rtIds use the hand-assigned 0771… range ("OTT1") so re-applies are
+# idempotent and the entities are easy to recognize.
+#
+# Associations into 670000000000000000000001/002/003 resolve against the
+# entities the service-managed System.Communication blueprint seeds on every
+# communication-enabled tenant (Pool / Mesh Adapter / dev Helm repo).
+# ---------------------------------------------------------------------------
+dependencies:
+- System.Communication-[3.1,4.0)
+entities:
+
+  # ========================================================================
+  # DataFlow — logical container for the three ticket pipelines
+  # ========================================================================
+  - rtId: '077100000000000000000001'
+    ckTypeId: System.Communication/DataFlow-1
+    attributes:
+      - id: System/Name-1
+        value: "One-Time Ticket API"
+      - id: System/Description-1
+        value: "HTTP API on the Mesh Adapter: POST /tickets (create), GET /tickets (list), GET /redeem?id= (reveal the secret exactly once)."
+
+  # ========================================================================
+  # Pipeline: create — POST /tickets { name, secret } -> { ticketId }
+  # ========================================================================
+  - rtId: '077100000000000000000002'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '077100000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'   # Mesh Adapter (blueprint default, fixed rtId)
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "ott-create-ticket"
+      - id: System/Description-1
+        value: "POST /tickets — store a new one-time ticket in the data mesh"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /tickets — body { name, secret }
+              method: Post
+              path: /tickets
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              description: Build the insert for the new ticket
+              updateKind: Insert
+              ckTypeId: Demo.Tickets/Ticket
+              rtIdPath: $.newTicketRtId
+              generateRtId: true
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates:
+                - attributeName: Name
+                  attributeValueType: String
+                  valuePath: $.body.name
+                - attributeName: Secret
+                  attributeValueType: String
+                  valuePath: $.body.secret
+                - attributeName: Redeemed
+                  attributeValueType: Boolean
+                  value: false
+
+            - type: ApplyChanges@2
+              description: Persist the ticket
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              description: Expose the generated id
+              valuePath: $.updates[0].RtId
+              valueType: String
+              targetPath: $.ticketId
+
+            - type: Project@1
+              description: Response = { ticketId } only (never echo the secret back)
+              clear: true
+              fields:
+                - path: $.ticketId
+                  inclusion: true
+
+  # ========================================================================
+  # Pipeline: list — GET /tickets -> { tickets } (public fields only)
+  # ========================================================================
+  - rtId: '077100000000000000000003'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '077100000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'   # Mesh Adapter (blueprint default, fixed rtId)
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "ott-list-tickets"
+      - id: System/Description-1
+        value: "GET /tickets — list all tickets without their secrets"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP GET /tickets — list all tickets WITHOUT secrets
+              method: Get
+              path: /tickets
+
+          transformations:
+            - type: GetRtEntitiesByType@1
+              description: Fetch all tickets
+              ckTypeId: Demo.Tickets/Ticket
+              take: 200
+              targetPath: $.lookup
+
+            - type: ForEach@1
+              description: Reduce each ticket to its public fields (no secret!)
+              iterationPath: $.lookup.Items
+              keyPath: $.key
+              mergePath: $.key.out
+              targetPath: $.tickets
+              transformations:
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.RtId
+                  valueType: String
+                  targetPath: $.key.out.id
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Name
+                  valueType: String
+                  targetPath: $.key.out.name
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Redeemed
+                  valueType: Boolean
+                  targetPath: $.key.out.redeemed
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.RtCreationDateTime
+                  valueType: DateTime
+                  targetPath: $.key.out.createdAt
+                - type: If@1
+                  description: RedeemedAt only exists on redeemed tickets — guard the copy
+                  path: $.key.Attributes.Redeemed
+                  operator: Equal
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      valuePath: $.key.Attributes.RedeemedAt
+                      valueType: DateTime
+                      targetPath: $.key.out.redeemedAt
+
+            - type: Project@1
+              description: Response = { tickets } only
+              clear: true
+              fields:
+                - path: $.tickets
+                  inclusion: true
+
+  # ========================================================================
+  # Pipeline: redeem — GET /redeem?id=<ticketId> -> { secret } exactly once
+  # ========================================================================
+  - rtId: '077100000000000000000004'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '077100000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'   # Mesh Adapter (blueprint default, fixed rtId)
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "ott-redeem-ticket"
+      - id: System/Description-1
+        value: "GET /redeem?id= — return the secret exactly once, then burn the ticket"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP GET /redeem?id=<ticketId> — return the secret exactly once
+              method: Get
+              path: /redeem
+
+          transformations:
+            - type: GetRtEntitiesByType@1
+              description: Look up the ticket by its id
+              ckTypeId: Demo.Tickets/Ticket
+              targetPath: $.lookup
+              fieldFilters:
+                - attributePath: RtId
+                  operator: Equals
+                  comparisonValuePath: $.query.id
+
+            - type: If@1
+              description: Unknown ticket id
+              path: $.lookup.TotalCount
+              operator: Equal
+              value: 0
+              valueType: Int
+              transformations:
+                - type: SetPrimitiveValue@1
+                  value: not_found
+                  valueType: String
+                  targetPath: $.error
+
+            - type: If@1
+              description: Ticket exists
+              path: $.lookup.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                - type: If@1
+                  description: Already redeemed — never reveal again
+                  path: $.lookup.Items[0].Attributes.Redeemed
+                  operator: Equal
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: already_redeemed
+                      valueType: String
+                      targetPath: $.error
+
+                - type: If@1
+                  description: Open ticket — reveal once, then burn
+                  path: $.lookup.Items[0].Attributes.Redeemed
+                  operator: Equal
+                  value: false
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      description: Capture the secret for the response
+                      valuePath: $.lookup.Items[0].Attributes.Secret
+                      valueType: String
+                      targetPath: $.secret
+
+                    - type: DateTime@1
+                      description: Redeem timestamp
+                      operation: Now
+                      targetPath: $.now
+
+                    - type: CreateUpdateInfo@1
+                      description: Mark redeemed and clear the stored secret
+                      updateKind: Update
+                      ckTypeId: Demo.Tickets/Ticket
+                      rtIdPath: $.lookup.Items[0].RtId
+                      targetPath: $.updates
+                      targetValueWriteMode: Append
+                      targetValueKind: Array
+                      attributeUpdates:
+                        - attributeName: Redeemed
+                          attributeValueType: Boolean
+                          value: true
+                        - attributeName: RedeemedAt
+                          attributeValueType: DateTime
+                          valuePath: $.now
+                        - attributeName: Secret
+                          attributeValueType: String
+                          value: ""
+
+                    - type: ApplyChanges@2
+                      description: Persist the redeem
+                      entityUpdatesPath: $.updates
+
+            - type: Project@1
+              description: Response = { secret } or { error }
+              clear: true
+              fields:
+                - path: $.secret
+                  inclusion: true
+                - path: $.error
+                  inclusion: true
+
+  # ========================================================================
+  # Web app — Application workload, rolled out by the Communication Operator
+  # as a Helm release from the one-time-ticket-app chart (src/charts).
+  # ========================================================================
+  - rtId: '077100000000000000000005'
+    ckTypeId: System.Communication/Application-1
+    associations:
+      # Deploy target: the Cloud pool the central operator owns.
+      - roleId: System.Communication/Manages-1
+        targetRtId: '670000000000000000000001'
+        targetCkTypeId: System.Communication/Pool-1
+      # Chart source: meshmakers-dev (dev channel, 003) — pre-seeded by
+      # System.Communication.MainLatest. The Release variant points at the
+      # apps release channel (005) instead.
+      - roleId: System.Communication/HelmRepository-1
+        targetRtId: '670000000000000000000003'
+        targetCkTypeId: System.Communication/HelmRepositoryConfiguration-1
+    attributes:
+      - id: System/Name-1
+        value: One-Time Ticket App
+      - id: System/Description-1
+        value: 'One-Time Ticket web UI (Node proxy + static client). Proxies the tenant-scoped ticket HTTP API hosted by the Mesh Adapter.'
+      # Own chart (src/charts/one-time-ticket-app), published to the dev channel
+      # on every main build. Empty ChartVersion = track the channel's newest
+      # chart; the image tag follows the chart's appVersion automatically.
+      - id: System.Communication/ChartName-1
+        value: one-time-ticket-app
+      - id: System.Communication/ChartVersion-1
+        value: ""
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      # Talks only to the Mesh Adapter over HTTP — no cluster secrets needed.
+      - id: System.Communication/ReceivesClusterSecrets-1
+        value: false
+      # Ingress: fixed "tickets" host under the controller's default domain,
+      # resolved at deploy time (127.0.0.1.nip.io on kind, test-2.mm.cloud on
+      # test-2, staging.octo-mesh.com on staging -> https://tickets.<domain>).
+      # Single-host (not tenant-scoped) — one install per cluster domain.
+      - id: System.Communication/IngressEnabled-1
+        value: true
+      - id: System.Communication/Hostname-1
+        value: 'tickets.{{domain.default}}'
+      # Only the tenant-scoped upstream needs overriding. The chart defaults
+      # image.repository to meshmakers/one-time-ticket-app, the operator injects
+      # image.privateRegistry, and image.tag defaults to the chart appVersion
+      # (set by CI to the same build number as the pushed image) — so the
+      # workload never pins a tag here.
+      - id: System.Communication/ValuesYaml-1
+        value: |
+          upstreamUrl: http://${octo.tenantId}-670000000000000000000002.octo.svc.cluster.local:80/${octo.tenantId}
