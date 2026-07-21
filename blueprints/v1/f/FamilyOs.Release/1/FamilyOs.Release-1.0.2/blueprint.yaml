@@ -1,0 +1,46 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: FamilyOs.Release-1.0.2
+description: |
+  FamilyOS — a family organizer running fully on OctoMesh.
+  Staging/production channel variant (mirrors the OneTimeTicket.Release pattern).
+
+  Tasks with a points/sticker game, a shopping list, pinboard notes and a
+  weekly calendar with per-day Mama/Papa assignments. The entire backend is
+  declarative pipeline YAML executed by the tenant's Mesh Adapter — no
+  service code.
+
+  What this blueprint installs:
+  - the FamilyOs construction kit model (auto-imported from the catalog)
+  - a DataFlow with 16 HTTP pipelines hosted by the tenant's Mesh Adapter
+    (state aggregation, task CRUD with server-side score booking, shopping,
+    notes, day-assignment upserts, household updates)
+  - domain seeds: the Household singleton and three default calendar
+    categories
+  - the FamilyOS web app (React SPA + Node proxy) as an Application workload,
+    rolled out to Kubernetes by the Communication Operator as a Helm release,
+    pulling the family-os-app chart from the meshmakers-apps release Helm repo.
+
+  PREREQUISITE: communication must be enabled on the target tenant. The
+  service-managed System.Communication.Release blueprint seeds the Pool
+  (670000000000000000000001), Mesh Adapter (670000000000000000000002) and the
+  apps release Helm repo (670000000000000000000005) this seed associates to.
+  We point at that pre-seeded repo rather than seeding our own.
+
+  Install only seeds entities — trigger the rollout afterwards with
+  DeployDataFlow (the pipelines) + DeployWorkload (the web app).
+
+  NOTE: the dev/test variant is FamilyOs.MainLatest. Keep the seed-data of
+  the two variants in sync — they differ only in the Application's
+  HelmRepository association (003 dev vs 005 apps).
+
+ckModelDependencies:
+  - FamilyOs-[1.0.0,2.0.0)
+
+seedDataPath: seed-data/entities.yaml
+
+# Staging/production channel: meshmakers-apps release Helm repo (005) seeded by
+# System.Communication.Release, which is gated to the same environments.
+requires:
+  octo.environment:
+    - staging
+    - production
