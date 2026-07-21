@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "FamilyOs.MainLatest",
+  "majorVersion": 1,
+  "latestVersion": "1.0.2",
+  "description": "FamilyOS \u2014 a family organizer running fully on OctoMesh.\nDev/test channel variant (mirrors the OneTimeTicket.MainLatest pattern).\n\nTasks with a points/sticker game, a shopping list, pinboard notes and a\nweekly calendar with per-day Mama/Papa assignments. The entire backend is\ndeclarative pipeline YAML executed by the tenant\u0027s Mesh Adapter \u2014 no\nservice code.\n\nWhat this blueprint installs:\n- the FamilyOs construction kit model (auto-imported from the catalog)\n- a DataFlow with 16 HTTP pipelines hosted by the tenant\u0027s Mesh Adapter:\n    GET    /state                 aggregated app state for the client boot\n    POST   /tasks                 create a task\n    POST   /tasks/toggle          toggle \u002B book points server-side\n    POST   /tasks/reset           recurrence reset (no scoring)\n    DELETE /tasks?id=             delete a task\n    POST   /shopping              add an item\n    POST   /shopping/toggle       flip an item\n    POST   /shopping/clear-done   remove all done items\n    DELETE /shopping?id=          remove one item\n    POST   /notes                 pin a note\n    DELETE /notes?id=             unpin a note\n    POST   /days                  upsert a day assignment\n    POST   /household/names       save display names\n    POST   /household/stickers    persist earned stickers\n    POST   /cats/name             rename a calendar category\n    POST   /cats/icon             change a category icon\n- domain seeds: the Household singleton and three default calendar\n  categories\n- the FamilyOS web app (React SPA \u002B Node proxy) as an Application workload,\n  rolled out to Kubernetes by the Communication Operator as a Helm release,\n  pulling the family-os-app chart from the meshmakers-dev Helm repo.\n\nPREREQUISITE: communication must be enabled on the target tenant. The\nservice-managed System.Communication.MainLatest blueprint seeds the Pool\n(670000000000000000000001), Mesh Adapter (670000000000000000000002) and dev\nHelm repo (670000000000000000000003) this seed associates to.\n\nInstall only seeds entities \u2014 trigger the rollout afterwards with\nDeployDataFlow (the pipelines) \u002B DeployWorkload (the web app).\n\nNOTE: the staging/production variant is FamilyOs.Release. Keep the\nseed-data of the two variants in sync \u2014 they differ only in the\nApplication\u0027s HelmRepository association (003 dev vs 005 apps).\n",
+  "versions": [
+    {
+      "version": "1.0.2",
+      "directoryPath": "blueprints/v1/f/FamilyOs.MainLatest/1/FamilyOs.MainLatest-1.0.2",
+      "publishedAt": "2026-07-21T14:49:12.2643639Z"
+    }
+  ],
+  "updatedAt": "2026-07-21T14:49:12.2731671Z"
+}
