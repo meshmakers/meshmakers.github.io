@@ -1,0 +1,450 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "CalendarCategory-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A configurable calendar category (e.g. kindergarten drop-off) that gets a Mama/Papa assignment per day.",
+      "attributes": [
+        {
+          "id": "FamilyOs-1.0.0/CategoryName-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/CategoryIcon-1",
+          "name": "Icon",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "DayEntry-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "The Mama/Papa assignment of one calendar category on one day. One entry per (day, category) pair, upserted by the API.",
+      "attributes": [
+        {
+          "id": "FamilyOs-1.0.0/DayEntryDateKey-1",
+          "name": "DateKey",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/DayEntryCategoryRtId-1",
+          "name": "CategoryRtId",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/DayEntryAssignment-1",
+          "name": "Assignment",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Household-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Singleton holding the family-wide state \u2014 display names, scores and earned achievement stickers. Seeded by the blueprint with a fixed rtId.",
+      "attributes": [
+        {
+          "id": "FamilyOs-1.0.0/HouseholdMamaName-1",
+          "name": "MamaName",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/HouseholdPapaName-1",
+          "name": "PapaName",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/HouseholdMamaScore-1",
+          "name": "MamaScore",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/HouseholdPapaScore-1",
+          "name": "PapaScore",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/HouseholdEarnedStickers-1",
+          "name": "EarnedStickers",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Note-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A short note on the family pinboard.",
+      "attributes": [
+        {
+          "id": "FamilyOs-1.0.0/NoteText-1",
+          "name": "Text",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/NoteAssignedTo-1",
+          "name": "AssignedTo",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ShoppingItem-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "An item on the family shopping list.",
+      "attributes": [
+        {
+          "id": "FamilyOs-1.0.0/ShopItemName-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/ShopItemCategory-1",
+          "name": "Category",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/ShopItemDone-1",
+          "name": "Done",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Task-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A family task. Depending on its kind it is due on a fixed date, recurs every N days, or is a one-off.",
+      "attributes": [
+        {
+          "id": "FamilyOs-1.0.0/TaskTitle-1",
+          "name": "Title",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/TaskAssignedTo-1",
+          "name": "AssignedTo",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/TaskDone-1",
+          "name": "Done",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/TaskKind-1",
+          "name": "Kind",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/TaskPoints-1",
+          "name": "Points",
+          "isOptional": false
+        },
+        {
+          "id": "FamilyOs-1.0.0/TaskDueDate-1",
+          "name": "DueDate",
+          "isOptional": true
+        },
+        {
+          "id": "FamilyOs-1.0.0/TaskRecurDays-1",
+          "name": "RecurDays",
+          "isOptional": true
+        },
+        {
+          "id": "FamilyOs-1.0.0/TaskCompletedBy-1",
+          "name": "CompletedBy",
+          "isOptional": true
+        },
+        {
+          "id": "FamilyOs-1.0.0/TaskIcon-1",
+          "name": "Icon",
+          "isOptional": true
+        },
+        {
+          "id": "FamilyOs-1.0.0/TaskLastCompleted-1",
+          "name": "LastCompleted",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "CategoryIcon-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Icon key of the calendar category (e.g. \u0022bike\u0022, \u0022bag\u0022 or an emoji)"
+    },
+    {
+      "id": "CategoryName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Display name of the calendar category (e.g. \u0022KiGa Bringen\u0022)"
+    },
+    {
+      "id": "DayEntryAssignment-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "FamilyOs-1.0.0/DayAssignment-1",
+      "isRuntimeState": false,
+      "description": "Who covers this category on this day (None, Mama or Papa)"
+    },
+    {
+      "id": "DayEntryCategoryRtId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "RtId of the CalendarCategory this assignment belongs to"
+    },
+    {
+      "id": "DayEntryDateKey-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Day the assignment applies to, as YYYY-MM-DD day key"
+    },
+    {
+      "id": "HouseholdEarnedStickers-1",
+      "valueType": "StringArray",
+      "isRuntimeState": false,
+      "description": "Ids of the achievement stickers the family has earned so far"
+    },
+    {
+      "id": "HouseholdMamaName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Display name for the \u0022Mama\u0022 role"
+    },
+    {
+      "id": "HouseholdMamaScore-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Accumulated points of Mama"
+    },
+    {
+      "id": "HouseholdPapaName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Display name for the \u0022Papa\u0022 role"
+    },
+    {
+      "id": "HouseholdPapaScore-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Accumulated points of Papa"
+    },
+    {
+      "id": "NoteAssignedTo-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "FamilyOs-1.0.0/Person-1",
+      "isRuntimeState": false,
+      "description": "Who the note concerns (Mama, Papa or Both)"
+    },
+    {
+      "id": "NoteText-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Free text of the pinboard note"
+    },
+    {
+      "id": "ShopItemCategory-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "FamilyOs-1.0.0/ShopCategory-1",
+      "isRuntimeState": false,
+      "description": "Shopping category the item belongs to (food, drugstore, misc)"
+    },
+    {
+      "id": "ShopItemDone-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Whether the item is already in the cart / bought"
+    },
+    {
+      "id": "ShopItemName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of the item to buy (e.g. \u0022Milk\u0022)"
+    },
+    {
+      "id": "TaskAssignedTo-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "FamilyOs-1.0.0/Person-1",
+      "isRuntimeState": false,
+      "description": "Who the task is assigned to (Mama, Papa or Both)"
+    },
+    {
+      "id": "TaskCompletedBy-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Who actually completed the task (\u0022mama\u0022, \u0022papa\u0022 or empty). Relevant for tasks assigned to Both; empty while the task is open. String rather than an enum so the API can always write a value."
+    },
+    {
+      "id": "TaskDone-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Whether the task is currently marked as done"
+    },
+    {
+      "id": "TaskDueDate-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Due date as YYYY-MM-DD day key. Only set for tasks of kind Date."
+    },
+    {
+      "id": "TaskIcon-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional emoji or icon key shown next to the task"
+    },
+    {
+      "id": "TaskKind-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "FamilyOs-1.0.0/TaskKind-1",
+      "isRuntimeState": false,
+      "description": "Scheduling kind of the task (fixed date, recurring, or one-off)"
+    },
+    {
+      "id": "TaskLastCompleted-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Day key (YYYY-MM-DD) of the most recent completion of a recurring task. Drives the recurrence reset."
+    },
+    {
+      "id": "TaskPoints-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Points awarded to the completing person when the task is done"
+    },
+    {
+      "id": "TaskRecurDays-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Recurrence interval in days. Only set for tasks of kind Recurring."
+    },
+    {
+      "id": "TaskTitle-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "What has to be done (e.g. \u0022Take out the trash\u0022)"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "DayAssignment-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "None",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Mama",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Papa",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "Person-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Mama",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Papa",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Both",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ShopCategory-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Food",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Drugstore",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Misc",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "TaskKind-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Date",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Recurring",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Once",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "FamilyOs-1.0.0",
+  "description": "Family organizer domain model \u2014 tasks, shopping list, pinboard notes, calendar day assignments and household gamification state for the FamilyOS app."
+}
