@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "FamilyOs.Release",
+  "majorVersion": 1,
+  "latestVersion": "1.0.2",
+  "description": "FamilyOS \u2014 a family organizer running fully on OctoMesh.\nStaging/production channel variant (mirrors the OneTimeTicket.Release pattern).\n\nTasks with a points/sticker game, a shopping list, pinboard notes and a\nweekly calendar with per-day Mama/Papa assignments. The entire backend is\ndeclarative pipeline YAML executed by the tenant\u0027s Mesh Adapter \u2014 no\nservice code.\n\nWhat this blueprint installs:\n- the FamilyOs construction kit model (auto-imported from the catalog)\n- a DataFlow with 16 HTTP pipelines hosted by the tenant\u0027s Mesh Adapter\n  (state aggregation, task CRUD with server-side score booking, shopping,\n  notes, day-assignment upserts, household updates)\n- domain seeds: the Household singleton and three default calendar\n  categories\n- the FamilyOS web app (React SPA \u002B Node proxy) as an Application workload,\n  rolled out to Kubernetes by the Communication Operator as a Helm release,\n  pulling the family-os-app chart from the meshmakers-apps release Helm repo.\n\nPREREQUISITE: communication must be enabled on the target tenant. The\nservice-managed System.Communication.Release blueprint seeds the Pool\n(670000000000000000000001), Mesh Adapter (670000000000000000000002) and the\napps release Helm repo (670000000000000000000005) this seed associates to.\nWe point at that pre-seeded repo rather than seeding our own.\n\nInstall only seeds entities \u2014 trigger the rollout afterwards with\nDeployDataFlow (the pipelines) \u002B DeployWorkload (the web app).\n\nNOTE: the dev/test variant is FamilyOs.MainLatest. Keep the seed-data of\nthe two variants in sync \u2014 they differ only in the Application\u0027s\nHelmRepository association (003 dev vs 005 apps).\n",
+  "versions": [
+    {
+      "version": "1.0.2",
+      "directoryPath": "blueprints/v1/f/FamilyOs.Release/1/FamilyOs.Release-1.0.2",
+      "publishedAt": "2026-07-21T14:49:24.724492Z"
+    }
+  ],
+  "updatedAt": "2026-07-21T14:49:24.7274945Z"
+}
