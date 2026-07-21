@@ -1,0 +1,1654 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# ---------------------------------------------------------------------------
+# Seed data for the FamilyOs blueprint.
+#
+# rtIds use the hand-assigned 0fa0… range ("FA") so re-applies are idempotent
+# and the entities are easy to recognize.
+#
+# Associations into 670000000000000000000001/002/003 resolve against the
+# entities the service-managed System.Communication blueprint seeds on every
+# communication-enabled tenant (Pool / Mesh Adapter / dev Helm repo).
+#
+# The pipeline YAML is the verified copy of test/dataflow-test.yaml (minus the
+# scratch probe) — keep the two in sync when iterating.
+# ---------------------------------------------------------------------------
+dependencies:
+- System.Communication-[3.1,4.0)
+- FamilyOs-[1.0.0,2.0.0)
+entities:
+  - rtId: '0fa000000000000000000030'
+    ckTypeId: FamilyOs/Household-1
+    attributes:
+      # User-mutable entity: unlock it so blueprint updates do not reset
+      # names/scores/stickers (Merge/Full skip unlocked entities).
+      - id: System/RtBlueprintLocked-1
+        value: false
+      - id: FamilyOs/HouseholdMamaName-1
+        value: "Mama"
+      - id: FamilyOs/HouseholdPapaName-1
+        value: "Papa"
+      - id: FamilyOs/HouseholdMamaScore-1
+        value: 0
+      - id: FamilyOs/HouseholdPapaScore-1
+        value: 0
+      - id: FamilyOs/HouseholdEarnedStickers-1
+        value: []
+
+  - rtId: '0fa000000000000000000031'
+    ckTypeId: FamilyOs/CalendarCategory-1
+    attributes:
+      # User-mutable entity: unlock it so blueprint updates do not reset
+      # names/scores/stickers (Merge/Full skip unlocked entities).
+      - id: System/RtBlueprintLocked-1
+        value: false
+      - id: FamilyOs/CategoryName-1
+        value: "KiGa Bringen"
+      - id: FamilyOs/CategoryIcon-1
+        value: "bike"
+
+  - rtId: '0fa000000000000000000032'
+    ckTypeId: FamilyOs/CalendarCategory-1
+    attributes:
+      # User-mutable entity: unlock it so blueprint updates do not reset
+      # names/scores/stickers (Merge/Full skip unlocked entities).
+      - id: System/RtBlueprintLocked-1
+        value: false
+      - id: FamilyOs/CategoryName-1
+        value: "KiGa Abholen"
+      - id: FamilyOs/CategoryIcon-1
+        value: "bike"
+
+  - rtId: '0fa000000000000000000033'
+    ckTypeId: FamilyOs/CalendarCategory-1
+    attributes:
+      # User-mutable entity: unlock it so blueprint updates do not reset
+      # names/scores/stickers (Merge/Full skip unlocked entities).
+      - id: System/RtBlueprintLocked-1
+        value: false
+      - id: FamilyOs/CategoryName-1
+        value: "Schule Abholen"
+      - id: FamilyOs/CategoryIcon-1
+        value: "bag"
+
+  # ========================================================================
+  # DataFlow — logical container for the FamilyOS API pipelines
+  # ========================================================================
+  - rtId: '0fa000000000000000000001'
+    ckTypeId: System.Communication/DataFlow-1
+    attributes:
+      - id: System/Name-1
+        value: "FamilyOS API"
+      - id: System/Description-1
+        value: "HTTP API for the FamilyOS app, hosted by the tenant Mesh Adapter."
+
+  # ========================================================================
+  # GET /state — full application state for the client boot
+  # ========================================================================
+  - rtId: '0fa000000000000000000002'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-get-state"
+      - id: System/Description-1
+        value: "GET /state — aggregated application state (household, cats, tasks, shopping, notes, days)"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP GET /state
+              method: Get
+              path: /state
+
+          transformations:
+            - type: GetRtEntitiesByType@1
+              description: Household singleton
+              ckTypeId: FamilyOs/Household
+              take: 1
+              targetPath: $.hh
+
+            - type: SetPrimitiveValue@1
+              valuePath: $.hh.Items[0].Attributes.MamaName
+              valueType: String
+              targetPath: $.household.mamaName
+            - type: SetPrimitiveValue@1
+              valuePath: $.hh.Items[0].Attributes.PapaName
+              valueType: String
+              targetPath: $.household.papaName
+            - type: SetPrimitiveValue@1
+              valuePath: $.hh.Items[0].Attributes.MamaScore
+              valueType: Int
+              targetPath: $.household.mamaScore
+            - type: SetPrimitiveValue@1
+              valuePath: $.hh.Items[0].Attributes.PapaScore
+              valueType: Int
+              targetPath: $.household.papaScore
+            - type: SetPrimitiveValue@1
+              valuePath: $.hh.Items[0].Attributes.EarnedStickers
+              valueType: StringArray
+              targetPath: $.household.earned
+
+            - type: GetRtEntitiesByType@1
+              description: Calendar categories
+              ckTypeId: FamilyOs/CalendarCategory
+              take: 50
+              targetPath: $.catsL
+            - type: ForEach@1
+              iterationPath: $.catsL.Items
+              keyPath: $.key
+              mergePath: $.key.out
+              targetPath: $.cats
+              transformations:
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.RtId
+                  valueType: String
+                  targetPath: $.key.out.id
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Name
+                  valueType: String
+                  targetPath: $.key.out.name
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Icon
+                  valueType: String
+                  targetPath: $.key.out.icon
+
+            - type: GetRtEntitiesByType@1
+              description: Tasks
+              ckTypeId: FamilyOs/Task
+              take: 500
+              targetPath: $.tasksL
+            - type: ForEach@1
+              iterationPath: $.tasksL.Items
+              keyPath: $.key
+              mergePath: $.key.out
+              targetPath: $.tasks
+              transformations:
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.RtId
+                  valueType: String
+                  targetPath: $.key.out.id
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Title
+                  valueType: String
+                  targetPath: $.key.out.title
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.AssignedTo
+                  valueType: Int
+                  targetPath: $.key.out.person
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Done
+                  valueType: Boolean
+                  targetPath: $.key.out.done
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Kind
+                  valueType: Int
+                  targetPath: $.key.out.type
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Points
+                  valueType: Int
+                  targetPath: $.key.out.pts
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.DueDate
+                  valueType: String
+                  targetPath: $.key.out.date
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.RecurDays
+                  valueType: Int
+                  targetPath: $.key.out.recurDays
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.CompletedBy
+                  valueType: String
+                  targetPath: $.key.out.completedBy
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Icon
+                  valueType: String
+                  targetPath: $.key.out.icon
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.LastCompleted
+                  valueType: String
+                  targetPath: $.key.out.lastCompleted
+
+            - type: GetRtEntitiesByType@1
+              description: Shopping items
+              ckTypeId: FamilyOs/ShoppingItem
+              take: 500
+              targetPath: $.shopL
+            - type: ForEach@1
+              iterationPath: $.shopL.Items
+              keyPath: $.key
+              mergePath: $.key.out
+              targetPath: $.shopping
+              transformations:
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.RtId
+                  valueType: String
+                  targetPath: $.key.out.id
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Name
+                  valueType: String
+                  targetPath: $.key.out.name
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Category
+                  valueType: Int
+                  targetPath: $.key.out.cat
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Done
+                  valueType: Boolean
+                  targetPath: $.key.out.done
+
+            - type: GetRtEntitiesByType@1
+              description: Pinboard notes
+              ckTypeId: FamilyOs/Note
+              take: 200
+              targetPath: $.notesL
+            - type: ForEach@1
+              iterationPath: $.notesL.Items
+              keyPath: $.key
+              mergePath: $.key.out
+              targetPath: $.notes
+              transformations:
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.RtId
+                  valueType: String
+                  targetPath: $.key.out.id
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Text
+                  valueType: String
+                  targetPath: $.key.out.text
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.AssignedTo
+                  valueType: Int
+                  targetPath: $.key.out.person
+
+            - type: GetRtEntitiesByType@1
+              description: Day assignments
+              ckTypeId: FamilyOs/DayEntry
+              take: 2000
+              targetPath: $.daysL
+            - type: ForEach@1
+              iterationPath: $.daysL.Items
+              keyPath: $.key
+              mergePath: $.key.out
+              targetPath: $.days
+              transformations:
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.DateKey
+                  valueType: String
+                  targetPath: $.key.out.dateKey
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.CategoryRtId
+                  valueType: String
+                  targetPath: $.key.out.categoryId
+                - type: SetPrimitiveValue@1
+                  valuePath: $.key.Attributes.Assignment
+                  valueType: Int
+                  targetPath: $.key.out.assignment
+
+            - type: Project@1
+              description: Response = the aggregated state only
+              clear: true
+              fields:
+                - path: $.household
+                  inclusion: true
+                - path: $.cats
+                  inclusion: true
+                - path: $.tasks
+                  inclusion: true
+                - path: $.shopping
+                  inclusion: true
+                - path: $.notes
+                  inclusion: true
+                - path: $.days
+                  inclusion: true
+
+  # ========================================================================
+  # POST /tasks — create a task. Body always carries ALL fields
+  # (unused ones as "" / 0) so no attribute is ever unset.
+  # ========================================================================
+  - rtId: '0fa000000000000000000003'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-create-task"
+      - id: System/Description-1
+        value: "POST /tasks — create a task. Body: { title, person, type, pts, date, recurDays, icon } (person/type as enum names)"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /tasks
+              method: Post
+              path: /tasks
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              description: Insert the new task
+              updateKind: Insert
+              ckTypeId: FamilyOs/Task
+              rtIdPath: $.newRtId
+              generateRtId: true
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates:
+                - attributeName: Title
+                  attributeValueType: String
+                  valuePath: $.body.title
+                - attributeName: AssignedTo
+                  attributeValueType: Enum
+                  valuePath: $.body.person
+                - attributeName: Done
+                  attributeValueType: Boolean
+                  value: false
+                - attributeName: Kind
+                  attributeValueType: Enum
+                  valuePath: $.body.type
+                - attributeName: Points
+                  attributeValueType: Int
+                  valuePath: $.body.pts
+                - attributeName: DueDate
+                  attributeValueType: String
+                  valuePath: $.body.date
+                - attributeName: RecurDays
+                  attributeValueType: Int
+                  valuePath: $.body.recurDays
+                - attributeName: CompletedBy
+                  attributeValueType: String
+                  value: ""
+                - attributeName: Icon
+                  attributeValueType: String
+                  valuePath: $.body.icon
+                - attributeName: LastCompleted
+                  attributeValueType: String
+                  value: ""
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              valuePath: $.updates[0].RtId
+              valueType: String
+              targetPath: $.id
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.id
+                  inclusion: true
+
+  # ========================================================================
+  # POST /tasks/toggle — flip done state, book points server-side.
+  # Body: { id, completedBy, today } — completedBy is "Mama"|"Papa"|"",
+  # today is the client's local YYYY-MM-DD day key.
+  # Response: { done, mamaScore, papaScore } or { error }
+  # ========================================================================
+  - rtId: '0fa000000000000000000004'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-toggle-task"
+      - id: System/Description-1
+        value: "POST /tasks/toggle — toggle a task and book points on the household (server-side scoring)"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /tasks/toggle
+              method: Post
+              path: /tasks/toggle
+
+          transformations:
+            - type: GetRtEntitiesByType@1
+              description: Look up the task
+              ckTypeId: FamilyOs/Task
+              targetPath: $.lookup
+              fieldFilters:
+                - attributePath: RtId
+                  operator: Equals
+                  comparisonValuePath: $.body.id
+
+            - type: If@1
+              description: Unknown task id
+              path: $.lookup.TotalCount
+              operator: Equal
+              value: 0
+              valueType: Int
+              transformations:
+                - type: SetPrimitiveValue@1
+                  value: not_found
+                  valueType: String
+                  targetPath: $.error
+
+            - type: If@1
+              description: Task exists — toggle and score
+              path: $.lookup.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                # ---- snapshots ----
+                - type: SetPrimitiveValue@1
+                  valuePath: $.lookup.Items[0].Attributes.Done
+                  valueType: Boolean
+                  targetPath: $.wasDone
+                - type: SetPrimitiveValue@1
+                  valuePath: $.lookup.Items[0].Attributes.Points
+                  valueType: Int
+                  targetPath: $.calc.pts
+                - type: SetPrimitiveValue@1
+                  description: Enum attributes read back as integer keys (Mama=0, Papa=1, Both=2)
+                  valuePath: $.lookup.Items[0].Attributes.AssignedTo
+                  valueType: Int
+                  targetPath: $.assignedTo
+                - type: SetPrimitiveValue@1
+                  valuePath: $.lookup.Items[0].Attributes.CompletedBy
+                  valueType: String
+                  targetPath: $.oldCompletedBy
+
+                - type: GetRtEntitiesByType@1
+                  description: Household for score booking
+                  ckTypeId: FamilyOs/Household
+                  take: 1
+                  targetPath: $.hh
+                - type: SetPrimitiveValue@1
+                  valuePath: $.hh.Items[0].Attributes.MamaScore
+                  valueType: Int
+                  targetPath: $.calc.mama
+                - type: SetPrimitiveValue@1
+                  valuePath: $.hh.Items[0].Attributes.PapaScore
+                  valueType: Int
+                  targetPath: $.calc.papa
+
+                # ---- completing: delta = +pts, scorer from request ----
+                - type: If@1
+                  path: $.wasDone
+                  operator: Equal
+                  value: false
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      valuePath: $.calc.pts
+                      valueType: Int
+                      targetPath: $.calc.delta
+                    - type: SetPrimitiveValue@1
+                      valuePath: $.body.completedBy
+                      valueType: String
+                      targetPath: $.scorer
+                    - type: SetPrimitiveValue@1
+                      value: true
+                      valueType: Boolean
+                      targetPath: $.done
+                    - type: CreateUpdateInfo@1
+                      description: Mark done, remember who did it and when
+                      updateKind: Update
+                      ckTypeId: FamilyOs/Task
+                      rtIdPath: $.lookup.Items[0].RtId
+                      targetPath: $.updates
+                      targetValueWriteMode: Append
+                      targetValueKind: Array
+                      attributeUpdates:
+                        - attributeName: Done
+                          attributeValueType: Boolean
+                          value: true
+                        - attributeName: CompletedBy
+                          attributeValueType: String
+                          valuePath: $.body.completedBy
+                        - attributeName: LastCompleted
+                          attributeValueType: String
+                          valuePath: $.body.today
+
+                # ---- un-completing: delta = -pts, scorer from stored CompletedBy ----
+                - type: If@1
+                  path: $.wasDone
+                  operator: Equal
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: Math@1
+                      description: delta = pts * -1
+                      path: $.calc
+                      itemPath: $.pts
+                      operation: Multiply
+                      value: -1
+                      itemTargetPath: $.delta
+                    - type: SetPrimitiveValue@1
+                      valuePath: $.oldCompletedBy
+                      valueType: String
+                      targetPath: $.scorer
+                    - type: SetPrimitiveValue@1
+                      value: false
+                      valueType: Boolean
+                      targetPath: $.done
+                    - type: CreateUpdateInfo@1
+                      description: Mark un-done and clear the completer
+                      updateKind: Update
+                      ckTypeId: FamilyOs/Task
+                      rtIdPath: $.lookup.Items[0].RtId
+                      targetPath: $.updates
+                      targetValueWriteMode: Append
+                      targetValueKind: Array
+                      attributeUpdates:
+                        - attributeName: Done
+                          attributeValueType: Boolean
+                          value: false
+                        - attributeName: CompletedBy
+                          attributeValueType: String
+                          value: ""
+
+                # ---- non-Both tasks always score for their assignee (enum keys) ----
+                - type: If@1
+                  path: $.assignedTo
+                  operator: Equal
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: Mama
+                      valueType: String
+                      targetPath: $.scorer
+                - type: If@1
+                  path: $.assignedTo
+                  operator: Equal
+                  value: 1
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: Papa
+                      valueType: String
+                      targetPath: $.scorer
+
+                # ---- book the delta ----
+                - type: If@1
+                  description: Only score point-carrying tasks
+                  path: $.calc.pts
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: If@1
+                      path: $.scorer
+                      operator: Equal
+                      value: Mama
+                      valueType: String
+                      transformations:
+                        - type: Math@1
+                          path: $.calc
+                          itemPath: $.mama
+                          operation: Add
+                          valuePath: $.calc.delta
+                          itemTargetPath: $.mama
+                    - type: If@1
+                      path: $.scorer
+                      operator: Equal
+                      value: Papa
+                      valueType: String
+                      transformations:
+                        - type: Math@1
+                          path: $.calc
+                          itemPath: $.papa
+                          operation: Add
+                          valuePath: $.calc.delta
+                          itemTargetPath: $.papa
+                    - type: If@1
+                      description: Nobody specific (Both without completer) — split the delta
+                      path: $.scorer
+                      operator: Equal
+                      value: ""
+                      valueType: String
+                      transformations:
+                        - type: Math@1
+                          description: rem = delta mod 2
+                          path: $.calc
+                          itemPath: $.delta
+                          operation: Modulo
+                          value: 2
+                          itemTargetPath: $.rem
+                        - type: Math@1
+                          description: even = delta - rem
+                          path: $.calc
+                          itemPath: $.delta
+                          operation: Subtract
+                          valuePath: $.calc.rem
+                          itemTargetPath: $.even
+                        - type: Math@1
+                          description: half = even / 2
+                          path: $.calc
+                          itemPath: $.even
+                          operation: Divide
+                          value: 2
+                          itemTargetPath: $.half
+                        - type: Math@1
+                          path: $.calc
+                          itemPath: $.mama
+                          operation: Add
+                          valuePath: $.calc.half
+                          itemTargetPath: $.mama
+                        - type: Math@1
+                          path: $.calc
+                          itemPath: $.papa
+                          operation: Add
+                          valuePath: $.calc.half
+                          itemTargetPath: $.papa
+
+                # ---- clamp at 0 like the app does ----
+                - type: If@1
+                  path: $.calc.mama
+                  operator: LessThan
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: 0
+                      valueType: Int
+                      targetPath: $.calc.mama
+                - type: If@1
+                  path: $.calc.papa
+                  operator: LessThan
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: 0
+                      valueType: Int
+                      targetPath: $.calc.papa
+
+                # ---- persist household scores + task toggle in one batch ----
+                - type: CreateUpdateInfo@1
+                  description: Book the new scores
+                  updateKind: Update
+                  ckTypeId: FamilyOs/Household
+                  rtIdPath: $.hh.Items[0].RtId
+                  targetPath: $.updates
+                  targetValueWriteMode: Append
+                  targetValueKind: Array
+                  attributeUpdates:
+                    - attributeName: MamaScore
+                      attributeValueType: Int
+                      valuePath: $.calc.mama
+                    - attributeName: PapaScore
+                      attributeValueType: Int
+                      valuePath: $.calc.papa
+
+                - type: ApplyChanges@2
+                  entityUpdatesPath: $.updates
+
+                - type: SetPrimitiveValue@1
+                  valuePath: $.calc.mama
+                  valueType: Int
+                  targetPath: $.mamaScore
+                - type: SetPrimitiveValue@1
+                  valuePath: $.calc.papa
+                  valueType: Int
+                  targetPath: $.papaScore
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
+                - path: $.mamaScore
+                  inclusion: true
+                - path: $.papaScore
+                  inclusion: true
+                - path: $.error
+                  inclusion: true
+
+  # ========================================================================
+  # DELETE /tasks?id= — delete a task
+  # ========================================================================
+  - rtId: '0fa000000000000000000005'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-delete-task"
+      - id: System/Description-1
+        value: "DELETE /tasks?id= — delete a task"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP DELETE /tasks?id=
+              method: Delete
+              path: /tasks
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              updateKind: Delete
+              ckTypeId: FamilyOs/Task
+              rtIdPath: $.query.id
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates: []
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # POST /tasks/reset — set a recurring task back to not-done (no scoring)
+  # ========================================================================
+  - rtId: '0fa000000000000000000006'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-reset-task"
+      - id: System/Description-1
+        value: "POST /tasks/reset — recurrence reset: mark a due recurring task as open again without touching scores"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /tasks/reset
+              method: Post
+              path: /tasks/reset
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              updateKind: Update
+              ckTypeId: FamilyOs/Task
+              rtIdPath: $.body.id
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates:
+                - attributeName: Done
+                  attributeValueType: Boolean
+                  value: false
+                - attributeName: CompletedBy
+                  attributeValueType: String
+                  value: ""
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # POST /shopping — add a shopping item
+  # ========================================================================
+  - rtId: '0fa000000000000000000007'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-create-shopitem"
+      - id: System/Description-1
+        value: "POST /shopping — add an item. Body: { name, cat } (cat as enum name Food|Drugstore|Misc)"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /shopping
+              method: Post
+              path: /shopping
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              updateKind: Insert
+              ckTypeId: FamilyOs/ShoppingItem
+              rtIdPath: $.newRtId
+              generateRtId: true
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates:
+                - attributeName: Name
+                  attributeValueType: String
+                  valuePath: $.body.name
+                - attributeName: Category
+                  attributeValueType: Enum
+                  valuePath: $.body.cat
+                - attributeName: Done
+                  attributeValueType: Boolean
+                  value: false
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              valuePath: $.updates[0].RtId
+              valueType: String
+              targetPath: $.id
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.id
+                  inclusion: true
+
+  # ========================================================================
+  # POST /shopping/toggle — flip an item's done state
+  # ========================================================================
+  - rtId: '0fa000000000000000000008'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-toggle-shopitem"
+      - id: System/Description-1
+        value: "POST /shopping/toggle — flip the done state of a shopping item. Body: { id }"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /shopping/toggle
+              method: Post
+              path: /shopping/toggle
+
+          transformations:
+            - type: GetRtEntitiesByType@1
+              ckTypeId: FamilyOs/ShoppingItem
+              targetPath: $.lookup
+              fieldFilters:
+                - attributePath: RtId
+                  operator: Equals
+                  comparisonValuePath: $.body.id
+
+            - type: If@1
+              path: $.lookup.TotalCount
+              operator: Equal
+              value: 0
+              valueType: Int
+              transformations:
+                - type: SetPrimitiveValue@1
+                  value: not_found
+                  valueType: String
+                  targetPath: $.error
+
+            - type: If@1
+              path: $.lookup.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                - type: If@1
+                  path: $.lookup.Items[0].Attributes.Done
+                  operator: Equal
+                  value: false
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: true
+                      valueType: Boolean
+                      targetPath: $.done
+                - type: If@1
+                  path: $.lookup.Items[0].Attributes.Done
+                  operator: Equal
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: false
+                      valueType: Boolean
+                      targetPath: $.done
+
+                - type: CreateUpdateInfo@1
+                  updateKind: Update
+                  ckTypeId: FamilyOs/ShoppingItem
+                  rtIdPath: $.lookup.Items[0].RtId
+                  targetPath: $.updates
+                  targetValueWriteMode: Append
+                  targetValueKind: Array
+                  attributeUpdates:
+                    - attributeName: Done
+                      attributeValueType: Boolean
+                      valuePath: $.done
+
+                - type: ApplyChanges@2
+                  entityUpdatesPath: $.updates
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
+                - path: $.error
+                  inclusion: true
+
+  # ========================================================================
+  # DELETE /shopping?id= — remove one item
+  # ========================================================================
+  - rtId: '0fa000000000000000000009'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-delete-shopitem"
+      - id: System/Description-1
+        value: "DELETE /shopping?id= — remove a shopping item"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP DELETE /shopping?id=
+              method: Delete
+              path: /shopping
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              updateKind: Delete
+              ckTypeId: FamilyOs/ShoppingItem
+              rtIdPath: $.query.id
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates: []
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # POST /shopping/clear-done — remove all done items
+  # ========================================================================
+  - rtId: '0fa00000000000000000000a'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-clear-done-shopping"
+      - id: System/Description-1
+        value: "POST /shopping/clear-done — delete every shopping item already marked done"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /shopping/clear-done
+              method: Post
+              path: /shopping/clear-done
+
+          transformations:
+            - type: GetRtEntitiesByType@1
+              description: All done items (fieldFilter on the attribute works with constants)
+              ckTypeId: FamilyOs/ShoppingItem
+              take: 500
+              targetPath: $.lookup
+              fieldFilters:
+                - attributePath: Done
+                  operator: Equals
+                  comparisonValue: true
+
+            - type: ForEach@1
+              description: One delete per done item — child $.del subtrees collect into $.dels
+              iterationPath: $.lookup.Items
+              keyPath: $.key
+              mergePath: $.del
+              targetPath: $.dels
+              transformations:
+                - type: CreateUpdateInfo@1
+                  updateKind: Delete
+                  ckTypeId: FamilyOs/ShoppingItem
+                  rtIdPath: $.key.RtId
+                  targetPath: $.del
+                  attributeUpdates: []
+
+            - type: If@1
+              description: Apply only when something matched
+              path: $.lookup.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                - type: ApplyChanges@2
+                  entityUpdatesPath: $.dels
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # POST /notes — pin a note
+  # ========================================================================
+  - rtId: '0fa00000000000000000000b'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-create-note"
+      - id: System/Description-1
+        value: "POST /notes — pin a note. Body: { text, person } (person as enum name)"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /notes
+              method: Post
+              path: /notes
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              updateKind: Insert
+              ckTypeId: FamilyOs/Note
+              rtIdPath: $.newRtId
+              generateRtId: true
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates:
+                - attributeName: Text
+                  attributeValueType: String
+                  valuePath: $.body.text
+                - attributeName: AssignedTo
+                  attributeValueType: Enum
+                  valuePath: $.body.person
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              valuePath: $.updates[0].RtId
+              valueType: String
+              targetPath: $.id
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.id
+                  inclusion: true
+
+  # ========================================================================
+  # DELETE /notes?id= — unpin a note
+  # ========================================================================
+  - rtId: '0fa00000000000000000000c'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-delete-note"
+      - id: System/Description-1
+        value: "DELETE /notes?id= — unpin a note"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP DELETE /notes?id=
+              method: Delete
+              path: /notes
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              updateKind: Delete
+              ckTypeId: FamilyOs/Note
+              rtIdPath: $.query.id
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates: []
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # POST /days — upsert the assignment of one (day, category) pair
+  # ========================================================================
+  - rtId: '0fa00000000000000000000d'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-set-day"
+      - id: System/Description-1
+        value: "POST /days — upsert a day assignment. Body: { dateKey, categoryId, assignment } (assignment None|Mama|Papa)"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /days
+              method: Post
+              path: /days
+
+          transformations:
+            - type: GetRtEntitiesByType@1
+              description: Existing entry for this (day, category) pair
+              ckTypeId: FamilyOs/DayEntry
+              targetPath: $.lookup
+              fieldFilters:
+                - attributePath: DateKey
+                  operator: Equals
+                  comparisonValuePath: $.body.dateKey
+                - attributePath: CategoryRtId
+                  operator: Equals
+                  comparisonValuePath: $.body.categoryId
+
+            - type: If@1
+              description: No entry yet — insert
+              path: $.lookup.TotalCount
+              operator: Equal
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  updateKind: Insert
+                  ckTypeId: FamilyOs/DayEntry
+                  rtIdPath: $.newRtId
+                  generateRtId: true
+                  targetPath: $.updates
+                  targetValueWriteMode: Append
+                  targetValueKind: Array
+                  attributeUpdates:
+                    - attributeName: DateKey
+                      attributeValueType: String
+                      valuePath: $.body.dateKey
+                    - attributeName: CategoryRtId
+                      attributeValueType: String
+                      valuePath: $.body.categoryId
+                    - attributeName: Assignment
+                      attributeValueType: Enum
+                      valuePath: $.body.assignment
+
+            - type: If@1
+              description: Entry exists — update the assignment
+              path: $.lookup.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  updateKind: Update
+                  ckTypeId: FamilyOs/DayEntry
+                  rtIdPath: $.lookup.Items[0].RtId
+                  targetPath: $.updates
+                  targetValueWriteMode: Append
+                  targetValueKind: Array
+                  attributeUpdates:
+                    - attributeName: Assignment
+                      attributeValueType: Enum
+                      valuePath: $.body.assignment
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # POST /household/names — save the display names
+  # ========================================================================
+  - rtId: '0fa00000000000000000000e'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-update-names"
+      - id: System/Description-1
+        value: "POST /household/names — save display names. Body: { mama, papa }"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /household/names
+              method: Post
+              path: /household/names
+
+          transformations:
+            - type: GetRtEntitiesByType@1
+              ckTypeId: FamilyOs/Household
+              take: 1
+              targetPath: $.hh
+
+            - type: CreateUpdateInfo@1
+              updateKind: Update
+              ckTypeId: FamilyOs/Household
+              rtIdPath: $.hh.Items[0].RtId
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates:
+                - attributeName: MamaName
+                  attributeValueType: String
+                  valuePath: $.body.mama
+                - attributeName: PapaName
+                  attributeValueType: String
+                  valuePath: $.body.papa
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # POST /household/stickers — persist the earned sticker set
+  # ========================================================================
+  - rtId: '0fa00000000000000000000f'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-update-stickers"
+      - id: System/Description-1
+        value: "POST /household/stickers — replace the earned sticker ids. Body: { earned: [id, ...], count: n }. count=0 stores the sentinel [\"~\"] because the pipeline layer cannot write an empty array (it would become null); readers filter the sentinel."
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /household/stickers
+              method: Post
+              path: /household/stickers
+
+          transformations:
+            - type: GetRtEntitiesByType@1
+              ckTypeId: FamilyOs/Household
+              take: 1
+              targetPath: $.hh
+
+            - type: If@1
+              description: Non-empty set — store as sent
+              path: $.body.count
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  updateKind: Update
+                  ckTypeId: FamilyOs/Household
+                  rtIdPath: $.hh.Items[0].RtId
+                  targetPath: $.updates
+                  targetValueWriteMode: Append
+                  targetValueKind: Array
+                  attributeUpdates:
+                    - attributeName: EarnedStickers
+                      attributeValueType: StringArray
+                      valuePath: $.body.earned
+
+            - type: If@1
+              description: Empty set — store the sentinel (writing [] would null the attribute)
+              path: $.body.count
+              operator: Equal
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  updateKind: Update
+                  ckTypeId: FamilyOs/Household
+                  rtIdPath: $.hh.Items[0].RtId
+                  targetPath: $.updates
+                  targetValueWriteMode: Append
+                  targetValueKind: Array
+                  attributeUpdates:
+                    - attributeName: EarnedStickers
+                      attributeValueType: StringArray
+                      value: ["~"]
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # POST /cats/name — rename a calendar category
+  # ========================================================================
+  - rtId: '0fa000000000000000000010'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-update-cat-name"
+      - id: System/Description-1
+        value: "POST /cats/name — rename a calendar category. Body: { id, name }"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /cats/name
+              method: Post
+              path: /cats/name
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              updateKind: Update
+              ckTypeId: FamilyOs/CalendarCategory
+              rtIdPath: $.body.id
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates:
+                - attributeName: Name
+                  attributeValueType: String
+                  valuePath: $.body.name
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # POST /cats/icon — change a calendar category icon
+  # ========================================================================
+  - rtId: '0fa000000000000000000011'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0fa000000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: "fam-update-cat-icon"
+      - id: System/Description-1
+        value: "POST /cats/icon — change a calendar category icon. Body: { id, icon }"
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              description: HTTP POST /cats/icon
+              method: Post
+              path: /cats/icon
+
+          transformations:
+            - type: CreateUpdateInfo@1
+              updateKind: Update
+              ckTypeId: FamilyOs/CalendarCategory
+              rtIdPath: $.body.id
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              attributeUpdates:
+                - attributeName: Icon
+                  attributeValueType: String
+                  valuePath: $.body.icon
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.updates
+
+            - type: SetPrimitiveValue@1
+              value: true
+              valueType: Boolean
+              targetPath: $.ok
+
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
+
+  # ========================================================================
+  # Web app — Application workload, rolled out by the Communication Operator
+  # as a Helm release from the family-os-app chart (src/charts).
+  # ========================================================================
+  - rtId: '0fa000000000000000000020'
+    ckTypeId: System.Communication/Application-1
+    associations:
+      # Deploy target: the Cloud pool the central operator owns.
+      - roleId: System.Communication/Manages-1
+        targetRtId: '670000000000000000000001'
+        targetCkTypeId: System.Communication/Pool-1
+      # Chart source: meshmakers-apps (release channel, 005) — pre-seeded by
+      # System.Communication.Release. The MainLatest variant points at the
+      # dev channel (003) instead.
+      - roleId: System.Communication/HelmRepository-1
+        targetRtId: '670000000000000000000005'
+        targetCkTypeId: System.Communication/HelmRepositoryConfiguration-1
+    attributes:
+      - id: System/Name-1
+        value: FamilyOS App
+      - id: System/Description-1
+        value: 'FamilyOS web UI (React SPA + Node proxy). Proxies the tenant-scoped FamilyOS HTTP API hosted by the Mesh Adapter.'
+      # Own chart (src/charts/family-os-app), published to the apps release
+      # channel on every r* tag. Empty ChartVersion = track the channel's
+      # newest chart; the image tag follows the chart's appVersion.
+      - id: System.Communication/ChartName-1
+        value: family-os-app
+      - id: System.Communication/ChartVersion-1
+        value: ""
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      # Talks only to the Mesh Adapter over HTTP — no cluster secrets needed.
+      - id: System.Communication/ReceivesClusterSecrets-1
+        value: false
+      # Ingress: per-tenant hostname under the controller's default domain,
+      # resolved at deploy time (127.0.0.1.nip.io on local kind).
+      - id: System.Communication/IngressEnabled-1
+        value: true
+      - id: System.Communication/Hostname-1
+        value: 'familyos-${octo.tenantId}.{{domain.default}}'
+      # Only the tenant-scoped upstream needs overriding. The chart defaults
+      # image.repository to meshmakers/family-os-app, the operator injects
+      # image.privateRegistry, and image.tag defaults to the chart appVersion
+      # (set by CI to the same build number as the pushed image) — so the
+      # workload never pins a tag here.
+      - id: System.Communication/ValuesYaml-1
+        value: |
+          upstreamUrl: http://${octo.tenantId}-670000000000000000000002.octo.svc.cluster.local:80/${octo.tenantId}
