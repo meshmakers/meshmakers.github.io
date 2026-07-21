@@ -1,0 +1,59 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: FamilyOs.MainLatest-1.0.2
+description: |
+  FamilyOS — a family organizer running fully on OctoMesh.
+  Dev/test channel variant (mirrors the OneTimeTicket.MainLatest pattern).
+
+  Tasks with a points/sticker game, a shopping list, pinboard notes and a
+  weekly calendar with per-day Mama/Papa assignments. The entire backend is
+  declarative pipeline YAML executed by the tenant's Mesh Adapter — no
+  service code.
+
+  What this blueprint installs:
+  - the FamilyOs construction kit model (auto-imported from the catalog)
+  - a DataFlow with 16 HTTP pipelines hosted by the tenant's Mesh Adapter:
+      GET    /state                 aggregated app state for the client boot
+      POST   /tasks                 create a task
+      POST   /tasks/toggle          toggle + book points server-side
+      POST   /tasks/reset           recurrence reset (no scoring)
+      DELETE /tasks?id=             delete a task
+      POST   /shopping              add an item
+      POST   /shopping/toggle       flip an item
+      POST   /shopping/clear-done   remove all done items
+      DELETE /shopping?id=          remove one item
+      POST   /notes                 pin a note
+      DELETE /notes?id=             unpin a note
+      POST   /days                  upsert a day assignment
+      POST   /household/names       save display names
+      POST   /household/stickers    persist earned stickers
+      POST   /cats/name             rename a calendar category
+      POST   /cats/icon             change a category icon
+  - domain seeds: the Household singleton and three default calendar
+    categories
+  - the FamilyOS web app (React SPA + Node proxy) as an Application workload,
+    rolled out to Kubernetes by the Communication Operator as a Helm release,
+    pulling the family-os-app chart from the meshmakers-dev Helm repo.
+
+  PREREQUISITE: communication must be enabled on the target tenant. The
+  service-managed System.Communication.MainLatest blueprint seeds the Pool
+  (670000000000000000000001), Mesh Adapter (670000000000000000000002) and dev
+  Helm repo (670000000000000000000003) this seed associates to.
+
+  Install only seeds entities — trigger the rollout afterwards with
+  DeployDataFlow (the pipelines) + DeployWorkload (the web app).
+
+  NOTE: the staging/production variant is FamilyOs.Release. Keep the
+  seed-data of the two variants in sync — they differ only in the
+  Application's HelmRepository association (003 dev vs 005 apps).
+
+ckModelDependencies:
+  - FamilyOs-[1.0.0,2.0.0)
+
+seedDataPath: seed-data/entities.yaml
+
+# Dev/test channel: meshmakers-dev Helm repo (003) seeded by
+# System.Communication.MainLatest, which is gated to the same environments.
+requires:
+  octo.environment:
+    - dev
+    - test
