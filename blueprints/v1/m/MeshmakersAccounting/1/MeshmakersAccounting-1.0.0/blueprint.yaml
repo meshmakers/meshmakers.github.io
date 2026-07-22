@@ -1,0 +1,76 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: MeshmakersAccounting-1.0.0
+description: |
+  Accounting preparation for meshmakers GmbH — connect bank transactions with
+  accounting documents and analyze costs by category.
+
+  Installs:
+  - the Meshmakers.Accounting construction kit model (auto-imported from the
+    catalog, pulls Basic + Basic.Accounting transitively)
+  - fiscal-year 2026 with 9 cost categories
+  - reporting root folders (Documents storage)
+  - the FinAPI adapter (octo-finapi-adapter Helm chart; configure the finAPI
+    ClientId/ClientSecret in AdapterConfiguration per tenant)
+  - 13 pipelines: the six finAPI pipelines (account/transaction sync, bank
+    connection import + BIC resolution, web-form create/complete) share ONE
+    "FinAPI" DataFlow so they deploy together and appear as tabs in one
+    execution-history dialog; the rest sit in their own DataFlows: Excel tree
+    import, CSV transaction import, AI prompt, document upload (staging +
+    duplicate check only), asynchronous document analysis (5-minute polling +
+    on-demand via POST /processDocuments: OCR + AI extraction of staged
+    uploads, replaces the former synchronous analysis and the Todo fallback —
+    incomplete extractions stay visible on the UploadedDocument inbox
+    entity), transaction matching
+  - the Microsoft 365 e-mail document import pipeline — ships DISABLED
+    (System/Enabled=false); the meshmakers-app activates it from Settings ->
+    E-Mail Import (writes the EmailImportSettings configuration, rewrites the
+    trigger mailbox/folders and deploys the DataFlow)
+  - the MicrosoftGraphDocuments configuration (placeholder Azure app-registration
+    credentials) used by the e-mail import via the Uses association
+  - the _trees repo-browser query
+  - the accounting SPA as an Application workload (meshmakers-app Helm
+    chart), rolled out by the Communication Operator
+  - the meshmakers-app OIDC client (authorization code + PKCE, redirect
+    ${octo.scheme}://accounting.${octo.domain}/) used by the deployed SPA
+  - the AnthropicAiConfig AiConfiguration (placeholder API key) referenced by
+    the AI pipelines via apiKeyConfigurationName
+  - the FinApiConfiguration (placeholder credentials, live.finapi.io) that all
+    finAPI pipelines load via GetPipelineConfigByWellKnownName + Uses association
+
+  PREREQUISITES: communication and reporting must be enabled on the target
+  tenant. The service-managed System.Communication blueprint seeds the Pool
+  (670000000000000000000001) and Mesh Adapter (670000000000000000000002)
+  this seed associates to.
+
+  Post-install:
+  - DeployDataFlow per DataFlow + DeployWorkload for the app (operator pools)
+  - Set the real Anthropic API key on the AnthropicAiConfig configuration and
+    the finAPI credentials on FinApiConfiguration — every blueprint re-apply
+    resets both to the placeholders (scripts/om_set_secrets.ps1 restores them
+    from the gitignored scripts/secrets.local.json)
+  - The Microsoft 365 e-mail import ships disabled — activate it in the
+    meshmakers-app under Settings -> E-Mail Import after filling the Azure
+    app-registration secrets on MicrosoftGraphDocuments via
+    scripts/om_set_secrets.ps1 (microsoftGraph section). Every blueprint
+    re-apply resets those to placeholders (same as Anthropic/finAPI).
+  - The remaining optional IMAP-email/Teams/Signal import pipelines still live
+    in the repo's data/ folder — they carry tenant-specific secrets and are
+    imported manually
+# NOTE: the blueprint engine installs each dependency's range FLOOR as the
+# exact version (ModelVersionRange.MinVersion), so floors must match versions
+# that exist in the catalogs — bump the Meshmakers.Accounting floor together
+# with ckModel.yaml, and the Basic/Basic.Accounting floors when the upstream
+# models are republished. Transitive CK dependencies are NOT resolved on
+# install, so Basic + Basic.Accounting must be listed explicitly and BEFORE
+# Meshmakers.Accounting (install order = list order). The System.* floors are
+# satisfied by the service-managed models already on the tenant (no-op).
+ckModelDependencies:
+- System-[2.0,)
+- System.Communication-[3.0,4.0)
+- System.Reporting-[2.0,3.0)
+- System.Identity-[2.0,3.0)
+- Basic-[2.0.2,3.0)
+- Basic.Accounting-[1.5.0,2.0)
+- Meshmakers.Accounting-[1.4.16,2.0)
+composedBlueprints: []
+seedDataPath: seed-data/entities.yaml
