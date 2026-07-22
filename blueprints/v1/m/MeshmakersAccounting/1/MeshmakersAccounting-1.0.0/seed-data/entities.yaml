@@ -37,11 +37,11 @@ entities:
         targetCkTypeId: Meshmakers.Accounting/FiscalYear
     attributes:
       - id: Meshmakers.Accounting/Name
-        value: Rent & Utilities
+        value: Rent
       - id: Meshmakers.Accounting/CategoryType
         value: RENT
       - id: Meshmakers.Accounting/CategoryDescription
-        value: Office rent, utilities, electricity, internet
+        value: Office rent, internet (building operating costs go to Facility Operations)
   - rtId: aa0000000000000000000003
     ckTypeId: Meshmakers.Accounting/CostCategory
     associations:
@@ -146,6 +146,64 @@ entities:
         value: BANKFEES
       - id: Meshmakers.Accounting/CategoryDescription
         value: Bank fees and account charges (Kontoführung, Entgelte, card fees) — costs without a separate receipt
+  # --- AB#4507: IT Operation + Facility Operations cost categories and the
+  #     first income categories (CategoryKind INCOME; missing kind = EXPENSE) ---
+  - rtId: aa00000000000000000000a1
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: IT Operation
+      - id: Meshmakers.Accounting/CategoryType
+        value: ITOPERATION
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: "Operating costs of OctoMesh and other SaaS offerings: hosting, cloud infrastructure, monitoring, API usage"
+  - rtId: aa00000000000000000000a2
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Facility Operations
+      - id: Meshmakers.Accounting/CategoryType
+        value: FACILITY
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: "Building operating costs: cleaning, kitchen supplies, electricity, heating"
+  - rtId: aa00000000000000000000b0
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Revenue
+      - id: Meshmakers.Accounting/CategoryType
+        value: REVENUE
+      - id: Meshmakers.Accounting/CategoryKind
+        value: INCOME
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Income from products and services (customer payments)
+  - rtId: aa00000000000000000000b1
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Interest & Other Income
+      - id: Meshmakers.Accounting/CategoryType
+        value: OTHERINCOME
+      - id: Meshmakers.Accounting/CategoryKind
+        value: INCOME
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Interest, refunds, grants and other income
   # --- Categorization rules ---
   # Auto-assign a cost category to bank transactions during the match pipeline.
   # Each rule matches on exactly ONE field (like a Dauerbeleg's match type) and
@@ -2089,7 +2147,7 @@ entities:
                     Known entity types and their key attributes:
                     - Meshmakers.Accounting/AccountingDocument: DocumentNumber, DocumentDate, DueDate, GrossTotal, NetTotal, TaxTotal, TaxRate, DocumentType, DocumentState; Vendor and Customer are Record objects — filter via a sub-field like Vendor.CompanyName (see rule above), never the bare attribute
                     - Basic.Accounting/BankTransaction: TransactionId, Amount, Currency, BookingDate, ValueDate, Purpose, CounterpartName, CounterpartIban, Direction
-                    - Meshmakers.Accounting/CostCategory: Name, CategoryType, CategoryDescription
+                    - Meshmakers.Accounting/CostCategory: Name, CategoryType, CategoryKind (EXPENSE or INCOME; missing = EXPENSE), CategoryDescription
                     - Meshmakers.Accounting/FiscalYear: Name, StartDate, EndDate, IsClosed
                     - Basic.Accounting/BankAccount: Iban, AccountHolder, Balance, Currency
 
@@ -3570,6 +3628,214 @@ entities:
                   description: Persist this rule's category assignments
                   entityUpdatesPath: $.key._catEntityUpdates
                   associationUpdatesPath: $.key._catAssocUpdates
+            # --- PayPal/credit-card settlement pass (AB#4509) — runs BEFORE the
+            #     deterministic pass so a pass-through leg is never matched to a
+            #     still-open document (which would double-count the expense).
+            #     A purchase paid via PayPal appears once per involved own
+            #     account: as the PayPal-ledger payment to the merchant AND as
+            #     the card/bank funding debit ("PAYPAL *…"). Whichever leg the
+            #     other passes match to the document first, the remaining leg is
+            #     a settlement duplicate: a pending Debit with the SAME signed
+            #     amount on a DIFFERENT own account, booked within ±7 days of a
+            #     Matched twin. Guard: at least one of the two legs must carry a
+            #     PayPal marker in Purpose or CounterpartName, so two unrelated
+            #     same-amount purchases on different accounts are never
+            #     conflated. The comment reuses the fixed 'Credit card/PayPal
+            #     payment' prefix of the manual mark action in the transactions
+            #     list, with an (auto) suffix — same convention as the bank-fee
+            #     (auto)/(manual) marks. Idempotent: ignoring the leg removes it
+            #     from the In [0, 2] candidate set. Credit (refund) chains are
+            #     deliberately out of scope. The finAPI PayPal history gap is
+            #     handled implicitly: a leg whose twin was never imported finds
+            #     no Matched twin and stays available for direct matching.
+            - type: GetRtEntitiesByType@1
+              description: Pending debits — potential settlement duplicates of a matched twin
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.ppPending
+              take: 500
+              fieldFilters:
+                - attributePath: MatchState
+                  operator: In
+                  comparisonValue:
+                    - 0
+                    - 2
+                - attributePath: Direction
+                  operator: Equals
+                  comparisonValue: 1
+            - type: ForEach@1
+              description: Ignore each pending leg whose matched twin lives on another account
+              iterationPath: $.ppPending.Items
+              targetPath: $.ppResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: Account of the pending leg (transactions are children of their bank account)
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Basic.Accounting/BankTransaction
+                  targetCkTypeId: Basic.Accounting/BankAccount
+                  associationRoleId: System/ParentChild
+                  graphDirection: Outbound
+                  targetPath: $.key._ppOwnAcc
+                - type: DateTime@1
+                  description: Twin window floor = booking date - 7 days
+                  operation: AddDays
+                  path: $.key.Attributes.BookingDate
+                  value: -7
+                  targetPath: $.key._ppMinDate
+                - type: DateTime@1
+                  description: Twin window cap = booking date + 7 days
+                  operation: AddDays
+                  path: $.key.Attributes.BookingDate
+                  value: 7
+                  targetPath: $.key._ppMaxDate
+                - type: GetRtEntitiesByType@1
+                  description: Matched debits with the same signed amount (twin candidates)
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  targetPath: $.key._ppTwins
+                  take: 20
+                  fieldFilters:
+                    - attributePath: MatchState
+                      operator: Equals
+                      comparisonValue: 1
+                    - attributePath: Direction
+                      operator: Equals
+                      comparisonValue: 1
+                    - attributePath: Amount
+                      operator: Equals
+                      comparisonValuePath: $.key.Attributes.Amount
+                - type: ForEach@1
+                  description: Check each twin — booked close in time, PayPal marker, different account
+                  iterationPath: $.key._ppTwins.Items
+                  targetPath: $.key._ppTwinResults
+                  targetValueKind: Simple
+                  targetValueWriteMode: Overwrite
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: If@1
+                      description: Twin booked no earlier than 7 days before the pending leg
+                      path: $.key.Attributes.BookingDate
+                      operator: GreaterEqualsThan
+                      valuePath: $.full.key._ppMinDate
+                      valueType: DateTime
+                      transformations:
+                        - type: If@1
+                          description: …and no later than 7 days after it
+                          path: $.key.Attributes.BookingDate
+                          operator: LessEqualsThan
+                          valuePath: $.full.key._ppMaxDate
+                          valueType: DateTime
+                          transformations:
+                            # PayPal marker on EITHER leg. If@1 has no OR, so the
+                            # four checks raise a flag. RegexMatch is null-safe: a
+                            # null purpose/counterpart simply does not match.
+                            - type: SetPrimitiveValue@1
+                              description: No PayPal marker found yet
+                              targetPath: $.key._ppMarker
+                              value: false
+                              valueType: Boolean
+                            - type: If@1
+                              description: Twin purpose mentions PayPal
+                              path: $.key.Attributes.Purpose
+                              operator: RegexMatch
+                              value: (?i)paypal
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key._ppMarker
+                                  value: true
+                                  valueType: Boolean
+                            - type: If@1
+                              description: Twin counterpart mentions PayPal
+                              path: $.key.Attributes.CounterpartName
+                              operator: RegexMatch
+                              value: (?i)paypal
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key._ppMarker
+                                  value: true
+                                  valueType: Boolean
+                            - type: If@1
+                              description: Pending leg purpose mentions PayPal
+                              path: $.full.key.Attributes.Purpose
+                              operator: RegexMatch
+                              value: (?i)paypal
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key._ppMarker
+                                  value: true
+                                  valueType: Boolean
+                            - type: If@1
+                              description: Pending leg counterpart mentions PayPal
+                              path: $.full.key.Attributes.CounterpartName
+                              operator: RegexMatch
+                              value: (?i)paypal
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key._ppMarker
+                                  value: true
+                                  valueType: Boolean
+                            - type: If@1
+                              description: PayPal marker present on at least one leg
+                              path: $.key._ppMarker
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: GetAssociationTargets@1
+                                  description: Account of the twin
+                                  originRtIdPath: $.key.RtId
+                                  originCkTypeId: Basic.Accounting/BankTransaction
+                                  targetCkTypeId: Basic.Accounting/BankAccount
+                                  associationRoleId: System/ParentChild
+                                  graphDirection: Outbound
+                                  targetPath: $.key._ppTwinAcc
+                                # Both account lookups must have resolved — If@1
+                                # with a valuePath THROWS on a missing path (the
+                                # AB#4433 Part C incident), so guard on the
+                                # always-present TotalCount before comparing.
+                                - type: If@1
+                                  description: Pending leg has a resolved account
+                                  path: $.full.key._ppOwnAcc[0].TotalCount
+                                  operator: GreaterThan
+                                  value: 0
+                                  valueType: Int64
+                                  transformations:
+                                    - type: If@1
+                                      description: Twin has a resolved account
+                                      path: $.key._ppTwinAcc[0].TotalCount
+                                      operator: GreaterThan
+                                      value: 0
+                                      valueType: Int64
+                                      transformations:
+                                        - type: If@1
+                                          description: Twin lives on a DIFFERENT own account — the pending leg is the settlement duplicate
+                                          path: $.key._ppTwinAcc[0].Items[0].RtId
+                                          operator: NotEquals
+                                          valuePath: $.full.key._ppOwnAcc[0].Items[0].RtId
+                                          valueType: String
+                                          transformations:
+                                            - type: CreateUpdateInfo@1
+                                              description: Ignore the pending leg as a PayPal/card settlement pass-through
+                                              targetPath: $._ppUpdates
+                                              targetValueKind: Array
+                                              targetValueWriteMode: Append
+                                              updateKind: Update
+                                              ckTypeId: Basic.Accounting/BankTransaction
+                                              rtIdPath: $.full.key.RtId
+                                              attributeUpdates:
+                                                - attributeName: MatchState
+                                                  attributeValueType: Enum
+                                                  value: Ignored
+                                                - attributeName: MatchComment
+                                                  attributeValueType: String
+                                                  value: Credit card/PayPal payment (auto)
+                                            - type: ApplyChanges@2
+                                              entityUpdatesPath: $._ppUpdates
             - type: GetRtEntitiesByType@1
               # The deterministic pass reconsiders BOTH unreviewed (0) and
               # previously unmatched (2) transactions. Bank transactions and
@@ -4066,7 +4332,7 @@ entities:
                   temperature: 0.0
                   question: >-
                     Match each bank transaction in the main content (aiTransactions, Items array)
-                    to the open accounting document from $.openDocs (Items array) that it pays.
+                    to the open accounting document(s) from $.openDocs (Items array) that it pays.
                     Every transaction must appear in exactly one of the two result lists.
                   systemPrompt: >-
                     You are a bank reconciliation assistant. The main content holds the bank
@@ -4074,13 +4340,14 @@ entities:
                     open accounting documents (Items array).
 
                     RULES:
-                    1. A Debit transaction (Direction 1, negative Amount) pays an INCOMING document; a Credit transaction (Direction 0) settles an OUTGOING document.
-                    2. Match when abs(transaction Amount) equals the document GrossTotal (allow small deviations only for obvious bank fees) AND the counterpart name or purpose plausibly relates to the document vendor/customer, AND the BookingDate is within 90 days of the DocumentDate.
-                    3. Only match when you are confident. When several documents are equally plausible, do NOT match.
-                    4. transactionRtId and documentRtId MUST be the exact 24-character hex RtId values from the input items — never invent or modify them.
-                    5. Every transaction from aiTransactions.Items must appear either in matches or in unmatched.
-                    6. NEVER output duplicates: each transactionRtId appears at most once across the whole result, each documentRtId is used for at most one transaction, and the same transaction–document pair is never repeated. A document already paid by one transaction cannot pay another. When in doubt, put the transaction in unmatched. (The downstream link step is not idempotent — a repeated pair aborts the run; see AB#4398.)
-                  jsonFormatSample: '{"matches": [{"transactionRtId": "69b858129a7ae6defef1ba39", "documentRtId": "69b858129a7ae6defef1ba40", "reason": "Amount 90.00 matches invoice R-2026-014 from Anthropic"}], "unmatched": ["69b858129a7ae6defef1ba41"]}'
+                    1. A Debit transaction (Direction 1, negative Amount) pays INCOMING documents; a Credit transaction (Direction 0) settles OUTGOING documents.
+                    2. Single match: abs(transaction Amount) equals the document GrossTotal (allow small deviations only for obvious bank fees) AND the counterpart name or purpose plausibly relates to the document vendor/customer, AND the BookingDate is within 90 days of the DocumentDate.
+                    3. Collective match (AB#4510): one transaction may settle SEVERAL documents at once — a typical case is an expense reimbursement transfer to an employee covering many receipts. Put multiple documents into documentRtIds ONLY when the SUM of their GrossTotals equals abs(transaction Amount) (allow small deviations only for obvious bank fees) AND all documents plausibly belong to that one payment (e.g. the purpose hints at a reimbursement or collective transfer, or all documents share the counterpart). Each document must still satisfy the 90-day date rule.
+                    4. Only match when you are confident. When several assignments are equally plausible, do NOT match.
+                    5. transactionRtId and every entry of documentRtIds MUST be the exact 24-character hex RtId values from the input items — never invent or modify them. documentRtIds MUST be a non-empty array (a single match is an array with one entry).
+                    6. Every transaction from aiTransactions.Items must appear either in matches or in unmatched.
+                    7. NEVER output duplicates: each transactionRtId appears at most once across the whole result, and each document RtId is used at most once across ALL documentRtIds arrays. A document already paid by one transaction cannot pay another. When in doubt, put the transaction in unmatched.
+                  jsonFormatSample: '{"matches": [{"transactionRtId": "69b858129a7ae6defef1ba39", "documentRtIds": ["69b858129a7ae6defef1ba40"], "reason": "Amount 90.00 matches invoice R-2026-014 from Anthropic"}, {"transactionRtId": "69b858129a7ae6defef1ba42", "documentRtIds": ["69b858129a7ae6defef1ba43", "69b858129a7ae6defef1ba44"], "reason": "Reimbursement 145.50 = 100.00 + 45.50, purpose Spesen Mueller"}], "unmatched": ["69b858129a7ae6defef1ba41"]}'
                   targetPath: $.ai
                 - type: ForEach@1
                   description: Apply AI matches
@@ -4090,63 +4357,79 @@ entities:
                   targetValueWriteMode: Overwrite
                   maxDegreeOfParallelism: 1
                   transformations:
-                    - type: GetAssociationTargets@1
-                      # Idempotency (AB#4398): the AI can return the same document->transaction
-                      # pair twice in one batch, and a prior pass may already have linked this
-                      # document. ApplyChanges runs per iteration, so the first commit is visible
-                      # here — create the link only when the document is not already linked; the
-                      # PAID/Matched updates below run regardless (idempotent).
-                      description: Existing tx links on this document (idempotency guard, AB#4398)
-                      originRtIdPath: $.key.documentRtId
-                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                      targetCkTypeId: Basic.Accounting/BankTransaction
-                      associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                      graphDirection: Outbound
-                      targetPath: $._aiExisting
-                    - type: If@1
-                      description: Create the link only when the document is not already linked
-                      path: $._aiExisting[0].TotalCount
-                      operator: Equals
-                      value: 0
-                      valueType: Int64
+                    # AB#4510: a match carries a documentRtIds LIST — a collective
+                    # transfer (e.g. an expense reimbursement) settles several
+                    # documents with one transaction. Link and settle each document
+                    # in turn, then mark the transaction matched once.
+                    - type: ForEach@1
+                      description: Link and settle every document of this match
+                      iterationPath: $.key.documentRtIds
+                      targetPath: $.key._aiDocResults
+                      targetValueKind: Simple
+                      targetValueWriteMode: Overwrite
+                      maxDegreeOfParallelism: 1
                       transformations:
-                        - type: CreateAssociationUpdate@1
-                          description: Link document to transaction
-                          targetPath: $._aiAssocs
-                          targetValueKind: Array
-                          targetValueWriteMode: Append
-                          updateKind: Create
-                          originRtIdPath: $.key.documentRtId
+                        - type: GetAssociationTargets@1
+                          # Idempotency (AB#4398): the AI can repeat a document across
+                          # matches despite the prompt, and a prior pass may already have
+                          # linked this document. ApplyChanges runs per iteration, so the
+                          # first commit is visible here — create the link only when the
+                          # document is not already linked; the PAID update below runs
+                          # regardless (idempotent).
+                          description: Existing tx links on this document (idempotency guard, AB#4398)
+                          originRtIdPath: $.key
                           originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                          targetRtIdPath: $.key.transactionRtId
                           targetCkTypeId: Basic.Accounting/BankTransaction
                           associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                    - type: GetRtEntitiesById@1
-                      description: Load the matched document to read its gross total for PaidAmount (AB#4433)
-                      rtIdsPath: $.key.documentRtId
-                      ckTypeId: Meshmakers.Accounting/AccountingDocument
-                      targetPath: $._aiDoc
-                    - type: CreateUpdateInfo@1
-                      description: Document is paid
-                      targetPath: $._aiUpdates
-                      targetValueKind: Array
-                      targetValueWriteMode: Append
-                      updateKind: Update
-                      ckTypeId: Meshmakers.Accounting/AccountingDocument
-                      rtIdPath: $.key.documentRtId
-                      attributeUpdates:
-                        - attributeName: DocumentState
-                          attributeValueType: Enum
-                          value: PAID
-                        # AB#4433: the deterministic/tolerance passes set PaidAmount on
-                        # match; the AI pass previously omitted it, leaving AI-matched
-                        # documents PAID with a null PaidAmount. Mirror the other passes.
-                        - attributeName: PaidAmount
-                          attributeValueType: Double
-                          valuePath: $._aiDoc.Items[0].Attributes.GrossTotal
+                          graphDirection: Outbound
+                          targetPath: $._aiExisting
+                        - type: If@1
+                          description: Create the link only when the document is not already linked
+                          path: $._aiExisting[0].TotalCount
+                          operator: Equals
+                          value: 0
+                          valueType: Int64
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              description: Link document to transaction
+                              targetPath: $._aiAssocs
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Create
+                              originRtIdPath: $.key
+                              originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetRtIdPath: $.full.key.transactionRtId
+                              targetCkTypeId: Basic.Accounting/BankTransaction
+                              associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                        - type: GetRtEntitiesById@1
+                          description: Load the matched document to read its gross total for PaidAmount (AB#4433)
+                          rtIdsPath: $.key
+                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                          targetPath: $._aiDoc
+                        - type: CreateUpdateInfo@1
+                          description: Document is paid
+                          targetPath: $._aiUpdates
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Update
+                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                          rtIdPath: $.key
+                          attributeUpdates:
+                            - attributeName: DocumentState
+                              attributeValueType: Enum
+                              value: PAID
+                            # AB#4433: mirror the deterministic/tolerance passes —
+                            # PaidAmount is the document's own gross total (for a
+                            # collective transfer each document carries its share).
+                            - attributeName: PaidAmount
+                              attributeValueType: Double
+                              valuePath: $._aiDoc.Items[0].Attributes.GrossTotal
+                        - type: ApplyChanges@2
+                          entityUpdatesPath: $._aiUpdates
+                          associationUpdatesPath: $._aiAssocs
                     - type: CreateUpdateInfo@1
                       description: Transaction is matched
-                      targetPath: $._aiUpdates
+                      targetPath: $._aiTxUpdates
                       targetValueKind: Array
                       targetValueWriteMode: Append
                       updateKind: Update
@@ -4157,8 +4440,7 @@ entities:
                           attributeValueType: Enum
                           value: Matched
                     - type: ApplyChanges@2
-                      entityUpdatesPath: $._aiUpdates
-                      associationUpdatesPath: $._aiAssocs
+                      entityUpdatesPath: $._aiTxUpdates
                 - type: ForEach@1
                   description: Mark transactions the AI could not assign
                   iterationPath: $.ai.unmatched
