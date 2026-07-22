@@ -7,7 +7,8 @@ description: |
   Installs:
   - the Meshmakers.Accounting construction kit model (auto-imported from the
     catalog, pulls Basic + Basic.Accounting transitively)
-  - fiscal-year 2026 with 9 cost categories
+  - fiscal-year 2026 with 12 cost categories and 2 income categories
+    (CategoryKind EXPENSE/INCOME, AB#4507)
   - reporting root folders (Documents storage)
   - the FinAPI adapter (octo-finapi-adapter Helm chart; configure the finAPI
     ClientId/ClientSecret in AdapterConfiguration per tenant)
@@ -71,6 +72,6 @@ ckModelDependencies:
 - System.Identity-[2.0,3.0)
 - Basic-[2.0.2,3.0)
 - Basic.Accounting-[1.5.0,2.0)
-- Meshmakers.Accounting-[1.4.16,2.0)
+- Meshmakers.Accounting-[1.5.0,2.0)
 composedBlueprints: []
 seedDataPath: seed-data/entities.yaml
