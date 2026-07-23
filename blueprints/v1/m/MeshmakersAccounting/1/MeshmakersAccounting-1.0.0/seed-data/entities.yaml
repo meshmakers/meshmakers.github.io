@@ -3836,6 +3836,206 @@ entities:
                                                   value: Credit card/PayPal payment (auto)
                                             - type: ApplyChanges@2
                                               entityUpdatesPath: $._ppUpdates
+            # --- Own-account transfer pass (AB#4511) — credit card statement
+            #     settlement and any other transfer between own accounts. The
+            #     monthly card statement books twice: the settlement debit on
+            #     the checking account (CounterpartIban = the OWN card
+            #     account's IBAN) and the balancing EINZUGSBETRAG credit on the
+            #     card account (no counterpart IBAN). Neither leg ever needs a
+            #     document — the individual purchases are imported separately.
+            #     Step 1 anchors on the counterpart IBAN: a pending transaction
+            #     whose CounterpartIban equals the IBAN of ANOTHER own account
+            #     is by definition an own transfer — no amount/date heuristics.
+            #     Step 2 catches the mirror credit: a pending credit on own
+            #     account A that pairs with a debit elsewhere pointing at A's
+            #     IBAN with the same absolute amount within ±3 days (regardless
+            #     of that debit's match state — it may already be Ignored).
+            #     Runs before the deterministic pass so a transfer leg can
+            #     never claim an open document. Idempotent via the In [0, 2]
+            #     gate. PayPal accounts carry no IBAN — those chains are
+            #     handled by the AB#4509 twin-leg pass above.
+            - type: GetRtEntitiesByType@1
+              description: Own bank accounts that carry an IBAN
+              ckTypeId: Basic.Accounting/BankAccount
+              targetPath: $.otAccounts
+              take: 50
+              fieldFilters:
+                - attributePath: Iban
+                  operator: MatchRegEx
+                  comparisonValue: .+
+            - type: ForEach@1
+              description: Per own IBAN account — ignore transfer legs in both directions
+              iterationPath: $.otAccounts.Items
+              targetPath: $.otResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                # Step 1: pending transactions ANYWHERE whose counterpart is
+                # this own account — transfers to/from it, e.g. the checking
+                # account's card settlement debit.
+                - type: GetRtEntitiesByType@1
+                  description: Pending transactions whose counterpart IBAN is this own account
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  targetPath: $.key._otAnchored
+                  take: 200
+                  fieldFilters:
+                    - attributePath: MatchState
+                      operator: In
+                      comparisonValue:
+                        - 0
+                        - 2
+                    - attributePath: CounterpartIban
+                      operator: Equals
+                      comparisonValuePath: $.key.Attributes.Iban
+                - type: ForEach@1
+                  description: Ignore each anchored transfer leg (unless it sits on the counterpart account itself)
+                  iterationPath: $.key._otAnchored.Items
+                  targetPath: $.key._otAnchoredResults
+                  targetValueKind: Simple
+                  targetValueWriteMode: Overwrite
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: GetAssociationTargets@1
+                      description: Account of this transaction (self-reference guard)
+                      originRtIdPath: $.key.RtId
+                      originCkTypeId: Basic.Accounting/BankTransaction
+                      targetCkTypeId: Basic.Accounting/BankAccount
+                      associationRoleId: System/ParentChild
+                      graphDirection: Outbound
+                      targetPath: $.key._otTxAcc
+                    - type: If@1
+                      description: Transaction has a resolved account
+                      path: $.key._otTxAcc[0].TotalCount
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Int64
+                      transformations:
+                        - type: If@1
+                          description: Not a self-reference — the leg belongs to a different account than its counterpart
+                          path: $.key._otTxAcc[0].Items[0].RtId
+                          operator: NotEquals
+                          valuePath: $.full.key.RtId
+                          valueType: String
+                          transformations:
+                            - type: CreateUpdateInfo@1
+                              description: Ignore the transfer leg (own counterpart IBAN)
+                              targetPath: $._otUpdates
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Update
+                              ckTypeId: Basic.Accounting/BankTransaction
+                              rtIdPath: $.key.RtId
+                              attributeUpdates:
+                                - attributeName: MatchState
+                                  attributeValueType: Enum
+                                  value: Ignored
+                                - attributeName: MatchComment
+                                  attributeValueType: String
+                                  value: Own-account transfer (auto)
+                            - type: ApplyChanges@2
+                              entityUpdatesPath: $._otUpdates
+                # Step 2: pending credits ON this account (e.g. EINZUGSBETRAG,
+                # no counterpart IBAN) — pair with a debit elsewhere that
+                # points at this account's IBAN, same absolute amount, ±3 days.
+                - type: GetAssociationTargets@1
+                  description: Pending credits on this own account (mirror-leg candidates)
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Basic.Accounting/BankAccount
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: System/ParentChild
+                  graphDirection: Inbound
+                  fieldFilters:
+                    - attributePath: MatchState
+                      operator: In
+                      comparisonValue:
+                        - 0
+                        - 2
+                    - attributePath: Direction
+                      operator: Equals
+                      comparisonValue: 0
+                  targetPath: $.key._otCredits
+                - type: ForEach@1
+                  description: Pair each pending credit with a debit pointing at this account
+                  iterationPath: $.key._otCredits[0].Items
+                  targetPath: $.key._otCreditResults
+                  targetValueKind: Simple
+                  targetValueWriteMode: Overwrite
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: Math@1
+                      description: Expected debit amount = negative credit amount
+                      path: $.key
+                      itemPath: $.Attributes.Amount
+                      itemTargetPath: $._otNegAmount
+                      operation: Multiply
+                      value: -1
+                    - type: DateTime@1
+                      description: Pair window floor = booking date - 3 days
+                      operation: AddDays
+                      path: $.key.Attributes.BookingDate
+                      value: -3
+                      targetPath: $.key._otMinDate
+                    - type: DateTime@1
+                      description: Pair window cap = booking date + 3 days
+                      operation: AddDays
+                      path: $.key.Attributes.BookingDate
+                      value: 3
+                      targetPath: $.key._otMaxDate
+                    - type: GetRtEntitiesByType@1
+                      description: Debits pointing at this account with the matching amount (any match state)
+                      ckTypeId: Basic.Accounting/BankTransaction
+                      targetPath: $.key._otDebits
+                      take: 10
+                      fieldFilters:
+                        - attributePath: Direction
+                          operator: Equals
+                          comparisonValue: 1
+                        - attributePath: CounterpartIban
+                          operator: Equals
+                          comparisonValuePath: $.full.key.Attributes.Iban
+                        - attributePath: Amount
+                          operator: Equals
+                          comparisonValuePath: $.key._otNegAmount
+                    - type: ForEach@1
+                      description: Ignore the credit when a debit twin books within the window
+                      iterationPath: $.key._otDebits.Items
+                      targetPath: $.key._otDebitResults
+                      targetValueKind: Simple
+                      targetValueWriteMode: Overwrite
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: If@1
+                          description: Debit booked no earlier than 3 days before the credit
+                          path: $.key.Attributes.BookingDate
+                          operator: GreaterEqualsThan
+                          valuePath: $.full.key._otMinDate
+                          valueType: DateTime
+                          transformations:
+                            - type: If@1
+                              description: …and no later than 3 days after it
+                              path: $.key.Attributes.BookingDate
+                              operator: LessEqualsThan
+                              valuePath: $.full.key._otMaxDate
+                              valueType: DateTime
+                              transformations:
+                                - type: CreateUpdateInfo@1
+                                  description: Ignore the mirror credit of the own-account transfer
+                                  targetPath: $._otMirrorUpdates
+                                  targetValueKind: Array
+                                  targetValueWriteMode: Append
+                                  updateKind: Update
+                                  ckTypeId: Basic.Accounting/BankTransaction
+                                  rtIdPath: $.full.key.RtId
+                                  attributeUpdates:
+                                    - attributeName: MatchState
+                                      attributeValueType: Enum
+                                      value: Ignored
+                                    - attributeName: MatchComment
+                                      attributeValueType: String
+                                      value: Own-account transfer (auto)
+                                - type: ApplyChanges@2
+                                  entityUpdatesPath: $._otMirrorUpdates
             - type: GetRtEntitiesByType@1
               # The deterministic pass reconsiders BOTH unreviewed (0) and
               # previously unmatched (2) transactions. Bank transactions and
