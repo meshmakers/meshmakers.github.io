@@ -1372,34 +1372,82 @@ entities:
               description: Sync completion timestamp
               operation: Now
               targetPath: $.syncTime
-            - type: GetRtEntitiesByType@1
-              description: All connections linked to finAPI (numeric ExternalId)
-              ckTypeId: Basic.Accounting/BankConnection
-              targetPath: $.connections
-              fieldFilters:
-                - attributePath: ExternalId
-                  operator: MatchRegEx
-                  comparisonValue: "^[0-9]+$"
+            # Stamp the REAL bank-data freshness, not the pipeline run time:
+            # LastSuccessfulSync = newest OK bank update at finAPI, SyncStatus
+            # honest (Connected / ActionRequired / Error). A connection whose
+            # update fails (SCA required, bank down) keeps its old timestamp
+            # so the UI shows how stale the data actually is.
+            - type: FinApiFetchBankConnections@1
+              description: Fetch per-connection bank-data freshness from finAPI
+              accessTokenPath: $.auth.accessToken
+              targetPath: $.finapi.connections
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              documentMode: Extend
             - type: ForEach@1
-              description: Stamp LastSuccessfulSync on each synced connection
-              iterationPath: $.connections.Items
+              description: Stamp bank-data freshness on each BankConnection
+              iterationPath: $.finapi.connections
               targetPath: $.connResult
               documentMode: Extend
               mergePath: $._connUpdates
               maxDegreeOfParallelism: 1
               transformations:
-                - type: CreateUpdateInfo@1
-                  targetPath: $._connUpdates._connUpdate
-                  updateKind: Update
+                - type: ConvertDataType@1
+                  description: finAPI connection id (number) as string for the ExternalId lookup
+                  path: $.key.id
+                  targetPath: $._connExternalId
+                  valueType: String
+                - type: GetRtEntitiesByType@1
+                  description: Find the BankConnection imported for this finAPI connection
                   ckTypeId: Basic.Accounting/BankConnection
-                  rtIdPath: $.key.RtId
-                  attributeUpdates:
-                    - attributeName: LastSuccessfulSync
-                      attributeValueType: DateTime
-                      valuePath: $.full.syncTime
-                    - attributeName: SyncStatus
-                      attributeValueType: String
-                      value: Connected
+                  targetPath: $._conn
+                  take: 1
+                  fieldFilters:
+                    - attributePath: ExternalId
+                      operator: Equals
+                      comparisonValuePath: $._connExternalId
+                - type: If@1
+                  description: Stamp only connections known to the tenant
+                  path: $._conn.TotalCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: If@1
+                      description: Freshness known - stamp timestamp and status
+                      path: $.key.hasSuccessfulUpdate
+                      operator: Equals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          targetPath: $._connUpdates._connUpdate
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankConnection
+                          rtIdPath: $._conn.Items[0].RtId
+                          attributeUpdates:
+                            - attributeName: LastSuccessfulSync
+                              attributeValueType: DateTime
+                              valuePath: $.key.lastSuccessfulUpdate
+                            - attributeName: SyncStatus
+                              attributeValueType: String
+                              valuePath: $.key.syncStatus
+                    - type: If@1
+                      description: Never updated - stamp status only, keep old timestamp
+                      path: $.key.hasSuccessfulUpdate
+                      operator: Equals
+                      value: false
+                      valueType: Boolean
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          targetPath: $._connUpdates._connUpdate
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankConnection
+                          rtIdPath: $._conn.Items[0].RtId
+                          attributeUpdates:
+                            - attributeName: SyncStatus
+                              attributeValueType: String
+                              valuePath: $.key.syncStatus
             - type: Flatten@1
               path: $.connResult[*]._connUpdate
               targetPath: $._connUpdateItems
