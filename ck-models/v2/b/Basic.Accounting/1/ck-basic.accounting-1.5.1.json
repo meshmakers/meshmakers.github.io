@@ -1,0 +1,800 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.0.2",
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "BankAccount-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Iban"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "ExternalId"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A bank account with balance and account details",
+      "attributes": [
+        {
+          "id": "Basic-2.0.2/Iban-1",
+          "name": "Iban",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.0.2/BankName-1",
+          "name": "BankName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.0.2/AccountHolder-1",
+          "name": "AccountHolder",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/AccountNumber-1",
+          "name": "AccountNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/BankAccountType-1",
+          "name": "AccountType",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/Balance-1",
+          "name": "Balance",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/Currency-1",
+          "name": "Currency",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/BalanceDate-1",
+          "name": "BalanceDate",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/Overdraft-1",
+          "name": "Overdraft",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/AvailableFunds-1",
+          "name": "AvailableFunds",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/BankAccountExternalId-1",
+          "name": "ExternalId",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "BankConnection-1",
+      "derivedFromCkTypeId": "Basic-2.0.2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Basic.Accounting-1.5.1/ConnectionToAccount-1",
+          "targetCkTypeId": "Basic.Accounting-1.5.1/BankAccount-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A connection to a bank institution used for synchronizing accounts and transactions",
+      "attributes": [
+        {
+          "id": "Basic-2.0.2/BankName-1",
+          "name": "BankName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/Bic-1",
+          "name": "Bic",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/BankCode-1",
+          "name": "BankCode",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/BankConnectionExternalId-1",
+          "name": "ExternalId",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/AccountIds-1",
+          "name": "AccountIds",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/LastSuccessfulSync-1",
+          "name": "LastSuccessfulSync",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/SyncStatus-1",
+          "name": "SyncStatus",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/ConsentExpiresAt-1",
+          "name": "ConsentExpiresAt",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "BankTransaction-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "UniqueNotDeleted",
+          "fields": [
+            {
+              "attributePaths": [
+                "TransactionId"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "BookingDate"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Direction"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "MatchState"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-2.2.2/ParentChild-1",
+          "targetCkTypeId": "Basic.Accounting-1.5.1/BankAccount-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A single bank transaction (booking)",
+      "attributes": [
+        {
+          "id": "Basic.Accounting-1.5.1/TransactionId-1",
+          "name": "TransactionId",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/Amount-1",
+          "name": "Amount",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/TransactionCurrency-1",
+          "name": "Currency",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/BookingDate-1",
+          "name": "BookingDate",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/ValueDate-1",
+          "name": "ValueDate",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/Purpose-1",
+          "name": "Purpose",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/TransactionText-1",
+          "name": "TransactionText",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/PaymentReference-1",
+          "name": "PaymentReference",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/CounterpartName-1",
+          "name": "CounterpartName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/CounterpartIban-1",
+          "name": "CounterpartIban",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/CounterpartBic-1",
+          "name": "CounterpartBic",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/TransactionDirection-1",
+          "name": "Direction",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/EndToEndReference-1",
+          "name": "EndToEndReference",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/MandateReference-1",
+          "name": "MandateReference",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/CreditorId-1",
+          "name": "CreditorId",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/BankTransactionCode-1",
+          "name": "BankTransactionCode",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/TransactionMatchState-1",
+          "name": "MatchState",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/TransactionMatchComment-1",
+          "name": "MatchComment",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "PaymentOrder-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Status"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-2.2.2/ParentChild-1",
+          "targetCkTypeId": "Basic.Accounting-1.5.1/BankAccount-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A payment order (e.g. SEPA credit transfer)",
+      "attributes": [
+        {
+          "id": "Basic.Accounting-1.5.1/PaymentAmount-1",
+          "name": "Amount",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/PaymentCurrency-1",
+          "name": "Currency",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/RecipientName-1",
+          "name": "RecipientName",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/RecipientIban-1",
+          "name": "RecipientIban",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/RecipientBic-1",
+          "name": "RecipientBic",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/PaymentPurpose-1",
+          "name": "Purpose",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/PaymentOrderStatus-1",
+          "name": "Status",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/PaymentExternalId-1",
+          "name": "ExternalId",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/ExecutionDate-1",
+          "name": "ExecutionDate",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Accounting-1.5.1/PaymentEndToEndReference-1",
+          "name": "EndToEndReference",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "ConnectionToAccount-1",
+      "inboundName": "Accounts",
+      "outboundName": "BankConnection",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Association between a bank connection and its accounts"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AccountIds-1",
+      "valueType": "IntArray",
+      "isRuntimeState": false,
+      "description": "List of finAPI account IDs associated with this bank connection"
+    },
+    {
+      "id": "AccountNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Bank-specific account number"
+    },
+    {
+      "id": "Amount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Transaction amount (positive for credit, negative for debit)"
+    },
+    {
+      "id": "AvailableFunds-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Available funds on the account"
+    },
+    {
+      "id": "Balance-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Current balance of the account"
+    },
+    {
+      "id": "BalanceDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Date of the last balance update"
+    },
+    {
+      "id": "BankAccountExternalId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Identifier of the account in the external system (e.g. finAPI account ID)"
+    },
+    {
+      "id": "BankAccountType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic.Accounting-1.5.1/BankAccountType-1",
+      "isRuntimeState": false,
+      "description": "Type of the bank account"
+    },
+    {
+      "id": "BankCode-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "National bank code (e.g. BLZ in Germany/Austria) or finAPI bank ID"
+    },
+    {
+      "id": "BankConnectionExternalId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Identifier of the bank connection in the external system"
+    },
+    {
+      "id": "BankTransactionCode-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Bank transaction code classifying the transaction type"
+    },
+    {
+      "id": "Bic-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Bank Identifier Code (BIC/SWIFT)"
+    },
+    {
+      "id": "BookingDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Date when the transaction was booked"
+    },
+    {
+      "id": "ConsentExpiresAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Expiry of the bank\u0027s AIS consent; after this date a re-consent (web form) is required before further synchronization"
+    },
+    {
+      "id": "CounterpartBic-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "BIC/SWIFT code of the counterpart\u0027s bank"
+    },
+    {
+      "id": "CounterpartIban-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "IBAN of the counterpart"
+    },
+    {
+      "id": "CounterpartName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of the counterpart (sender or receiver)"
+    },
+    {
+      "id": "CreditorId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "SEPA creditor identifier for direct debits"
+    },
+    {
+      "id": "Currency-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "ISO 4217 currency code (e.g. EUR, USD)"
+    },
+    {
+      "id": "EndToEndReference-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "End-to-end reference of the transaction"
+    },
+    {
+      "id": "ExecutionDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Requested execution date of the payment"
+    },
+    {
+      "id": "LastSuccessfulSync-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Timestamp of the last successful synchronization"
+    },
+    {
+      "id": "MandateReference-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "SEPA mandate reference for direct debits"
+    },
+    {
+      "id": "Overdraft-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Overdraft limit of the account"
+    },
+    {
+      "id": "PaymentAmount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Amount to transfer"
+    },
+    {
+      "id": "PaymentCurrency-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "ISO 4217 currency code of the payment"
+    },
+    {
+      "id": "PaymentEndToEndReference-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "End-to-end reference for the payment"
+    },
+    {
+      "id": "PaymentExternalId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Identifier of the payment in the external system"
+    },
+    {
+      "id": "PaymentOrderStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic.Accounting-1.5.1/PaymentOrderStatus-1",
+      "isRuntimeState": false,
+      "description": "Current status of the payment order"
+    },
+    {
+      "id": "PaymentPurpose-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Purpose or reference text of the payment"
+    },
+    {
+      "id": "PaymentReference-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Payment reference of the transaction"
+    },
+    {
+      "id": "Purpose-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Purpose or reference text of the transaction"
+    },
+    {
+      "id": "RecipientBic-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "BIC/SWIFT code of the recipient\u0027s bank"
+    },
+    {
+      "id": "RecipientIban-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "IBAN of the payment recipient"
+    },
+    {
+      "id": "RecipientName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of the payment recipient"
+    },
+    {
+      "id": "SyncStatus-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Current synchronization status"
+    },
+    {
+      "id": "TransactionCurrency-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "ISO 4217 currency code of the transaction"
+    },
+    {
+      "id": "TransactionDirection-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic.Accounting-1.5.1/TransactionDirection-1",
+      "isRuntimeState": false,
+      "description": "Direction of the transaction (Credit or Debit)"
+    },
+    {
+      "id": "TransactionId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Unique identifier of the transaction from the source system"
+    },
+    {
+      "id": "TransactionMatchComment-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Comment on the reconciliation state, e.g. why a transaction is ignored"
+    },
+    {
+      "id": "TransactionMatchState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Basic.Accounting-1.5.1/TransactionMatchState-1",
+      "isRuntimeState": false,
+      "description": "Reconciliation state of the transaction against accounting documents"
+    },
+    {
+      "id": "TransactionText-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Descriptive text of the transaction from the bank statement"
+    },
+    {
+      "id": "ValueDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Value date of the transaction"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "BankAccountType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Checking",
+          "description": "Checking or current account",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Savings",
+          "description": "Savings account",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "CreditCard",
+          "description": "Credit card account",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Loan",
+          "description": "Loan account",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Securities",
+          "description": "Securities or investment account",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "PayPal",
+          "description": "PayPal account",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Other",
+          "description": "Other account type",
+          "isExtension": false
+        }
+      ],
+      "description": "Type of financial account"
+    },
+    {
+      "enumId": "PaymentOrderStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Pending",
+          "description": "Payment is pending approval or execution",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Approved",
+          "description": "Payment has been approved",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Executed",
+          "description": "Payment has been successfully executed",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Rejected",
+          "description": "Payment has been rejected",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Cancelled",
+          "description": "Payment has been cancelled",
+          "isExtension": false
+        }
+      ],
+      "description": "Status of a payment order"
+    },
+    {
+      "enumId": "TransactionDirection-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Credit",
+          "description": "Incoming payment",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Debit",
+          "description": "Outgoing payment",
+          "isExtension": false
+        }
+      ],
+      "description": "Direction of a bank transaction"
+    },
+    {
+      "enumId": "TransactionMatchState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unreviewed",
+          "description": "Transaction has not been reviewed for matching yet",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Matched",
+          "description": "Transaction is assigned to one or more accounting documents",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Unmatched",
+          "description": "Matching was attempted but no accounting document could be assigned",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Ignored",
+          "description": "Deliberately excluded from matching (see MatchComment for the reason)",
+          "isExtension": false
+        }
+      ],
+      "description": "Reconciliation state of a bank transaction against accounting documents"
+    }
+  ],
+  "modelId": "Basic.Accounting-1.5.1"
+}
