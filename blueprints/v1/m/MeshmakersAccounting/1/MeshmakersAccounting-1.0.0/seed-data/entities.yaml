@@ -27,6 +27,8 @@ entities:
         value: IT & Software
       - id: Meshmakers.Accounting/CategoryType
         value: IT
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: IT infrastructure, cloud services, software licenses (Hetzner, Anthropic, Adobe, etc.)
   - rtId: aa0000000000000000000002
@@ -40,6 +42,8 @@ entities:
         value: Rent
       - id: Meshmakers.Accounting/CategoryType
         value: RENT
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: Office rent, internet (building operating costs go to Facility Operations)
   - rtId: aa0000000000000000000003
@@ -53,6 +57,8 @@ entities:
         value: Personnel
       - id: Meshmakers.Accounting/CategoryType
         value: PERSONNEL
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: Salaries, payroll taxes, social security contributions
   - rtId: aa0000000000000000000004
@@ -66,6 +72,8 @@ entities:
         value: Travel & Transportation
       - id: Meshmakers.Accounting/CategoryType
         value: TRAVEL
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: Business trips, train tickets, fuel costs, hotels
   - rtId: aa0000000000000000000005
@@ -79,6 +87,8 @@ entities:
         value: Office & Supplies
       - id: Meshmakers.Accounting/CategoryType
         value: OFFICE
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: Office supplies, equipment, catering
   - rtId: aa0000000000000000000006
@@ -92,6 +102,8 @@ entities:
         value: Marketing & Advertising
       - id: Meshmakers.Accounting/CategoryType
         value: MARKETING
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: LinkedIn Ads, advertising, events
   - rtId: aa0000000000000000000007
@@ -105,6 +117,8 @@ entities:
         value: Consulting & Services
       - id: Meshmakers.Accounting/CategoryType
         value: CONSULTING
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: External consultants, freelancers, legal advice, tax consulting
   - rtId: aa0000000000000000000008
@@ -118,6 +132,8 @@ entities:
         value: Insurance
       - id: Meshmakers.Accounting/CategoryType
         value: INSURANCE
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: Business liability, D&O, legal protection
   - rtId: aa0000000000000000000009
@@ -131,6 +147,8 @@ entities:
         value: Other
       - id: Meshmakers.Accounting/CategoryType
         value: OTHER
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: Uncategorized expenses
   - rtId: aa00000000000000000000a0
@@ -144,6 +162,8 @@ entities:
         value: Kosten des Geldverkehrs
       - id: Meshmakers.Accounting/CategoryType
         value: BANKFEES
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: Bank fees and account charges (Kontoführung, Entgelte, card fees) — costs without a separate receipt
   # --- AB#4507: IT Operation + Facility Operations cost categories and the
@@ -159,6 +179,8 @@ entities:
         value: IT Operation
       - id: Meshmakers.Accounting/CategoryType
         value: ITOPERATION
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: "Operating costs of OctoMesh and other SaaS offerings: hosting, cloud infrastructure, monitoring, API usage"
   - rtId: aa00000000000000000000a2
@@ -172,6 +194,8 @@ entities:
         value: Facility Operations
       - id: Meshmakers.Accounting/CategoryType
         value: FACILITY
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: "Building operating costs: cleaning, kitchen supplies, electricity, heating"
   - rtId: aa00000000000000000000b0
@@ -686,6 +710,11 @@ entities:
             - type: Project@1
               fields:
                 - path: $.auth
+            # Refresh finAPI's own data from the banks before fetching — finAPI
+            # has no auto-update on our mandator (headless within AIS consent).
+            - type: FinApiSyncBankConnection@1
+              description: Update all bank connections at finAPI (background update task)
+              accessTokenPath: $.auth.accessToken
             - type: FinApiFetchAccounts@1
               description: Fetch all bank accounts from finAPI
               accessTokenPath: $.auth.accessToken
@@ -1115,6 +1144,14 @@ entities:
               documentMode: Extend
               usernamePath: $.config.username
               passwordPath: $.config.password
+            # --- Refresh finAPI's own data from the banks BEFORE fetching:
+            # finAPI has no auto-update on our mandator, so without this the
+            # fetch nodes only re-read whatever the last web-form interaction
+            # left behind. The task-based background update completes headless
+            # within a valid AIS consent window.
+            - type: FinApiSyncBankConnection@1
+              description: Update all bank connections at finAPI (background update task)
+              accessTokenPath: $.auth.accessToken
             # --- Ensure BankAccount entities exist BEFORE importing transactions:
             # the transaction -> account ParentChild association is mandatory
             # (minimum multiplicity One), so an unknown account would make every
@@ -4123,62 +4160,175 @@ entities:
                   value: 1
                   valueType: Int64
                   transformations:
-                    - type: GetAssociationTargets@1
-                      description: Existing tx links on this document (idempotency guard, AB#4398)
-                      originRtIdPath: $._candidates.Items[0].RtId
-                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                      targetCkTypeId: Basic.Accounting/BankTransaction
-                      associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                      graphDirection: Outbound
-                      targetPath: $._detExisting
+                    # AB#4512: exact amount + unique open document is NOT enough.
+                    # A monthly 9.99 subscription invoice was claimed by an
+                    # unrelated 9.99 debit booked 103 days later (Tesla invoice,
+                    # Apple transaction) — common subscription amounts collide
+                    # across vendors, and card debits carry no CounterpartName to
+                    # anchor on. Guard the exact pass like the AB#4433 fallback:
+                    # (a) the booking date must lie in [document date - 1 day,
+                    # document date + 14 days] (kept under ~28 days so monthly
+                    # recurring invoices stay discriminable; later payments are
+                    # left to the AI pass and its 90-day rule), and (b) the
+                    # transaction must be the ONLY pending one with this amount
+                    # and direction inside that window — otherwise the assignment
+                    # is ambiguous (iteration order would decide the winner) and
+                    # is left to the AI pass / manual review. The DocumentDate
+                    # null-guard uses RegexMatch (null-safe); DateTime@1 would
+                    # throw on a null date and poison every cycle.
                     - type: If@1
-                      description: Create the link only when the document is not already linked (a stale link still settles via the existing one)
-                      path: $._detExisting[0].TotalCount
-                      operator: Equals
-                      value: 0
-                      valueType: Int64
+                      description: Candidate document carries a document date
+                      path: $._candidates.Items[0].Attributes.DocumentDate
+                      operator: RegexMatch
+                      value: .+
+                      valueType: String
                       transformations:
-                        - type: CreateAssociationUpdate@1
-                          description: Link document to transaction
-                          targetPath: $._detAssocs
-                          targetValueKind: Array
-                          targetValueWriteMode: Append
-                          updateKind: Create
-                          originRtIdPath: $._candidates.Items[0].RtId
-                          originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                          targetRtIdPath: $.key.RtId
-                          targetCkTypeId: Basic.Accounting/BankTransaction
-                          associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                    - type: CreateUpdateInfo@1
-                      description: Document is paid
-                      targetPath: $._detUpdates
-                      targetValueKind: Array
-                      targetValueWriteMode: Append
-                      updateKind: Update
-                      ckTypeId: Meshmakers.Accounting/AccountingDocument
-                      rtIdPath: $._candidates.Items[0].RtId
-                      attributeUpdates:
-                        - attributeName: DocumentState
-                          attributeValueType: Enum
-                          value: PAID
-                        - attributeName: PaidAmount
-                          attributeValueType: Double
-                          valuePath: $.key._docAmount
-                    - type: CreateUpdateInfo@1
-                      description: Transaction is matched
-                      targetPath: $._detUpdates
-                      targetValueKind: Array
-                      targetValueWriteMode: Append
-                      updateKind: Update
-                      ckTypeId: Basic.Accounting/BankTransaction
-                      rtIdPath: $.key.RtId
-                      attributeUpdates:
-                        - attributeName: MatchState
-                          attributeValueType: Enum
-                          value: Matched
-                    - type: ApplyChanges@2
-                      entityUpdatesPath: $._detUpdates
-                      associationUpdatesPath: $._detAssocs
+                        - type: DateTime@1
+                          description: Date-window floor = document date - 1 day
+                          operation: AddDays
+                          path: $._candidates.Items[0].Attributes.DocumentDate
+                          value: -1
+                          targetPath: $.key._detMinDate
+                        - type: DateTime@1
+                          description: Date-window cap = document date + 14 days
+                          operation: AddDays
+                          path: $._candidates.Items[0].Attributes.DocumentDate
+                          value: 14
+                          targetPath: $.key._detMaxDate
+                        - type: If@1
+                          description: Transaction booked no earlier than one day before the document date
+                          path: $.key.Attributes.BookingDate
+                          operator: GreaterEqualsThan
+                          valuePath: $.key._detMinDate
+                          valueType: DateTime
+                          transformations:
+                            - type: If@1
+                              description: …and no later than 14 days after the document date
+                              path: $.key.Attributes.BookingDate
+                              operator: LessEqualsThan
+                              valuePath: $.key._detMaxDate
+                              valueType: DateTime
+                              transformations:
+                                - type: GetRtEntitiesByType@1
+                                  description: Pending transactions with the same amount and direction (rival candidates)
+                                  ckTypeId: Basic.Accounting/BankTransaction
+                                  targetPath: $.key._detRivals
+                                  take: 50
+                                  fieldFilters:
+                                    - attributePath: MatchState
+                                      operator: In
+                                      comparisonValue:
+                                        - 0
+                                        - 2
+                                    - attributePath: Amount
+                                      operator: Equals
+                                      comparisonValuePath: $.key.Attributes.Amount
+                                    - attributePath: Direction
+                                      operator: Equals
+                                      comparisonValuePath: $.key.Attributes.Direction
+                                - type: ForEach@1
+                                  description: Flag every rival booked inside the document's date window (the transaction itself counts once)
+                                  iterationPath: $.key._detRivals.Items
+                                  targetPath: $.key._detRivalChecks
+                                  targetValueKind: Simple
+                                  targetValueWriteMode: Overwrite
+                                  maxDegreeOfParallelism: 1
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      description: Rival outside the window (default)
+                                      targetPath: $.key._inWindow
+                                      value: 0
+                                      valueType: Int
+                                    - type: If@1
+                                      description: Rival booked no earlier than the window floor
+                                      path: $.key.Attributes.BookingDate
+                                      operator: GreaterEqualsThan
+                                      valuePath: $.full.key._detMinDate
+                                      valueType: DateTime
+                                      transformations:
+                                        - type: If@1
+                                          description: …and no later than the window cap
+                                          path: $.key.Attributes.BookingDate
+                                          operator: LessEqualsThan
+                                          valuePath: $.full.key._detMaxDate
+                                          valueType: DateTime
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.key._inWindow
+                                              value: 1
+                                              valueType: Int
+                                - type: SumAggregation@1
+                                  description: Count rivals inside the window
+                                  targetPath: $.key._detRivalsInWindow
+                                  aggregations:
+                                    - path: $.key._detRivalChecks[*]
+                                      aggregationPath: $._inWindow
+                                      value: 1
+                                      filterPath: null
+                                      comparisonValue: null
+                                - type: If@1
+                                  description: The transaction is the only in-window rival — unambiguous, apply the match
+                                  path: $.key._detRivalsInWindow
+                                  operator: Equals
+                                  value: 1
+                                  valueType: Double
+                                  transformations:
+                                    - type: GetAssociationTargets@1
+                                      description: Existing tx links on this document (idempotency guard, AB#4398)
+                                      originRtIdPath: $._candidates.Items[0].RtId
+                                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                      targetCkTypeId: Basic.Accounting/BankTransaction
+                                      associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                      graphDirection: Outbound
+                                      targetPath: $._detExisting
+                                    - type: If@1
+                                      description: Create the link only when the document is not already linked (a stale link still settles via the existing one)
+                                      path: $._detExisting[0].TotalCount
+                                      operator: Equals
+                                      value: 0
+                                      valueType: Int64
+                                      transformations:
+                                        - type: CreateAssociationUpdate@1
+                                          description: Link document to transaction
+                                          targetPath: $._detAssocs
+                                          targetValueKind: Array
+                                          targetValueWriteMode: Append
+                                          updateKind: Create
+                                          originRtIdPath: $._candidates.Items[0].RtId
+                                          originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                          targetRtIdPath: $.key.RtId
+                                          targetCkTypeId: Basic.Accounting/BankTransaction
+                                          associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                    - type: CreateUpdateInfo@1
+                                      description: Document is paid
+                                      targetPath: $._detUpdates
+                                      targetValueKind: Array
+                                      targetValueWriteMode: Append
+                                      updateKind: Update
+                                      ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                      rtIdPath: $._candidates.Items[0].RtId
+                                      attributeUpdates:
+                                        - attributeName: DocumentState
+                                          attributeValueType: Enum
+                                          value: PAID
+                                        - attributeName: PaidAmount
+                                          attributeValueType: Double
+                                          valuePath: $.key._docAmount
+                                    - type: CreateUpdateInfo@1
+                                      description: Transaction is matched
+                                      targetPath: $._detUpdates
+                                      targetValueKind: Array
+                                      targetValueWriteMode: Append
+                                      updateKind: Update
+                                      ckTypeId: Basic.Accounting/BankTransaction
+                                      rtIdPath: $.key.RtId
+                                      attributeUpdates:
+                                        - attributeName: MatchState
+                                          attributeValueType: Enum
+                                          value: Matched
+                                    - type: ApplyChanges@2
+                                      entityUpdatesPath: $._detUpdates
+                                      associationUpdatesPath: $._detAssocs
                 - type: If@1
                   # Tolerance pass: no document had the EXACT amount. Cross-border
                   # transfers frequently add a small fee to the SAME booking, so the
