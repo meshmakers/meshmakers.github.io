@@ -2068,6 +2068,150 @@ entities:
                                   targetPath: $.docType
                                   valueType: String
                                   value: OUTGOING
+                            # --- Sanitize party addresses (poison-item fix) -------
+                            # Copy each party's address into a sanitized staging path
+                            # ($.san.*) ONLY when its mandatory Street + CityTown are
+                            # both present; otherwise leave it absent so no Basic
+                            # Address record is materialized without its mandatory
+                            # fields (which would FatalError ApplyChanges).
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.vendorAddrOk
+                              valueType: Boolean
+                              value: true
+                            - type: If@1
+                              description: Vendor street absent — no address
+                              path: $.ai.result.vendor.address.street
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor street empty — no address
+                              path: $.ai.result.vendor.address.street
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor city absent — no address
+                              path: $.ai.result.vendor.address.city
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor city empty — no address
+                              path: $.ai.result.vendor.address.city
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor address complete — stage the fields
+                              path: $.vendorAddrOk
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.vendor.address.street
+                                  targetPath: $.san.vendor.address.street
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.vendor.address.zipcode
+                                  targetPath: $.san.vendor.address.zipcode
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.vendor.address.city
+                                  targetPath: $.san.vendor.address.city
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.vendor.address.countryCode
+                                  targetPath: $.san.vendor.address.countryCode
+                                  valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.customerAddrOk
+                              valueType: Boolean
+                              value: true
+                            - type: If@1
+                              description: Customer street absent — no address
+                              path: $.ai.result.customer.address.street
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer street empty — no address
+                              path: $.ai.result.customer.address.street
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer city absent — no address
+                              path: $.ai.result.customer.address.city
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer city empty — no address
+                              path: $.ai.result.customer.address.city
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer address complete — stage the fields
+                              path: $.customerAddrOk
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.customer.address.street
+                                  targetPath: $.san.customer.address.street
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.customer.address.zipcode
+                                  targetPath: $.san.customer.address.zipcode
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.customer.address.city
+                                  targetPath: $.san.customer.address.city
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.customer.address.countryCode
+                                  targetPath: $.san.customer.address.countryCode
+                                  valueType: String
                             - type: CreateUpdateInfo@1
                               targetPath: $.updates._items
                               targetValueKind: Array
@@ -2105,22 +2249,26 @@ entities:
                                 - attributeName: Vendor.AccountName
                                   attributeValueType: String
                                   valuePath: $.ai.result.vendor.accountName
-                                # Address all-or-nothing (see Document Analysis Pipeline).
+                                # Address from the SANITIZED staging path ($.san.*),
+                                # populated above only when the party's mandatory
+                                # Street + CityTown are both present — a partial AI
+                                # address would otherwise materialize the Basic Address
+                                # record without its mandatory fields and FatalError.
                                 - attributeName: Vendor.Address.Street
                                   attributeValueType: String
-                                  valuePath: $.ai.result.vendor.address.street
+                                  valuePath: $.san.vendor.address.street
                                 - attributeName: Vendor.Address.Zipcode
                                   attributeValueType: String
-                                  valuePath: $.ai.result.vendor.address.zipcode
+                                  valuePath: $.san.vendor.address.zipcode
                                 - attributeName: Vendor.Address.CityTown
                                   attributeValueType: String
-                                  valuePath: $.ai.result.vendor.address.city
+                                  valuePath: $.san.vendor.address.city
                                 - attributeName: Vendor.Address.NationalCode
                                   attributeValueType: String
-                                  valuePath: $.ai.result.vendor.address.countryCode
+                                  valuePath: $.san.vendor.address.countryCode
                                 # Customer (recipient/buyer) — valuePath only, so an
-                                # absent customer materializes no record. All-or-nothing
-                                # address, same as the vendor.
+                                # absent customer materializes no record. Address from
+                                # the sanitized staging path, same as the vendor.
                                 - attributeName: Customer.CompanyName
                                   attributeValueType: String
                                   valuePath: $.ai.result.customer.companyName
@@ -2132,16 +2280,16 @@ entities:
                                   valuePath: $.ai.result.customer.accountName
                                 - attributeName: Customer.Address.Street
                                   attributeValueType: String
-                                  valuePath: $.ai.result.customer.address.street
+                                  valuePath: $.san.customer.address.street
                                 - attributeName: Customer.Address.Zipcode
                                   attributeValueType: String
-                                  valuePath: $.ai.result.customer.address.zipcode
+                                  valuePath: $.san.customer.address.zipcode
                                 - attributeName: Customer.Address.CityTown
                                   attributeValueType: String
-                                  valuePath: $.ai.result.customer.address.city
+                                  valuePath: $.san.customer.address.city
                                 - attributeName: Customer.Address.NationalCode
                                   attributeValueType: String
-                                  valuePath: $.ai.result.customer.address.countryCode
+                                  valuePath: $.san.customer.address.countryCode
                                 - attributeName: Comment
                                   attributeValueType: String
                                   valuePath: $.ai.result.vendor.addressNotes
@@ -2587,13 +2735,25 @@ entities:
               method: POST
           transformations:
             - type: GetRtEntitiesByType@1
-              description: Fetch uploads waiting for analysis
+              description: Fetch uploads waiting for analysis (and reclaim orphans)
               ckTypeId: Meshmakers.Accounting/UploadedDocument
-              take: 20
+              # Smaller batch caps peak memory + run duration so an adapter OOM
+              # restart orphans fewer in-flight uploads (the real memory fix is
+              # requests/limits on the adapter container — infra, octo-helm-core).
+              take: 5
               fieldFilters:
+                # Self-healing: pick up NEW(0) AND reclaim uploads orphaned in
+                # PROCESSING(1) by a crash/OOM restart (or, pre-fix, a poison
+                # FatalError). The mark-as-PROCESSING commit outlives the dead run,
+                # and the old Equals-0 filter never retried them, so they sat
+                # forever "in progress" in the Inbox. Runs of this polling pipeline
+                # do not overlap (duration < 5-min interval), so at run start a
+                # PROCESSING upload is genuinely orphaned; the only concurrent path
+                # is the manual "Analyze now" trigger, and AB#4452 duplicate
+                # detection neutralizes any resulting double-create.
                 - attributePath: ProcessingState
-                  operator: Equals
-                  comparisonValue: 0
+                  operator: LessEqualThan
+                  comparisonValue: 1
               targetPath: $.pending
             - type: ForEach@1
               description: Analyze each staged upload
@@ -2768,12 +2928,19 @@ entities:
                 # only catches byte-identical files - the same invoice arriving via
                 # two channels (e-mail receipt vs. portal export) passes it, and
                 # Apple even issues DIFFERENT invoice numbers per channel for the
-                # same charge. Two checks before creating the document:
-                #   1. hard: an AccountingDocument with the same DocumentNumber
-                #      already exists -> never create a second one.
+                # same charge. Checks before creating the document:
+                #   1. hard: an existing AccountingDocument matches the extracted
+                #      DocumentNumber AND (the same vendor OR the same
+                #      GrossTotal+DocumentDate) -> genuine re-import, never create a
+                #      second one. DocumentNumber ALONE is not enough: external
+                #      reference numbers (customer/case numbers) are echoed across
+                #      different vendors' documents - e.g. an OeAMTC customer number
+                #      printed on a lawyer's dunning letter would otherwise wrongly
+                #      block the (different) lawyer invoice (prod false-positive,
+                #      salzburgdev 2026-07-24).
                 #   2. soft: a document with the identical GrossTotal AND
-                #      DocumentDate exists -> suspected twin; do not create
-                #      silently, flag the upload for manual review instead.
+                #      DocumentDate but a different number exists -> suspected twin;
+                #      do not create silently, flag the upload for manual review.
                 - type: SetPrimitiveValue@1
                   description: Default - no duplicate detected
                   targetPath: $.dupNote
@@ -2786,18 +2953,40 @@ entities:
                   value: true
                   valueType: Boolean
                   transformations:
+                    # Hard-duplicate candidates: an existing document must share the
+                    # DocumentNumber AND either the vendor or the amount+date. A bare
+                    # DocumentNumber collision is NOT a duplicate (shared external
+                    # reference numbers across vendors).
                     - type: GetRtEntitiesByType@1
-                      description: Existing document with the same document number (hard duplicate)
+                      description: Same document number AND same vendor (genuine re-import)
                       ckTypeId: Meshmakers.Accounting/AccountingDocument
-                      targetPath: $._dupByNumber
+                      targetPath: $._dupByNumberVendor
                       take: 1
                       fieldFilters:
                         - attributePath: DocumentNumber
                           operator: Equals
                           comparisonValuePath: $.ai.result.documentNumber
+                        - attributePath: Vendor.CompanyName
+                          operator: Equals
+                          comparisonValuePath: $.ai.result.vendor.companyName
+                    - type: GetRtEntitiesByType@1
+                      description: Same document number AND same amount+date (same invoice, vendor-name variant)
+                      ckTypeId: Meshmakers.Accounting/AccountingDocument
+                      targetPath: $._dupByNumberAmountDate
+                      take: 1
+                      fieldFilters:
+                        - attributePath: DocumentNumber
+                          operator: Equals
+                          comparisonValuePath: $.ai.result.documentNumber
+                        - attributePath: GrossTotal
+                          operator: Equals
+                          comparisonValuePath: $.ai.result.grossTotal
+                        - attributePath: DocumentDate
+                          operator: Equals
+                          comparisonValuePath: $.ai.result.documentDate
                     - type: If@1
-                      description: Hard duplicate - do not create a second document
-                      path: $._dupByNumber.TotalCount
+                      description: Hard duplicate - number + vendor match
+                      path: $._dupByNumberVendor.TotalCount
                       operator: GreaterThan
                       value: 0
                       valueType: Int64
@@ -2810,13 +2999,29 @@ entities:
                           description: Duplicate reason shown in the Inbox
                           targetPath: $.dupNote
                           valueType: String
-                          value: "Duplicate: an accounting document with this document number already exists. No document was created."
+                          value: "Duplicate: an accounting document with the same number and vendor already exists. No document was created."
                     - type: If@1
-                      description: No number match - check for a same-amount/same-date twin (soft suspect)
-                      path: $._dupByNumber.TotalCount
-                      operator: Equals
+                      description: Hard duplicate - number + amount+date match (vendor name may differ per channel)
+                      path: $._dupByNumberAmountDate.TotalCount
+                      operator: GreaterThan
                       value: 0
                       valueType: Int64
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.docOk
+                          valueType: Boolean
+                          value: false
+                        - type: SetPrimitiveValue@1
+                          description: Duplicate reason shown in the Inbox
+                          targetPath: $.dupNote
+                          valueType: String
+                          value: "Duplicate: an accounting document with the same number, amount and date already exists. No document was created."
+                    - type: If@1
+                      description: Not a hard duplicate - check for a same-amount/same-date twin with a different number (soft suspect)
+                      path: $.docOk
+                      operator: Equals
+                      value: true
+                      valueType: Boolean
                       transformations:
                         - type: GetRtEntitiesByType@1
                           description: Existing document with identical gross total and document date
@@ -2873,6 +3078,156 @@ entities:
                           targetPath: $.docType
                           valueType: String
                           value: OUTGOING
+                    # --- Sanitize party addresses (poison-item fix) -------------
+                    # The Basic Address record has MANDATORY Street + CityTown. The
+                    # AI is asked to emit an address all-or-nothing, but occasionally
+                    # returns a PARTIAL address (e.g. only zipcode/countryCode); that
+                    # partial object still materializes the embedded Address record,
+                    # whose missing Street/CityTown then FatalError ApplyChanges and
+                    # abort the ENTIRE ForEach — stranding every queued upload. Do not
+                    # trust the AI's structural omission: copy each party's address
+                    # into a sanitized staging path ($.san.*) ONLY when BOTH mandatory
+                    # fields (street + city) are present and non-empty; otherwise the
+                    # staging paths stay absent and NO Address record is materialized
+                    # (the raw sender address is still kept in Comment via addressNotes).
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.vendorAddrOk
+                      valueType: Boolean
+                      value: true
+                    - type: If@1
+                      description: Vendor street absent — no address
+                      path: $.ai.result.vendor.address.street
+                      operator: Equals
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.vendorAddrOk
+                          valueType: Boolean
+                          value: false
+                    - type: If@1
+                      description: Vendor street empty — no address
+                      path: $.ai.result.vendor.address.street
+                      operator: Equals
+                      value: ""
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.vendorAddrOk
+                          valueType: Boolean
+                          value: false
+                    - type: If@1
+                      description: Vendor city absent — no address
+                      path: $.ai.result.vendor.address.city
+                      operator: Equals
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.vendorAddrOk
+                          valueType: Boolean
+                          value: false
+                    - type: If@1
+                      description: Vendor city empty — no address
+                      path: $.ai.result.vendor.address.city
+                      operator: Equals
+                      value: ""
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.vendorAddrOk
+                          valueType: Boolean
+                          value: false
+                    - type: If@1
+                      description: Vendor address complete — stage the fields for the write
+                      path: $.vendorAddrOk
+                      operator: Equals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          valuePath: $.ai.result.vendor.address.street
+                          targetPath: $.san.vendor.address.street
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          valuePath: $.ai.result.vendor.address.zipcode
+                          targetPath: $.san.vendor.address.zipcode
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          valuePath: $.ai.result.vendor.address.city
+                          targetPath: $.san.vendor.address.city
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          valuePath: $.ai.result.vendor.address.countryCode
+                          targetPath: $.san.vendor.address.countryCode
+                          valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.customerAddrOk
+                      valueType: Boolean
+                      value: true
+                    - type: If@1
+                      description: Customer street absent — no address
+                      path: $.ai.result.customer.address.street
+                      operator: Equals
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.customerAddrOk
+                          valueType: Boolean
+                          value: false
+                    - type: If@1
+                      description: Customer street empty — no address
+                      path: $.ai.result.customer.address.street
+                      operator: Equals
+                      value: ""
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.customerAddrOk
+                          valueType: Boolean
+                          value: false
+                    - type: If@1
+                      description: Customer city absent — no address
+                      path: $.ai.result.customer.address.city
+                      operator: Equals
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.customerAddrOk
+                          valueType: Boolean
+                          value: false
+                    - type: If@1
+                      description: Customer city empty — no address
+                      path: $.ai.result.customer.address.city
+                      operator: Equals
+                      value: ""
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.customerAddrOk
+                          valueType: Boolean
+                          value: false
+                    - type: If@1
+                      description: Customer address complete — stage the fields for the write
+                      path: $.customerAddrOk
+                      operator: Equals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          valuePath: $.ai.result.customer.address.street
+                          targetPath: $.san.customer.address.street
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          valuePath: $.ai.result.customer.address.zipcode
+                          targetPath: $.san.customer.address.zipcode
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          valuePath: $.ai.result.customer.address.city
+                          targetPath: $.san.customer.address.city
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          valuePath: $.ai.result.customer.address.countryCode
+                          targetPath: $.san.customer.address.countryCode
+                          valueType: String
                     - type: CreateUpdateInfo@1
                       targetPath: $.updates._items
                       targetValueKind: Array
@@ -2910,28 +3265,31 @@ entities:
                         - attributeName: Vendor.AccountName
                           attributeValueType: String
                           valuePath: $.ai.result.vendor.accountName
-                        # Address is all-or-nothing: the AI only emits vendor.address
-                        # when street+zipcode+city+countryCode are all present, so these
-                        # four either all set (record complete) or all skip (absent path,
-                        # no record materialized). A partial/absent address instead lands
-                        # in Comment via addressNotes.
+                        # Address is written from the SANITIZED staging path
+                        # ($.san.*), populated above only when the party's mandatory
+                        # Street + CityTown are both present. This prevents a partial
+                        # AI address (e.g. countryCode only) from materializing the
+                        # Basic Address record without its mandatory fields, which
+                        # would FatalError ApplyChanges and abort the whole ForEach.
+                        # A partial/absent address instead lands in Comment via
+                        # addressNotes.
                         - attributeName: Vendor.Address.Street
                           attributeValueType: String
-                          valuePath: $.ai.result.vendor.address.street
+                          valuePath: $.san.vendor.address.street
                         - attributeName: Vendor.Address.Zipcode
                           attributeValueType: String
-                          valuePath: $.ai.result.vendor.address.zipcode
+                          valuePath: $.san.vendor.address.zipcode
                         - attributeName: Vendor.Address.CityTown
                           attributeValueType: String
-                          valuePath: $.ai.result.vendor.address.city
+                          valuePath: $.san.vendor.address.city
                         - attributeName: Vendor.Address.NationalCode
                           attributeValueType: String
-                          valuePath: $.ai.result.vendor.address.countryCode
+                          valuePath: $.san.vendor.address.countryCode
                         # Customer (invoice recipient/buyer). All fields are written
                         # via valuePath only — no static value — so when the AI emits
                         # no customer, every path is absent and NO Customer record is
                         # materialized (LegalEntityType is optional on Contact). Address
-                        # is all-or-nothing, same as the vendor.
+                        # from the sanitized staging path, same as the vendor.
                         - attributeName: Customer.CompanyName
                           attributeValueType: String
                           valuePath: $.ai.result.customer.companyName
@@ -2943,16 +3301,16 @@ entities:
                           valuePath: $.ai.result.customer.accountName
                         - attributeName: Customer.Address.Street
                           attributeValueType: String
-                          valuePath: $.ai.result.customer.address.street
+                          valuePath: $.san.customer.address.street
                         - attributeName: Customer.Address.Zipcode
                           attributeValueType: String
-                          valuePath: $.ai.result.customer.address.zipcode
+                          valuePath: $.san.customer.address.zipcode
                         - attributeName: Customer.Address.CityTown
                           attributeValueType: String
-                          valuePath: $.ai.result.customer.address.city
+                          valuePath: $.san.customer.address.city
                         - attributeName: Customer.Address.NationalCode
                           attributeValueType: String
-                          valuePath: $.ai.result.customer.address.countryCode
+                          valuePath: $.san.customer.address.countryCode
                         - attributeName: Comment
                           attributeValueType: String
                           valuePath: $.ai.result.vendor.addressNotes
