@@ -1,0 +1,1712 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.0.2",
+    "Basic.Accounting-1.5.1",
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "AccountingDocument-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/TransactionToDocument-1",
+          "targetCkTypeId": "Basic.Accounting-1.5.1/BankTransaction-1"
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/DocumentToFiscalYear-1",
+          "targetCkTypeId": "Meshmakers.Accounting-1.6.0/FiscalYear-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "An accounting document (invoice, receipt, credit note, etc.).",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/DocumentNumber-1",
+          "name": "DocumentNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/DocumentDate-1",
+          "name": "DocumentDate",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/DueDate-1",
+          "name": "DueDate",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/DocumentType-1",
+          "name": "DocumentType",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/DocumentState-1",
+          "name": "DocumentState",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Vendor-1",
+          "name": "Vendor",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Customer-1",
+          "name": "Customer",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/GrossTotal-1",
+          "name": "GrossTotal",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/NetTotal-1",
+          "name": "NetTotal",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/TaxTotal-1",
+          "name": "TaxTotal",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/TaxRate-1",
+          "name": "TaxRate",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/PaidAmount-1",
+          "name": "PaidAmount",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/DocumentPath-1",
+          "name": "DocumentPath",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/FileHash-1",
+          "name": "FileHash",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Comment-1",
+          "name": "Comment",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/TaxAdvisorNote-1",
+          "name": "TaxAdvisorNote",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/NoTransactionExpected-1",
+          "name": "NoTransactionExpected",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RecurrenceInterval-1",
+          "name": "RecurrenceInterval",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RecurrenceAmountPerPeriod-1",
+          "name": "RecurrenceAmountPerPeriod",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RecurrenceValidFrom-1",
+          "name": "RecurrenceValidFrom",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RecurrenceValidTo-1",
+          "name": "RecurrenceValidTo",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RecurrenceMatchType-1",
+          "name": "RecurrenceMatchType",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RecurrenceMatchValue-1",
+          "name": "RecurrenceMatchValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "CategorizationRule-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A user-maintained rule that auto-assigns a cost category (and optionally resolves the match state) to bank transactions during the match pipeline. Exactly one match field per rule keeps evaluation unambiguous.",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RulePriority-1",
+          "name": "RulePriority",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RuleEnabled-1",
+          "name": "RuleEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RuleMatchField-1",
+          "name": "RuleMatchField",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RuleMatchValue-1",
+          "name": "RuleMatchValue",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RuleDirectionFilter-1",
+          "name": "RuleDirectionFilter",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RuleTargetCategoryType-1",
+          "name": "RuleTargetCategoryType",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RuleTerminalState-1",
+          "name": "RuleTerminalState",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/RuleCommentTemplate-1",
+          "name": "RuleCommentTemplate",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ChatMessage-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A single message (USER or ASSISTANT) within a ChatSession, linked via ChatSessionId. Ordered by the system rtCreationDateTime.",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ChatRole-1",
+          "name": "Role",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ChatContent-1",
+          "name": "Content",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ChatSessionId-1",
+          "name": "SessionId",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ChatSession-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A saved AI assistant chat session belonging to a user. Its messages are ChatMessage entities that carry this session\u0027s RtId in ChatSessionId.",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ChatOwnerUserId-1",
+          "name": "OwnerUserId",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ChatTitle-1",
+          "name": "Title",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "CompanyProfile-1",
+      "derivedFromCkTypeId": "System-2.2.2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Company master data configuration (singleton) \u2014 name, address, tax and contact details. Derived from System/Configuration so pipelines can load it via GetPipelineConfigByWellKnownName (Uses association \u002B RtWellKnownName \u0027CompanyProfile\u0027).",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/LegalForm-1",
+          "name": "LegalForm",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Street-1",
+          "name": "Street",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/PostalCode-1",
+          "name": "PostalCode",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/City-1",
+          "name": "City",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Country-1",
+          "name": "Country",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/VatId-1",
+          "name": "VatId",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/CommercialRegisterNumber-1",
+          "name": "CommercialRegisterNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Email-1",
+          "name": "Email",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Phone-1",
+          "name": "Phone",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "CostCategory-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.2.2/ParentChild-1",
+          "targetCkTypeId": "Meshmakers.Accounting-1.6.0/FiscalYear-1"
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/TransactionToCategory-1",
+          "targetCkTypeId": "Basic.Accounting-1.5.1/BankTransaction-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A category for classifying expenses or income (IT, Rent, Revenue, etc.); CategoryKind separates the two.",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/CategoryType-1",
+          "name": "CategoryType",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/CategoryKind-1",
+          "name": "CategoryKind",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/CategoryDescription-1",
+          "name": "CategoryDescription",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/BudgetAmount-1",
+          "name": "BudgetAmount",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ActualAmount-1",
+          "name": "ActualAmount",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ActualAmountUpdatedAt-1",
+          "name": "ActualAmountUpdatedAt",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Comment-1",
+          "name": "Comment",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EmailImportSettings-1",
+      "derivedFromCkTypeId": "System-2.2.2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Microsoft 365 e-mail document import configuration (singleton). Holds the mailbox, source/done folder paths, poll interval and the enabled flag edited in Settings \u2192 E-Mail Import. Derived from System/Configuration; created by the UI on first save with RtWellKnownName \u0027EmailImportSettings\u0027. Not seeded \u2014 blueprint re-applies never reset it. Default disabled: the import pipeline ships with System/Enabled=false and is activated when this configuration is enabled.",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/EmailImportEnabled-1",
+          "name": "EmailImportEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/EmailImportMailbox-1",
+          "name": "EmailImportMailbox",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/EmailImportSourceFolder-1",
+          "name": "EmailImportSourceFolder",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/EmailImportDoneFolder-1",
+          "name": "EmailImportDoneFolder",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/EmailImportPollingSeconds-1",
+          "name": "EmailImportPollingSeconds",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "FiscalYear-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/TransactionToFiscalYear-1",
+          "targetCkTypeId": "Basic.Accounting-1.5.1/BankTransaction-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A fiscal year for organizing cost categories and financial reporting.",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/StartDate-1",
+          "name": "StartDate",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/EndDate-1",
+          "name": "EndDate",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/IsClosed-1",
+          "name": "IsClosed",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/PeriodBasis-1",
+          "name": "PeriodBasis",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "UploadedDocument-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/UploadedToDocument-1",
+          "targetCkTypeId": "Meshmakers.Accounting-1.6.0/AccountingDocument-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "An uploaded document staged for asynchronous analysis. Upload stores the file and the SHA-256 hash (duplicate detection); the analysis pipeline picks up NEW documents, runs OCR \u002B AI extraction and links the resulting accounting document.",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/OriginalFileName-1",
+          "name": "OriginalFileName",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/FileRtId-1",
+          "name": "FileRtId",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/FileHash-1",
+          "name": "FileHash",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/UploadedAt-1",
+          "name": "UploadedAt",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ProcessingState-1",
+          "name": "ProcessingState",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ProcessedAt-1",
+          "name": "ProcessedAt",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ProcessingError-1",
+          "name": "ProcessingError",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/SourceChannel-1",
+          "name": "SourceChannel",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/SourceSender-1",
+          "name": "SourceSender",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/SourceSubject-1",
+          "name": "SourceSubject",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/SourceReceivedAt-1",
+          "name": "SourceReceivedAt",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/SourceBody-1",
+          "name": "SourceBody",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/Extraction-1",
+          "name": "Extraction",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "DocumentToCategory-1",
+      "inboundName": "Documents",
+      "outboundName": "CostCategory",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Links an accounting document to a cost category for expense tracking."
+    },
+    {
+      "id": "DocumentToFiscalYear-1",
+      "inboundName": "Documents",
+      "outboundName": "FiscalYear",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Assigns an accounting document to the fiscal year it belongs to (derived from the fiscal year\u0027s period basis, manually overridable)."
+    },
+    {
+      "id": "TransactionToCategory-1",
+      "inboundName": "CostCategory",
+      "outboundName": "Transactions",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "N",
+      "description": "Assigns a bank transaction to a cost category for budget analysis (actual spend per category and fiscal year). The fiscal year follows from the category\u0027s parent fiscal year. Declared on CostCategory (like TransactionToDocument on AccountingDocument) so the association is written from the CostCategory entity with the transaction as target."
+    },
+    {
+      "id": "TransactionToDocument-1",
+      "inboundName": "Documents",
+      "outboundName": "Transactions",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Links a bank transaction to an accounting document (invoice, receipt, etc.) for payment matching."
+    },
+    {
+      "id": "TransactionToFiscalYear-1",
+      "inboundName": "FiscalYear",
+      "outboundName": "Transactions",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "N",
+      "description": "Assigns a bank transaction to the fiscal year it belongs to. Declared on FiscalYear because BankTransaction lives in the upstream Basic.Accounting CK and cannot declare app associations itself (same pattern as TransactionToDocument)."
+    },
+    {
+      "id": "UploadedToDocument-1",
+      "inboundName": "UploadedDocument",
+      "outboundName": "ResultDocument",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Links an uploaded document (staging) to the accounting document created by the analysis."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AccountName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Bank account holder name as printed in the invoice payment/bank section (e.g. \u0027Clevervision\u0027), which may differ from the letterhead company name and matches the bank transaction\u0027s counterpart name"
+    },
+    {
+      "id": "ActualAmount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Materialized actual spend: sum of all bank transactions currently assigned to this category, fully recomputed on every aggregation run so corrections and re-categorizations are always reflected (AB#4434)",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        }
+      ]
+    },
+    {
+      "id": "ActualAmountUpdatedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When ActualAmount was last recomputed"
+    },
+    {
+      "id": "BudgetAmount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Annual budget for this category",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        }
+      ]
+    },
+    {
+      "id": "CategoryDescription-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Detailed description of what belongs to this category"
+    },
+    {
+      "id": "CategoryKind-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/CostCategoryKind-1",
+      "isRuntimeState": false,
+      "description": "Expense or income category; missing value means EXPENSE (pre-1.5.0 entities). Actuals sign: EXPENSE = -(sum of signed amounts), INCOME = \u002B(sum)"
+    },
+    {
+      "id": "CategoryName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Display name of the category | Example: IT-Infrastruktur"
+    },
+    {
+      "id": "CategoryType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/CostCategoryType-1",
+      "isRuntimeState": false,
+      "description": "Type of cost category"
+    },
+    {
+      "id": "ChatContent-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Message text content"
+    },
+    {
+      "id": "ChatOwnerUserId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "OIDC subject (sub) of the user that owns this chat session; used to scope sessions per user"
+    },
+    {
+      "id": "ChatRole-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/ChatRole-1",
+      "isRuntimeState": false,
+      "description": "Author of the message: USER or ASSISTANT"
+    },
+    {
+      "id": "ChatSessionId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "RtId of the owning ChatSession (foreign key; messages are ordered by rtCreationDateTime)"
+    },
+    {
+      "id": "ChatTitle-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Human-readable title of the chat session (derived from the first user message)"
+    },
+    {
+      "id": "City-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "City of the company address"
+    },
+    {
+      "id": "Comment-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional comment or note"
+    },
+    {
+      "id": "CommercialRegisterNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Commercial register number (Firmenbuchnummer)"
+    },
+    {
+      "id": "Country-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Country of the company address"
+    },
+    {
+      "id": "Customer-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Meshmakers.Accounting-1.6.0/AccountingContact-1",
+      "isRuntimeState": false,
+      "description": "Customer contact information"
+    },
+    {
+      "id": "DocumentDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Date of the document | Example: 2025-01-15"
+    },
+    {
+      "id": "DocumentNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Unique document number | Example: RE-2025-001"
+    },
+    {
+      "id": "DocumentPath-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Path or URL to the document (PDF)"
+    },
+    {
+      "id": "DocumentState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/DocumentState-1",
+      "isRuntimeState": false,
+      "description": "Current state of the document in the accounting workflow"
+    },
+    {
+      "id": "DocumentType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/DocumentType-1",
+      "isRuntimeState": false,
+      "description": "Type of document (INCOMING or OUTGOING)"
+    },
+    {
+      "id": "DueDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Payment due date | Example: 2025-02-15"
+    },
+    {
+      "id": "Email-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Contact e-mail address of the company"
+    },
+    {
+      "id": "EmailImportDoneFolder-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Graph folder path a mail is moved to after its import succeeds, e.g. Archive/Rechnungen_Vertr\u00E4ge/Done"
+    },
+    {
+      "id": "EmailImportEnabled-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Whether the Microsoft 365 e-mail document import is active. Default false \u2014 the pipeline ships disabled and is activated when this is enabled in Settings."
+    },
+    {
+      "id": "EmailImportMailbox-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The Microsoft 365 mailbox (UPN) to poll, e.g. accounting@example.com"
+    },
+    {
+      "id": "EmailImportPollingSeconds-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Polling interval in seconds for the mailbox folder (default 120 when unset)"
+    },
+    {
+      "id": "EmailImportSourceFolder-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Graph folder path polled as the work queue (non-localized names), e.g. Archive/Rechnungen_Vertr\u00E4ge/ToDo"
+    },
+    {
+      "id": "EndDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "End date of the fiscal year"
+    },
+    {
+      "id": "Extraction-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Meshmakers.Accounting-1.6.0/DocumentExtraction-1",
+      "isRuntimeState": false,
+      "description": "AI/OCR extraction result staged on the uploaded document; the source for manual completion and the gate for AccountingDocument creation."
+    },
+    {
+      "id": "ExtractionAddressComplete-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "True when a complete structured vendor address (street\u002Bzipcode\u002Bcity\u002Bcountry) was extracted (staging)."
+    },
+    {
+      "id": "ExtractionAddressNotes-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Raw vendor address text when a complete structured address could not be extracted (staging)."
+    },
+    {
+      "id": "ExtractionDocumentDate-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Extracted document date as raw string, ISO yyyy-MM-dd (staging)."
+    },
+    {
+      "id": "ExtractionDocumentNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Extracted document number (staging)."
+    },
+    {
+      "id": "ExtractionDueDate-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Extracted due date as raw string, ISO yyyy-MM-dd (staging)."
+    },
+    {
+      "id": "ExtractionGrossTotal-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Extracted gross total (staging)."
+    },
+    {
+      "id": "ExtractionNetTotal-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Extracted net total (staging)."
+    },
+    {
+      "id": "ExtractionTaxRate-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Extracted tax rate in percent (staging)."
+    },
+    {
+      "id": "ExtractionTaxTotal-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Extracted tax total (staging)."
+    },
+    {
+      "id": "ExtractionVendorCity-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Extracted vendor city (staging)."
+    },
+    {
+      "id": "ExtractionVendorCompanyName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Extracted vendor company name (staging)."
+    },
+    {
+      "id": "ExtractionVendorCountryCode-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Extracted vendor country code (staging)."
+    },
+    {
+      "id": "ExtractionVendorIban-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Extracted vendor IBAN (staging)."
+    },
+    {
+      "id": "ExtractionVendorStreet-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Extracted vendor street (staging)."
+    },
+    {
+      "id": "ExtractionVendorZipcode-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Extracted vendor zipcode (staging)."
+    },
+    {
+      "id": "FileHash-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "SHA-256 hash of the original document file for deduplication"
+    },
+    {
+      "id": "FileRtId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "RtId of the stored System.Reporting/FileSystemItem holding the uploaded file (denormalized for the analysis pipeline; the System/Related association carries the same link for navigation)."
+    },
+    {
+      "id": "GrossTotal-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The gross total amount, typically representing the total monetary value before deductions.",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        }
+      ]
+    },
+    {
+      "id": "IBAN-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "IBAN of the contact (vendor or customer)"
+    },
+    {
+      "id": "IsClosed-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Whether the fiscal year is closed"
+    },
+    {
+      "id": "LegalForm-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Legal form suffix of the company (e.g. GmbH, AG)"
+    },
+    {
+      "id": "Name-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of the entity"
+    },
+    {
+      "id": "NetTotal-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The net total amount, usually indicating the monetary value after deductions such as taxes or discounts.",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        }
+      ]
+    },
+    {
+      "id": "NoTransactionExpected-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Reconciliation exception (AB#4393): marks a document that legitimately has no bank transaction (e.g. cash payment) so the completeness check does not flag it. Documents in state OPEN/RECURRING/CANCELLED are already excepted by their state; this flag covers PAID/PARTIALLYPAID documents that were settled outside the bank."
+    },
+    {
+      "id": "OriginalFileName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The original file name of the uploaded document."
+    },
+    {
+      "id": "PaidAmount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Amount already paid on this document",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        }
+      ]
+    },
+    {
+      "id": "PeriodBasis-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/PeriodBasis-1",
+      "isRuntimeState": false,
+      "description": "Which date defines fiscal-year membership: document date (Belegdatum) or payment date (Zahlungsdatum)"
+    },
+    {
+      "id": "Phone-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Contact phone number of the company"
+    },
+    {
+      "id": "PostalCode-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Postal code of the company address"
+    },
+    {
+      "id": "ProcessedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "The date and time the analysis of the document finished."
+    },
+    {
+      "id": "ProcessingError-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The error message when the analysis of the document failed."
+    },
+    {
+      "id": "ProcessingState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/ProcessingState-1",
+      "isRuntimeState": false,
+      "description": "The processing state of the uploaded document (NEW until picked up by the analysis pipeline)."
+    },
+    {
+      "id": "RecurrenceAmountPerPeriod-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Expected amount booked per period | Example: 20.0",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        }
+      ]
+    },
+    {
+      "id": "RecurrenceInterval-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/RecurrenceInterval-1",
+      "isRuntimeState": false,
+      "description": "Booking interval of the recurring document (MONTHLY/QUARTERLY/YEARLY)"
+    },
+    {
+      "id": "RecurrenceMatchType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/RecurrenceMatchType-1",
+      "isRuntimeState": false,
+      "description": "Which bank-transaction attribute the recurring debits are matched on"
+    },
+    {
+      "id": "RecurrenceMatchValue-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The value the matched transaction attribute must equal (SEPA CreditorId / MandateReference / counterpart IBAN) | Example: AT12ZZZ00000000001"
+    },
+    {
+      "id": "RecurrenceValidFrom-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Start of the recurring obligation | Example: 2025-01-01"
+    },
+    {
+      "id": "RecurrenceValidTo-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "End of the recurring obligation (empty = open-ended) | Example: 2026-12-31"
+    },
+    {
+      "id": "RuleCommentTemplate-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Comment written to the transaction MatchComment when the rule resolves it | Example: Bank fee (auto)"
+    },
+    {
+      "id": "RuleDirectionFilter-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/RuleDirectionFilter-1",
+      "isRuntimeState": false,
+      "description": "Restricts the rule to a transaction direction (ANY / DEBIT / CREDIT)"
+    },
+    {
+      "id": "RuleEnabled-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Whether the rule is applied by the auto-categorization pass"
+    },
+    {
+      "id": "RuleMatchField-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/RuleMatchField-1",
+      "isRuntimeState": false,
+      "description": "Which bank-transaction attribute the rule matches on"
+    },
+    {
+      "id": "RuleMatchValue-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Case-insensitive regex the matched field must satisfy (exact match = anchor with ^...$) | Example: Entgelt|Geb(\u00FC|ue)hr|Kontof\u00FChrung"
+    },
+    {
+      "id": "RulePriority-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Evaluation order \u2014 lower runs first, first matching rule wins | Example: 100"
+    },
+    {
+      "id": "RuleTargetCategoryType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/CostCategoryType-1",
+      "isRuntimeState": false,
+      "description": "The cost-category type to assign \u2014 resolved per fiscal year from the transaction booking date"
+    },
+    {
+      "id": "RuleTerminalState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/RuleTerminalState-1",
+      "isRuntimeState": false,
+      "description": "MatchState set after categorizing (NONE leaves it for document matching; MATCHED/IGNORED resolve it)"
+    },
+    {
+      "id": "SourceBody-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Body of the source message (HTML or plain text) - shown in the inbox detail view. Shared by all attachments of the same message."
+    },
+    {
+      "id": "SourceChannel-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Meshmakers.Accounting-1.6.0/DocumentSource-1",
+      "isRuntimeState": false,
+      "description": "Channel through which the document entered the inbox (UPLOAD, EMAIL, TEAMS)."
+    },
+    {
+      "id": "SourceReceivedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Date and time the source message was received."
+    },
+    {
+      "id": "SourceSender-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Sender of the source message (e-mail address or display name)."
+    },
+    {
+      "id": "SourceSubject-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Subject of the source message."
+    },
+    {
+      "id": "StartDate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Start date of the fiscal year"
+    },
+    {
+      "id": "Street-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Street and house number of the company address"
+    },
+    {
+      "id": "TaxAdvisorNote-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Note handed over to the tax advisor on the document cover sheet. Kept separate from the internal Comment so internal notes are not exposed in the handover package."
+    },
+    {
+      "id": "TaxRate-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Tax rate in percent | Example: 20.0"
+    },
+    {
+      "id": "TaxTotal-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The total tax amount, representing the cumulative value of all applicable taxes on the gross total.",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        }
+      ]
+    },
+    {
+      "id": "UploadedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "The date and time the document was uploaded."
+    },
+    {
+      "id": "VatId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "VAT identification number (UID)"
+    },
+    {
+      "id": "Vendor-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Meshmakers.Accounting-1.6.0/AccountingContact-1",
+      "isRuntimeState": false,
+      "description": "Vendor/supplier contact information"
+    }
+  ],
+  "records": [
+    {
+      "recordId": "AccountingContact-1",
+      "derivedFromCkRecordId": "Basic-2.0.2/Contact-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Extended contact for accounting documents, adds IBAN and bank account holder name",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/IBAN-1",
+          "name": "IBAN",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/AccountName-1",
+          "name": "AccountName",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "DocumentExtraction-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Staged AI/OCR extraction result held on an UploadedDocument. All fields optional so partial extractions never fail to persist.",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionDocumentNumber-1",
+          "name": "DocumentNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionDocumentDate-1",
+          "name": "DocumentDate",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionDueDate-1",
+          "name": "DueDate",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionGrossTotal-1",
+          "name": "GrossTotal",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionNetTotal-1",
+          "name": "NetTotal",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionTaxTotal-1",
+          "name": "TaxTotal",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionTaxRate-1",
+          "name": "TaxRate",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionVendorCompanyName-1",
+          "name": "VendorCompanyName",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionVendorIban-1",
+          "name": "VendorIban",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionVendorStreet-1",
+          "name": "VendorStreet",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionVendorZipcode-1",
+          "name": "VendorZipcode",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionVendorCity-1",
+          "name": "VendorCity",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionVendorCountryCode-1",
+          "name": "VendorCountryCode",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionAddressNotes-1",
+          "name": "AddressNotes",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting-1.6.0/ExtractionAddressComplete-1",
+          "name": "AddressComplete",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "ChatRole-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "USER",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "ASSISTANT",
+          "isExtension": false
+        }
+      ],
+      "description": "Author role of a chat message"
+    },
+    {
+      "enumId": "CostCategoryKind-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "EXPENSE",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "INCOME",
+          "isExtension": false
+        }
+      ],
+      "description": "Whether a category collects expenses or income; drives the sign of the actuals computation"
+    },
+    {
+      "enumId": "CostCategoryType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "IT",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "RENT",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "PERSONNEL",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "TRAVEL",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "OFFICE",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "MARKETING",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "CONSULTING",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "INSURANCE",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "OTHER",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "BANKFEES",
+          "description": "Bank fees and account charges (Kontof\u00FChrung, Entgelte, card fees) \u2014 costs without a separate receipt",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "ITOPERATION",
+          "description": "IT operations: running OctoMesh and other SaaS offerings (hosting, cloud infrastructure, monitoring, API usage)",
+          "isExtension": false
+        },
+        {
+          "key": 11,
+          "name": "FACILITY",
+          "description": "Building operating costs: cleaning, kitchen, electricity, heating",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "REVENUE",
+          "description": "Revenue from products and services (income)",
+          "isExtension": false
+        },
+        {
+          "key": 13,
+          "name": "INTEREST",
+          "description": "Interest and capital income",
+          "isExtension": false
+        },
+        {
+          "key": 14,
+          "name": "OTHERINCOME",
+          "description": "Other income: refunds, grants, insurance payouts",
+          "isExtension": false
+        }
+      ],
+      "description": "Type of cost category for expense tracking"
+    },
+    {
+      "enumId": "CurrencyEnum-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "EUR",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "DocumentSource-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "UPLOAD",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "EMAIL",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "TEAMS",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "SIGNAL",
+          "isExtension": false
+        }
+      ],
+      "description": "Channel through which an uploaded document entered the inbox"
+    },
+    {
+      "enumId": "DocumentState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "OPEN",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "PAID",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "PARTIALLYPAID",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "CANCELLED",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "RECURRING",
+          "description": "Recurring master document (Dauerbeleg) \u2014 justifies a recurring series of debits (e.g. contract, insurance, subscription, donation). Excluded from the OPEN/PAID reconciliation; its debits are auto-matched by SEPA key.",
+          "isExtension": false
+        }
+      ],
+      "description": "State of a document in the accounting workflow"
+    },
+    {
+      "enumId": "DocumentType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "INCOMING",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "OUTGOING",
+          "isExtension": false
+        }
+      ],
+      "description": "Type of accounting document"
+    },
+    {
+      "enumId": "PeriodBasis-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "DOCUMENTDATE",
+          "description": "Membership by document date (Belegdatum) \u2014 accrual accounting (Bilanzierung)",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "PAYMENTDATE",
+          "description": "Membership by payment date (Zahlungsdatum) \u2014 cash-basis accounting (Einnahmen-Ausgaben-Rechnung)",
+          "isExtension": false
+        }
+      ],
+      "description": "Which date defines fiscal-year membership of documents and transactions"
+    },
+    {
+      "enumId": "ProcessingState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "NEW",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "PROCESSING",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "COMPLETED",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "INCOMPLETE",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "FAILED",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "IGNORED",
+          "isExtension": false
+        }
+      ],
+      "description": "Processing state of an uploaded document in the analysis workflow"
+    },
+    {
+      "enumId": "RecurrenceInterval-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "MONTHLY",
+          "description": "Booked once per month (e.g. subscriptions, insurance)",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "QUARTERLY",
+          "description": "Booked once per quarter",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "YEARLY",
+          "description": "Booked once per year",
+          "isExtension": false
+        }
+      ],
+      "description": "Booking interval of a recurring accounting document (Dauerbeleg)"
+    },
+    {
+      "enumId": "RecurrenceMatchType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "CREDITORID",
+          "description": "SEPA Creditor Identifier \u2014 the most stable key for recurring direct debits",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "MANDATEREFERENCE",
+          "description": "SEPA mandate reference of the direct-debit mandate",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "COUNTERPARTIBAN",
+          "description": "Counterpart IBAN \u2014 for standing orders / transfers without a SEPA creditor id",
+          "isExtension": false
+        }
+      ],
+      "description": "Which bank-transaction attribute a recurring document (Dauerbeleg) matches its recurring debits on. Exactly one key is used per document, so auto-matching stays unambiguous."
+    },
+    {
+      "enumId": "RuleDirectionFilter-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "ANY",
+          "description": "Applies to both credits and debits",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "DEBIT",
+          "description": "Only outgoing debits (Direction 1)",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "CREDIT",
+          "description": "Only incoming credits (Direction 0)",
+          "isExtension": false
+        }
+      ],
+      "description": "Restricts a categorization rule to a transaction direction. Mirrors Basic.Accounting BankTransaction Direction (Credit=0, Debit=1)."
+    },
+    {
+      "enumId": "RuleMatchField-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "PURPOSE",
+          "description": "The transaction purpose / payment reference text",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "COUNTERPARTIBAN",
+          "description": "The counterpart IBAN",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "CREDITORID",
+          "description": "The SEPA Creditor Identifier",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "COUNTERPARTNAME",
+          "description": "The counterpart name",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "BANKTXCODE",
+          "description": "The bank transaction code (finAPI BankTransactionCode / SWIFT GVC)",
+          "isExtension": false
+        }
+      ],
+      "description": "Which bank-transaction attribute a categorization rule matches on. Exactly one field is used per rule, so evaluation stays unambiguous (same pattern as RecurrenceMatchType)."
+    },
+    {
+      "enumId": "RuleTerminalState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "NONE",
+          "description": "Assign the category only; leave the transaction for the document-matching passes",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "MATCHED",
+          "description": "Resolve the transaction as matched (receiptless cost, e.g. bank fees)",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "IGNORED",
+          "description": "Exclude the transaction from matching (e.g. private spending)",
+          "isExtension": false
+        }
+      ],
+      "description": "What MatchState a categorization rule sets on a matched transaction after assigning the category. NONE leaves the transaction open for the document-matching passes; MATCHED/IGNORED resolve it (used for receiptless costs like bank fees, or private spending)."
+    }
+  ],
+  "modelId": "Meshmakers.Accounting-1.6.0"
+}
