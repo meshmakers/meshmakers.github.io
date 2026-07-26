@@ -261,6 +261,100 @@ entities:
         value: MATCHED
       - id: Meshmakers.Accounting/RuleCommentTemplate
         value: Bank fee (auto)
+  # --- AB#4539: payroll categorization rules ---
+  # Salaries are represented by ONE payroll journal (Lohnjournal) document per
+  # month, collectively matched (AB#4510) to all payroll transactions of that
+  # month: net salaries, social insurance (ÖGK, includes the BV fund), wage
+  # taxes (Finanzamt L/DB/DZ) and municipal tax. Individual payslips are never
+  # uploaded (per-employee personal data; the tax advisor runs payroll and has
+  # them). These rules therefore only assign the Personnel category
+  # (RuleTerminalState NONE): the transactions stay Unreviewed so the
+  # collective match against the journal can still settle them.
+  - rtId: aa0000000000000000000501
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - salaries
+      - id: Meshmakers.Accounting/RulePriority
+        value: 110
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      # Word-start match covers Gehalt/Gehälter/Gehaltszahlung and
+      # Lohn/Lohnzahlung/Lohn+Gehalt; Belohnung etc. is not a word start.
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: '\b(Geh(a|ä)lt|Lohn)'
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: NONE
+  - rtId: aa0000000000000000000502
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - social insurance (ÖGK)
+      - id: Meshmakers.Accounting/RulePriority
+        value: 111
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: COUNTERPARTNAME
+      # "Österreichische Gesundheitskasse" and abbreviated/ASCII spellings.
+      # The monthly ÖGK debit also collects the BV fund contribution
+      # (Mitarbeitervorsorge), so no separate BV rule is needed.
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: Gesundheitskasse|OEGK|ÖGK
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: NONE
+  - rtId: aa0000000000000000000503
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - wage taxes (Finanzamt)
+      - id: Meshmakers.Accounting/RulePriority
+        value: 112
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      # FinanzOnline payment purposes carry the levy codes with a period, e.g.
+      # "L 06/2026 DB 06/2026 DZ 06/2026" (Lohnsteuer, Dienstgeberbeitrag,
+      # Zuschlag). Deliberately does NOT match "U 06/2026" — VAT payments to
+      # the Finanzamt are not payroll.
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: '\b(L|DB|DZ)\s?\d{2}/\d{2,4}'
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: NONE
+  - rtId: aa0000000000000000000504
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - municipal tax
+      - id: Meshmakers.Accounting/RulePriority
+        value: 113
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: Kommunalsteuer|KommSt
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: NONE
   # Application workload for the accounting SPA (modeled on voest-app's
   # rt-voestalpine-app.yaml). The Communication Operator deploys it via the
   # meshmakers-app Helm chart published by this repo's CI; the empty
@@ -2498,6 +2592,30 @@ entities:
                               description: Upload timestamp
                               operation: Now
                               targetPath: $.uploadedAt
+                            - type: SetPrimitiveValue@1
+                              description: Default staging state - the analysis pipeline picks up NEW uploads
+                              targetPath: $.stageState
+                              value: "NEW"
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.stageNote
+                              value: ""
+                              valueType: String
+                            - type: If@1
+                              description: Privacy skip requested (AB#4540) - stage as INCOMPLETE so the analysis pipeline (pickup <= PROCESSING) never touches the content; the user enters the details manually from the inbox
+                              path: $.full.formData.skipAnalysis
+                              operator: Equals
+                              value: "true"
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.stageState
+                                  value: "INCOMPLETE"
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.stageNote
+                                  value: "AI analysis skipped on upload - enter the document details manually."
+                                  valueType: String
                             - type: CreateFileSystemUpdate@1
                               description: Store PDF in file system
                               targetPath: $.fileSystemItem
@@ -2531,7 +2649,10 @@ entities:
                                   valuePath: $.uploadedAt
                                 - attributeName: ProcessingState
                                   attributeValueType: Enum
-                                  value: NEW
+                                  valuePath: $.stageState
+                                - attributeName: ProcessingError
+                                  attributeValueType: String
+                                  valuePath: $.stageNote
                                 - attributeName: SourceChannel
                                   attributeValueType: Enum
                                   value: UPLOAD
@@ -2559,6 +2680,17 @@ entities:
                               targetPath: $.key._resultType
                               value: "uploaded"
                               valueType: String
+                            - type: If@1
+                              description: Report the privacy-skip staging distinctly (AB#4540)
+                              path: $.full.formData.skipAnalysis
+                              operator: Equals
+                              value: "true"
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key._resultType
+                                  value: "stored"
+                                  valueType: String
                 - type: Project@1
                   description: Remove base64 data from response
                   path: $.key
