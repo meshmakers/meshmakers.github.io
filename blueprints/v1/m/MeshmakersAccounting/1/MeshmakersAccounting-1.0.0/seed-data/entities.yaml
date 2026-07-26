@@ -4499,7 +4499,7 @@ entities:
               description: Load unreviewed and previously unmatched bank transactions
               ckTypeId: Basic.Accounting/BankTransaction
               targetPath: $.pending
-              take: 500
+              take: 3000
               fieldFilters:
                 - attributePath: MatchState
                   operator: In
@@ -4996,65 +4996,183 @@ entities:
                                   valuePath: $._fbMaxDate
                                   valueType: DateTime
                                   transformations:
-                                    - type: GetAssociationTargets@1
-                                      description: Existing tx links on this document (idempotency guard, AB#4398)
-                                      originRtIdPath: $._fbCandidates.Items[0].RtId
-                                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                                      targetCkTypeId: Basic.Accounting/BankTransaction
-                                      associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                                      graphDirection: Outbound
-                                      targetPath: $._fbExisting
+                                    # AB#4512 pattern ported to the anonymous fallback: the one-sided
+                                    # "exactly one doc candidate" check is order-dependent — a Booking.com
+                                    # debit (-374.95) claimed a Bierheuriger invoice (366.30) that a second
+                                    # pending POS debit (-380.00, incl. tip) matched just as well. Require
+                                    # TWO-SIDED uniqueness: this transaction must be the only pending
+                                    # transaction whose amount lies in the document's fee band and whose
+                                    # booking date lies in the document's date window; ambiguous clusters
+                                    # fall through to the AI pass, which sees the purpose text.
+                                    - type: SetPrimitiveValue@1
+                                      description: Candidate gross total, copied to the transaction scope for Math
+                                      targetPath: $.key._fbGross
+                                      valuePath: $._fbCandidates.Items[0].Attributes.GrossTotal
+                                      valueType: Double
+                                    - type: Math@1
+                                      description: Band cap = gross total + the maximum tolerated transfer fee (15 EUR)
+                                      path: $.key
+                                      itemPath: $._fbGross
+                                      itemTargetPath: $._fbGrossCap
+                                      operation: Add
+                                      value: 15
+                                    - type: SetPrimitiveValue@1
+                                      description: Signed rival band lower bound (Credit default = gross total)
+                                      targetPath: $.key._fbRivLow
+                                      valuePath: $.key._fbGross
+                                      valueType: Double
+                                    - type: SetPrimitiveValue@1
+                                      description: Signed rival band upper bound (Credit default = gross total + fee cap)
+                                      targetPath: $.key._fbRivHigh
+                                      valuePath: $.key._fbGrossCap
+                                      valueType: Double
                                     - type: If@1
-                                      description: Create the link only when the document is not already linked (a stale link still settles via the existing one)
-                                      path: $._fbExisting[0].TotalCount
+                                      description: Debit — amounts are negative, the signed band is the negated mirror
+                                      path: $.key.Attributes.Direction
                                       operator: Equals
-                                      value: 0
+                                      value: 1
                                       valueType: Int64
                                       transformations:
-                                        - type: CreateAssociationUpdate@1
-                                          description: Link document to transaction
-                                          targetPath: $._fbAssocs
-                                          targetValueKind: Array
-                                          targetValueWriteMode: Append
-                                          updateKind: Create
+                                        - type: Math@1
+                                          description: Lower bound = -(gross total + fee cap)
+                                          path: $.key
+                                          itemPath: $._fbGrossCap
+                                          itemTargetPath: $._fbRivLow
+                                          operation: Multiply
+                                          value: -1
+                                        - type: Math@1
+                                          description: Upper bound = -(gross total)
+                                          path: $.key
+                                          itemPath: $._fbGross
+                                          itemTargetPath: $._fbRivHigh
+                                          operation: Multiply
+                                          value: -1
+                                    - type: GetRtEntitiesByType@1
+                                      description: Pending transactions whose amount lies in the same fee band (rival candidates)
+                                      ckTypeId: Basic.Accounting/BankTransaction
+                                      targetPath: $.key._fbRivals
+                                      take: 50
+                                      fieldFilters:
+                                        - attributePath: MatchState
+                                          operator: In
+                                          comparisonValue:
+                                            - 0
+                                            - 2
+                                        - attributePath: Direction
+                                          operator: Equals
+                                          comparisonValuePath: $.key.Attributes.Direction
+                                        - attributePath: Amount
+                                          operator: GreaterEqualThan
+                                          comparisonValuePath: $.key._fbRivLow
+                                        - attributePath: Amount
+                                          operator: LessEqualThan
+                                          comparisonValuePath: $.key._fbRivHigh
+                                    - type: ForEach@1
+                                      description: Flag every rival booked inside the document's date window (the transaction itself counts once)
+                                      iterationPath: $.key._fbRivals.Items
+                                      targetPath: $.key._fbRivalChecks
+                                      targetValueKind: Simple
+                                      targetValueWriteMode: Overwrite
+                                      maxDegreeOfParallelism: 1
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          description: Rival outside the window (default)
+                                          targetPath: $.key._inWindow
+                                          value: 0
+                                          valueType: Int
+                                        - type: If@1
+                                          description: Rival booked no earlier than the window floor
+                                          path: $.key.Attributes.BookingDate
+                                          operator: GreaterEqualsThan
+                                          valuePath: $.full._fbMinDate
+                                          valueType: DateTime
+                                          transformations:
+                                            - type: If@1
+                                              description: …and no later than the window cap
+                                              path: $.key.Attributes.BookingDate
+                                              operator: LessEqualsThan
+                                              valuePath: $.full._fbMaxDate
+                                              valueType: DateTime
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.key._inWindow
+                                                  value: 1
+                                                  valueType: Int
+                                    - type: SumAggregation@1
+                                      description: Count rivals inside the window
+                                      targetPath: $.key._fbRivalsInWindow
+                                      aggregations:
+                                        - path: $.key._fbRivalChecks[*]
+                                          aggregationPath: $._inWindow
+                                          value: 1
+                                          filterPath: null
+                                          comparisonValue: null
+                                    - type: If@1
+                                      description: The transaction is the only in-window rival — unambiguous, apply the match
+                                      path: $.key._fbRivalsInWindow
+                                      operator: Equals
+                                      value: 1
+                                      valueType: Double
+                                      transformations:
+                                        - type: GetAssociationTargets@1
+                                          description: Existing tx links on this document (idempotency guard, AB#4398)
                                           originRtIdPath: $._fbCandidates.Items[0].RtId
                                           originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                                          targetRtIdPath: $.key.RtId
                                           targetCkTypeId: Basic.Accounting/BankTransaction
                                           associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                                    - type: CreateUpdateInfo@1
-                                      description: Document is paid — PaidAmount is the invoice total; the extra paid is the transfer fee
-                                      targetPath: $._fbUpdates
-                                      targetValueKind: Array
-                                      targetValueWriteMode: Append
-                                      updateKind: Update
-                                      ckTypeId: Meshmakers.Accounting/AccountingDocument
-                                      rtIdPath: $._fbCandidates.Items[0].RtId
-                                      attributeUpdates:
-                                        - attributeName: DocumentState
-                                          attributeValueType: Enum
-                                          value: PAID
-                                        - attributeName: PaidAmount
-                                          attributeValueType: Double
-                                          valuePath: $._fbCandidates.Items[0].Attributes.GrossTotal
-                                    - type: CreateUpdateInfo@1
-                                      description: Transaction is matched (amount+date; payment includes a transfer fee)
-                                      targetPath: $._fbUpdates
-                                      targetValueKind: Array
-                                      targetValueWriteMode: Append
-                                      updateKind: Update
-                                      ckTypeId: Basic.Accounting/BankTransaction
-                                      rtIdPath: $.key.RtId
-                                      attributeUpdates:
-                                        - attributeName: MatchState
-                                          attributeValueType: Enum
-                                          value: Matched
-                                        - attributeName: MatchComment
-                                          attributeValueType: String
-                                          value: Auto-matched by amount and date incl. transfer fee (no account-holder name)
-                                    - type: ApplyChanges@2
-                                      entityUpdatesPath: $._fbUpdates
-                                      associationUpdatesPath: $._fbAssocs
+                                          graphDirection: Outbound
+                                          targetPath: $._fbExisting
+                                        - type: If@1
+                                          description: Create the link only when the document is not already linked (a stale link still settles via the existing one)
+                                          path: $._fbExisting[0].TotalCount
+                                          operator: Equals
+                                          value: 0
+                                          valueType: Int64
+                                          transformations:
+                                            - type: CreateAssociationUpdate@1
+                                              description: Link document to transaction
+                                              targetPath: $._fbAssocs
+                                              targetValueKind: Array
+                                              targetValueWriteMode: Append
+                                              updateKind: Create
+                                              originRtIdPath: $._fbCandidates.Items[0].RtId
+                                              originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                              targetRtIdPath: $.key.RtId
+                                              targetCkTypeId: Basic.Accounting/BankTransaction
+                                              associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                        - type: CreateUpdateInfo@1
+                                          description: Document is paid — PaidAmount is the invoice total; the extra paid is the transfer fee
+                                          targetPath: $._fbUpdates
+                                          targetValueKind: Array
+                                          targetValueWriteMode: Append
+                                          updateKind: Update
+                                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                          rtIdPath: $._fbCandidates.Items[0].RtId
+                                          attributeUpdates:
+                                            - attributeName: DocumentState
+                                              attributeValueType: Enum
+                                              value: PAID
+                                            - attributeName: PaidAmount
+                                              attributeValueType: Double
+                                              valuePath: $._fbCandidates.Items[0].Attributes.GrossTotal
+                                        - type: CreateUpdateInfo@1
+                                          description: Transaction is matched (amount+date; payment includes a transfer fee)
+                                          targetPath: $._fbUpdates
+                                          targetValueKind: Array
+                                          targetValueWriteMode: Append
+                                          updateKind: Update
+                                          ckTypeId: Basic.Accounting/BankTransaction
+                                          rtIdPath: $.key.RtId
+                                          attributeUpdates:
+                                            - attributeName: MatchState
+                                              attributeValueType: Enum
+                                              value: Matched
+                                            - attributeName: MatchComment
+                                              attributeValueType: String
+                                              value: Auto-matched by amount and date incl. transfer fee (no account-holder name)
+                                        - type: ApplyChanges@2
+                                          entityUpdatesPath: $._fbUpdates
+                                          associationUpdatesPath: $._fbAssocs
             - type: GetRtEntitiesByType@1
               description: Transactions still unreviewed after the deterministic pass
               ckTypeId: Basic.Accounting/BankTransaction
@@ -5660,9 +5778,16 @@ entities:
           #  [3] DONE: values are copied as JSON nodes (not string-interpolated), so they
           #      are auto-escaped — a note/name with a quote or newline can't break the JSON.
           #  [DATE] DONE: date/time values are trimmed to yyyy-MM-dd via TransformString.
-          #  [PERIOD] DONE: optional query from/to (ISO) narrow the export to a month or
-          #      quarter (DocumentDate range gate); omitting them exports the whole fiscal
-          #      year. The frontend Handover page computes from/to from the period picker.
+          #  [PERIOD] DONE (AB#4535): optional query from/to (ISO) narrow the export to a
+          #      month or quarter — a DocumentDate range gate flips $.key.include back to
+          #      "no" outside [from, to]; omitting the params exports the whole fiscal
+          #      year (bounds default to an all-inclusive range because the params are
+          #      absent then, and a missing path would make FormatString throw — seeded
+          #      via SetPrimitiveValue + SelectByPath, same pattern as the AB#4395
+          #      PeriodBasis read). The frontend Handover page computes from/to from the
+          #      period picker. NOTE: out-of-period documents are still rendered (like
+          #      scope-excluded ones) — they are only dropped from the ZIP; rendering is
+          #      cheap (~40ms/doc), a skip-early refactor was deliberately not done.
           #  [5] DONE: the Zahlungsnachweis section lists ONE row per linked transaction
           #      (inner ForEach over $.key.txGroups[0].Items -> Flatten -> inject). Verified
           #      live with a document linked to two transactions.
@@ -5765,6 +5890,54 @@ entities:
                     - type: SetPrimitiveValue@1
                       targetPath: $.key.include
                       value: "yes"
+                      valueType: String
+
+                # period gate (AB#4535): optional query from/to narrow the export
+                # to a month or quarter — a document dated outside [from, to] is
+                # flipped back to include=no. The params are ABSENT for a
+                # full-year export and a missing path makes FormatString throw,
+                # so all-inclusive bounds are seeded first and SelectByPath only
+                # copies the params when present (AB#4395 pattern). Date tests
+                # run as If@1 valueType DateTime — date field filters on dynamic
+                # CK attributes do not coerce (AB#4389).
+                - type: SetPrimitiveValue@1
+                  description: Default period lower bound (open)
+                  targetPath: $.key.periodFrom
+                  value: "0001-01-01T00:00:00Z"
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  description: Default period upper bound (open)
+                  targetPath: $.key.periodTo
+                  value: "9999-12-31T23:59:59Z"
+                  valueType: String
+                - type: SelectByPath@1
+                  description: Copy the optional from/to query params when present
+                  selectPath:
+                    - path: $.full.query.from
+                      targetPath: $.key.periodFrom
+                    - path: $.full.query.to
+                      targetPath: $.key.periodTo
+                - type: If@1
+                  description: Document date before the period start — exclude
+                  path: $.key.Attributes.DocumentDate
+                  operator: LessThan
+                  valuePath: $.key.periodFrom
+                  valueType: DateTime
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "no"
+                      valueType: String
+                - type: If@1
+                  description: Document date after the period end — exclude
+                  path: $.key.Attributes.DocumentDate
+                  operator: GreaterThan
+                  valuePath: $.key.periodTo
+                  valueType: DateTime
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "no"
                       valueType: String
 
                 # 2a) original stored PDF via System/Related
