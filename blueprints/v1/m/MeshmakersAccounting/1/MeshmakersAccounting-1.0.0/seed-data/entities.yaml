@@ -5225,6 +5225,211 @@ entities:
                           value: Unmatched
                     - type: ApplyChanges@2
                       entityUpdatesPath: $._unmatchedUpdates
+            # --- Fiscal-year assignment pass (AB#4395) — runs LAST, after all
+            #     matching passes, so a PAYMENTDATE-based document can follow a
+            #     payment that was linked earlier in this very run. Assigns every
+            #     document WITHOUT a DocumentToFiscalYear link to the fiscal year
+            #     determined by that year's own PeriodBasis: DOCUMENTDATE (0,
+            #     also the default when the attribute is unset) = DocumentDate in
+            #     [StartDate, EndDate]; PAYMENTDATE (1) = a linked payment's
+            #     BookingDate in range — an unpaid document then deliberately
+            #     stays unassigned until it is matched. Fiscal years are iterated
+            #     ascending by StartDate with first-match-wins, so for partial
+            #     payments across a year boundary the earliest payment's year
+            #     wins. A document whose date falls into no fiscal year stays
+            #     unassigned (surfaced on the Handover page). Idempotency and
+            #     manual override: the association is only ever CREATED when the
+            #     document has none — an existing (manual or earlier) assignment
+            #     is never touched (association adds are not idempotent, cf.
+            #     AB#4433) and is re-checked inside each iteration because
+            #     ApplyChanges persists immediately (this also prevents a double
+            #     assignment when a DOCUMENTDATE year and a PAYMENTDATE year
+            #     both contain the document). Date tests run in-pipeline with
+            #     If@1 valueType DateTime — date field filters on dynamic CK
+            #     attributes do not coerce (AB#4389). RECURRING master documents
+            #     (state 4) are templates, not receipts, and are excluded (the
+            #     NotEquals filter also matches documents without a state).
+            #     Caps: 50 fiscal years, 1000 documents per run — the 15-minute
+            #     polling loop drains any backlog beyond that.
+            - type: GetRtEntitiesByType@1
+              description: Load fiscal years ascending by start date (first match wins)
+              ckTypeId: Meshmakers.Accounting/FiscalYear
+              targetPath: $.fyYears
+              take: 50
+              sortOrders:
+                - sortOrder: Ascending
+                  attributeName: StartDate
+            - type: GetRtEntitiesByType@1
+              description: Load documents (recurring masters excluded)
+              ckTypeId: Meshmakers.Accounting/AccountingDocument
+              targetPath: $.fyDocs
+              take: 1000
+              fieldFilters:
+                - attributePath: DocumentState
+                  operator: NotEquals
+                  comparisonValue: 4
+            - type: ForEach@1
+              description: Assign each unassigned document to its fiscal year
+              iterationPath: $.fyDocs.Items
+              targetPath: $.fyAssignResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: Existing fiscal-year assignment (manual or auto — never overwritten)
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  targetCkTypeId: Meshmakers.Accounting/FiscalYear
+                  associationRoleId: Meshmakers.Accounting/DocumentToFiscalYear
+                  graphDirection: Outbound
+                  targetPath: $.key._fyExisting
+                - type: If@1
+                  description: Unassigned — find the fiscal year by period basis
+                  path: $.key._fyExisting[0].TotalCount
+                  operator: Equals
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: ForEach@1
+                      description: Test each fiscal year by its own period basis
+                      iterationPath: $.full.fyYears.Items
+                      targetPath: $.key._fyLoop
+                      targetValueKind: Simple
+                      targetValueWriteMode: Overwrite
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        # Normalize the optional PeriodBasis: seed the DOCUMENTDATE
+                        # default, then copy the attribute over it when present —
+                        # SelectByPath skips missing paths instead of throwing
+                        # (FormatString errors on a missing path, nullValue only
+                        # covers present-but-null).
+                        - type: SetPrimitiveValue@1
+                          description: Default period basis DOCUMENTDATE
+                          targetPath: $.key._basis
+                          value: 0
+                          valueType: Int
+                        - type: SelectByPath@1
+                          description: Copy the fiscal year's PeriodBasis when present
+                          selectPath:
+                            - path: $.key.Attributes.PeriodBasis
+                              targetPath: $.key._basis
+                        - type: If@1
+                          description: DOCUMENTDATE basis — the document date decides
+                          path: $.key._basis
+                          operator: NotEquals
+                          value: 1
+                          valueType: Int64
+                          transformations:
+                            - type: If@1
+                              description: Document date on/after fiscal-year start
+                              path: $.full.key.Attributes.DocumentDate
+                              operator: GreaterEqualsThan
+                              valuePath: $.key.Attributes.StartDate
+                              valueType: DateTime
+                              transformations:
+                                - type: If@1
+                                  description: Document date on/before fiscal-year end
+                                  path: $.full.key.Attributes.DocumentDate
+                                  operator: LessEqualsThan
+                                  valuePath: $.key.Attributes.EndDate
+                                  valueType: DateTime
+                                  transformations:
+                                    - type: GetAssociationTargets@1
+                                      description: Re-check — an earlier fiscal-year iteration may have assigned already
+                                      originRtIdPath: $.full.key.RtId
+                                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                      targetCkTypeId: Meshmakers.Accounting/FiscalYear
+                                      associationRoleId: Meshmakers.Accounting/DocumentToFiscalYear
+                                      graphDirection: Outbound
+                                      targetPath: $.key._fyRecheck
+                                    - type: If@1
+                                      description: Still unassigned — link document to this fiscal year
+                                      path: $.key._fyRecheck[0].TotalCount
+                                      operator: Equals
+                                      value: 0
+                                      valueType: Int64
+                                      transformations:
+                                        - type: CreateAssociationUpdate@1
+                                          description: Document -> FiscalYear by document date
+                                          targetPath: $.key._fyAssoc
+                                          targetValueKind: Array
+                                          targetValueWriteMode: Append
+                                          updateKind: Create
+                                          originRtIdPath: $.full.key.RtId
+                                          originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                          targetRtIdPath: $.key.RtId
+                                          targetCkTypeId: Meshmakers.Accounting/FiscalYear
+                                          associationRoleId: Meshmakers.Accounting/DocumentToFiscalYear
+                                        - type: ApplyChanges@2
+                                          description: Persist the fiscal-year assignment
+                                          associationUpdatesPath: $.key._fyAssoc
+                        - type: If@1
+                          description: PAYMENTDATE basis — a linked payment decides; unmatched documents stay unassigned
+                          path: $.key._basis
+                          operator: Equals
+                          value: 1
+                          valueType: Int64
+                          transformations:
+                            - type: GetAssociationTargets@1
+                              description: Payments linked to the document
+                              originRtIdPath: $.full.key.RtId
+                              originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetCkTypeId: Basic.Accounting/BankTransaction
+                              associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                              graphDirection: Outbound
+                              targetPath: $.key._fyTxs
+                            - type: ForEach@1
+                              description: Assign when a payment's booking date falls into this fiscal year
+                              iterationPath: $.key._fyTxs[0].Items
+                              targetPath: $.key._fyTxLoop
+                              targetValueKind: Simple
+                              targetValueWriteMode: Overwrite
+                              maxDegreeOfParallelism: 1
+                              transformations:
+                                - type: If@1
+                                  description: Booking date on/after fiscal-year start
+                                  path: $.key.Attributes.BookingDate
+                                  operator: GreaterEqualsThan
+                                  valuePath: $.full.key.Attributes.StartDate
+                                  valueType: DateTime
+                                  transformations:
+                                    - type: If@1
+                                      description: Booking date on/before fiscal-year end
+                                      path: $.key.Attributes.BookingDate
+                                      operator: LessEqualsThan
+                                      valuePath: $.full.key.Attributes.EndDate
+                                      valueType: DateTime
+                                      transformations:
+                                        - type: GetAssociationTargets@1
+                                          description: Re-check — an earlier payment or fiscal-year iteration may have assigned already
+                                          originRtIdPath: $.full.full.key.RtId
+                                          originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                          targetCkTypeId: Meshmakers.Accounting/FiscalYear
+                                          associationRoleId: Meshmakers.Accounting/DocumentToFiscalYear
+                                          graphDirection: Outbound
+                                          targetPath: $.key._fyRecheck
+                                        - type: If@1
+                                          description: Still unassigned — link document to this fiscal year
+                                          path: $.key._fyRecheck[0].TotalCount
+                                          operator: Equals
+                                          value: 0
+                                          valueType: Int64
+                                          transformations:
+                                            - type: CreateAssociationUpdate@1
+                                              description: Document -> FiscalYear by payment date
+                                              targetPath: $.key._fyAssoc
+                                              targetValueKind: Array
+                                              targetValueWriteMode: Append
+                                              updateKind: Create
+                                              originRtIdPath: $.full.full.key.RtId
+                                              originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                              targetRtIdPath: $.full.key.RtId
+                                              targetCkTypeId: Meshmakers.Accounting/FiscalYear
+                                              associationRoleId: Meshmakers.Accounting/DocumentToFiscalYear
+                                            - type: ApplyChanges@2
+                                              description: Persist the fiscal-year assignment
+                                              associationUpdatesPath: $.key._fyAssoc
             # Security: the HTTP response body is the whole data context. Reduce
             # it to a minimal acknowledgement so it can never echo the caller's
             # request headers/Authorization or internal entity data.
