@@ -2162,6 +2162,30 @@ entities:
                                   targetPath: $.docType
                                   valueType: String
                                   value: OUTGOING
+                            # AB#4542: zero-total invoices (voucher/credit-settled)
+                            # never see a payment — create them as PAID with
+                            # NoTransactionExpected (same rule as the analysis
+                            # pipeline; absent valuePath skips the attribute).
+                            - type: SetPrimitiveValue@1
+                              description: New documents await a payment (default)
+                              targetPath: $.docState
+                              valueType: String
+                              value: OPEN
+                            - type: If@1
+                              description: Zero gross total — voucher/credit-settled, no payment expected
+                              path: $.ai.result.grossTotal
+                              operator: Equals
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docState
+                                  valueType: String
+                                  value: PAID
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.noTxExpected
+                                  valueType: Boolean
+                                  value: true
                             # --- Sanitize party addresses (poison-item fix) -------
                             # Copy each party's address into a sanitized staging path
                             # ($.san.*) ONLY when its mandatory Street + CityTown are
@@ -2330,7 +2354,10 @@ entities:
                                   valuePath: $.docType
                                 - attributeName: DocumentState
                                   attributeValueType: Enum
-                                  value: OPEN
+                                  valuePath: $.docState
+                                - attributeName: NoTransactionExpected
+                                  attributeValueType: Boolean
+                                  valuePath: $.noTxExpected
                                 - attributeName: Vendor.LegalEntityType
                                   attributeValueType: Enum
                                   value: COMPANY
@@ -2457,7 +2484,14 @@ entities:
                     - $.company
                   conversationHistoryPath: $.body.history
                   responseFormat: text
-                  mcpServerUrl: https://localhost:5017
+                  # AB#4541: no mcpServerUrl here — the node resolves it from the
+                  # AnthropicAiConfig entity (McpServerUrl attribute), which carries
+                  # the environment-specific URL (local: https://localhost:5017,
+                  # prod: https://mcp.prod-1.octo-mesh.com; restored per environment
+                  # by scripts/om_set_secrets.ps1). A hardcoded localhost URL here
+                  # broke the Q&A chat on every deployed environment. When neither
+                  # the config nor the node carries a URL, the node answers without
+                  # MCP tools instead of failing.
                   maxToolRounds: 10
                   maxTokens: 2000
                   temperature: 0.3
@@ -2825,9 +2859,10 @@ entities:
   # Picks up staged uploads (ProcessingState NEW) every 5 minutes, or on demand
   # via POST /processDocuments (the app's "Analyze now" button). Each document
   # is marked PROCESSING first so a run that outlasts the polling interval is
-  # not picked up twice; the result is COMPLETED (AccountingDocument created and
-  # linked) or INCOMPLETE (manual follow-up in the inbox, replaces the former
-  # Todo mechanism).
+  # not picked up twice; the result is COMPLETED (one AccountingDocument created
+  # and linked per invoice found in the PDF — a single file may contain several
+  # independent invoices, AB#4543) or INCOMPLETE (manual follow-up in the inbox,
+  # replaces the former Todo mechanism).
   - rtId: aa0000000000000000000300
     ckTypeId: System.Communication/DataFlow
     attributes:
@@ -2943,8 +2978,8 @@ entities:
                   responseFormat: json
                   temperature: 0.1
                   question: >-
-                    Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal; otherwise false. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section.
-                  jsonFormatSample: '{ "extractionComplete": true, "documentType": "INCOMING", "documentNumber": "RE-2026-001", "documentDate": "2026-03-01", "dueDate": "2026-03-31", "vendor": { "companyName": "Supplier GmbH", "iban": "AT123456789012345678", "accountName": "Supplier Trading Ltd", "address": { "street": "Hauptstrasse 1", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "customer": { "companyName": "Our Company GmbH", "address": { "street": "Firmianstrasse 31A", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "grossTotal": 1200.00, "netTotal": 1000.00, "taxTotal": 200.00, "taxRate": 20.0 }'
+                    Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. The file may contain ONE invoice or SEVERAL independent invoices concatenated into a single PDF (typical: an Amazon marketplace order produces one invoice per seller for the same order; a scan batch combines several receipts). A new invoice starts ONLY where a new invoice number appears — a multi-page invoice is still ONE invoice; never split by page. Output "invoices" as an array with exactly one element per invoice found and "invoiceCount" as the number of elements. Per invoice also output "pageFrom" and "pageTo" (the 1-based first and last PDF page of that invoice) when the page boundaries are recognizable from the text (page markers, "Seite X von Y", repeated per-invoice headers); OMIT both keys when unsure. Apply ALL of the following rules to EACH invoice element independently. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal for that invoice; otherwise false. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section.
+                  jsonFormatSample: '{ "invoiceCount": 1, "invoices": [ { "extractionComplete": true, "documentType": "INCOMING", "documentNumber": "RE-2026-001", "documentDate": "2026-03-01", "dueDate": "2026-03-31", "pageFrom": 1, "pageTo": 2, "vendor": { "companyName": "Supplier GmbH", "iban": "AT123456789012345678", "accountName": "Supplier Trading Ltd", "address": { "street": "Hauptstrasse 1", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "customer": { "companyName": "Our Company GmbH", "address": { "street": "Firmianstrasse 31A", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "grossTotal": 1200.00, "netTotal": 1000.00, "taxTotal": 200.00, "taxRate": 20.0 } ] }'
                   targetPath: $.ai.result
                   continueOnError: true
                 - type: DateTime@1
@@ -2952,6 +2987,9 @@ entities:
                   operation: Now
                   targetPath: $.processedAt
                 # Stage 1: persist the extraction on the UploadedDocument itself,
+                # For multi-invoice PDFs (AB#4543) the staging record holds the
+                # FIRST invoice only (manual-create pre-fill); per-invoice data is
+                # carried into the documents created below.
                 # ALWAYS (even when incomplete) so nothing the AI found is lost
                 # and the manual "Create Document" form can pre-fill from it.
                 # Dates are stored as String here (no parse), so an empty/invalid
@@ -2967,640 +3005,791 @@ entities:
                   attributeUpdates:
                     - attributeName: Extraction.DocumentNumber
                       attributeValueType: String
-                      valuePath: $.ai.result.documentNumber
+                      valuePath: $.ai.result.invoices[0].documentNumber
                     - attributeName: Extraction.DocumentDate
                       attributeValueType: String
-                      valuePath: $.ai.result.documentDate
+                      valuePath: $.ai.result.invoices[0].documentDate
                     - attributeName: Extraction.DueDate
                       attributeValueType: String
-                      valuePath: $.ai.result.dueDate
+                      valuePath: $.ai.result.invoices[0].dueDate
                     - attributeName: Extraction.GrossTotal
                       attributeValueType: Double
-                      valuePath: $.ai.result.grossTotal
+                      valuePath: $.ai.result.invoices[0].grossTotal
                     - attributeName: Extraction.NetTotal
                       attributeValueType: Double
-                      valuePath: $.ai.result.netTotal
+                      valuePath: $.ai.result.invoices[0].netTotal
                     - attributeName: Extraction.TaxTotal
                       attributeValueType: Double
-                      valuePath: $.ai.result.taxTotal
+                      valuePath: $.ai.result.invoices[0].taxTotal
                     - attributeName: Extraction.TaxRate
                       attributeValueType: Double
-                      valuePath: $.ai.result.taxRate
+                      valuePath: $.ai.result.invoices[0].taxRate
                     - attributeName: Extraction.VendorCompanyName
                       attributeValueType: String
-                      valuePath: $.ai.result.vendor.companyName
+                      valuePath: $.ai.result.invoices[0].vendor.companyName
                     - attributeName: Extraction.VendorIban
                       attributeValueType: String
-                      valuePath: $.ai.result.vendor.iban
+                      valuePath: $.ai.result.invoices[0].vendor.iban
                     - attributeName: Extraction.VendorStreet
                       attributeValueType: String
-                      valuePath: $.ai.result.vendor.address.street
+                      valuePath: $.ai.result.invoices[0].vendor.address.street
                     - attributeName: Extraction.VendorZipcode
                       attributeValueType: String
-                      valuePath: $.ai.result.vendor.address.zipcode
+                      valuePath: $.ai.result.invoices[0].vendor.address.zipcode
                     - attributeName: Extraction.VendorCity
                       attributeValueType: String
-                      valuePath: $.ai.result.vendor.address.city
+                      valuePath: $.ai.result.invoices[0].vendor.address.city
                     - attributeName: Extraction.VendorCountryCode
                       attributeValueType: String
-                      valuePath: $.ai.result.vendor.address.countryCode
+                      valuePath: $.ai.result.invoices[0].vendor.address.countryCode
                     - attributeName: Extraction.AddressNotes
                       attributeValueType: String
-                      valuePath: $.ai.result.vendor.addressNotes
+                      valuePath: $.ai.result.invoices[0].vendor.addressNotes
                     - attributeName: Extraction.AddressComplete
                       attributeValueType: Boolean
-                      valuePath: $.ai.result.vendor.addressComplete
+                      valuePath: $.ai.result.invoices[0].vendor.addressComplete
                 - type: ApplyChanges@2
                   entityUpdatesPath: $.extractionUpdate
-                # Stage 2: only when all mandatory fields are present is an
-                # AccountingDocument created from the (in-memory / persisted) data.
-                # Guard (poison-item fix): the AI can claim extractionComplete while
-                # omitting documentNumber (mandatory on AccountingDocument). Such an item
-                # would fail ApplyChanges and abort the whole ForEach run every poll,
-                # blocking all queued uploads. Gate creation on docOk = extractionComplete
-                # AND non-empty documentNumber; everything else lands in INCOMPLETE.
+                # Stage 2: document creation (AB#4543). The AI reports every
+                # invoice found in the PDF as one element of $.ai.result.invoices —
+                # a single PDF may carry several independent invoices that are
+                # settled by ONE bank transaction (e.g. an Amazon marketplace
+                # order with one invoice per seller). Each element runs the full
+                # per-invoice gate/duplicate/create logic below; a single-invoice
+                # PDF is simply the 1-element case. Inside the loop $.key is the
+                # invoice element and $.full.key the UploadedDocument entity.
+                # Guard (poison-item fix): the AI can claim extractionComplete
+                # while omitting documentNumber (mandatory on AccountingDocument).
+                # Such an item would fail ApplyChanges and abort the whole ForEach
+                # run every poll, blocking all queued uploads. Gate creation per
+                # invoice on docOk = extractionComplete AND non-empty documentNumber.
                 - type: SetPrimitiveValue@1
-                  description: Default - document not creatable
-                  targetPath: $.docOk
-                  valueType: Boolean
-                  value: false
+                  description: Default - no invoice reported by the AI
+                  targetPath: $.invCount
+                  valueType: Int
+                  value: 0
                 - type: If@1
-                  description: Extraction claims complete
-                  path: $.ai.result.extractionComplete
-                  operator: Equals
-                  value: true
-                  valueType: Boolean
+                  description: AI reported at least one invoice
+                  path: $.ai.result.invoiceCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
                   transformations:
                     - type: SetPrimitiveValue@1
-                      targetPath: $.docOk
-                      valueType: Boolean
-                      value: true
-                    - type: If@1
-                      description: documentNumber missing - demote to incomplete
-                      path: $.ai.result.documentNumber
-                      operator: Equals
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.docOk
-                          valueType: Boolean
-                          value: false
-                    - type: If@1
-                      description: documentNumber empty - demote to incomplete
-                      path: $.ai.result.documentNumber
-                      operator: Equals
-                      value: ""
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.docOk
-                          valueType: Boolean
-                          value: false
-                # AB#4452: semantic duplicate detection. The SHA-256 FileHash check
-                # only catches byte-identical files - the same invoice arriving via
-                # two channels (e-mail receipt vs. portal export) passes it, and
-                # Apple even issues DIFFERENT invoice numbers per channel for the
-                # same charge. Checks before creating the document:
-                #   1. hard: an existing AccountingDocument matches the extracted
-                #      DocumentNumber AND (the same vendor OR the same
-                #      GrossTotal+DocumentDate) -> genuine re-import, never create a
-                #      second one. DocumentNumber ALONE is not enough: external
-                #      reference numbers (customer/case numbers) are echoed across
-                #      different vendors' documents - e.g. an OeAMTC customer number
-                #      printed on a lawyer's dunning letter would otherwise wrongly
-                #      block the (different) lawyer invoice (prod false-positive,
-                #      salzburgdev 2026-07-24).
-                #   2. soft: a document with the identical GrossTotal AND
-                #      DocumentDate but a different number exists -> suspected twin;
-                #      do not create silently, flag the upload for manual review.
-                - type: SetPrimitiveValue@1
-                  description: Default - no duplicate detected
-                  targetPath: $.dupNote
-                  valueType: String
-                  value: ""
-                - type: If@1
-                  description: Extraction valid - run the duplicate checks
-                  path: $.docOk
-                  operator: Equals
-                  value: true
-                  valueType: Boolean
-                  transformations:
-                    # Hard-duplicate candidates: an existing document must share the
-                    # DocumentNumber AND either the vendor or the amount+date. A bare
-                    # DocumentNumber collision is NOT a duplicate (shared external
-                    # reference numbers across vendors).
-                    - type: GetRtEntitiesByType@1
-                      description: Same document number AND same vendor (genuine re-import)
-                      ckTypeId: Meshmakers.Accounting/AccountingDocument
-                      targetPath: $._dupByNumberVendor
-                      take: 1
-                      fieldFilters:
-                        - attributePath: DocumentNumber
-                          operator: Equals
-                          comparisonValuePath: $.ai.result.documentNumber
-                        - attributePath: Vendor.CompanyName
-                          operator: Equals
-                          comparisonValuePath: $.ai.result.vendor.companyName
-                    - type: GetRtEntitiesByType@1
-                      description: Same document number AND same amount+date (same invoice, vendor-name variant)
-                      ckTypeId: Meshmakers.Accounting/AccountingDocument
-                      targetPath: $._dupByNumberAmountDate
-                      take: 1
-                      fieldFilters:
-                        - attributePath: DocumentNumber
-                          operator: Equals
-                          comparisonValuePath: $.ai.result.documentNumber
-                        - attributePath: GrossTotal
-                          operator: Equals
-                          comparisonValuePath: $.ai.result.grossTotal
-                        - attributePath: DocumentDate
-                          operator: Equals
-                          comparisonValuePath: $.ai.result.documentDate
-                    - type: If@1
-                      description: Hard duplicate - number + vendor match
-                      path: $._dupByNumberVendor.TotalCount
-                      operator: GreaterThan
-                      value: 0
-                      valueType: Int64
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.docOk
-                          valueType: Boolean
-                          value: false
-                        - type: SetPrimitiveValue@1
-                          description: Duplicate reason shown in the Inbox
-                          targetPath: $.dupNote
-                          valueType: String
-                          value: "Duplicate: an accounting document with the same number and vendor already exists. No document was created."
-                    - type: If@1
-                      description: Hard duplicate - number + amount+date match (vendor name may differ per channel)
-                      path: $._dupByNumberAmountDate.TotalCount
-                      operator: GreaterThan
-                      value: 0
-                      valueType: Int64
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.docOk
-                          valueType: Boolean
-                          value: false
-                        - type: SetPrimitiveValue@1
-                          description: Duplicate reason shown in the Inbox
-                          targetPath: $.dupNote
-                          valueType: String
-                          value: "Duplicate: an accounting document with the same number, amount and date already exists. No document was created."
-                    - type: If@1
-                      description: Not a hard duplicate - check for a same-amount/same-date twin with a different number (soft suspect)
-                      path: $.docOk
-                      operator: Equals
-                      value: true
-                      valueType: Boolean
-                      transformations:
-                        - type: GetRtEntitiesByType@1
-                          description: Existing document with identical gross total and document date
-                          ckTypeId: Meshmakers.Accounting/AccountingDocument
-                          targetPath: $._dupByAmountDate
-                          take: 1
-                          fieldFilters:
-                            - attributePath: GrossTotal
-                              operator: Equals
-                              comparisonValuePath: $.ai.result.grossTotal
-                            - attributePath: DocumentDate
-                              operator: Equals
-                              comparisonValuePath: $.ai.result.documentDate
-                        - type: If@1
-                          description: Suspected duplicate - flag for manual review instead of creating silently
-                          path: $._dupByAmountDate.TotalCount
-                          operator: GreaterThan
-                          value: 0
-                          valueType: Int64
-                          transformations:
-                            - type: SetPrimitiveValue@1
-                              targetPath: $.docOk
-                              valueType: Boolean
-                              value: false
-                            - type: SetPrimitiveValue@1
-                              description: Suspected-duplicate reason shown in the Inbox
-                              targetPath: $.dupNote
-                              valueType: String
-                              value: "Possible duplicate: an accounting document with the same amount and document date already exists (invoice numbers may differ per channel). No document was created - please verify and process manually."
-                - type: If@1
-                  description: Extraction successful - create AccountingDocument
-                  path: $.docOk
-                  operator: Equals
-                  value: true
-                  valueType: Boolean
-                  transformations:
-                    # Normalize the AI-detected direction to a guaranteed enum name
-                    # before the write: default INCOMING, promote to OUTGOING only on
-                    # an exact match. Guards against a missing/variant documentType
-                    # breaking the Enum attribute conversion.
-                    - type: SetPrimitiveValue@1
-                      description: Default document direction
-                      targetPath: $.docType
-                      valueType: String
-                      value: INCOMING
-                    - type: If@1
-                      description: Our company is the issuer — outgoing invoice
-                      path: $.ai.result.documentType
-                      operator: Equals
-                      value: OUTGOING
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.docType
-                          valueType: String
-                          value: OUTGOING
-                    # --- Sanitize party addresses (poison-item fix) -------------
-                    # The Basic Address record has MANDATORY Street + CityTown. The
-                    # AI is asked to emit an address all-or-nothing, but occasionally
-                    # returns a PARTIAL address (e.g. only zipcode/countryCode); that
-                    # partial object still materializes the embedded Address record,
-                    # whose missing Street/CityTown then FatalError ApplyChanges and
-                    # abort the ENTIRE ForEach — stranding every queued upload. Do not
-                    # trust the AI's structural omission: copy each party's address
-                    # into a sanitized staging path ($.san.*) ONLY when BOTH mandatory
-                    # fields (street + city) are present and non-empty; otherwise the
-                    # staging paths stay absent and NO Address record is materialized
-                    # (the raw sender address is still kept in Comment via addressNotes).
-                    - type: SetPrimitiveValue@1
-                      targetPath: $.vendorAddrOk
-                      valueType: Boolean
-                      value: true
-                    - type: If@1
-                      description: Vendor street absent — no address
-                      path: $.ai.result.vendor.address.street
-                      operator: Equals
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.vendorAddrOk
-                          valueType: Boolean
-                          value: false
-                    - type: If@1
-                      description: Vendor street empty — no address
-                      path: $.ai.result.vendor.address.street
-                      operator: Equals
-                      value: ""
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.vendorAddrOk
-                          valueType: Boolean
-                          value: false
-                    - type: If@1
-                      description: Vendor city absent — no address
-                      path: $.ai.result.vendor.address.city
-                      operator: Equals
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.vendorAddrOk
-                          valueType: Boolean
-                          value: false
-                    - type: If@1
-                      description: Vendor city empty — no address
-                      path: $.ai.result.vendor.address.city
-                      operator: Equals
-                      value: ""
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.vendorAddrOk
-                          valueType: Boolean
-                          value: false
-                    - type: If@1
-                      description: Vendor address complete — stage the fields for the write
-                      path: $.vendorAddrOk
-                      operator: Equals
-                      value: true
-                      valueType: Boolean
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          valuePath: $.ai.result.vendor.address.street
-                          targetPath: $.san.vendor.address.street
-                          valueType: String
-                        - type: SetPrimitiveValue@1
-                          valuePath: $.ai.result.vendor.address.zipcode
-                          targetPath: $.san.vendor.address.zipcode
-                          valueType: String
-                        - type: SetPrimitiveValue@1
-                          valuePath: $.ai.result.vendor.address.city
-                          targetPath: $.san.vendor.address.city
-                          valueType: String
-                        - type: SetPrimitiveValue@1
-                          valuePath: $.ai.result.vendor.address.countryCode
-                          targetPath: $.san.vendor.address.countryCode
-                          valueType: String
-                    - type: SetPrimitiveValue@1
-                      targetPath: $.customerAddrOk
-                      valueType: Boolean
-                      value: true
-                    - type: If@1
-                      description: Customer street absent — no address
-                      path: $.ai.result.customer.address.street
-                      operator: Equals
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.customerAddrOk
-                          valueType: Boolean
-                          value: false
-                    - type: If@1
-                      description: Customer street empty — no address
-                      path: $.ai.result.customer.address.street
-                      operator: Equals
-                      value: ""
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.customerAddrOk
-                          valueType: Boolean
-                          value: false
-                    - type: If@1
-                      description: Customer city absent — no address
-                      path: $.ai.result.customer.address.city
-                      operator: Equals
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.customerAddrOk
-                          valueType: Boolean
-                          value: false
-                    - type: If@1
-                      description: Customer city empty — no address
-                      path: $.ai.result.customer.address.city
-                      operator: Equals
-                      value: ""
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.customerAddrOk
-                          valueType: Boolean
-                          value: false
-                    - type: If@1
-                      description: Customer address complete — stage the fields for the write
-                      path: $.customerAddrOk
-                      operator: Equals
-                      value: true
-                      valueType: Boolean
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          valuePath: $.ai.result.customer.address.street
-                          targetPath: $.san.customer.address.street
-                          valueType: String
-                        - type: SetPrimitiveValue@1
-                          valuePath: $.ai.result.customer.address.zipcode
-                          targetPath: $.san.customer.address.zipcode
-                          valueType: String
-                        - type: SetPrimitiveValue@1
-                          valuePath: $.ai.result.customer.address.city
-                          targetPath: $.san.customer.address.city
-                          valueType: String
-                        - type: SetPrimitiveValue@1
-                          valuePath: $.ai.result.customer.address.countryCode
-                          targetPath: $.san.customer.address.countryCode
-                          valueType: String
-                    - type: CreateUpdateInfo@1
-                      targetPath: $.updates._items
-                      targetValueKind: Array
-                      targetValueWriteMode: Overwrite
-                      updateKind: Insert
-                      ckTypeId: Meshmakers.Accounting/AccountingDocument
-                      rtIdPath: $.documentRtId
-                      generateRtId: true
-                      rtWellKnownNamePath: $.ai.result.documentNumber
-                      attributeUpdates:
-                        - attributeName: DocumentNumber
-                          attributeValueType: String
-                          valuePath: $.ai.result.documentNumber
-                        - attributeName: DocumentDate
-                          attributeValueType: DateTime
-                          valuePath: $.ai.result.documentDate
-                        - attributeName: DueDate
-                          attributeValueType: DateTime
-                          valuePath: $.ai.result.dueDate
-                        - attributeName: DocumentType
-                          attributeValueType: Enum
-                          valuePath: $.docType
-                        - attributeName: DocumentState
-                          attributeValueType: Enum
-                          value: OPEN
-                        - attributeName: Vendor.LegalEntityType
-                          attributeValueType: Enum
-                          value: COMPANY
-                        - attributeName: Vendor.CompanyName
-                          attributeValueType: String
-                          valuePath: $.ai.result.vendor.companyName
-                        - attributeName: Vendor.IBAN
-                          attributeValueType: String
-                          valuePath: $.ai.result.vendor.iban
-                        - attributeName: Vendor.AccountName
-                          attributeValueType: String
-                          valuePath: $.ai.result.vendor.accountName
-                        # Address is written from the SANITIZED staging path
-                        # ($.san.*), populated above only when the party's mandatory
-                        # Street + CityTown are both present. This prevents a partial
-                        # AI address (e.g. countryCode only) from materializing the
-                        # Basic Address record without its mandatory fields, which
-                        # would FatalError ApplyChanges and abort the whole ForEach.
-                        # A partial/absent address instead lands in Comment via
-                        # addressNotes.
-                        - attributeName: Vendor.Address.Street
-                          attributeValueType: String
-                          valuePath: $.san.vendor.address.street
-                        - attributeName: Vendor.Address.Zipcode
-                          attributeValueType: String
-                          valuePath: $.san.vendor.address.zipcode
-                        - attributeName: Vendor.Address.CityTown
-                          attributeValueType: String
-                          valuePath: $.san.vendor.address.city
-                        - attributeName: Vendor.Address.NationalCode
-                          attributeValueType: String
-                          valuePath: $.san.vendor.address.countryCode
-                        # Customer (invoice recipient/buyer). All fields are written
-                        # via valuePath only — no static value — so when the AI emits
-                        # no customer, every path is absent and NO Customer record is
-                        # materialized (LegalEntityType is optional on Contact). Address
-                        # from the sanitized staging path, same as the vendor.
-                        - attributeName: Customer.CompanyName
-                          attributeValueType: String
-                          valuePath: $.ai.result.customer.companyName
-                        - attributeName: Customer.IBAN
-                          attributeValueType: String
-                          valuePath: $.ai.result.customer.iban
-                        - attributeName: Customer.AccountName
-                          attributeValueType: String
-                          valuePath: $.ai.result.customer.accountName
-                        - attributeName: Customer.Address.Street
-                          attributeValueType: String
-                          valuePath: $.san.customer.address.street
-                        - attributeName: Customer.Address.Zipcode
-                          attributeValueType: String
-                          valuePath: $.san.customer.address.zipcode
-                        - attributeName: Customer.Address.CityTown
-                          attributeValueType: String
-                          valuePath: $.san.customer.address.city
-                        - attributeName: Customer.Address.NationalCode
-                          attributeValueType: String
-                          valuePath: $.san.customer.address.countryCode
-                        - attributeName: Comment
-                          attributeValueType: String
-                          valuePath: $.ai.result.vendor.addressNotes
-                        - attributeName: GrossTotal
-                          attributeValueType: Double
-                          valuePath: $.ai.result.grossTotal
-                        - attributeName: NetTotal
-                          attributeValueType: Double
-                          valuePath: $.ai.result.netTotal
-                        - attributeName: TaxTotal
-                          attributeValueType: Double
-                          valuePath: $.ai.result.taxTotal
-                        - attributeName: TaxRate
-                          attributeValueType: Double
-                          valuePath: $.ai.result.taxRate
-                        - attributeName: FileHash
-                          attributeValueType: String
-                          valuePath: $.key.Attributes.FileHash
-                    - type: CreateAssociationUpdate@1
-                      description: Link the document to the stored file
-                      targetPath: $.updates._assocItems
-                      targetValueKind: Array
-                      targetValueWriteMode: Overwrite
-                      updateKind: Create
-                      originRtIdPath: $.updates._items[0].RtEntity.RtId
-                      originCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
-                      targetRtIdPath: $.key.Attributes.FileRtId
-                      targetCkTypeId: System.Reporting/FileSystemItem
-                      associationRoleId: System/Related
-                    - type: CreateAssociationUpdate@1
-                      description: Link the staged upload to the created document
-                      targetPath: $.updates._assocItems
-                      targetValueKind: Array
-                      targetValueWriteMode: Append
-                      updateKind: Create
-                      originRtIdPath: $.key.RtId
-                      originCkTypeId: Meshmakers.Accounting/UploadedDocument
-                      targetRtIdPath: $.updates._items[0].RtEntity.RtId
-                      targetCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
-                      associationRoleId: Meshmakers.Accounting/UploadedToDocument
-                    - type: ApplyChanges@2
-                      entityUpdatesPath: $.updates._items
-                      associationUpdatesPath: $.updates._assocItems
-                    # --- AB#4433: re-arm plausibly-matching Unmatched transactions ---
-                    # A transaction synced (finAPI) before its document existed is often
-                    # burned to Unmatched(2) before an OPEN candidate document exists.
-                    # The AI matching pass only reconsiders MatchState=Unreviewed(0)
-                    # (the recurring pass re-checks In [0, 2] since AB#4473), so such
-                    # a transaction is never re-matched once its document finally
-                    # arrives. Reset the plausible
-                    # candidates for THIS freshly-created OPEN document back to
-                    # Unreviewed so the next Match Transactions run (<=15 min poll, or
-                    # the manual "Run matching") reconsiders them, including the AI
-                    # fallback that alone can resolve masked/ambiguous payees (e.g.
-                    # PayPal). Scope: transaction direction (Debit pays an incoming
-                    # document, Credit settles an outgoing one), |amount| within
-                    # [GrossTotal, GrossTotal + 15 EUR transfer fee], and BookingDate on/
-                    # after the DocumentDate. Idempotent: only MatchState=Unmatched(2)
-                    # rows are touched (Matched/Ignored are left untouched). The explicit
-                    # PendingDocument state that would remove the re-arm churn is the
-                    # deferred part B of AB#4433 (needs a shared Basic.Accounting change).
-                    - type: SetPrimitiveValue@1
-                      description: Copy the AI gross total under $.key so all Math bases are $.key (Math itemTargetPath is relative to path — AB#4433 fix)
-                      valuePath: $.ai.result.grossTotal
-                      targetPath: $.key._rearmGross
-                      valueType: Double
-                    - type: Math@1
-                      description: -GrossTotal (Debit upper bound)
-                      path: $.key
-                      itemPath: $._rearmGross
-                      itemTargetPath: $._rearmNegGross
-                      operation: Multiply
-                      value: -1
-                    - type: Math@1
-                      description: -(GrossTotal + 15) = -GrossTotal - 15 (Debit lower bound)
-                      path: $.key
-                      itemPath: $._rearmNegGross
-                      itemTargetPath: $._rearmLo
-                      operation: Subtract
-                      value: 15
-                    - type: SetPrimitiveValue@1
-                      description: Default = Debit(1) pays an incoming document
-                      targetPath: $.key._rearmDir
-                      value: 1
+                      targetPath: $.invCount
                       valueType: Int
-                    - type: SetPrimitiveValue@1
-                      description: Debit upper bound = -GrossTotal
-                      valuePath: $.key._rearmNegGross
-                      targetPath: $.key._rearmHi
-                      valueType: Double
-                    - type: If@1
-                      description: Outgoing document is settled by a Credit(0) — positive amount band
-                      path: $.docType
-                      operator: Equals
-                      value: OUTGOING
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.key._rearmDir
-                          value: 0
-                          valueType: Int
-                        - type: SetPrimitiveValue@1
-                          description: Credit lower bound = GrossTotal
-                          valuePath: $.ai.result.grossTotal
-                          targetPath: $.key._rearmLo
-                          valueType: Double
-                        - type: Math@1
-                          description: Credit upper bound = GrossTotal + 15 (Subtract -15 = +15)
-                          path: $.key
-                          itemPath: $._rearmGross
-                          itemTargetPath: $._rearmHi
-                          operation: Subtract
-                          value: -15
-                    - type: GetRtEntitiesByType@1
-                      description: Unmatched transactions plausibly paying this document (amount band + direction + booked on/after the document date)
-                      ckTypeId: Basic.Accounting/BankTransaction
-                      targetPath: $._rearmCandidates
-                      take: 50
-                      fieldFilters:
-                        - attributePath: MatchState
-                          operator: Equals
-                          comparisonValue: 2
-                        - attributePath: Direction
-                          operator: Equals
-                          comparisonValuePath: $.key._rearmDir
-                        - attributePath: Amount
-                          operator: GreaterEqualThan
-                          comparisonValuePath: $.key._rearmLo
-                        - attributePath: Amount
-                          operator: LessEqualThan
-                          comparisonValuePath: $.key._rearmHi
-                        - attributePath: BookingDate
-                          operator: GreaterEqualThan
-                          comparisonValuePath: $.ai.result.documentDate
+                      valuePath: $.ai.result.invoiceCount
+                - type: If@1
+                  description: Gate, duplicate-check and create each reported invoice
+                  path: $.invCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
                     - type: ForEach@1
-                      description: Re-arm each candidate transaction to Unreviewed so matching reconsiders it
-                      iterationPath: $._rearmCandidates.Items
-                      targetPath: $._rearmApplied
+                      description: One accounting document per invoice in the PDF
+                      iterationPath: $.ai.result.invoices
+                      targetPath: $.invoiceResults
                       targetValueKind: Simple
                       targetValueWriteMode: Overwrite
                       maxDegreeOfParallelism: 1
                       transformations:
-                        - type: CreateUpdateInfo@1
-                          description: Reset the transaction to Unreviewed
-                          targetPath: $._rearmUpdates
-                          targetValueKind: Array
-                          targetValueWriteMode: Overwrite
-                          updateKind: Update
-                          ckTypeId: Basic.Accounting/BankTransaction
-                          rtIdPath: $.key.RtId
-                          attributeUpdates:
-                            - attributeName: MatchState
-                              attributeValueType: Enum
-                              value: Unreviewed
-                        - type: ApplyChanges@2
-                          entityUpdatesPath: $._rearmUpdates
+                        - type: SetPrimitiveValue@1
+                          description: Default - document not creatable
+                          targetPath: $.docOk
+                          valueType: Boolean
+                          value: false
+                        - type: If@1
+                          description: Extraction claims complete
+                          path: $.key.extractionComplete
+                          operator: Equals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.docOk
+                              valueType: Boolean
+                              value: true
+                            - type: If@1
+                              description: documentNumber missing - demote to incomplete
+                              path: $.key.documentNumber
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: documentNumber empty - demote to incomplete
+                              path: $.key.documentNumber
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docOk
+                                  valueType: Boolean
+                                  value: false
+                        # AB#4452: semantic duplicate detection. The SHA-256 FileHash check
+                        # only catches byte-identical files - the same invoice arriving via
+                        # two channels (e-mail receipt vs. portal export) passes it, and
+                        # Apple even issues DIFFERENT invoice numbers per channel for the
+                        # same charge. Checks before creating the document:
+                        #   1. hard: an existing AccountingDocument matches the extracted
+                        #      DocumentNumber AND (the same vendor OR the same
+                        #      GrossTotal+DocumentDate) -> genuine re-import, never create a
+                        #      second one. DocumentNumber ALONE is not enough: external
+                        #      reference numbers (customer/case numbers) are echoed across
+                        #      different vendors' documents - e.g. an OeAMTC customer number
+                        #      printed on a lawyer's dunning letter would otherwise wrongly
+                        #      block the (different) lawyer invoice (prod false-positive,
+                        #      salzburgdev 2026-07-24).
+                        #   2. soft: a document with the identical GrossTotal AND
+                        #      DocumentDate but a different number exists -> suspected twin;
+                        #      do not create silently, flag the upload for manual review.
+                        - type: SetPrimitiveValue@1
+                          description: Default - no duplicate detected
+                          targetPath: $.dupNote
+                          valueType: String
+                          value: ""
+                        - type: If@1
+                          description: Extraction valid - run the duplicate checks
+                          path: $.docOk
+                          operator: Equals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            # Hard-duplicate candidates: an existing document must share the
+                            # DocumentNumber AND either the vendor or the amount+date. A bare
+                            # DocumentNumber collision is NOT a duplicate (shared external
+                            # reference numbers across vendors).
+                            - type: GetRtEntitiesByType@1
+                              description: Same document number AND same vendor (genuine re-import)
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetPath: $._dupByNumberVendor
+                              take: 1
+                              fieldFilters:
+                                - attributePath: DocumentNumber
+                                  operator: Equals
+                                  comparisonValuePath: $.key.documentNumber
+                                - attributePath: Vendor.CompanyName
+                                  operator: Equals
+                                  comparisonValuePath: $.key.vendor.companyName
+                            - type: GetRtEntitiesByType@1
+                              description: Same document number AND same amount+date (same invoice, vendor-name variant)
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetPath: $._dupByNumberAmountDate
+                              take: 1
+                              fieldFilters:
+                                - attributePath: DocumentNumber
+                                  operator: Equals
+                                  comparisonValuePath: $.key.documentNumber
+                                - attributePath: GrossTotal
+                                  operator: Equals
+                                  comparisonValuePath: $.key.grossTotal
+                                - attributePath: DocumentDate
+                                  operator: Equals
+                                  comparisonValuePath: $.key.documentDate
+                            - type: If@1
+                              description: Hard duplicate - number + vendor match
+                              path: $._dupByNumberVendor.TotalCount
+                              operator: GreaterThan
+                              value: 0
+                              valueType: Int64
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docOk
+                                  valueType: Boolean
+                                  value: false
+                                - type: SetPrimitiveValue@1
+                                  description: Duplicate reason shown in the Inbox
+                                  targetPath: $.dupNote
+                                  valueType: String
+                                  value: "Duplicate: an accounting document with the same number and vendor already exists. No document was created."
+                            - type: If@1
+                              description: Hard duplicate - number + amount+date match (vendor name may differ per channel)
+                              path: $._dupByNumberAmountDate.TotalCount
+                              operator: GreaterThan
+                              value: 0
+                              valueType: Int64
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docOk
+                                  valueType: Boolean
+                                  value: false
+                                - type: SetPrimitiveValue@1
+                                  description: Duplicate reason shown in the Inbox
+                                  targetPath: $.dupNote
+                                  valueType: String
+                                  value: "Duplicate: an accounting document with the same number, amount and date already exists. No document was created."
+                            - type: If@1
+                              description: Not a hard duplicate - check for a same-amount/same-date twin with a different number (soft suspect)
+                              path: $.docOk
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: GetRtEntitiesByType@1
+                                  description: Existing document with identical gross total and document date
+                                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                  targetPath: $._dupByAmountDate
+                                  take: 1
+                                  fieldFilters:
+                                    - attributePath: GrossTotal
+                                      operator: Equals
+                                      comparisonValuePath: $.key.grossTotal
+                                    - attributePath: DocumentDate
+                                      operator: Equals
+                                      comparisonValuePath: $.key.documentDate
+                                - type: If@1
+                                  description: Suspected duplicate - flag for manual review instead of creating silently
+                                  path: $._dupByAmountDate.TotalCount
+                                  operator: GreaterThan
+                                  value: 0
+                                  valueType: Int64
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.docOk
+                                      valueType: Boolean
+                                      value: false
+                                    - type: SetPrimitiveValue@1
+                                      description: Suspected-duplicate reason shown in the Inbox
+                                      targetPath: $.dupNote
+                                      valueType: String
+                                      value: "Possible duplicate: an accounting document with the same amount and document date already exists (invoice numbers may differ per channel). No document was created - please verify and process manually."
+                        - type: If@1
+                          description: Extraction successful - create AccountingDocument
+                          path: $.docOk
+                          operator: Equals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            # Normalize the AI-detected direction to a guaranteed enum name
+                            # before the write: default INCOMING, promote to OUTGOING only on
+                            # an exact match. Guards against a missing/variant documentType
+                            # breaking the Enum attribute conversion.
+                            - type: SetPrimitiveValue@1
+                              description: Default document direction
+                              targetPath: $.docType
+                              valueType: String
+                              value: INCOMING
+                            - type: If@1
+                              description: Our company is the issuer — outgoing invoice
+                              path: $.key.documentType
+                              operator: Equals
+                              value: OUTGOING
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docType
+                                  valueType: String
+                                  value: OUTGOING
+                            # AB#4542: a zero-total invoice (voucher/credit-settled, e.g.
+                            # HelloFresh voucher weeks, provider credit notes) will never
+                            # see a payment — create it as PAID with NoTransactionExpected
+                            # instead of leaving it OPEN forever. $.noTxExpected stays
+                            # absent for normal documents; an absent valuePath skips the
+                            # attribute in CreateUpdateInfo.
+                            - type: SetPrimitiveValue@1
+                              description: New documents await a payment (default)
+                              targetPath: $.docState
+                              valueType: String
+                              value: OPEN
+                            - type: If@1
+                              description: Zero gross total — voucher/credit-settled, no payment expected
+                              path: $.key.grossTotal
+                              operator: Equals
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docState
+                                  valueType: String
+                                  value: PAID
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.noTxExpected
+                                  valueType: Boolean
+                                  value: true
+                            # --- Sanitize party addresses (poison-item fix) -------------
+                            # The Basic Address record has MANDATORY Street + CityTown. The
+                            # AI is asked to emit an address all-or-nothing, but occasionally
+                            # returns a PARTIAL address (e.g. only zipcode/countryCode); that
+                            # partial object still materializes the embedded Address record,
+                            # whose missing Street/CityTown then FatalError ApplyChanges and
+                            # abort the ENTIRE ForEach — stranding every queued upload. Do not
+                            # trust the AI's structural omission: copy each party's address
+                            # into a sanitized staging path ($.san.*) ONLY when BOTH mandatory
+                            # fields (street + city) are present and non-empty; otherwise the
+                            # staging paths stay absent and NO Address record is materialized
+                            # (the raw sender address is still kept in Comment via addressNotes).
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.vendorAddrOk
+                              valueType: Boolean
+                              value: true
+                            - type: If@1
+                              description: Vendor street absent — no address
+                              path: $.key.vendor.address.street
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor street empty — no address
+                              path: $.key.vendor.address.street
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor city absent — no address
+                              path: $.key.vendor.address.city
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor city empty — no address
+                              path: $.key.vendor.address.city
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor address complete — stage the fields for the write
+                              path: $.vendorAddrOk
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.key.vendor.address.street
+                                  targetPath: $.san.vendor.address.street
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.key.vendor.address.zipcode
+                                  targetPath: $.san.vendor.address.zipcode
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.key.vendor.address.city
+                                  targetPath: $.san.vendor.address.city
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.key.vendor.address.countryCode
+                                  targetPath: $.san.vendor.address.countryCode
+                                  valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.customerAddrOk
+                              valueType: Boolean
+                              value: true
+                            - type: If@1
+                              description: Customer street absent — no address
+                              path: $.key.customer.address.street
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer street empty — no address
+                              path: $.key.customer.address.street
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer city absent — no address
+                              path: $.key.customer.address.city
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer city empty — no address
+                              path: $.key.customer.address.city
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer address complete — stage the fields for the write
+                              path: $.customerAddrOk
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.key.customer.address.street
+                                  targetPath: $.san.customer.address.street
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.key.customer.address.zipcode
+                                  targetPath: $.san.customer.address.zipcode
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.key.customer.address.city
+                                  targetPath: $.san.customer.address.city
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.key.customer.address.countryCode
+                                  targetPath: $.san.customer.address.countryCode
+                                  valueType: String
+                            - type: CreateUpdateInfo@1
+                              targetPath: $.updates._items
+                              targetValueKind: Array
+                              targetValueWriteMode: Overwrite
+                              updateKind: Insert
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              rtIdPath: $.documentRtId
+                              generateRtId: true
+                              rtWellKnownNamePath: $.key.documentNumber
+                              attributeUpdates:
+                                - attributeName: DocumentNumber
+                                  attributeValueType: String
+                                  valuePath: $.key.documentNumber
+                                - attributeName: DocumentDate
+                                  attributeValueType: DateTime
+                                  valuePath: $.key.documentDate
+                                - attributeName: DueDate
+                                  attributeValueType: DateTime
+                                  valuePath: $.key.dueDate
+                                - attributeName: DocumentType
+                                  attributeValueType: Enum
+                                  valuePath: $.docType
+                                - attributeName: DocumentState
+                                  attributeValueType: Enum
+                                  valuePath: $.docState
+                                - attributeName: NoTransactionExpected
+                                  attributeValueType: Boolean
+                                  valuePath: $.noTxExpected
+                                - attributeName: Vendor.LegalEntityType
+                                  attributeValueType: Enum
+                                  value: COMPANY
+                                - attributeName: Vendor.CompanyName
+                                  attributeValueType: String
+                                  valuePath: $.key.vendor.companyName
+                                - attributeName: Vendor.IBAN
+                                  attributeValueType: String
+                                  valuePath: $.key.vendor.iban
+                                - attributeName: Vendor.AccountName
+                                  attributeValueType: String
+                                  valuePath: $.key.vendor.accountName
+                                # Address is written from the SANITIZED staging path
+                                # ($.san.*), populated above only when the party's mandatory
+                                # Street + CityTown are both present. This prevents a partial
+                                # AI address (e.g. countryCode only) from materializing the
+                                # Basic Address record without its mandatory fields, which
+                                # would FatalError ApplyChanges and abort the whole ForEach.
+                                # A partial/absent address instead lands in Comment via
+                                # addressNotes.
+                                - attributeName: Vendor.Address.Street
+                                  attributeValueType: String
+                                  valuePath: $.san.vendor.address.street
+                                - attributeName: Vendor.Address.Zipcode
+                                  attributeValueType: String
+                                  valuePath: $.san.vendor.address.zipcode
+                                - attributeName: Vendor.Address.CityTown
+                                  attributeValueType: String
+                                  valuePath: $.san.vendor.address.city
+                                - attributeName: Vendor.Address.NationalCode
+                                  attributeValueType: String
+                                  valuePath: $.san.vendor.address.countryCode
+                                # Customer (invoice recipient/buyer). All fields are written
+                                # via valuePath only — no static value — so when the AI emits
+                                # no customer, every path is absent and NO Customer record is
+                                # materialized (LegalEntityType is optional on Contact). Address
+                                # from the sanitized staging path, same as the vendor.
+                                - attributeName: Customer.CompanyName
+                                  attributeValueType: String
+                                  valuePath: $.key.customer.companyName
+                                - attributeName: Customer.IBAN
+                                  attributeValueType: String
+                                  valuePath: $.key.customer.iban
+                                - attributeName: Customer.AccountName
+                                  attributeValueType: String
+                                  valuePath: $.key.customer.accountName
+                                - attributeName: Customer.Address.Street
+                                  attributeValueType: String
+                                  valuePath: $.san.customer.address.street
+                                - attributeName: Customer.Address.Zipcode
+                                  attributeValueType: String
+                                  valuePath: $.san.customer.address.zipcode
+                                - attributeName: Customer.Address.CityTown
+                                  attributeValueType: String
+                                  valuePath: $.san.customer.address.city
+                                - attributeName: Customer.Address.NationalCode
+                                  attributeValueType: String
+                                  valuePath: $.san.customer.address.countryCode
+                                - attributeName: Comment
+                                  attributeValueType: String
+                                  valuePath: $.key.vendor.addressNotes
+                                - attributeName: GrossTotal
+                                  attributeValueType: Double
+                                  valuePath: $.key.grossTotal
+                                - attributeName: NetTotal
+                                  attributeValueType: Double
+                                  valuePath: $.key.netTotal
+                                - attributeName: TaxTotal
+                                  attributeValueType: Double
+                                  valuePath: $.key.taxTotal
+                                - attributeName: TaxRate
+                                  attributeValueType: Double
+                                  valuePath: $.key.taxRate
+                                - attributeName: FileHash
+                                  attributeValueType: String
+                                  valuePath: $.full.key.Attributes.FileHash
+                                - attributeName: PageFrom
+                                  attributeValueType: Int
+                                  valuePath: $.key.pageFrom
+                                - attributeName: PageTo
+                                  attributeValueType: Int
+                                  valuePath: $.key.pageTo
+                            - type: CreateAssociationUpdate@1
+                              description: Link the document to the stored file
+                              targetPath: $.updates._assocItems
+                              targetValueKind: Array
+                              targetValueWriteMode: Overwrite
+                              updateKind: Create
+                              originRtIdPath: $.updates._items[0].RtEntity.RtId
+                              originCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
+                              targetRtIdPath: $.full.key.Attributes.FileRtId
+                              targetCkTypeId: System.Reporting/FileSystemItem
+                              associationRoleId: System/Related
+                            - type: CreateAssociationUpdate@1
+                              description: Link the staged upload to the created document
+                              targetPath: $.updates._assocItems
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Create
+                              originRtIdPath: $.full.key.RtId
+                              originCkTypeId: Meshmakers.Accounting/UploadedDocument
+                              targetRtIdPath: $.updates._items[0].RtEntity.RtId
+                              targetCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
+                              associationRoleId: Meshmakers.Accounting/UploadedToDocument
+                            - type: ApplyChanges@2
+                              entityUpdatesPath: $.updates._items
+                              associationUpdatesPath: $.updates._assocItems
+                            # --- AB#4433: re-arm plausibly-matching Unmatched transactions ---
+                            # A transaction synced (finAPI) before its document existed is often
+                            # burned to Unmatched(2) before an OPEN candidate document exists.
+                            # The AI matching pass only reconsiders MatchState=Unreviewed(0)
+                            # (the recurring pass re-checks In [0, 2] since AB#4473), so such
+                            # a transaction is never re-matched once its document finally
+                            # arrives. Reset the plausible
+                            # candidates for THIS freshly-created OPEN document back to
+                            # Unreviewed so the next Match Transactions run (<=15 min poll, or
+                            # the manual "Run matching") reconsiders them, including the AI
+                            # fallback that alone can resolve masked/ambiguous payees (e.g.
+                            # PayPal). Scope: transaction direction (Debit pays an incoming
+                            # document, Credit settles an outgoing one), |amount| within
+                            # [GrossTotal, GrossTotal + 15 EUR transfer fee], and BookingDate on/
+                            # after the DocumentDate. Idempotent: only MatchState=Unmatched(2)
+                            # rows are touched (Matched/Ignored are left untouched). The explicit
+                            # PendingDocument state that would remove the re-arm churn is the
+                            # deferred part B of AB#4433 (needs a shared Basic.Accounting change).
+                            - type: SetPrimitiveValue@1
+                              description: Copy the AI gross total under $.key so all Math bases are $.key (Math itemTargetPath is relative to path — AB#4433 fix)
+                              valuePath: $.key.grossTotal
+                              targetPath: $.key._rearmGross
+                              valueType: Double
+                            - type: Math@1
+                              description: -GrossTotal (Debit upper bound)
+                              path: $.key
+                              itemPath: $._rearmGross
+                              itemTargetPath: $._rearmNegGross
+                              operation: Multiply
+                              value: -1
+                            - type: Math@1
+                              description: -(GrossTotal + 15) = -GrossTotal - 15 (Debit lower bound)
+                              path: $.key
+                              itemPath: $._rearmNegGross
+                              itemTargetPath: $._rearmLo
+                              operation: Subtract
+                              value: 15
+                            - type: SetPrimitiveValue@1
+                              description: Default = Debit(1) pays an incoming document
+                              targetPath: $.key._rearmDir
+                              value: 1
+                              valueType: Int
+                            - type: SetPrimitiveValue@1
+                              description: Debit upper bound = -GrossTotal
+                              valuePath: $.key._rearmNegGross
+                              targetPath: $.key._rearmHi
+                              valueType: Double
+                            - type: If@1
+                              description: Outgoing document is settled by a Credit(0) — positive amount band
+                              path: $.docType
+                              operator: Equals
+                              value: OUTGOING
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key._rearmDir
+                                  value: 0
+                                  valueType: Int
+                                - type: SetPrimitiveValue@1
+                                  description: Credit lower bound = GrossTotal
+                                  valuePath: $.key.grossTotal
+                                  targetPath: $.key._rearmLo
+                                  valueType: Double
+                                - type: Math@1
+                                  description: Credit upper bound = GrossTotal + 15 (Subtract -15 = +15)
+                                  path: $.key
+                                  itemPath: $._rearmGross
+                                  itemTargetPath: $._rearmHi
+                                  operation: Subtract
+                                  value: -15
+                            - type: GetRtEntitiesByType@1
+                              description: Unmatched transactions plausibly paying this document (amount band + direction + booked on/after the document date)
+                              ckTypeId: Basic.Accounting/BankTransaction
+                              targetPath: $._rearmCandidates
+                              take: 50
+                              fieldFilters:
+                                - attributePath: MatchState
+                                  operator: Equals
+                                  comparisonValue: 2
+                                - attributePath: Direction
+                                  operator: Equals
+                                  comparisonValuePath: $.key._rearmDir
+                                - attributePath: Amount
+                                  operator: GreaterEqualThan
+                                  comparisonValuePath: $.key._rearmLo
+                                - attributePath: Amount
+                                  operator: LessEqualThan
+                                  comparisonValuePath: $.key._rearmHi
+                                - attributePath: BookingDate
+                                  operator: GreaterEqualThan
+                                  comparisonValuePath: $.key.documentDate
+                            - type: ForEach@1
+                              description: Re-arm each candidate transaction to Unreviewed so matching reconsiders it
+                              iterationPath: $._rearmCandidates.Items
+                              targetPath: $._rearmApplied
+                              targetValueKind: Simple
+                              targetValueWriteMode: Overwrite
+                              maxDegreeOfParallelism: 1
+                              transformations:
+                                - type: CreateUpdateInfo@1
+                                  description: Reset the transaction to Unreviewed
+                                  targetPath: $._rearmUpdates
+                                  targetValueKind: Array
+                                  targetValueWriteMode: Overwrite
+                                  updateKind: Update
+                                  ckTypeId: Basic.Accounting/BankTransaction
+                                  rtIdPath: $.key.RtId
+                                  attributeUpdates:
+                                    - attributeName: MatchState
+                                      attributeValueType: Enum
+                                      value: Unreviewed
+                                - type: ApplyChanges@2
+                                  entityUpdatesPath: $._rearmUpdates
+                        - type: If@1
+                          description: Invoice not created - record the reason on the upload (final state is decided after the loop)
+                          path: $.docOk
+                          operator: NotEquals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: Default manual-follow-up reason
+                              targetPath: $.procError
+                              valueType: String
+                              value: "OCR or AI extraction did not produce a complete result. Please process the document manually."
+                            - type: If@1
+                              description: Duplicate detection produced a specific reason (AB#4452)
+                              path: $.dupNote
+                              operator: NotEquals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.procError
+                                  valueType: String
+                                  valuePath: $.dupNote
+                            - type: CreateUpdateInfo@1
+                              targetPath: $.invoiceError
+                              targetValueKind: Array
+                              targetValueWriteMode: Overwrite
+                              updateKind: Update
+                              ckTypeId: Meshmakers.Accounting/UploadedDocument
+                              rtIdPath: $.full.key.RtId
+                              attributeUpdates:
+                                - attributeName: ProcessingError
+                                  attributeValueType: String
+                                  valuePath: $.procError
+                            - type: ApplyChanges@2
+                              entityUpdatesPath: $.invoiceError
+                # Upload final state (AB#4543): COMPLETED only when every
+                # reported invoice has a linked result document (links from
+                # previous runs count, so re-analysis stays idempotent);
+                # otherwise INCOMPLETE. Per-invoice failure reasons were already
+                # written to ProcessingError inside the loop; the no-invoice
+                # case gets the generic message here.
+                - type: GetAssociationTargets@1
+                  description: Result documents linked to this upload
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/UploadedDocument
+                  targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  associationRoleId: Meshmakers.Accounting/UploadedToDocument
+                  graphDirection: Outbound
+                  targetPath: $.linkedDocs
+                - type: SetPrimitiveValue@1
+                  description: Default - upload not fully processed
+                  targetPath: $.uploadDone
+                  valueType: Boolean
+                  value: false
+                - type: If@1
+                  description: At least one invoice was reported
+                  path: $.invCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: If@1
+                      description: Every reported invoice has a linked document
+                      path: $.linkedDocs[0].TotalCount
+                      operator: Equals
+                      valuePath: $.invCount
+                      valueType: Int64
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.uploadDone
+                          valueType: Boolean
+                          value: true
+                - type: If@1
+                  description: All invoices created - mark the upload as completed
+                  path: $.uploadDone
+                  operator: Equals
+                  value: true
+                  valueType: Boolean
+                  transformations:
                     - type: CreateUpdateInfo@1
-                      description: Mark the upload as completed
                       targetPath: $.finals
                       targetValueKind: Array
                       targetValueWriteMode: Overwrite
@@ -3614,31 +3803,31 @@ entities:
                         - attributeName: ProcessedAt
                           attributeValueType: DateTime
                           valuePath: $.processedAt
+                        # Clear a leftover per-invoice note from a previous run
+                        # (e.g. a duplicate re-analysis that now completes).
+                        - attributeName: ProcessingError
+                          attributeValueType: String
+                          value: ""
                     - type: ApplyChanges@2
                       entityUpdatesPath: $.finals
                 - type: If@1
-                  description: Extraction incomplete or failed - flag for manual follow-up
-                  path: $.docOk
+                  description: Extraction incomplete, duplicate or no invoice found - flag for manual follow-up
+                  path: $.uploadDone
                   operator: NotEquals
                   value: true
                   valueType: Boolean
                   transformations:
-                    - type: SetPrimitiveValue@1
-                      description: Default manual-follow-up reason
-                      targetPath: $.procError
-                      valueType: String
-                      value: "OCR or AI extraction did not produce a complete result. Please process the document manually."
                     - type: If@1
-                      description: Duplicate detection produced a specific reason (AB#4452)
-                      path: $.dupNote
-                      operator: NotEquals
-                      value: ""
-                      valueType: String
+                      description: No invoice reported at all - write the generic reason (per-invoice reasons were written in the loop)
+                      path: $.invCount
+                      operator: LessEqualsThan
+                      value: 0
+                      valueType: Int64
                       transformations:
                         - type: SetPrimitiveValue@1
-                          targetPath: $.procError
+                          targetPath: $.noInvoiceNote
                           valueType: String
-                          valuePath: $.dupNote
+                          value: "OCR or AI extraction did not produce a complete result. Please process the document manually."
                     - type: CreateUpdateInfo@1
                       targetPath: $.finals
                       targetValueKind: Array
@@ -3655,7 +3844,7 @@ entities:
                           valuePath: $.processedAt
                         - attributeName: ProcessingError
                           attributeValueType: String
-                          valuePath: $.procError
+                          valuePath: $.noInvoiceNote
                     - type: ApplyChanges@2
                       entityUpdatesPath: $.finals
                 - type: SetPrimitiveValue@1
@@ -4682,8 +4871,31 @@ entities:
                       targetPath: $._wantedDocType
                       value: 1
                       valueType: Int
+                # AB#4542: the candidate query is restricted to documents whose
+                # own date window [document date - 1 day, document date + 14
+                # days] contains this booking date (inverted below: the document
+                # date must lie in [booking date - 14 days, booking date + 1
+                # day]). Without the date filters, recurring same-amount invoice
+                # series (e.g. a monthly retainer) made TotalCount N>1 forever
+                # and every series member stayed OPEN, even though each
+                # transaction's window singles out exactly one member. With the
+                # filters, TotalCount==1 means "exactly one IN-WINDOW candidate"
+                # and out-of-window or undated documents no longer block the
+                # pass (undated documents simply drop out of the query).
+                - type: DateTime@1
+                  description: Earliest document date whose match window still contains this booking date
+                  operation: AddDays
+                  path: $.key.Attributes.BookingDate
+                  value: -14
+                  targetPath: $.key._detDocMinDate
+                - type: DateTime@1
+                  description: Latest document date whose match window still contains this booking date
+                  operation: AddDays
+                  path: $.key.Attributes.BookingDate
+                  value: 1
+                  targetPath: $.key._detDocMaxDate
                 - type: GetRtEntitiesByType@1
-                  description: Open documents with exactly this gross total and type
+                  description: Open documents with exactly this gross total and type, dated so their match window contains this booking date
                   ckTypeId: Meshmakers.Accounting/AccountingDocument
                   targetPath: $._candidates
                   take: 5
@@ -4697,8 +4909,14 @@ entities:
                     - attributePath: GrossTotal
                       operator: Equals
                       comparisonValuePath: $.key._docAmount
+                    - attributePath: DocumentDate
+                      operator: GreaterEqualThan
+                      comparisonValuePath: $.key._detDocMinDate
+                    - attributePath: DocumentDate
+                      operator: LessEqualThan
+                      comparisonValuePath: $.key._detDocMaxDate
                 - type: If@1
-                  description: Exactly one candidate — deterministic match
+                  description: Exactly one in-window candidate — deterministic match
                   path: $._candidates.TotalCount
                   operator: Equals
                   value: 1
@@ -4754,7 +4972,16 @@ entities:
                               valueType: DateTime
                               transformations:
                                 - type: GetRtEntitiesByType@1
-                                  description: Pending transactions with the same amount and direction (rival candidates)
+                                  # AB#4542: the rival query is window-filtered in the
+                                  # QUERY itself. Without the date filters, take:50
+                                  # truncated the rival set — with 90+ pending
+                                  # transactions of a popular amount (61.48 weekly
+                                  # subscription) the transaction under test was often
+                                  # not among the returned 50, the in-window sum came
+                                  # out 0 instead of 1 and the match was wrongly
+                                  # skipped. Window-filtering keeps the set tiny and
+                                  # the count exact regardless of volume.
+                                  description: Pending transactions with the same amount and direction booked inside the document's date window (rival candidates)
                                   ckTypeId: Basic.Accounting/BankTransaction
                                   targetPath: $.key._detRivals
                                   take: 50
@@ -4770,6 +4997,12 @@ entities:
                                     - attributePath: Direction
                                       operator: Equals
                                       comparisonValuePath: $.key.Attributes.Direction
+                                    - attributePath: BookingDate
+                                      operator: GreaterEqualThan
+                                      comparisonValuePath: $.key._detMinDate
+                                    - attributePath: BookingDate
+                                      operator: LessEqualThan
+                                      comparisonValuePath: $.key._detMaxDate
                                 - type: ForEach@1
                                   description: Flag every rival booked inside the document's date window (the transaction itself counts once)
                                   iterationPath: $.key._detRivals.Items
@@ -5180,7 +5413,12 @@ entities:
                                           operation: Multiply
                                           value: -1
                                     - type: GetRtEntitiesByType@1
-                                      description: Pending transactions whose amount lies in the same fee band (rival candidates)
+                                      # AB#4542: window-filtered in the query itself —
+                                      # same take:50 truncation issue as the exact-pass
+                                      # rival guard (90+ pending same-amount
+                                      # transactions pushed the transaction under test
+                                      # out of the returned page).
+                                      description: Pending transactions whose amount lies in the same fee band, booked inside the document's date window (rival candidates)
                                       ckTypeId: Basic.Accounting/BankTransaction
                                       targetPath: $.key._fbRivals
                                       take: 50
@@ -5199,6 +5437,12 @@ entities:
                                         - attributePath: Amount
                                           operator: LessEqualThan
                                           comparisonValuePath: $.key._fbRivHigh
+                                        - attributePath: BookingDate
+                                          operator: GreaterEqualThan
+                                          comparisonValuePath: $._fbMinDate
+                                        - attributePath: BookingDate
+                                          operator: LessEqualThan
+                                          comparisonValuePath: $._fbMaxDate
                                     - type: ForEach@1
                                       description: Flag every rival booked inside the document's date window (the transaction itself counts once)
                                       iterationPath: $.key._fbRivals.Items
@@ -5305,6 +5549,522 @@ entities:
                                         - type: ApplyChanges@2
                                           entityUpdatesPath: $._fbUpdates
                                           associationUpdatesPath: $._fbAssocs
+            # --- Document-number pass (AB#4542) — the transfer purpose often
+            #     carries the exact document number, the strongest deterministic
+            #     signal there is. It covers what the amount passes cannot see:
+            #     payments made weeks after the document date and net-of-VAT
+            #     transfers (invoice gross 7.68, transferred 6.40 = net, purpose
+            #     "150418325"). Doc-driven: for every OPEN document with a
+            #     sufficiently distinctive number, accept the SINGLE pending
+            #     transaction of the right direction whose purpose contains that
+            #     number — but only when the paid amount equals the document's
+            #     gross OR net total. The amount guard keeps interest bookings
+            #     and collective transfers that merely REFERENCE the number from
+            #     settling the document. Deliberately no date window: purpose +
+            #     amount + direction anchors harder than booking proximity.
+            - type: GetRtEntitiesByType@1
+              description: Open documents for the document-number pass
+              ckTypeId: Meshmakers.Accounting/AccountingDocument
+              targetPath: $.dnDocs
+              take: 500
+              fieldFilters:
+                - attributePath: DocumentState
+                  operator: Equals
+                  comparisonValue: 0
+            - type: ForEach@1
+              description: Document-number pass — unique pending transaction whose purpose contains the document number
+              iterationPath: $.dnDocs.Items
+              targetPath: $.dnResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                # Number guards: at least 5 characters, only literal characters
+                # that are safe inside the Like filter (Like builds an UNESCAPED
+                # regex server-side), and at least one run of 4 digits so short
+                # generic tokens ("2025", "A-1") can never anchor a match.
+                # RegexMatch is null-safe — numberless documents fall through.
+                - type: If@1
+                  description: Document number has at least 5 characters
+                  path: $.key.Attributes.DocumentNumber
+                  operator: RegexMatch
+                  value: .{5,}
+                  valueType: String
+                  transformations:
+                    - type: If@1
+                      description: …contains only literal characters safe for the Like filter
+                      path: $.key.Attributes.DocumentNumber
+                      operator: RegexMatch
+                      value: ^[A-Za-z0-9 ./_-]+$
+                      valueType: String
+                      transformations:
+                        - type: If@1
+                          description: …and carries a run of at least 4 digits
+                          path: $.key.Attributes.DocumentNumber
+                          operator: RegexMatch
+                          value: '[0-9]{4}'
+                          valueType: String
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: An INCOMING document is paid by a Debit (default)
+                              targetPath: $.key._dnWantedDir
+                              value: 1
+                              valueType: Int
+                            - type: If@1
+                              description: OUTGOING document — expect an incoming Credit
+                              path: $.key.Attributes.DocumentType
+                              operator: Equals
+                              value: 1
+                              valueType: Int64
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key._dnWantedDir
+                                  value: 0
+                                  valueType: Int
+                            - type: GetRtEntitiesByType@1
+                              description: Pending transactions of the right direction whose purpose contains the document number
+                              ckTypeId: Basic.Accounting/BankTransaction
+                              targetPath: $.key._dnTxs
+                              take: 5
+                              fieldFilters:
+                                - attributePath: MatchState
+                                  operator: In
+                                  comparisonValue:
+                                    - 0
+                                    - 2
+                                - attributePath: Direction
+                                  operator: Equals
+                                  comparisonValuePath: $.key._dnWantedDir
+                                - attributePath: Purpose
+                                  operator: Like
+                                  comparisonValuePath: $.key.Attributes.DocumentNumber
+                            - type: If@1
+                              description: At least one pending transaction references the document number
+                              path: $.key._dnTxs.TotalCount
+                              operator: GreaterEqualsThan
+                              value: 1
+                              valueType: Int64
+                              transformations:
+                                # The paid total is the SUM over all purpose hits:
+                                # split payments (net first, VAT transferred
+                                # separately weeks later — troii case) settle as a
+                                # whole when the parts add up to the gross total.
+                                - type: SumAggregation@1
+                                  description: Signed sum over all purpose hits
+                                  targetPath: $.key._dnSumSigned
+                                  aggregations:
+                                    - path: $.key._dnTxs.Items[*]
+                                      aggregationPath: $.Attributes.Amount
+                                      value: 1
+                                      filterPath: null
+                                      comparisonValue: null
+                                - type: Math@1
+                                  description: Paid total (Credit default = signed sum)
+                                  path: $.key
+                                  itemPath: $._dnSumSigned
+                                  itemTargetPath: $._dnPaidAbs
+                                  operation: Multiply
+                                  value: 1
+                                - type: If@1
+                                  description: Debit — invert the sign to get the positive paid total
+                                  path: $.key._dnWantedDir
+                                  operator: Equals
+                                  value: 1
+                                  valueType: Int
+                                  transformations:
+                                    - type: Math@1
+                                      path: $.key
+                                      itemPath: $._dnSumSigned
+                                      itemTargetPath: $._dnPaidAbs
+                                      operation: Multiply
+                                      value: -1
+                                - type: SetPrimitiveValue@1
+                                  description: Amount not plausible yet (default)
+                                  targetPath: $.key._dnAmountOk
+                                  value: 0
+                                  valueType: Int
+                                # Float-safe amount check — a sum of doubles (6.40
+                                # + 1.28) need not be bit-equal to 7.68, so the
+                                # paid total must lie within ±0.005 of the target.
+                                # GreaterThan on a Double path is null-safe (a
+                                # null/missing GrossTotal simply fails the
+                                # comparison — RegexMatch would THROW on numeric
+                                # attributes) and keeps the GrossTotal-0
+                                # extraction defect from ever matching.
+                                - type: If@1
+                                  description: Document carries a positive gross total
+                                  path: $.key.Attributes.GrossTotal
+                                  operator: GreaterThan
+                                  value: 0
+                                  valueType: Double
+                                  transformations:
+                                    - type: Math@1
+                                      description: Gross band floor
+                                      path: $.key
+                                      itemPath: $.Attributes.GrossTotal
+                                      itemTargetPath: $._dnGrossLo
+                                      operation: Subtract
+                                      value: 0.005
+                                    - type: Math@1
+                                      description: Gross band cap
+                                      path: $.key
+                                      itemPath: $.Attributes.GrossTotal
+                                      itemTargetPath: $._dnGrossHi
+                                      operation: Add
+                                      value: 0.005
+                                    - type: If@1
+                                      description: Paid total no less than the gross band floor
+                                      path: $.key._dnPaidAbs
+                                      operator: GreaterEqualsThan
+                                      valuePath: $.key._dnGrossLo
+                                      valueType: Double
+                                      transformations:
+                                        - type: If@1
+                                          description: …and no more than the gross band cap — amount plausible
+                                          path: $.key._dnPaidAbs
+                                          operator: LessEqualsThan
+                                          valuePath: $.key._dnGrossHi
+                                          valueType: Double
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.key._dnAmountOk
+                                              value: 1
+                                              valueType: Int
+                                # A SINGLE transaction paying exactly the net total
+                                # is also plausible (transfer without VAT, e.g.
+                                # reverse charge) — never accepted for multiple
+                                # hits, where only the gross sum counts.
+                                - type: If@1
+                                  description: Exactly one hit — also accept the net total
+                                  path: $.key._dnTxs.TotalCount
+                                  operator: Equals
+                                  value: 1
+                                  valueType: Int64
+                                  transformations:
+                                    - type: If@1
+                                      description: Document carries a positive net total (null-safe numeric guard)
+                                      path: $.key.Attributes.NetTotal
+                                      operator: GreaterThan
+                                      value: 0
+                                      valueType: Double
+                                      transformations:
+                                        - type: Math@1
+                                          description: Net band floor
+                                          path: $.key
+                                          itemPath: $.Attributes.NetTotal
+                                          itemTargetPath: $._dnNetLo
+                                          operation: Subtract
+                                          value: 0.005
+                                        - type: Math@1
+                                          description: Net band cap
+                                          path: $.key
+                                          itemPath: $.Attributes.NetTotal
+                                          itemTargetPath: $._dnNetHi
+                                          operation: Add
+                                          value: 0.005
+                                        - type: If@1
+                                          description: Paid amount no less than the net band floor
+                                          path: $.key._dnPaidAbs
+                                          operator: GreaterEqualsThan
+                                          valuePath: $.key._dnNetLo
+                                          valueType: Double
+                                          transformations:
+                                            - type: If@1
+                                              description: …and no more than the net band cap — amount plausible
+                                              path: $.key._dnPaidAbs
+                                              operator: LessEqualsThan
+                                              valuePath: $.key._dnNetHi
+                                              valueType: Double
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.key._dnAmountOk
+                                                  value: 1
+                                                  valueType: Int
+                                - type: If@1
+                                  description: Amount plausible — settle the document and all referenced transactions
+                                  path: $.key._dnAmountOk
+                                  operator: Equals
+                                  value: 1
+                                  valueType: Int64
+                                  transformations:
+                                    - type: GetAssociationTargets@1
+                                      description: Existing tx links on this document (idempotency guard, AB#4398)
+                                      originRtIdPath: $.key.RtId
+                                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                      targetCkTypeId: Basic.Accounting/BankTransaction
+                                      associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                      graphDirection: Outbound
+                                      targetPath: $.key._dnExisting
+                                    - type: ForEach@1
+                                      description: Mark every referenced transaction matched, link it when the document is not already linked
+                                      iterationPath: $.key._dnTxs.Items
+                                      targetPath: $.key._dnLinkResults
+                                      targetValueKind: Simple
+                                      targetValueWriteMode: Overwrite
+                                      maxDegreeOfParallelism: 1
+                                      transformations:
+                                        - type: CreateUpdateInfo@1
+                                          description: Transaction is matched (document number found in the transfer purpose)
+                                          targetPath: $.key._upd
+                                          updateKind: Update
+                                          ckTypeId: Basic.Accounting/BankTransaction
+                                          rtIdPath: $.key.RtId
+                                          attributeUpdates:
+                                            - attributeName: MatchState
+                                              attributeValueType: Enum
+                                              value: Matched
+                                            - attributeName: MatchComment
+                                              attributeValueType: String
+                                              value: Auto-matched by document number in transfer purpose
+                                        - type: If@1
+                                          description: Create the link only when the document is not already linked (a stale link still settles via the existing one)
+                                          path: $.full.key._dnExisting[0].TotalCount
+                                          operator: Equals
+                                          value: 0
+                                          valueType: Int64
+                                          transformations:
+                                            - type: CreateAssociationUpdate@1
+                                              description: Link document to transaction
+                                              targetPath: $.key._assoc
+                                              updateKind: Create
+                                              originRtIdPath: $.full.key.RtId
+                                              originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                              targetRtIdPath: $.key.RtId
+                                              targetCkTypeId: Basic.Accounting/BankTransaction
+                                              associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                    - type: Flatten@1
+                                      description: Collect the transaction updates
+                                      path: $.key._dnLinkResults[*]._upd
+                                      targetPath: $.key._dnUpdates
+                                      targetValueKind: Simple
+                                      targetValueWriteMode: Overwrite
+                                    - type: If@1
+                                      description: Collect the new links (only produced when the document had none)
+                                      path: $.key._dnExisting[0].TotalCount
+                                      operator: Equals
+                                      value: 0
+                                      valueType: Int64
+                                      transformations:
+                                        - type: Flatten@1
+                                          path: $.key._dnLinkResults[*]._assoc
+                                          targetPath: $.key._dnAssocs
+                                          targetValueKind: Simple
+                                          targetValueWriteMode: Overwrite
+                                    - type: CreateUpdateInfo@1
+                                      description: Document is paid — PaidAmount is the total actually transferred (net-of-VAT transfers stay visible)
+                                      targetPath: $.key._dnUpdates
+                                      targetValueKind: Array
+                                      targetValueWriteMode: Append
+                                      updateKind: Update
+                                      ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                      rtIdPath: $.key.RtId
+                                      attributeUpdates:
+                                        - attributeName: DocumentState
+                                          attributeValueType: Enum
+                                          value: PAID
+                                        - attributeName: PaidAmount
+                                          attributeValueType: Double
+                                          valuePath: $.key._dnPaidAbs
+                                    - type: ApplyChanges@2
+                                      entityUpdatesPath: $.key._dnUpdates
+                                      associationUpdatesPath: $.key._dnAssocs
+            # --- Recurring-merchant series pass (AB#4542) — card-charging
+            #     subscription vendors (HelloFresh & co) debit a few days
+            #     BEFORE the invoice date and repeat identical amounts weekly.
+            #     The exact pass cannot settle these: the charge lies outside
+            #     its [-1,+14] window (charge precedes invoice), or several
+            #     identical charges share one window (rival guard, by design).
+            #     This pass compensates with a STRONGER anchor: the charge must
+            #     carry the vendor-name prefix in its purpose AND match the
+            #     gross total exactly, inside a [-7,+14] day window around the
+            #     document date. Documents iterate OLDEST-FIRST with a
+            #     per-document ApplyChanges, so a weekly chain unravels
+            #     greedily: the earliest open document claims the earliest
+            #     anchored charge, the next document the next one. Worst case
+            #     within one merchant series is a swap of adjacent same-amount
+            #     weeks — immaterial for bookkeeping.
+            - type: GetRtEntitiesByType@1
+              description: Open documents for the series pass, oldest first
+              ckTypeId: Meshmakers.Accounting/AccountingDocument
+              targetPath: $.srDocs
+              take: 500
+              sortOrders:
+                - attributeName: DocumentDate
+                  sortOrder: Ascending
+              fieldFilters:
+                - attributePath: DocumentState
+                  operator: Equals
+                  comparisonValue: 0
+            - type: ForEach@1
+              description: Series pass — earliest purpose-anchored charge settles the earliest open document
+              iterationPath: $.srDocs.Items
+              targetPath: $.srResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                # Guards: positive gross (GreaterThan/Double is null-safe — a
+                # RegexMatch on a numeric attribute would throw), a document
+                # date for the window, and a vendor name whose first 8
+                # characters are Like-safe (Like builds an UNESCAPED regex) —
+                # that prefix is the purpose anchor ("HelloFre" matches
+                # "...HELLOFRESH BERLIN...", case-insensitively).
+                - type: If@1
+                  description: Document carries a positive gross total
+                  path: $.key.Attributes.GrossTotal
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Double
+                  transformations:
+                    - type: If@1
+                      description: Document carries a document date
+                      path: $.key.Attributes.DocumentDate
+                      operator: RegexMatch
+                      value: .+
+                      valueType: String
+                      transformations:
+                        # Nested-record shape: an RtRecord attribute serializes
+                        # as { CkRecordId, Attributes: {...} } in the data
+                        # context — the company name lives one level deeper than
+                        # the fieldFilter path (Vendor.CompanyName) suggests.
+                        - type: If@1
+                          description: Vendor name is at least 8 Like-safe characters
+                          path: $.key.Attributes.Vendor.Attributes.CompanyName
+                          operator: RegexMatch
+                          value: ^[A-Za-z0-9][A-Za-z0-9 .-]{7,}
+                          valueType: String
+                          transformations:
+                            - type: TransformString@1
+                              description: Purpose anchor = first 8 characters of the vendor name
+                              path: $.key
+                              sourcePath: $.Attributes.Vendor.Attributes.CompanyName
+                              targetPath: $._srPrefix
+                              operation: SubstringFromStart
+                              length: 8
+                            - type: Math@1
+                              description: Expected signed charge (INCOMING default = negative gross)
+                              path: $.key
+                              itemPath: $.Attributes.GrossTotal
+                              itemTargetPath: $._srAmount
+                              operation: Multiply
+                              value: -1
+                            - type: If@1
+                              description: OUTGOING document — expect an incoming Credit (positive amount)
+                              path: $.key.Attributes.DocumentType
+                              operator: Equals
+                              value: 1
+                              valueType: Int64
+                              transformations:
+                                - type: Math@1
+                                  path: $.key
+                                  itemPath: $.Attributes.GrossTotal
+                                  itemTargetPath: $._srAmount
+                                  operation: Multiply
+                                  value: 1
+                            - type: DateTime@1
+                              description: Window floor = document date - 7 days (card charges precede the invoice)
+                              operation: AddDays
+                              path: $.key.Attributes.DocumentDate
+                              value: -7
+                              targetPath: $.key._srMin
+                            - type: DateTime@1
+                              description: Window cap = document date + 14 days
+                              operation: AddDays
+                              path: $.key.Attributes.DocumentDate
+                              value: 14
+                              targetPath: $.key._srMax
+                            - type: GetRtEntitiesByType@1
+                              description: Pending charges of the exact amount, purpose-anchored to the vendor, inside the window, earliest first
+                              ckTypeId: Basic.Accounting/BankTransaction
+                              targetPath: $.key._srTxs
+                              take: 5
+                              sortOrders:
+                                - attributeName: BookingDate
+                                  sortOrder: Ascending
+                              fieldFilters:
+                                - attributePath: MatchState
+                                  operator: In
+                                  comparisonValue:
+                                    - 0
+                                    - 2
+                                - attributePath: Amount
+                                  operator: Equals
+                                  comparisonValuePath: $.key._srAmount
+                                - attributePath: BookingDate
+                                  operator: GreaterEqualThan
+                                  comparisonValuePath: $.key._srMin
+                                - attributePath: BookingDate
+                                  operator: LessEqualThan
+                                  comparisonValuePath: $.key._srMax
+                                - attributePath: Purpose
+                                  operator: Like
+                                  comparisonValuePath: $.key._srPrefix
+                            - type: If@1
+                              description: At least one anchored charge — the earliest settles this document
+                              path: $.key._srTxs.TotalCount
+                              operator: GreaterEqualsThan
+                              value: 1
+                              valueType: Int64
+                              transformations:
+                                - type: GetAssociationTargets@1
+                                  description: Existing tx links on this document (idempotency guard, AB#4398)
+                                  originRtIdPath: $.key.RtId
+                                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                  targetCkTypeId: Basic.Accounting/BankTransaction
+                                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                  graphDirection: Outbound
+                                  targetPath: $.key._srExisting
+                                - type: If@1
+                                  description: Create the link only when the document is not already linked (a stale link still settles via the existing one)
+                                  path: $.key._srExisting[0].TotalCount
+                                  operator: Equals
+                                  value: 0
+                                  valueType: Int64
+                                  transformations:
+                                    - type: CreateAssociationUpdate@1
+                                      description: Link document to the earliest anchored charge
+                                      targetPath: $.key._srAssocs
+                                      targetValueKind: Array
+                                      targetValueWriteMode: Append
+                                      updateKind: Create
+                                      originRtIdPath: $.key.RtId
+                                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                      targetRtIdPath: $.key._srTxs.Items[0].RtId
+                                      targetCkTypeId: Basic.Accounting/BankTransaction
+                                      associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                - type: CreateUpdateInfo@1
+                                  description: Document is paid
+                                  targetPath: $.key._srUpdates
+                                  targetValueKind: Array
+                                  targetValueWriteMode: Append
+                                  updateKind: Update
+                                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                  rtIdPath: $.key.RtId
+                                  attributeUpdates:
+                                    - attributeName: DocumentState
+                                      attributeValueType: Enum
+                                      value: PAID
+                                    - attributeName: PaidAmount
+                                      attributeValueType: Double
+                                      valuePath: $.key.Attributes.GrossTotal
+                                - type: CreateUpdateInfo@1
+                                  description: Transaction is matched (recurring merchant series)
+                                  targetPath: $.key._srUpdates
+                                  targetValueKind: Array
+                                  targetValueWriteMode: Append
+                                  updateKind: Update
+                                  ckTypeId: Basic.Accounting/BankTransaction
+                                  rtIdPath: $.key._srTxs.Items[0].RtId
+                                  attributeUpdates:
+                                    - attributeName: MatchState
+                                      attributeValueType: Enum
+                                      value: Matched
+                                    - attributeName: MatchComment
+                                      attributeValueType: String
+                                      value: Auto-matched by recurring merchant series (vendor purpose anchor, exact amount)
+                                - type: ApplyChanges@2
+                                  entityUpdatesPath: $.key._srUpdates
+                                  associationUpdatesPath: $.key._srAssocs
             - type: GetRtEntitiesByType@1
               description: Transactions still unreviewed after the deterministic pass
               ckTypeId: Basic.Accounting/BankTransaction
