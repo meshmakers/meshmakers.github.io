@@ -228,6 +228,24 @@ entities:
         value: INCOME
       - id: Meshmakers.Accounting/CategoryDescription
         value: Interest, refunds, grants and other income
+  # AB#4584: VAT (Umsatzsteuer) settlement to the tax office. Kept as its own
+  # line so it does not inflate Personnel — mixed Finanzamt payments (wage
+  # levies + VAT) are split (AB#4545) and the VAT part lands here.
+  - rtId: aa00000000000000000000c0
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Umsatzsteuer
+      - id: Meshmakers.Accounting/CategoryType
+        value: VAT
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Value-added tax (Umsatzsteuer) settlement paid to the tax office
   # --- Categorization rules ---
   # Auto-assign a cost category to bank transactions during the match pipeline.
   # Each rule matches on exactly ONE field (like a Dauerbeleg's match type) and
@@ -261,15 +279,18 @@ entities:
         value: MATCHED
       - id: Meshmakers.Accounting/RuleCommentTemplate
         value: Bank fee (auto)
-  # --- AB#4539: payroll categorization rules ---
-  # Salaries are represented by ONE payroll journal (Lohnjournal) document per
-  # month, collectively matched (AB#4510) to all payroll transactions of that
-  # month: net salaries, social insurance (ÖGK, includes the BV fund), wage
-  # taxes (Finanzamt L/DB/DZ) and municipal tax. Individual payslips are never
-  # uploaded (per-employee personal data; the tax advisor runs payroll and has
-  # them). These rules therefore only assign the Personnel category
-  # (RuleTerminalState NONE): the transactions stay Unreviewed so the
-  # collective match against the journal can still settle them.
+  # --- AB#4539/AB#4583: payroll categorization rules ---
+  # Payroll transactions (net salaries incl. the BMD collective transfers, ÖGK
+  # social insurance incl. the BV fund, Finanzamt wage taxes L/DB/DZ, municipal
+  # tax) are categorized Personnel. Individual payslips are never uploaded
+  # (per-employee personal data; the tax advisor runs payroll and holds the
+  # records). The rules are TERMINAL (RuleTerminalState MATCHED): a matching
+  # transaction is set Matched + Personnel with a "Categorized as payroll
+  # (auto)" comment. Payroll is documented externally (the tax advisor's
+  # payroll records), so the completeness check (AB#4393, isExceptedTransaction)
+  # treats Matched + category + no-document as resolved — payroll transactions
+  # never flag as unassigned, and no per-tenant monthly journal is required
+  # (AB#4583). Historic journals stay linked; they were matched before this.
   - rtId: aa0000000000000000000501
     ckTypeId: Meshmakers.Accounting/CategorizationRule
     attributes:
@@ -290,7 +311,9 @@ entities:
       - id: Meshmakers.Accounting/RuleTargetCategoryType
         value: PERSONNEL
       - id: Meshmakers.Accounting/RuleTerminalState
-        value: NONE
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
   - rtId: aa0000000000000000000502
     ckTypeId: Meshmakers.Accounting/CategorizationRule
     attributes:
@@ -312,7 +335,9 @@ entities:
       - id: Meshmakers.Accounting/RuleTargetCategoryType
         value: PERSONNEL
       - id: Meshmakers.Accounting/RuleTerminalState
-        value: NONE
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
   - rtId: aa0000000000000000000503
     ckTypeId: Meshmakers.Accounting/CategorizationRule
     attributes:
@@ -336,7 +361,9 @@ entities:
       - id: Meshmakers.Accounting/RuleTargetCategoryType
         value: PERSONNEL
       - id: Meshmakers.Accounting/RuleTerminalState
-        value: NONE
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
   - rtId: aa0000000000000000000504
     ckTypeId: Meshmakers.Accounting/CategorizationRule
     attributes:
@@ -355,7 +382,64 @@ entities:
       - id: Meshmakers.Accounting/RuleTargetCategoryType
         value: PERSONNEL
       - id: Meshmakers.Accounting/RuleTerminalState
-        value: NONE
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
+  - rtId: aa0000000000000000000505
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - collective transfer (BMD)
+      - id: Meshmakers.Accounting/RulePriority
+        value: 114
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      # When payroll is run through BMD (the tax advisor's software), the net
+      # salaries are paid as ONE collective SEPA transfer per run instead of
+      # individual per-employee payments, purpose "DT: <run>M|K BMDLOHN". The
+      # salaries rule's "\b(Gehalt|Lohn)" does not match "…MBMDLOHN" (no word
+      # boundary, upper-case), so this rule assigns Personnel to the BMD
+      # collective transfers (AB#4581).
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: BMDLOHN
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
+  # --- AB#4584: VAT (Umsatzsteuer) rule ---
+  # Categorizes VAT payments to the tax office as Umsatzsteuer, kept separate
+  # from Personnel. Priority 115 runs AFTER the payroll rules (110-114), so an
+  # unsplit mixed Finanzamt payment is claimed by the terminal wage-tax rule
+  # first; this rule then only catches what stays open — pure-VAT payments and
+  # the VAT part of a split (label "U MM/YY", AB#4545). MatchValue covers both
+  # the split-part label and the FinanzOnline period format (e.g. "U 06/2026").
+  - rtId: aa0000000000000000000506
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: VAT (Umsatzsteuer)
+      - id: Meshmakers.Accounting/RulePriority
+        value: 115
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: '\bU\s?\d{2}/\d{2,4}'
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: VAT
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as VAT (auto)
   # Application workload for the accounting SPA (modeled on voest-app's
   # rt-voestalpine-app.yaml). The Communication Operator deploys it via the
   # meshmakers-app Helm chart published by this repo's CI; the empty
