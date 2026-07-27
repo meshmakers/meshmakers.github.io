@@ -6518,7 +6518,11 @@ entities:
                   dataPaths:
                     - $.openDocs
                   responseFormat: json
-                  maxTokens: 4000
+                  # AB#4544: 4000 was too tight for a full 25-transaction batch —
+                  # responses of ~8k characters were cut mid-JSON ("No JSON block
+                  # found in response"), which is exactly the degraded case the
+                  # guards below catch. 8000 gives the answer room to finish.
+                  maxTokens: 8000
                   temperature: 0.0
                   question: >-
                     Match each bank transaction in the main content (aiTransactions, Items array)
