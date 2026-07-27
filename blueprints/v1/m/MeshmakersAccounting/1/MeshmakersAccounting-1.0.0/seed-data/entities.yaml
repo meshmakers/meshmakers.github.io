@@ -3807,6 +3807,22 @@ entities:
                               valuePath: $.key.grossTotal
                               targetPath: $.key._rearmGross
                               valueType: Double
+                            # AB#4590: widen the re-arm band below the gross total so a
+                            # freshly-created OPEN document also reconsiders payments that
+                            # came in BELOW its gross — foreign-currency wires and cash
+                            # discount (Skonto) — down to 85% of the gross, on top of the
+                            # existing +15 EUR transfer-fee headroom above. The AI fallback
+                            # still makes the final call, so a wider re-arm only triggers a
+                            # reconsider, never a wrong match. (Card-currency purchases are
+                            # already handled deterministically by the foreign-currency card
+                            # pass; this covers the non-card FX/Skonto tail.)
+                            - type: Math@1
+                              description: 0.85 * GrossTotal (lower magnitude bound for FX/Skonto)
+                              path: $.key
+                              itemPath: $._rearmGross
+                              itemTargetPath: $._rearmGross85
+                              operation: Multiply
+                              value: 0.85
                             - type: Math@1
                               description: -GrossTotal (Debit upper bound)
                               path: $.key
@@ -3826,11 +3842,13 @@ entities:
                               targetPath: $.key._rearmDir
                               value: 1
                               valueType: Int
-                            - type: SetPrimitiveValue@1
-                              description: Debit upper bound = -GrossTotal
-                              valuePath: $.key._rearmNegGross
-                              targetPath: $.key._rearmHi
-                              valueType: Double
+                            - type: Math@1
+                              description: Debit upper bound = -(0.85 * GrossTotal) — allow payment below gross (FX/Skonto)
+                              path: $.key
+                              itemPath: $._rearmGross85
+                              itemTargetPath: $._rearmHi
+                              operation: Multiply
+                              value: -1
                             - type: If@1
                               description: Outgoing document is settled by a Credit(0) — positive amount band
                               path: $.docType
@@ -3843,8 +3861,8 @@ entities:
                                   value: 0
                                   valueType: Int
                                 - type: SetPrimitiveValue@1
-                                  description: Credit lower bound = GrossTotal
-                                  valuePath: $.key.grossTotal
+                                  description: Credit lower bound = 0.85 * GrossTotal (allow payment below gross — FX/Skonto)
+                                  valuePath: $.key._rearmGross85
                                   targetPath: $.key._rearmLo
                                   valueType: Double
                                 - type: Math@1
@@ -3854,8 +3872,19 @@ entities:
                                   itemTargetPath: $._rearmHi
                                   operation: Subtract
                                   value: -15
+                            # AB#4590: allow a payment booked up to 14 days BEFORE the
+                            # document date to re-arm too — invoices dated at month-end
+                            # but paid earlier, and prepayments, were previously never
+                            # reconsidered because the filter demanded BookingDate on/after
+                            # the document date.
+                            - type: DateTime@1
+                              description: Earliest booking date that still re-arms (document date - 14 days)
+                              operation: AddDays
+                              path: $.key.documentDate
+                              value: -14
+                              targetPath: $.key._rearmMinDate
                             - type: GetRtEntitiesByType@1
-                              description: Unmatched transactions plausibly paying this document (amount band + direction + booked on/after the document date)
+                              description: Unmatched transactions plausibly paying this document (amount band incl. below-gross + direction + booked within the document's ±window)
                               ckTypeId: Basic.Accounting/BankTransaction
                               targetPath: $._rearmCandidates
                               take: 50
@@ -3874,7 +3903,7 @@ entities:
                                   comparisonValuePath: $.key._rearmHi
                                 - attributePath: BookingDate
                                   operator: GreaterEqualThan
-                                  comparisonValuePath: $.key.documentDate
+                                  comparisonValuePath: $.key._rearmMinDate
                             - type: ForEach@1
                               description: Re-arm each candidate transaction to Unreviewed so matching reconsiders it
                               iterationPath: $._rearmCandidates.Items
@@ -5740,6 +5769,184 @@ entities:
                                         - type: ApplyChanges@2
                                           entityUpdatesPath: $._fbUpdates
                                           associationUpdatesPath: $._fbAssocs
+            # --- Foreign-currency card pass (AB#4590) — foreign-currency card
+            #     purchases ("E-COMM 24,00 USD ... SPESEN: 1,25 KURS: 1,160408")
+            #     are booked in EUR: 24 USD becomes 21,93 EUR incl. the forex
+            #     surcharge, so the EUR Amount never equals the invoice
+            #     GrossTotal, which the AI stores as the ORIGINAL foreign amount
+            #     (24). The exact pass (EUR amount == gross) and the tolerance
+            #     pass (payment >= invoice, but here the EUR payment is BELOW the
+            #     foreign gross) therefore both miss them, and these card debits
+            #     carry no CounterpartName to anchor on. This pass reads the
+            #     printed foreign amount out of the purpose (TransformString
+            #     RegexExtract, German number -> JSON number) and settles the
+            #     UNIQUE open incoming document whose GrossTotal equals it inside
+            #     the document's date window. Gated to purposes carrying the
+            #     all-caps "SPESEN:" surcharge (MatchRegEx is CASE-SENSITIVE, so
+            #     it hits only genuine foreign-currency card purchases) — domestic
+            #     EUR card debits (no SPESEN, EUR amount == gross) stay with the
+            #     exact pass and its AB#4512 rival guard, so the same-amount
+            #     collision cannot reappear here. No tx-side rival guard is
+            #     needed: the doc-side uniqueness (exactly one in-window gross),
+            #     the sequential settle (maxDegreeOfParallelism 1 flips the doc to
+            #     PAID before the next iteration) and the existing-link guard make
+            #     a double match impossible.
+            - type: GetRtEntitiesByType@1
+              description: Pending foreign-currency card debits (purpose carries the all-caps SPESEN surcharge)
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.fxPending
+              take: 500
+              fieldFilters:
+                - attributePath: MatchState
+                  operator: In
+                  comparisonValue:
+                    - 0
+                    - 2
+                - attributePath: Direction
+                  operator: Equals
+                  comparisonValue: 1
+                - attributePath: Purpose
+                  operator: MatchRegEx
+                  comparisonValue: "SPESEN:"
+            - type: ForEach@1
+              description: Foreign-currency card pass — match the printed foreign amount to a unique open incoming document
+              iterationPath: $.fxPending.Items
+              targetPath: $.fxResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                # Presence guard first (string), so a non-conforming purpose never
+                # reaches a numeric node as null (RegexMatch is null-safe; the
+                # guarded value is a string, never a number — cf. the
+                # RegexMatch-on-number trap). Pattern: the amount printed right
+                # after "E-COMM" followed by its currency token ("E-COMM 24,00 USD",
+                # "E-COMM 1.234,56 US"). No inline (?i): the token is upper-case.
+                - type: TransformString@1
+                  description: Foreign amount as text (presence probe)
+                  path: $.key
+                  sourcePath: $.Attributes.Purpose
+                  targetPath: $._fxAmountStr
+                  operation: RegexExtract
+                  pattern: '^E-COMM\s+([0-9.]+,[0-9]{2})\s+[A-Z]'
+                - type: If@1
+                  description: A foreign amount was extracted from the purpose
+                  path: $.key._fxAmountStr
+                  operator: RegexMatch
+                  value: .+
+                  valueType: String
+                  transformations:
+                    # Same capture, coerced to a JSON number (strip "." grouping,
+                    # "," -> "."), so the GrossTotal Equals filter can compare it.
+                    - type: TransformString@1
+                      description: Foreign amount as number for the gross-total filter
+                      path: $.key
+                      sourcePath: $.Attributes.Purpose
+                      targetPath: $._fxAmount
+                      operation: RegexExtract
+                      pattern: '^E-COMM\s+([0-9.]+,[0-9]{2})\s+[A-Z]'
+                      asDecimal: true
+                      groupSeparator: "."
+                      decimalSeparator: ","
+                    - type: DateTime@1
+                      description: Earliest document date whose match window still contains this booking date
+                      operation: AddDays
+                      path: $.key.Attributes.BookingDate
+                      value: -14
+                      targetPath: $.key._fxDocMinDate
+                    - type: DateTime@1
+                      description: Latest document date whose match window still contains this booking date
+                      operation: AddDays
+                      path: $.key.Attributes.BookingDate
+                      value: 1
+                      targetPath: $.key._fxDocMaxDate
+                    - type: GetRtEntitiesByType@1
+                      description: Open incoming documents whose gross total equals the printed foreign amount, dated so their window contains this booking date
+                      ckTypeId: Meshmakers.Accounting/AccountingDocument
+                      targetPath: $._fxCands
+                      take: 5
+                      fieldFilters:
+                        - attributePath: DocumentState
+                          operator: Equals
+                          comparisonValue: 0
+                        - attributePath: DocumentType
+                          operator: Equals
+                          comparisonValue: 0
+                        - attributePath: GrossTotal
+                          operator: Equals
+                          comparisonValuePath: $.key._fxAmount
+                        - attributePath: DocumentDate
+                          operator: GreaterEqualThan
+                          comparisonValuePath: $.key._fxDocMinDate
+                        - attributePath: DocumentDate
+                          operator: LessEqualThan
+                          comparisonValuePath: $.key._fxDocMaxDate
+                    - type: If@1
+                      description: Exactly one open incoming document with that foreign gross in-window — settle it
+                      path: $._fxCands.TotalCount
+                      operator: Equals
+                      value: 1
+                      valueType: Int64
+                      transformations:
+                        - type: GetAssociationTargets@1
+                          description: Existing tx links on this document (idempotency guard, AB#4398)
+                          originRtIdPath: $._fxCands.Items[0].RtId
+                          originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                          targetCkTypeId: Basic.Accounting/BankTransaction
+                          associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                          graphDirection: Outbound
+                          targetPath: $._fxExisting
+                        - type: If@1
+                          description: Create the link only when the document is not already linked
+                          path: $._fxExisting[0].TotalCount
+                          operator: Equals
+                          value: 0
+                          valueType: Int64
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              description: Link document to transaction
+                              targetPath: $._fxAssocs
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Create
+                              originRtIdPath: $._fxCands.Items[0].RtId
+                              originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetRtIdPath: $.key.RtId
+                              targetCkTypeId: Basic.Accounting/BankTransaction
+                              associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                        - type: CreateUpdateInfo@1
+                          description: Document is paid (foreign-currency card purchase)
+                          targetPath: $._fxUpdates
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Update
+                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                          rtIdPath: $._fxCands.Items[0].RtId
+                          attributeUpdates:
+                            - attributeName: DocumentState
+                              attributeValueType: Enum
+                              value: PAID
+                            - attributeName: PaidAmount
+                              attributeValueType: Double
+                              valuePath: $._fxCands.Items[0].Attributes.GrossTotal
+                        - type: CreateUpdateInfo@1
+                          description: Transaction is matched
+                          targetPath: $._fxUpdates
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankTransaction
+                          rtIdPath: $.key.RtId
+                          attributeUpdates:
+                            - attributeName: MatchState
+                              attributeValueType: Enum
+                              value: Matched
+                            - attributeName: MatchComment
+                              attributeValueType: String
+                              value: Auto-matched by foreign-currency amount (auto)
+                        - type: ApplyChanges@2
+                          entityUpdatesPath: $._fxUpdates
+                          associationUpdatesPath: $._fxAssocs
             # --- Document-number pass (AB#4542) — the transfer purpose often
             #     carries the exact document number, the strongest deterministic
             #     signal there is. It covers what the amount passes cannot see:
