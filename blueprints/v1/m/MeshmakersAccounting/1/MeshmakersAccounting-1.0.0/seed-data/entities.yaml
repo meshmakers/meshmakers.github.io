@@ -246,6 +246,24 @@ entities:
         value: EXPENSE
       - id: Meshmakers.Accounting/CategoryDescription
         value: Value-added tax (Umsatzsteuer) settlement paid to the tax office
+  # AB#4585: general taxes & levies other than VAT (corporate income tax,
+  # chamber levy, penalties). No auto-rule — no reliable purpose pattern, so
+  # these are assigned manually (few per year).
+  - rtId: aa00000000000000000000c1
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Steuern & Abgaben
+      - id: Meshmakers.Accounting/CategoryType
+        value: TAXES
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: "Taxes and levies other than VAT: corporate income tax (Körperschaftsteuer), chamber levy (Kammerumlage), penalties"
   # --- Categorization rules ---
   # Auto-assign a cost category to bank transactions during the match pipeline.
   # Each rule matches on exactly ONE field (like a Dauerbeleg's match type) and
@@ -432,8 +450,11 @@ entities:
         value: PURPOSE
       - id: Meshmakers.Accounting/RuleMatchValue
         value: '\bU\s?\d{2}/\d{2,4}'
+      # ANY: VAT is a payment (debit) most months but a refund (credit) in the
+      # Saldo months where the tax office nets a VAT credit against the wage
+      # levies (AB#4576); both belong to Umsatzsteuer.
       - id: Meshmakers.Accounting/RuleDirectionFilter
-        value: DEBIT
+        value: ANY
       - id: Meshmakers.Accounting/RuleTargetCategoryType
         value: VAT
       - id: Meshmakers.Accounting/RuleTerminalState
