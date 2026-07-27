@@ -324,12 +324,13 @@ entities:
         value: true
       - id: Meshmakers.Accounting/RuleMatchField
         value: PURPOSE
-      # FinanzOnline payment purposes carry the levy codes with a period, e.g.
-      # "L 06/2026 DB 06/2026 DZ 06/2026" (Lohnsteuer, Dienstgeberbeitrag,
-      # Zuschlag). Deliberately does NOT match "U 06/2026" — VAT payments to
-      # the Finanzamt are not payroll.
+      # FinanzOnline payment purposes carry the levy codes either with a period
+      # ("L 06/2026 DB 06/2026 DZ 06/2026") or in the compact bank-statement
+      # format "2601+537564L+145749DB+13787DZ..." (amount digits followed by
+      # the levy code, AB#4539). Deliberately does NOT match "U"/"...U" — VAT
+      # payments to the Finanzamt are not payroll.
       - id: Meshmakers.Accounting/RuleMatchValue
-        value: '\b(L|DB|DZ)\s?\d{2}/\d{2,4}'
+        value: '\b(L|DB|DZ)\s?\d{2}/\d{2,4}|\+\d+(L|DB|DZ)'
       - id: Meshmakers.Accounting/RuleDirectionFilter
         value: DEBIT
       - id: Meshmakers.Accounting/RuleTargetCategoryType
@@ -3131,6 +3132,75 @@ entities:
                                   targetPath: $.docOk
                                   valueType: Boolean
                                   value: false
+                            # Poison-item guard (prod incident 2026-07-26): the AI can claim
+                            # extractionComplete while omitting documentDate or grossTotal —
+                            # both are MANDATORY on AccountingDocument, so the create would
+                            # FatalError ApplyChanges and abort the whole upload ForEach every
+                            # poll, stranding all queued uploads (a city-fee notice without a
+                            # recognizable invoice date blocked a 233-upload batch). Demote such
+                            # invoices to INCOMPLETE instead. String guards for the date
+                            # (absent + empty); the gross total uses the null-safe numeric
+                            # pattern (comparisons on an absent/null number are false, so
+                            # only a real number of either sign sets $.grossOk).
+                            - type: If@1
+                              description: documentDate missing - demote to incomplete
+                              path: $.key.documentDate
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: documentDate empty - demote to incomplete
+                              path: $.key.documentDate
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: SetPrimitiveValue@1
+                              description: Default - gross total not a number
+                              targetPath: $.grossOk
+                              valueType: Boolean
+                              value: false
+                            - type: If@1
+                              description: Gross total is a non-negative number
+                              path: $.key.grossTotal
+                              operator: GreaterEqualsThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.grossOk
+                                  valueType: Boolean
+                                  value: true
+                            - type: If@1
+                              description: Gross total is a negative number (credit note)
+                              path: $.key.grossTotal
+                              operator: LessThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.grossOk
+                                  valueType: Boolean
+                                  value: true
+                            - type: If@1
+                              description: grossTotal missing - demote to incomplete
+                              path: $.grossOk
+                              operator: NotEquals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docOk
+                                  valueType: Boolean
+                                  value: false
                         # AB#4452: semantic duplicate detection. The SHA-256 FileHash check
                         # only catches byte-identical files - the same invoice arriving via
                         # two channels (e-mail receipt vs. portal export) passes it, and
@@ -4229,38 +4299,41 @@ entities:
                           targetPath: $.key._dirOk
                           value: 1
                           valueType: Int
+                    # AB#4539: these two guards were nested inside the ANY branch
+                    # above, so direction-filtered rules never set _dirOk and
+                    # assigned nothing. They must be siblings of the ANY check.
+                    - type: If@1
+                      path: $.full.key.Attributes.RuleDirectionFilter
+                      operator: Equal
+                      value: 1
+                      valueType: Enum
+                      transformations:
                         - type: If@1
-                          path: $.full.key.Attributes.RuleDirectionFilter
+                          path: $.key.Attributes.Direction
                           operator: Equal
                           value: 1
-                          valueType: Enum
+                          valueType: Int64
                           transformations:
-                            - type: If@1
-                              path: $.key.Attributes.Direction
-                              operator: Equal
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key._dirOk
                               value: 1
-                              valueType: Int64
-                              transformations:
-                                - type: SetPrimitiveValue@1
-                                  targetPath: $.key._dirOk
-                                  value: 1
-                                  valueType: Int
+                              valueType: Int
+                    - type: If@1
+                      path: $.full.key.Attributes.RuleDirectionFilter
+                      operator: Equal
+                      value: 2
+                      valueType: Enum
+                      transformations:
                         - type: If@1
-                          path: $.full.key.Attributes.RuleDirectionFilter
+                          path: $.key.Attributes.Direction
                           operator: Equal
-                          value: 2
-                          valueType: Enum
+                          value: 0
+                          valueType: Int64
                           transformations:
-                            - type: If@1
-                              path: $.key.Attributes.Direction
-                              operator: Equal
-                              value: 0
-                              valueType: Int64
-                              transformations:
-                                - type: SetPrimitiveValue@1
-                                  targetPath: $.key._dirOk
-                                  value: 1
-                                  valueType: Int
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key._dirOk
+                              value: 1
+                              valueType: Int
                     - type: If@1
                       description: Direction allowed — resolve fiscal year + category
                       path: $.key._dirOk
@@ -6065,6 +6138,344 @@ entities:
                                 - type: ApplyChanges@2
                                   entityUpdatesPath: $.key._srUpdates
                                   associationUpdatesPath: $.key._srAssocs
+            # --- Multi-invoice upload sum pass (AB#4543) — one uploaded PDF can
+            #     contain SEVERAL independent invoices (e.g. an Amazon marketplace
+            #     order with one invoice per seller) that are settled by ONE
+            #     payment over the total. The counterpart/purpose ("AMZN MKTP...")
+            #     has no textual relation to the per-seller vendor names, so the
+            #     purpose-anchored passes cannot link these, and the AI pass is
+            #     unreliable here (no textual anchor, and its inline candidate
+            #     list is take-capped). The upload itself is the deterministic
+            #     anchor: for every OPEN document that came out of a multi-invoice
+            #     upload, settle ALL sibling documents against the SINGLE pending
+            #     transaction whose amount equals the sibling gross sum inside a
+            #     [-7,+14] day window around the document date. All-or-nothing:
+            #     the pass only fires while every sibling is still OPEN and
+            #     unlinked, and the whole group commits in one ApplyChanges —
+            #     re-runs skip settled groups, ambiguity (several candidate
+            #     transactions) falls through to the AI/manual path.
+            - type: GetRtEntitiesByType@1
+              description: Open documents for the multi-invoice upload sum pass
+              ckTypeId: Meshmakers.Accounting/AccountingDocument
+              targetPath: $.miDocs
+              take: 500
+              fieldFilters:
+                - attributePath: DocumentState
+                  operator: Equals
+                  comparisonValue: 0
+            - type: ForEach@1
+              description: Multi-invoice upload sum pass — settle all sibling documents of one upload against the single transaction over their sum
+              iterationPath: $.miDocs.Items
+              targetPath: $.miResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: Upload (staging entity) this document came from
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  targetCkTypeId: Meshmakers.Accounting/UploadedDocument
+                  associationRoleId: Meshmakers.Accounting/UploadedToDocument
+                  graphDirection: Inbound
+                  targetPath: $.key._miUpload
+                - type: If@1
+                  description: Document originates from an upload
+                  path: $.key._miUpload[0].TotalCount
+                  operator: GreaterEqualsThan
+                  value: 1
+                  valueType: Int64
+                  transformations:
+                    - type: GetAssociationTargets@1
+                      description: All sibling documents of that upload (including this one)
+                      originRtIdPath: $.key._miUpload[0].Items[0].RtId
+                      originCkTypeId: Meshmakers.Accounting/UploadedDocument
+                      targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                      associationRoleId: Meshmakers.Accounting/UploadedToDocument
+                      graphDirection: Outbound
+                      targetPath: $.key._miSibs
+                    - type: If@1
+                      description: The upload produced SEVERAL documents — a multi-invoice PDF
+                      path: $.key._miSibs[0].TotalCount
+                      operator: GreaterThan
+                      value: 1
+                      valueType: Int64
+                      transformations:
+                        - type: ForEach@1
+                          description: Check every sibling — open, unlinked, and collect its gross total
+                          iterationPath: $.key._miSibs[0].Items
+                          targetPath: $.key._miSibChecks
+                          targetValueKind: Simple
+                          targetValueWriteMode: Overwrite
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: Sibling not settleable (default)
+                              targetPath: $.key._open
+                              value: 0
+                              valueType: Int
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key._gross
+                              value: 0
+                              valueType: Double
+                            - type: SetPrimitiveValue@1
+                              description: Existing transaction links (default)
+                              targetPath: $.key._links
+                              value: 0
+                              valueType: Int
+                            - type: GetRtEntitiesByType@1
+                              description: Load the sibling document (association targets carry no attributes)
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetPath: $.sib
+                              take: 1
+                              fieldFilters:
+                                - attributePath: RtId
+                                  operator: Equals
+                                  comparisonValuePath: $.key.RtId
+                            - type: If@1
+                              description: Sibling resolved
+                              path: $.sib.TotalCount
+                              operator: GreaterEqualsThan
+                              value: 1
+                              valueType: Int64
+                              transformations:
+                                - type: If@1
+                                  description: Sibling is OPEN
+                                  path: $.sib.Items[0].Attributes.DocumentState
+                                  operator: Equals
+                                  value: 0
+                                  valueType: Int64
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.key._open
+                                      value: 1
+                                      valueType: Int
+                                - type: If@1
+                                  description: Sibling carries a positive gross total (null-safe numeric guard)
+                                  path: $.sib.Items[0].Attributes.GrossTotal
+                                  operator: GreaterThan
+                                  value: 0
+                                  valueType: Double
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.key._gross
+                                      valuePath: $.sib.Items[0].Attributes.GrossTotal
+                                      valueType: Double
+                            - type: GetAssociationTargets@1
+                              description: Existing transaction links of the sibling (idempotency guard, AB#4398)
+                              originRtIdPath: $.key.RtId
+                              originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetCkTypeId: Basic.Accounting/BankTransaction
+                              associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                              graphDirection: Outbound
+                              targetPath: $.sibLinks
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key._links
+                              valuePath: $.sibLinks[0].TotalCount
+                              valueType: Int
+                        - type: SumAggregation@1
+                          description: Open siblings in the group
+                          targetPath: $.key._miOpenCount
+                          aggregations:
+                            - path: $.key._miSibChecks[*]
+                              aggregationPath: $._open
+                              value: 1
+                              filterPath: null
+                              comparisonValue: null
+                        - type: SumAggregation@1
+                          description: Gross sum over the group
+                          targetPath: $.key._miGrossSum
+                          aggregations:
+                            - path: $.key._miSibChecks[*]
+                              aggregationPath: $._gross
+                              value: 1
+                              filterPath: null
+                              comparisonValue: null
+                        - type: SumAggregation@1
+                          description: Pre-existing transaction links over the group
+                          targetPath: $.key._miLinkSum
+                          aggregations:
+                            - path: $.key._miSibChecks[*]
+                              aggregationPath: $._links
+                              value: 1
+                              filterPath: null
+                              comparisonValue: null
+                        - type: If@1
+                          description: Every sibling is still OPEN — the group is settleable as a whole
+                          path: $.key._miOpenCount
+                          operator: Equals
+                          valuePath: $.key._miSibs[0].TotalCount
+                          valueType: Double
+                          transformations:
+                            - type: If@1
+                              description: No sibling is linked to a transaction yet
+                              path: $.key._miLinkSum
+                              operator: Equals
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: If@1
+                                  description: Group gross sum is positive
+                                  path: $.key._miGrossSum
+                                  operator: GreaterThan
+                                  value: 0
+                                  valueType: Double
+                                  transformations:
+                                    - type: If@1
+                                      description: Document carries a document date for the window
+                                      path: $.key.Attributes.DocumentDate
+                                      operator: RegexMatch
+                                      value: .+
+                                      valueType: String
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          description: An INCOMING group is paid by a Debit (default)
+                                          targetPath: $.key._miDir
+                                          value: 1
+                                          valueType: Int
+                                        - type: Math@1
+                                          description: Expected signed amount (Debit = negative gross sum)
+                                          path: $.key
+                                          itemPath: $._miGrossSum
+                                          itemTargetPath: $._miAmt
+                                          operation: Multiply
+                                          value: -1
+                                        - type: If@1
+                                          description: OUTGOING group — expect an incoming Credit over the positive sum
+                                          path: $.key.Attributes.DocumentType
+                                          operator: Equals
+                                          value: 1
+                                          valueType: Int64
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.key._miDir
+                                              value: 0
+                                              valueType: Int
+                                            - type: Math@1
+                                              path: $.key
+                                              itemPath: $._miGrossSum
+                                              itemTargetPath: $._miAmt
+                                              operation: Multiply
+                                              value: 1
+                                        - type: Math@1
+                                          description: Float-safe amount band floor
+                                          path: $.key
+                                          itemPath: $._miAmt
+                                          itemTargetPath: $._miAmtLo
+                                          operation: Subtract
+                                          value: 0.005
+                                        - type: Math@1
+                                          description: Float-safe amount band cap
+                                          path: $.key
+                                          itemPath: $._miAmt
+                                          itemTargetPath: $._miAmtHi
+                                          operation: Add
+                                          value: 0.005
+                                        - type: DateTime@1
+                                          description: Window floor = document date - 7 days (card charges can precede the invoice)
+                                          operation: AddDays
+                                          path: $.key.Attributes.DocumentDate
+                                          value: -7
+                                          targetPath: $.key._miMinDate
+                                        - type: DateTime@1
+                                          description: Window cap = document date + 14 days
+                                          operation: AddDays
+                                          path: $.key.Attributes.DocumentDate
+                                          value: 14
+                                          targetPath: $.key._miMaxDate
+                                        - type: GetRtEntitiesByType@1
+                                          description: Pending transactions matching the group sum inside the window
+                                          ckTypeId: Basic.Accounting/BankTransaction
+                                          targetPath: $.key._miTxs
+                                          take: 5
+                                          fieldFilters:
+                                            - attributePath: MatchState
+                                              operator: In
+                                              comparisonValue:
+                                                - 0
+                                                - 2
+                                            - attributePath: Direction
+                                              operator: Equals
+                                              comparisonValuePath: $.key._miDir
+                                            - attributePath: Amount
+                                              operator: GreaterEqualThan
+                                              comparisonValuePath: $.key._miAmtLo
+                                            - attributePath: Amount
+                                              operator: LessEqualThan
+                                              comparisonValuePath: $.key._miAmtHi
+                                            - attributePath: BookingDate
+                                              operator: GreaterEqualThan
+                                              comparisonValuePath: $.key._miMinDate
+                                            - attributePath: BookingDate
+                                              operator: LessEqualThan
+                                              comparisonValuePath: $.key._miMaxDate
+                                        - type: If@1
+                                          description: Exactly ONE candidate transaction — unambiguous, settle the whole group
+                                          path: $.key._miTxs.TotalCount
+                                          operator: Equals
+                                          value: 1
+                                          valueType: Int64
+                                          transformations:
+                                            - type: ForEach@1
+                                              description: Settle every sibling document against the group transaction
+                                              iterationPath: $.key._miSibChecks
+                                              targetPath: $.key._miApply
+                                              targetValueKind: Simple
+                                              targetValueWriteMode: Overwrite
+                                              maxDegreeOfParallelism: 1
+                                              transformations:
+                                                - type: CreateUpdateInfo@1
+                                                  description: Sibling document is paid with its own gross total
+                                                  targetPath: $.key._upd
+                                                  updateKind: Update
+                                                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                                  rtIdPath: $.key.RtId
+                                                  attributeUpdates:
+                                                    - attributeName: DocumentState
+                                                      attributeValueType: Enum
+                                                      value: PAID
+                                                    - attributeName: PaidAmount
+                                                      attributeValueType: Double
+                                                      valuePath: $.key._gross
+                                                - type: CreateAssociationUpdate@1
+                                                  description: Link the sibling document to the group transaction
+                                                  targetPath: $.key._assoc
+                                                  updateKind: Create
+                                                  originRtIdPath: $.key.RtId
+                                                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                                  targetRtIdPath: $.full.key._miTxs.Items[0].RtId
+                                                  targetCkTypeId: Basic.Accounting/BankTransaction
+                                                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                            - type: Flatten@1
+                                              description: Collect the sibling updates
+                                              path: $.key._miApply[*]._upd
+                                              targetPath: $.key._miUpdates
+                                              targetValueKind: Simple
+                                              targetValueWriteMode: Overwrite
+                                            - type: Flatten@1
+                                              description: Collect the sibling links
+                                              path: $.key._miApply[*]._assoc
+                                              targetPath: $.key._miAssocs
+                                              targetValueKind: Simple
+                                              targetValueWriteMode: Overwrite
+                                            - type: CreateUpdateInfo@1
+                                              description: Transaction is matched (multi-invoice upload sum)
+                                              targetPath: $.key._miUpdates
+                                              targetValueKind: Array
+                                              targetValueWriteMode: Append
+                                              updateKind: Update
+                                              ckTypeId: Basic.Accounting/BankTransaction
+                                              rtIdPath: $.key._miTxs.Items[0].RtId
+                                              attributeUpdates:
+                                                - attributeName: MatchState
+                                                  attributeValueType: Enum
+                                                  value: Matched
+                                                - attributeName: MatchComment
+                                                  attributeValueType: String
+                                                  value: Auto-matched by multi-invoice upload sum (one PDF, several invoices)
+                                            - type: ApplyChanges@2
+                                              entityUpdatesPath: $.key._miUpdates
+                                              associationUpdatesPath: $.key._miAssocs
             - type: GetRtEntitiesByType@1
               description: Transactions still unreviewed after the deterministic pass
               ckTypeId: Basic.Accounting/BankTransaction
@@ -6086,6 +6497,13 @@ entities:
                   ckTypeId: Meshmakers.Accounting/AccountingDocument
                   targetPath: $.openDocs
                   take: 200
+                  # AB#4544: newest documents first — with more OPEN documents than
+                  # the page size (bulk-upload days) the natural order dropped exactly
+                  # the newest documents, which are the likeliest matches for pending
+                  # transactions. Undated documents sort last.
+                  sortOrders:
+                    - sortOrder: Descending
+                      attributeName: DocumentDate
                   fieldFilters:
                     - attributePath: DocumentState
                       operator: Equals
@@ -6121,120 +6539,163 @@ entities:
                     7. NEVER output duplicates: each transactionRtId appears at most once across the whole result, and each document RtId is used at most once across ALL documentRtIds arrays. A document already paid by one transaction cannot pay another. When in doubt, put the transaction in unmatched.
                   jsonFormatSample: '{"matches": [{"transactionRtId": "69b858129a7ae6defef1ba39", "documentRtIds": ["69b858129a7ae6defef1ba40"], "reason": "Amount 90.00 matches invoice R-2026-014 from Anthropic"}, {"transactionRtId": "69b858129a7ae6defef1ba42", "documentRtIds": ["69b858129a7ae6defef1ba43", "69b858129a7ae6defef1ba44"], "reason": "Reimbursement 145.50 = 100.00 + 45.50, purpose Spesen Mueller"}], "unmatched": ["69b858129a7ae6defef1ba41"]}'
                   targetPath: $.ai
-                - type: ForEach@1
-                  description: Apply AI matches
-                  iterationPath: $.ai.matches
-                  targetPath: $.aiApplied
-                  targetValueKind: Simple
-                  targetValueWriteMode: Overwrite
-                  maxDegreeOfParallelism: 1
+                # AB#4544: a degraded AI response (API error, refusal, malformed or
+                # truncated JSON) carries no matches/unmatched arrays — the ForEach
+                # nodes below would then FAIL the whole run ('the value in the
+                # pipeline is not an array'), nothing of the batch would be committed
+                # and the same 25 transactions would loop forever. Guard each loop on
+                # its first element (RegexMatch is null-safe; the guarded values are
+                # strings, never numbers — cf. the RegexMatch-on-number trap): an
+                # empty or missing list simply skips the loop, the batch stays
+                # Unreviewed and is retried on the next run — same degraded-mode
+                # philosophy as AB#4541.
+                - type: If@1
+                  description: AI returned a usable matches list (degraded-response guard, AB#4544)
+                  path: $.ai.matches[0].transactionRtId
+                  operator: RegexMatch
+                  value: ".+"
+                  valueType: String
                   transformations:
-                    # AB#4510: a match carries a documentRtIds LIST — a collective
-                    # transfer (e.g. an expense reimbursement) settles several
-                    # documents with one transaction. Link and settle each document
-                    # in turn, then mark the transaction matched once.
                     - type: ForEach@1
-                      description: Link and settle every document of this match
-                      iterationPath: $.key.documentRtIds
-                      targetPath: $.key._aiDocResults
+                      description: Apply AI matches
+                      iterationPath: $.ai.matches
+                      targetPath: $.aiApplied
                       targetValueKind: Simple
                       targetValueWriteMode: Overwrite
                       maxDegreeOfParallelism: 1
                       transformations:
-                        - type: GetAssociationTargets@1
-                          # Idempotency (AB#4398): the AI can repeat a document across
-                          # matches despite the prompt, and a prior pass may already have
-                          # linked this document. ApplyChanges runs per iteration, so the
-                          # first commit is visible here — create the link only when the
-                          # document is not already linked; the PAID update below runs
-                          # regardless (idempotent).
-                          description: Existing tx links on this document (idempotency guard, AB#4398)
-                          originRtIdPath: $.key
-                          originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                          targetCkTypeId: Basic.Accounting/BankTransaction
-                          associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                          graphDirection: Outbound
-                          targetPath: $._aiExisting
-                        - type: If@1
-                          description: Create the link only when the document is not already linked
-                          path: $._aiExisting[0].TotalCount
-                          operator: Equals
-                          value: 0
-                          valueType: Int64
+                        # AB#4510: a match carries a documentRtIds LIST — a collective
+                        # transfer (e.g. an expense reimbursement) settles several
+                        # documents with one transaction. Link and settle each document
+                        # in turn, then mark the transaction matched once.
+                        - type: ForEach@1
+                          description: Link and settle every document of this match
+                          iterationPath: $.key.documentRtIds
+                          targetPath: $.key._aiDocResults
+                          targetValueKind: Simple
+                          targetValueWriteMode: Overwrite
+                          maxDegreeOfParallelism: 1
                           transformations:
-                            - type: CreateAssociationUpdate@1
-                              description: Link document to transaction
-                              targetPath: $._aiAssocs
-                              targetValueKind: Array
-                              targetValueWriteMode: Append
-                              updateKind: Create
+                            - type: GetAssociationTargets@1
+                              # Idempotency (AB#4398): the AI can repeat a document across
+                              # matches despite the prompt, and a prior pass may already have
+                              # linked this document. ApplyChanges runs per iteration, so the
+                              # first commit is visible here — create the link only when the
+                              # document is not already linked; the PAID update below runs
+                              # regardless (idempotent).
+                              description: Existing tx links on this document (idempotency guard, AB#4398)
                               originRtIdPath: $.key
                               originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                              targetRtIdPath: $.full.key.transactionRtId
                               targetCkTypeId: Basic.Accounting/BankTransaction
                               associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                        - type: GetRtEntitiesById@1
-                          description: Load the matched document to read its gross total for PaidAmount (AB#4433)
-                          rtIdsPath: $.key
-                          ckTypeId: Meshmakers.Accounting/AccountingDocument
-                          targetPath: $._aiDoc
+                              graphDirection: Outbound
+                              targetPath: $._aiExisting
+                            - type: If@1
+                              description: Create the link only when the document is not already linked
+                              path: $._aiExisting[0].TotalCount
+                              operator: Equals
+                              value: 0
+                              valueType: Int64
+                              transformations:
+                                - type: CreateAssociationUpdate@1
+                                  description: Link document to transaction
+                                  targetPath: $._aiAssocs
+                                  targetValueKind: Array
+                                  targetValueWriteMode: Append
+                                  updateKind: Create
+                                  originRtIdPath: $.key
+                                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                  targetRtIdPath: $.full.key.transactionRtId
+                                  targetCkTypeId: Basic.Accounting/BankTransaction
+                                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                            - type: GetRtEntitiesById@1
+                              description: Load the matched document to read its gross total for PaidAmount (AB#4433)
+                              rtIdsPath: $.key
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetPath: $._aiDoc
+                            - type: CreateUpdateInfo@1
+                              description: Document is paid
+                              targetPath: $._aiUpdates
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Update
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              rtIdPath: $.key
+                              attributeUpdates:
+                                - attributeName: DocumentState
+                                  attributeValueType: Enum
+                                  value: PAID
+                                # AB#4433: mirror the deterministic/tolerance passes —
+                                # PaidAmount is the document's own gross total (for a
+                                # collective transfer each document carries its share).
+                                - attributeName: PaidAmount
+                                  attributeValueType: Double
+                                  valuePath: $._aiDoc.Items[0].Attributes.GrossTotal
+                            - type: ApplyChanges@2
+                              entityUpdatesPath: $._aiUpdates
+                              associationUpdatesPath: $._aiAssocs
                         - type: CreateUpdateInfo@1
-                          description: Document is paid
-                          targetPath: $._aiUpdates
+                          description: Transaction is matched
+                          targetPath: $._aiTxUpdates
                           targetValueKind: Array
                           targetValueWriteMode: Append
                           updateKind: Update
-                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                          ckTypeId: Basic.Accounting/BankTransaction
+                          rtIdPath: $.key.transactionRtId
+                          attributeUpdates:
+                            - attributeName: MatchState
+                              attributeValueType: Enum
+                              value: Matched
+                        - type: ApplyChanges@2
+                          entityUpdatesPath: $._aiTxUpdates
+                - type: If@1
+                  description: AI returned a usable unmatched list (degraded-response guard, AB#4544)
+                  path: $.ai.unmatched[0]
+                  operator: RegexMatch
+                  value: ".+"
+                  valueType: String
+                  transformations:
+                    - type: ForEach@1
+                      description: Mark transactions the AI could not assign
+                      iterationPath: $.ai.unmatched
+                      targetPath: $.aiUnmatched
+                      targetValueKind: Simple
+                      targetValueWriteMode: Overwrite
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          description: Transaction could not be assigned
+                          targetPath: $._unmatchedUpdates
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankTransaction
                           rtIdPath: $.key
                           attributeUpdates:
-                            - attributeName: DocumentState
+                            - attributeName: MatchState
                               attributeValueType: Enum
-                              value: PAID
-                            # AB#4433: mirror the deterministic/tolerance passes —
-                            # PaidAmount is the document's own gross total (for a
-                            # collective transfer each document carries its share).
-                            - attributeName: PaidAmount
-                              attributeValueType: Double
-                              valuePath: $._aiDoc.Items[0].Attributes.GrossTotal
+                              value: Unmatched
                         - type: ApplyChanges@2
-                          entityUpdatesPath: $._aiUpdates
-                          associationUpdatesPath: $._aiAssocs
-                    - type: CreateUpdateInfo@1
-                      description: Transaction is matched
-                      targetPath: $._aiTxUpdates
-                      targetValueKind: Array
-                      targetValueWriteMode: Append
-                      updateKind: Update
-                      ckTypeId: Basic.Accounting/BankTransaction
-                      rtIdPath: $.key.transactionRtId
-                      attributeUpdates:
-                        - attributeName: MatchState
-                          attributeValueType: Enum
-                          value: Matched
-                    - type: ApplyChanges@2
-                      entityUpdatesPath: $._aiTxUpdates
-                - type: ForEach@1
-                  description: Mark transactions the AI could not assign
-                  iterationPath: $.ai.unmatched
-                  targetPath: $.aiUnmatched
-                  targetValueKind: Simple
-                  targetValueWriteMode: Overwrite
-                  maxDegreeOfParallelism: 1
+                          entityUpdatesPath: $._unmatchedUpdates
+                - type: If@1
+                  # AB#4544: If@1 'Equals' with no configured value compares against
+                  # null — true only when the path yields nothing. Both lists
+                  # empty/missing although transactions were pending means the
+                  # response was degraded (prompt rule 6: every transaction must
+                  # appear in exactly one of the two lists).
+                  description: Degraded AI response — no matches list (AB#4544)
+                  path: $.ai.matches[0].transactionRtId
+                  operator: Equals
+                  valueType: String
                   transformations:
-                    - type: CreateUpdateInfo@1
-                      description: Transaction could not be assigned
-                      targetPath: $._unmatchedUpdates
-                      targetValueKind: Array
-                      targetValueWriteMode: Append
-                      updateKind: Update
-                      ckTypeId: Basic.Accounting/BankTransaction
-                      rtIdPath: $.key
-                      attributeUpdates:
-                        - attributeName: MatchState
-                          attributeValueType: Enum
-                          value: Unmatched
-                    - type: ApplyChanges@2
-                      entityUpdatesPath: $._unmatchedUpdates
+                    - type: If@1
+                      description: ...and no unmatched list — batch stays Unreviewed for the next run
+                      path: $.ai.unmatched[0]
+                      operator: Equals
+                      valueType: String
+                      transformations:
+                        - type: Logger@1
+                          message: AI match pass received a degraded AI response (no matches/unmatched arrays) — leaving the batch Unreviewed for the next run (AB#4544)
             # --- Fiscal-year assignment pass (AB#4395) — runs LAST, after all
             #     matching passes, so a PAYMENTDATE-based document can follow a
             #     payment that was linked earlier in this very run. Assigns every
