@@ -1903,14 +1903,20 @@ entities:
               fields:
                 - path: $.done
                   inclusion: true
-  # PayPal activity CSV import (AB#4459): PayPal exports have a completely
-  # different shape than the Austrian bank CSV above — UTF-8 with BOM,
-  # columns Datum/Name/Typ/Status/Betrag/Transaktionscode, and a balancing
-  # counter-row ("Allgemeine Gutschrift auf Kreditkarte") next to almost
-  # every payment. Only negative completed payment rows are imported. The
-  # PayPal account carries no IBAN, so the target BankAccount rtId is passed
-  # by the frontend as the multipart form field `accountRtId` (the
-  # ParentChild association is mandatory — rows without it would fail).
+  # PayPal activity CSV import (AB#4459, fixed AB#4593): PayPal exports have a
+  # completely different shape than the Austrian bank CSV above — UTF-8 with
+  # BOM, columns Datum/Name/Typ/Status/Brutto/Gebühr/Netto/Transaktionscode/
+  # "Auswirkung auf Guthaben", and both an authorization hold ("Allgemeine
+  # Autorisierung", Memo) and a balancing credit-card funding counter-row
+  # ("Allgemeine Gutschrift auf Kreditkarte", Haben) next to almost every
+  # payment. Only rows whose "Auswirkung auf Guthaben" is Soll (a real balance
+  # debit) and completed are imported — this excludes the Memo authorization
+  # holds (which would duplicate each payment) and Haben credits; the currency-
+  # conversion debit legs are excluded by type. The amount comes from Brutto
+  # (NOT "Betrag", which does not exist in this export). The PayPal account
+  # carries no IBAN, so the target BankAccount rtId is passed by the frontend
+  # as the multipart form field `accountRtId` (the ParentChild association is
+  # mandatory — rows without it would fail).
   - rtId: 67d4a2f0b2e4d8c3a1f00052
     ckTypeId: System.Communication/Pipeline
     associations:
@@ -1961,10 +1967,24 @@ entities:
                 - sourceColumn: "Währung"
                   targetProperty: currency
                   dataType: String
-                - sourceColumn: Betrag
+                # PayPal activity exports name the transaction amount "Brutto"
+                # (alongside "Gebühr"/"Netto"), NOT "Betrag" (AB#4593). On
+                # outgoing payments Gebühr is 0, so Brutto is the full cash
+                # impact. A wrong column name is only a warning in ImportFromCsv
+                # (the mapping is skipped), so mapping "Betrag" left amount null
+                # and every row was filtered out — a silent zero-row import.
+                - sourceColumn: Brutto
                   targetProperty: amount
                   dataType: Double
                   numberCulture: de-AT
+                # "Auswirkung auf Guthaben" = impact on balance: Soll (debit),
+                # Haben (credit), Memo (authorization hold — no cash movement).
+                # Only Soll rows are real payments; the Memo "Allgemeine
+                # Autorisierung" hold mirrors each card payment and would
+                # otherwise be imported as a duplicate (AB#4593).
+                - sourceColumn: "Auswirkung auf Guthaben"
+                  targetProperty: balanceImpact
+                  dataType: String
                 - sourceColumn: Empfangsnummer
                   targetProperty: paymentReference
                   dataType: String
@@ -2005,11 +2025,11 @@ entities:
                           valueType: String
                           transformations:
                             - type: If@1
-                              description: Only outgoing payments (negative amount)
-                              path: $.key.amount
-                              operator: LessThan
-                              value: 0
-                              valueType: Double
+                              description: Only real balance debits (Soll) — excludes Memo authorization holds that duplicate each payment and Haben credits (AB#4593)
+                              path: $.key.balanceImpact
+                              operator: Equals
+                              value: Soll
+                              valueType: String
                               transformations:
                                 - type: GetOrCreateRtEntitiesByType@1
                                   description: Resolve the existing BankTransaction by TransactionId or generate a new id
