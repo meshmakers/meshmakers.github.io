@@ -5967,6 +5967,272 @@ entities:
                         - type: ApplyChanges@2
                           entityUpdatesPath: $._fxUpdates
                           associationUpdatesPath: $._fxAssocs
+            # --- Cross-currency PayPal funding pass (AB#4596) — a purchase paid
+            #     through PayPal in a foreign currency (e.g. GitHub, 306.69 USD)
+            #     lands twice, across two own accounts: as the original-currency
+            #     debit on the PayPal-ledger account (USD — carries the vendor and
+            #     the invoice) and, two-ish days later, as the EUR SEPA direct debit
+            #     "…/PAYPAL" that PayPal collects from the giro account (counterpart
+            #     "PayPal Europe…", 281 EUR). The EUR giro leg is the amount that
+            #     actually left the bank, so it — not the USD ledger leg — is the
+            #     accounting-relevant expense. But the AB#4509 settlement pass pairs
+            #     legs only on an EQUAL signed amount (306.69 USD != 281 EUR) and
+            #     the giro leg carries no vendor to match a document, so both legs
+            #     stay unresolved. This pass bridges them by FX band: for a pending
+            #     EUR giro debit whose counterpart is PayPal, it finds the UNIQUE
+            #     foreign-currency debit on another own account, booked just before,
+            #     whose magnitude is within [1.00, 1.25]x the EUR magnitude (implied
+            #     EUR/foreign rate 0.80–1.00). It then makes the EUR giro leg the
+            #     booking leg — moves the invoice onto it — and ignores the foreign
+            #     ledger leg as a clearing duplicate, so the expense is counted once,
+            #     in EUR, on the leg that can then be categorised. Uniqueness
+            #     (exactly one in-band twin) plus the PayPal counterpart gate make a
+            #     false pair impossible; verified 21/21 clean on prod-1, 0 ambiguous.
+            #     The band is expressed as magnitude bounds on the (negative) foreign
+            #     amount to avoid a dynamic division. Runs AFTER the deterministic
+            #     passes so the foreign leg already carries its invoice, and only
+            #     acts when it does (nothing to book otherwise). PaidAmount lives on
+            #     the document, not the transaction, so the EUR value needs no write —
+            #     it is the giro leg's own Amount. Idempotent: matching the giro leg
+            #     and moving the invoice off the twin removes the pair from the
+            #     candidate sets. Standard nodes only (no RegexExtract) — deployable
+            #     without an adapter release, like the AB#4590 bank-fee vocab.
+            - type: GetRtEntitiesByType@1
+              description: Pending EUR debits collected by PayPal (potential foreign-purchase funding legs)
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.ppfxPending
+              take: 500
+              fieldFilters:
+                - attributePath: MatchState
+                  operator: In
+                  comparisonValue:
+                    - 0
+                    - 2
+                - attributePath: Direction
+                  operator: Equals
+                  comparisonValue: 1
+                - attributePath: Currency
+                  operator: Equals
+                  comparisonValue: EUR
+                - attributePath: CounterpartName
+                  operator: MatchRegEx
+                  comparisonValue: "(?i)paypal"
+            - type: ForEach@1
+              description: Bridge each PayPal EUR funding leg to its unique foreign-currency twin
+              iterationPath: $.ppfxPending.Items
+              targetPath: $.ppfxResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                # FX band as magnitude bounds on the (negative) foreign amount:
+                # |foreign| in [|eur|, 1.25*|eur|] == rate in [0.80, 1.00]. In signed
+                # debit space the foreign amount sits in [1.25*eurAmount, eurAmount]
+                # (eurAmount is the less-negative, upper bound).
+                - type: SetPrimitiveValue@1
+                  description: Copy the EUR amount to a single-segment key under $.key (Math bases must be relative-to-path — AB#4433/AB#4590 convention)
+                  valuePath: $.key.Attributes.Amount
+                  targetPath: $.key._ppfxAmt
+                  valueType: Double
+                - type: Math@1
+                  description: Lower (more negative) foreign bound = 1.25 * EUR amount
+                  path: $.key
+                  itemPath: $._ppfxAmt
+                  itemTargetPath: $._ppfxLo
+                  operation: Multiply
+                  value: 1.25
+                - type: DateTime@1
+                  description: Twin window floor = booking date - 8 days
+                  operation: AddDays
+                  path: $.key.Attributes.BookingDate
+                  value: -8
+                  targetPath: $.key._ppfxMinDate
+                - type: DateTime@1
+                  description: Twin window cap = booking date + 1 day
+                  operation: AddDays
+                  path: $.key.Attributes.BookingDate
+                  value: 1
+                  targetPath: $.key._ppfxMaxDate
+                - type: GetRtEntitiesByType@1
+                  description: Foreign-currency debits in the FX amount band (date window checked in-pipeline — field-filter dates do not coerce, AB#4389/AB#4509)
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  targetPath: $._ppfxTwins
+                  take: 50
+                  fieldFilters:
+                    - attributePath: Direction
+                      operator: Equals
+                      comparisonValue: 1
+                    - attributePath: Currency
+                      operator: NotEquals
+                      comparisonValue: EUR
+                    - attributePath: Amount
+                      operator: GreaterEqualThan
+                      comparisonValuePath: $.key._ppfxLo
+                    - attributePath: Amount
+                      operator: LessEqualThan
+                      comparisonValuePath: $.key.Attributes.Amount
+                # Date window + uniqueness are decided in-pipeline: field-filter
+                # DateTime comparisons do not coerce (AB#4389), so the AB#4509
+                # settlement pass established this If-based pattern. Count the twins
+                # booked inside [bookingDate-8, bookingDate+1] and capture the last
+                # one's RtId; act only when exactly one survives.
+                - type: ForEach@1
+                  description: For each in-window foreign twin, book the EUR leg and ignore the clearing leg
+                  iterationPath: $._ppfxTwins.Items
+                  targetPath: $._ppfxScan
+                  targetValueKind: Simple
+                  targetValueWriteMode: Overwrite
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: If@1
+                      description: Twin booked no earlier than 8 days before the collection
+                      path: $.key.Attributes.BookingDate
+                      operator: GreaterEqualsThan
+                      valuePath: $.full.key._ppfxMinDate
+                      valueType: DateTime
+                      transformations:
+                        - type: If@1
+                          description: …and no later than 1 day after it
+                          path: $.key.Attributes.BookingDate
+                          operator: LessEqualsThan
+                          valuePath: $.full.key._ppfxMaxDate
+                          valueType: DateTime
+                          transformations:
+                            # Act INSIDE the loop: ApplyChanges persists to the DB,
+                            # whereas nested-ForEach context state does not survive the
+                            # loop (AB#4509 pattern). First-in-window-twin-wins: only
+                            # act while the giro leg carries no document yet — prevents
+                            # a double move if two twins ever fall in-window, and pairs
+                            # with the ppfxPending In[0,2] gate for cross-run idempotency
+                            # (a matched giro leg leaves the candidate set).
+                            - type: GetAssociationTargets@1
+                              description: Documents already on the EUR giro leg
+                              originRtIdPath: $.full.key.RtId
+                              originCkTypeId: Basic.Accounting/BankTransaction
+                              targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                              associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                              graphDirection: Inbound
+                              targetPath: $._ppfxGiroDocs
+                            - type: If@1
+                              description: Giro leg not yet booked to a document
+                              path: $._ppfxGiroDocs[0].TotalCount
+                              operator: Equals
+                              value: 0
+                              valueType: Int64
+                              transformations:
+                                # Both account lookups are TotalCount-guarded before the
+                                # RtId compare (an If with a valuePath THROWS on a missing
+                                # path — the AB#4433 Part C incident).
+                                - type: GetAssociationTargets@1
+                                  description: Account of the EUR giro leg
+                                  originRtIdPath: $.full.key.RtId
+                                  originCkTypeId: Basic.Accounting/BankTransaction
+                                  targetCkTypeId: Basic.Accounting/BankAccount
+                                  associationRoleId: System/ParentChild
+                                  graphDirection: Outbound
+                                  targetPath: $._ppfxGiroAcc
+                                - type: GetAssociationTargets@1
+                                  description: Account of the foreign twin
+                                  originRtIdPath: $.key.RtId
+                                  originCkTypeId: Basic.Accounting/BankTransaction
+                                  targetCkTypeId: Basic.Accounting/BankAccount
+                                  associationRoleId: System/ParentChild
+                                  graphDirection: Outbound
+                                  targetPath: $._ppfxTwinAcc
+                                - type: If@1
+                                  description: Giro leg has a resolved account
+                                  path: $._ppfxGiroAcc[0].TotalCount
+                                  operator: GreaterThan
+                                  value: 0
+                                  valueType: Int64
+                                  transformations:
+                                    - type: If@1
+                                      description: Twin has a resolved account
+                                      path: $._ppfxTwinAcc[0].TotalCount
+                                      operator: GreaterThan
+                                      value: 0
+                                      valueType: Int64
+                                      transformations:
+                                        - type: If@1
+                                          description: Twin lives on a DIFFERENT own account (never the EUR giro account)
+                                          path: $._ppfxTwinAcc[0].Items[0].RtId
+                                          operator: NotEquals
+                                          valuePath: $._ppfxGiroAcc[0].Items[0].RtId
+                                          valueType: String
+                                          transformations:
+                                            - type: GetAssociationTargets@1
+                                              description: Documents currently linked to the foreign twin
+                                              originRtIdPath: $.key.RtId
+                                              originCkTypeId: Basic.Accounting/BankTransaction
+                                              targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                              associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                              graphDirection: Inbound
+                                              targetPath: $._ppfxTwinDocs
+                                            # Only act when the foreign leg carries exactly
+                                            # one invoice to move — leave 0 or >1 for manual.
+                                            - type: If@1
+                                              description: The foreign twin carries exactly one invoice
+                                              path: $._ppfxTwinDocs[0].TotalCount
+                                              operator: Equals
+                                              value: 1
+                                              valueType: Int64
+                                              transformations:
+                                                - type: CreateAssociationUpdate@1
+                                                  description: Link the invoice to the EUR giro leg (the booking leg)
+                                                  targetPath: $._ppfxAssocs
+                                                  targetValueKind: Array
+                                                  targetValueWriteMode: Overwrite
+                                                  updateKind: Create
+                                                  originRtIdPath: $._ppfxTwinDocs[0].Items[0].RtId
+                                                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                                  targetRtIdPath: $.full.key.RtId
+                                                  targetCkTypeId: Basic.Accounting/BankTransaction
+                                                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                                - type: CreateAssociationUpdate@1
+                                                  description: Unlink the invoice from the foreign clearing leg
+                                                  targetPath: $._ppfxAssocs
+                                                  targetValueKind: Array
+                                                  targetValueWriteMode: Append
+                                                  updateKind: Delete
+                                                  originRtIdPath: $._ppfxTwinDocs[0].Items[0].RtId
+                                                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                                  targetRtIdPath: $.key.RtId
+                                                  targetCkTypeId: Basic.Accounting/BankTransaction
+                                                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                                - type: CreateUpdateInfo@1
+                                                  description: EUR giro leg becomes the matched booking leg (its Amount is the real EUR value)
+                                                  targetPath: $._ppfxUpdates
+                                                  targetValueKind: Array
+                                                  targetValueWriteMode: Overwrite
+                                                  updateKind: Update
+                                                  ckTypeId: Basic.Accounting/BankTransaction
+                                                  rtIdPath: $.full.key.RtId
+                                                  attributeUpdates:
+                                                    - attributeName: MatchState
+                                                      attributeValueType: Enum
+                                                      value: Matched
+                                                    - attributeName: MatchComment
+                                                      attributeValueType: String
+                                                      value: PayPal foreign-currency purchase, booked in EUR (auto)
+                                                - type: CreateUpdateInfo@1
+                                                  description: Foreign PayPal-ledger leg is a clearing duplicate
+                                                  targetPath: $._ppfxUpdates
+                                                  targetValueKind: Array
+                                                  targetValueWriteMode: Append
+                                                  updateKind: Update
+                                                  ckTypeId: Basic.Accounting/BankTransaction
+                                                  rtIdPath: $.key.RtId
+                                                  attributeUpdates:
+                                                    - attributeName: MatchState
+                                                      attributeValueType: Enum
+                                                      value: Ignored
+                                                    - attributeName: MatchComment
+                                                      attributeValueType: String
+                                                      value: PayPal foreign-currency clearing leg, booked on the EUR giro leg (auto)
+                                                - type: ApplyChanges@2
+                                                  description: Persist the cross-currency bridge
+                                                  entityUpdatesPath: $._ppfxUpdates
+                                                  associationUpdatesPath: $._ppfxAssocs
             # --- Document-number pass (AB#4542) — the transfer purpose often
             #     carries the exact document number, the strongest deterministic
             #     signal there is. It covers what the amount passes cannot see:
