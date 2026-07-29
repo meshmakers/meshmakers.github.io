@@ -4253,6 +4253,44 @@ entities:
                         - attributePath: CounterpartIban
                           operator: MatchRegEx
                           comparisonValue: .+
+                - type: If@1
+                  description: Match by a token in the transaction purpose (Verwendungszweck)
+                  path: $.key.Attributes.RecurrenceMatchType
+                  operator: Equals
+                  value: 3
+                  valueType: Int64
+                  transformations:
+                    # Guard against a null/empty RecurrenceMatchValue. Unlike the
+                    # SEPA branches (where "Equals null" is empty), the purpose
+                    # branch matches with a regex — an empty pattern matches EVERY
+                    # non-null purpose and would bulk-link every transaction to the
+                    # document. So only run the query when a non-empty value is
+                    # configured. Checked on the document DataContext (not a field
+                    # filter) so it resolves regardless of the adapter's CK cache.
+                    - type: If@1
+                      description: Only match when a non-empty purpose token is configured
+                      path: $.key.Attributes.RecurrenceMatchValue
+                      operator: RegexMatch
+                      value: .+
+                      valueType: String
+                      transformations:
+                        - type: GetRtEntitiesByType@1
+                          ckTypeId: Basic.Accounting/BankTransaction
+                          targetPath: $.key._recTxs
+                          take: 100
+                          fieldFilters:
+                            # In [0, 2]: see the CreditorId branch (AB#4473).
+                            - attributePath: MatchState
+                              operator: In
+                              comparisonValue: [0, 2]
+                            # Case-sensitive substring match: the token (e.g. an
+                            # insurance policy number) appears anywhere in the
+                            # free-text purpose. Mirrors the CategorizationRule
+                            # PURPOSE pass. A null purpose never matches a non-empty
+                            # pattern, so no extra null-guard is needed here.
+                            - attributePath: Purpose
+                              operator: MatchRegEx
+                              comparisonValuePath: $.key.Attributes.RecurrenceMatchValue
                 - type: ForEach@1
                   description: Link every matched debit to this recurring document
                   iterationPath: $.key._recTxs.Items
@@ -6229,6 +6267,23 @@ entities:
                                                     - attributeName: MatchComment
                                                       attributeValueType: String
                                                       value: PayPal foreign-currency clearing leg, booked on the EUR giro leg (auto)
+                                                # Stamp the invoice with the foreign leg's currency so foreign
+                                                # invoices are not summed as EUR (AB#4612). Requires the adapter
+                                                # to carry model >=1.10.0 (Currency attribute); a stale CK cache
+                                                # silently drops the write (AB#4456) — restart the adapter after
+                                                # the model bump.
+                                                - type: CreateUpdateInfo@1
+                                                  description: Stamp the invoice currency from the foreign clearing leg
+                                                  targetPath: $._ppfxUpdates
+                                                  targetValueKind: Array
+                                                  targetValueWriteMode: Append
+                                                  updateKind: Update
+                                                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                                  rtIdPath: $._ppfxTwinDocs[0].Items[0].RtId
+                                                  attributeUpdates:
+                                                    - attributeName: Currency
+                                                      attributeValueType: String
+                                                      valuePath: $.key.Attributes.Currency
                                                 - type: ApplyChanges@2
                                                   description: Persist the cross-currency bridge
                                                   entityUpdatesPath: $._ppfxUpdates
