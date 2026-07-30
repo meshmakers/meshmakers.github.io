@@ -6013,6 +6013,219 @@ entities:
                         - type: ApplyChanges@2
                           entityUpdatesPath: $._fxUpdates
                           associationUpdatesPath: $._fxAssocs
+            - type: GetRtEntitiesByType@1
+              description: 'AB#4590 FX card pass: pending EUR debits that mention a foreign currency code in the purpose (direct card charges)'
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.fxcPending
+              take: 500
+              fieldFilters:
+              - attributePath: MatchState
+                operator: In
+                comparisonValue:
+                - 0
+                - 2
+              - attributePath: Direction
+                operator: Equals
+                comparisonValue: 1
+              - attributePath: Currency
+                operator: Equals
+                comparisonValue: EUR
+              - attributePath: Purpose
+                operator: MatchRegEx
+                comparisonValue: (USD|GBP|CHF|CAD|AUD|SEK|NOK|DKK|PLN|CZK|HKD|JPY|SGD)
+            - type: ForEach@1
+              description: For each foreign-currency card debit, find the unique invoice by original amount + currency
+              iterationPath: $.fxcPending.Items
+              targetPath: $.fxcResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+              - type: Logger@1
+                message: FXCARD-DIAG-A pending EUR card debit
+              - type: SetPrimitiveValue@1
+                description: Initialise extraction slots so the paths always exist
+                targetPath: $.key._fxCur
+                value: ''
+                valueType: String
+              - type: SetPrimitiveValue@1
+                targetPath: $.key._fxAmt
+                value: 0
+                valueType: Double
+              - type: TransformString@1
+                description: Extract the original foreign amount from the purpose (e.g. "36,00 USD" -> 36.00)
+                sourcePath: $.key.Attributes.Purpose
+                targetPath: $.key._fxAmt
+                operation: RegexExtract
+                pattern: ([0-9][0-9.]*,[0-9]{2})\s+(USD|GBP|CHF|CAD|AUD|SEK|NOK|DKK|PLN|CZK|HKD|JPY|SGD)
+                groupIndex: 1
+                asDecimal: true
+                groupSeparator: .
+                decimalSeparator: ','
+              - type: TransformString@1
+                description: Extract the currency code from the purpose (group 2)
+                sourcePath: $.key.Attributes.Purpose
+                targetPath: $.key._fxCur
+                operation: RegexExtract
+                pattern: ([0-9][0-9.]*,[0-9]{2})\s+(USD|GBP|CHF|CAD|AUD|SEK|NOK|DKK|PLN|CZK|HKD|JPY|SGD)
+                groupIndex: 2
+                asDecimal: false
+              - type: If@1
+                description: A valid foreign currency code was extracted
+                path: $.key._fxCur
+                operator: RegexMatch
+                value: ^(USD|GBP|CHF|CAD|AUD|SEK|NOK|DKK|PLN|CZK|HKD|JPY|SGD)$
+                valueType: String
+                transformations:
+                - type: Logger@1
+                  message: FXCARD-DIAG-B foreign amount+currency extracted
+                - type: GetAssociationTargets@1
+                  description: Documents already linked to this transaction (idempotency + uniqueness guard)
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Basic.Accounting/BankTransaction
+                  targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                  graphDirection: Inbound
+                  targetPath: $.key._fxTxDocs
+                - type: If@1
+                  description: Transaction not yet linked to any document
+                  path: $.key._fxTxDocs[0].TotalCount
+                  operator: Equals
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                  - type: DateTime@1
+                    description: Window floor = booking date - 45 days (card charge may precede the invoice)
+                    operation: AddDays
+                    path: $.key.Attributes.BookingDate
+                    value: -45
+                    targetPath: $.key._fxMinDate
+                  - type: DateTime@1
+                    description: Window cap = booking date + 10 days
+                    operation: AddDays
+                    path: $.key.Attributes.BookingDate
+                    value: 10
+                    targetPath: $.key._fxMaxDate
+                  - type: GetRtEntitiesByType@1
+                    description: Candidate invoices with the same currency and gross total (date window checked in-pipeline)
+                    ckTypeId: Meshmakers.Accounting/AccountingDocument
+                    targetPath: $._fxDocs
+                    take: 20
+                    fieldFilters:
+                    - attributePath: Currency
+                      operator: Equals
+                      comparisonValuePath: $.key._fxCur
+                    - attributePath: GrossTotal
+                      operator: Equals
+                      comparisonValuePath: $.key._fxAmt
+                    - attributePath: DocumentState
+                      operator: In
+                      comparisonValue:
+                      - 0
+                      - 2
+                  - type: ForEach@1
+                    description: For each candidate invoice, link it when in the date window and still unmatched
+                    iterationPath: $._fxDocs.Items
+                    targetPath: $._fxScan
+                    targetValueKind: Simple
+                    targetValueWriteMode: Overwrite
+                    maxDegreeOfParallelism: 1
+                    transformations:
+                    - type: If@1
+                      description: Document date on/after window floor
+                      path: $.key.Attributes.DocumentDate
+                      operator: GreaterEqualsThan
+                      valuePath: $.full.key._fxMinDate
+                      valueType: DateTime
+                      transformations:
+                      - type: If@1
+                        description: Document date on/before window cap
+                        path: $.key.Attributes.DocumentDate
+                        operator: LessEqualsThan
+                        valuePath: $.full.key._fxMaxDate
+                        valueType: DateTime
+                        transformations:
+                        - type: GetAssociationTargets@1
+                          description: Transactions already linked to this document (skip if already paid)
+                          originRtIdPath: $.key.RtId
+                          originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                          targetCkTypeId: Basic.Accounting/BankTransaction
+                          associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                          graphDirection: Outbound
+                          targetPath: $._fxDocTxs
+                        - type: If@1
+                          description: Document not yet linked to any transaction
+                          path: $._fxDocTxs[0].TotalCount
+                          operator: Equals
+                          value: 0
+                          valueType: Int64
+                          transformations:
+                          - type: GetAssociationTargets@1
+                            description: Re-check the transaction is still unlinked (first-candidate-wins)
+                            originRtIdPath: $.full.key.RtId
+                            originCkTypeId: Basic.Accounting/BankTransaction
+                            targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                            associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                            graphDirection: Inbound
+                            targetPath: $._fxTxRecheck
+                          - type: If@1
+                            description: Transaction still unlinked — book the match
+                            path: $._fxTxRecheck[0].TotalCount
+                            operator: Equals
+                            value: 0
+                            valueType: Int64
+                            transformations:
+                            - type: Logger@1
+                              message: FXCARD-DIAG-D linking invoice to foreign-currency card debit
+                            - type: CreateAssociationUpdate@1
+                              description: Link the invoice to the card debit
+                              targetPath: $._fxAssocs
+                              targetValueKind: Array
+                              targetValueWriteMode: Overwrite
+                              updateKind: Create
+                              originRtIdPath: $.key.RtId
+                              originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetRtIdPath: $.full.key.RtId
+                              targetCkTypeId: Basic.Accounting/BankTransaction
+                              associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                            - type: CreateUpdateInfo@1
+                              description: Card debit becomes the matched booking leg
+                              targetPath: $._fxUpdates
+                              targetValueKind: Array
+                              targetValueWriteMode: Overwrite
+                              updateKind: Update
+                              ckTypeId: Basic.Accounting/BankTransaction
+                              rtIdPath: $.full.key.RtId
+                              attributeUpdates:
+                              - attributeName: MatchState
+                                attributeValueType: Enum
+                                value: Matched
+                              - attributeName: MatchComment
+                                attributeValueType: String
+                                value: Foreign-currency card charge, matched by original amount and currency in purpose (auto)
+                            - type: CreateUpdateInfo@1
+                              description: Invoice is paid (in its own foreign currency), currency stamped
+                              targetPath: $._fxUpdates
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Update
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              rtIdPath: $.key.RtId
+                              attributeUpdates:
+                              - attributeName: DocumentState
+                                attributeValueType: Enum
+                                value: PAID
+                              - attributeName: PaidAmount
+                                attributeValueType: Double
+                                valuePath: $.full.key._fxAmt
+                              - attributeName: Currency
+                                attributeValueType: String
+                                valuePath: $.full.key._fxCur
+                            - type: ApplyChanges@2
+                              description: Persist the foreign-currency card match
+                              entityUpdatesPath: $._fxUpdates
+                              associationUpdatesPath: $._fxAssocs
+
             # --- Cross-currency PayPal funding pass (AB#4596) — a purchase paid
             #     through PayPal in a foreign currency (e.g. GitHub, 306.69 USD)
             #     lands twice, across two own accounts: as the original-currency
@@ -8000,7 +8213,7 @@ entities:
                 #     transaction only ([5] multi-payment is a follow-up).
                 - type: WriteJson@1
                   description: Cover-sheet skeleton (labels + empty values)
-                  jsonString: '{"title":"Belegübergabe an den Steuerberater","subtitle":"","sections":[{"heading":"Beleg","rows":[{"label":"Belegnummer","value":""},{"label":"Belegdatum","value":""},{"label":"Fälligkeit","value":""},{"label":"Belegart","value":""},{"label":"Brutto","value":""}]},{"heading":"Kontakt","rows":[{"label":"Lieferant","value":""},{"label":"UID","value":""},{"label":"IBAN","value":""},{"label":"Kunde","value":""}]},{"heading":"Beträge","rows":[{"label":"Netto","value":""},{"label":"USt","value":""},{"label":"Steuersatz %","value":""}]},{"heading":"Zahlungsnachweis","rows":[]}],"footerHeading":"Notiz an den Steuerberater","footerText":""}'
+                  jsonString: '{"title":"Belegübergabe an den Steuerberater","subtitle":"","sections":[{"heading":"Beleg","rows":[{"label":"Belegnummer","value":""},{"label":"Belegdatum","value":""},{"label":"Fälligkeit","value":""},{"label":"Belegart","value":""},{"label":"Brutto","value":""},{"label":"Ersatzbeleg","value":"Nein"}]},{"heading":"Kontakt","rows":[{"label":"Lieferant","value":""},{"label":"UID","value":""},{"label":"IBAN","value":""},{"label":"Kunde","value":""}]},{"heading":"Beträge","rows":[{"label":"Netto","value":""},{"label":"USt","value":""},{"label":"Steuersatz %","value":""}]},{"heading":"Zahlungsnachweis","rows":[]}],"footerHeading":"Notiz an den Steuerberater","footerText":""}'
                   targetPath: $.key.sheet
                 - type: SelectByPath@1
                   description: Copy present document values into the skeleton (skips missing/null)
@@ -8039,6 +8252,20 @@ entities:
                       targetPath: $.key.sheet.sections[3].rows[2].value
                     - path: $.key.Attributes.TaxAdvisorNote
                       targetPath: $.key.sheet.footerText
+                # Ersatzbeleg (substitute voucher) marker: skeleton defaults the row to
+                # "Nein"; flip to "Ja" only when the document carries IsSubstitute=true.
+                # Missing/absent attribute (pre-migration documents) stays "Nein".
+                - type: If@1
+                  description: Substitute voucher => mark Ersatzbeleg row as Ja
+                  path: $.key.Attributes.IsSubstitute
+                  operator: Equals
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.sheet.sections[0].rows[5].value
+                      value: Ja
+                      valueType: String
                 # Trim ISO date/time values to the date only (yyyy-MM-dd). SubstringFromStart
                 # is null-safe and clamps to the string length, so blank values stay blank.
                 - type: TransformString@1
