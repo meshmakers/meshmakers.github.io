@@ -2708,10 +2708,14 @@ entities:
               maxDegreeOfParallelism: 2
               transformations:
                 - type: If@1
-                  description: Only process PDF files
+                  # Accept PDFs AND images (jpg/png) — the shared Document Analysis
+                  # pipeline runs OCR on both (same as the Signal channel). A missing
+                  # content type is the only thing rejected here; the frontend file
+                  # picker already restricts selection to pdf/jpg/png. NotEquals with
+                  # no value = "content type is present" (null-check).
+                  description: Only process files that carry a content type (PDF or image)
                   path: $.key.contentType
-                  operator: Equals
-                  value: "application/pdf"
+                  operator: NotEquals
                   valueType: String
                   transformations:
                     - type: If@1
@@ -2794,12 +2798,12 @@ entities:
                                   value: "AI analysis skipped on upload - enter the document details manually."
                                   valueType: String
                             - type: CreateFileSystemUpdate@1
-                              description: Store PDF in file system
+                              description: Store the uploaded file (PDF or image) in the file system
                               targetPath: $.fileSystemItem
                               path: $.key.data
                               generateRtId: true
                               fileNamePath: $.key.fileName
-                              contentType: application/pdf
+                              contentTypePath: $.key.contentType
                               contentLengthPath: $.key.length
                               rootFolderWellKnownName: "Documents"
                             - type: CreateUpdateInfo@1
@@ -3357,9 +3361,18 @@ entities:
                         #      printed on a lawyer's dunning letter would otherwise wrongly
                         #      block the (different) lawyer invoice (prod false-positive,
                         #      salzburgdev 2026-07-24).
-                        #   2. soft: a document with the identical GrossTotal AND
-                        #      DocumentDate but a different number exists -> suspected twin;
-                        #      do not create silently, flag the upload for manual review.
+                        #   2. soft: ONLY when the extraction carries no document
+                        #      number of its own. A numberless document whose
+                        #      GrossTotal AND DocumentDate match an existing one is a
+                        #      suspected twin -> do not create silently, flag for
+                        #      manual review. A document that DOES carry a number is
+                        #      never soft-blocked: a same-number re-import is already
+                        #      caught by check 1, and two genuinely different invoices
+                        #      from one vendor on one day for one amount legitimately
+                        #      differ only by number (sequential Lufthansa tickets
+                        #      ...260/...261, an invoice + its credit note INV/RINV) -
+                        #      blocking those on amount+date alone was a confirmed prod
+                        #      false-positive (prod-1, 2026-07-30).
                         - type: SetPrimitiveValue@1
                           description: Default - no duplicate detected
                           targetPath: $.dupNote
@@ -3436,40 +3449,80 @@ entities:
                                   valueType: String
                                   value: "Duplicate: an accounting document with the same number, amount and date already exists. No document was created."
                             - type: If@1
-                              description: Not a hard duplicate - check for a same-amount/same-date twin with a different number (soft suspect)
+                              description: Not a hard duplicate - a same-amount/same-date twin is only a soft suspect when THIS document has no distinctive number of its own
                               path: $.docOk
                               operator: Equals
                               value: true
                               valueType: Boolean
                               transformations:
-                                - type: GetRtEntitiesByType@1
-                                  description: Existing document with identical gross total and document date
-                                  ckTypeId: Meshmakers.Accounting/AccountingDocument
-                                  targetPath: $._dupByAmountDate
-                                  take: 1
-                                  fieldFilters:
-                                    - attributePath: GrossTotal
-                                      operator: Equals
-                                      comparisonValuePath: $.key.grossTotal
-                                    - attributePath: DocumentDate
-                                      operator: Equals
-                                      comparisonValuePath: $.key.documentDate
+                                # Does the extraction carry a document number? Null-safe,
+                                # mirroring the documentDate guard above (absent + empty).
+                                - type: SetPrimitiveValue@1
+                                  description: Assume the document has a number
+                                  targetPath: $.hasDocumentNumber
+                                  valueType: Boolean
+                                  value: true
                                 - type: If@1
-                                  description: Suspected duplicate - flag for manual review instead of creating silently
-                                  path: $._dupByAmountDate.TotalCount
-                                  operator: GreaterThan
-                                  value: 0
-                                  valueType: Int64
+                                  description: documentNumber missing
+                                  path: $.key.documentNumber
+                                  operator: Equals
+                                  valueType: String
                                   transformations:
                                     - type: SetPrimitiveValue@1
-                                      targetPath: $.docOk
+                                      targetPath: $.hasDocumentNumber
                                       valueType: Boolean
                                       value: false
+                                - type: If@1
+                                  description: documentNumber empty
+                                  path: $.key.documentNumber
+                                  operator: Equals
+                                  value: ""
+                                  valueType: String
+                                  transformations:
                                     - type: SetPrimitiveValue@1
-                                      description: Suspected-duplicate reason shown in the Inbox
-                                      targetPath: $.dupNote
-                                      valueType: String
-                                      value: "Possible duplicate: an accounting document with the same amount and document date already exists (invoice numbers may differ per channel). No document was created - please verify and process manually."
+                                      targetPath: $.hasDocumentNumber
+                                      valueType: Boolean
+                                      value: false
+                                # Only numberless documents fall back to the amount+date
+                                # soft suspect. A numbered document is created: an actual
+                                # re-import (same number) was already caught by the hard
+                                # checks, so a surviving amount+date twin with a different
+                                # number is a genuinely distinct invoice.
+                                - type: If@1
+                                  description: No distinctive number - fall back to the amount+date soft-duplicate suspect
+                                  path: $.hasDocumentNumber
+                                  operator: Equals
+                                  value: false
+                                  valueType: Boolean
+                                  transformations:
+                                    - type: GetRtEntitiesByType@1
+                                      description: Existing document with identical gross total and document date
+                                      ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                      targetPath: $._dupByAmountDate
+                                      take: 1
+                                      fieldFilters:
+                                        - attributePath: GrossTotal
+                                          operator: Equals
+                                          comparisonValuePath: $.key.grossTotal
+                                        - attributePath: DocumentDate
+                                          operator: Equals
+                                          comparisonValuePath: $.key.documentDate
+                                    - type: If@1
+                                      description: Suspected duplicate - flag for manual review instead of creating silently
+                                      path: $._dupByAmountDate.TotalCount
+                                      operator: GreaterThan
+                                      value: 0
+                                      valueType: Int64
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.docOk
+                                          valueType: Boolean
+                                          value: false
+                                        - type: SetPrimitiveValue@1
+                                          description: Suspected-duplicate reason shown in the Inbox
+                                          targetPath: $.dupNote
+                                          valueType: String
+                                          value: "Possible duplicate: an accounting document with the same amount and document date already exists (invoice numbers may differ per channel). No document was created - please verify and process manually."
                         - type: If@1
                           description: Extraction successful - create AccountingDocument
                           path: $.docOk
