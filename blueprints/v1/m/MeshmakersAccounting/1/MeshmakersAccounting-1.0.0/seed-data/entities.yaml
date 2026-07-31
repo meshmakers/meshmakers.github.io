@@ -2797,8 +2797,44 @@ entities:
                                   targetPath: $.stageNote
                                   value: "AI analysis skipped on upload - enter the document details manually."
                                   valueType: String
+                            # Image receipts (JPG/PNG) -> wrap into a single-page PDF so
+                            # the stored Beleg is ALWAYS a PDF: the document/inbox preview
+                            # renders it and the BMD handover can merge it (MergePdf@1
+                            # needs PDF originals). OCR is unaffected (PdfOcrExtraction
+                            # reads the image inside the PDF). The dedup hash above was
+                            # taken on the ORIGINAL bytes, so conversion never changes
+                            # duplicate detection. PDFs pass through untouched.
+                            - type: If@1
+                              description: Convert image uploads to PDF (PDFs pass through)
+                              path: $.key.contentType
+                              operator: NotEquals
+                              value: "application/pdf"
+                              valueType: String
+                              transformations:
+                                - type: FormatString@1
+                                  description: Wrap the image as a full-width data-URI in minimal HTML
+                                  format: '<!DOCTYPE html><html><body style="margin:0;padding:0"><img src="data:{$.key.contentType};base64,{$.key.data}" style="display:block;width:100%;height:auto"></body></html>'
+                                  targetPath: $.imageHtml
+                                - type: RenderHtmlPdf@1
+                                  description: Render the image HTML to a single-page PDF
+                                  path: $.imageHtml
+                                  targetPath: $.imagePdf
+                                  contentLengthTargetPath: $.imagePdfLen
+                                - type: SetPrimitiveValue@1
+                                  description: Replace the stored bytes with the rendered PDF
+                                  targetPath: $.key.data
+                                  valuePath: $.imagePdf
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.contentType
+                                  value: "application/pdf"
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.length
+                                  valuePath: $.imagePdfLen
+                                  valueType: Int64
                             - type: CreateFileSystemUpdate@1
-                              description: Store the uploaded file (PDF or image) in the file system
+                              description: Store the uploaded file (always a PDF after image conversion)
                               targetPath: $.fileSystemItem
                               path: $.key.data
                               generateRtId: true
@@ -8414,6 +8450,11 @@ entities:
                       description: Prepend cover sheet to the original
                       path: $.key.mergeInputs
                       targetPath: $.key.finalPdf
+                      # Write the merged PDF to the per-execution scratch space and emit a
+                      # small reference instead of a base64 string, so a full fiscal-year
+                      # export never accumulates every merged PDF (or the ZIP) on the heap
+                      # (AB#4642). CreateZipArchive streams it from scratch into the archive.
+                      outputAsScratchFile: true
                 - type: If@1
                   description: No original PDF -> cover sheet only
                   path: $.key.fileGroups[0].TotalCount
@@ -8421,12 +8462,22 @@ entities:
                   value: 0
                   valueType: Int
                   transformations:
+                    # Route the cover-only case through MergePdf too, so $.key.finalPdf is
+                    # always a scratch reference (uniform entry building below).
                     - type: FormatString@1
-                      description: Use the cover sheet as the final PDF
-                      format: "{$.key.coverPdf}"
+                      description: Merge inputs [cover] only
+                      format: '["{$.key.coverPdf}"]'
+                      targetPath: $.key.mergeJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.key.mergeJson
+                      targetPath: $.key.mergeInputs
+                    - type: MergePdf@1
+                      description: Cover sheet only, written to the scratch space
+                      path: $.key.mergeInputs
                       targetPath: $.key.finalPdf
+                      outputAsScratchFile: true
 
-                # 2e) zip entry { fileName, contentBase64 } — only for in-scope documents.
+                # 2e) zip entry { fileName, scratchFileToken, length } — only in-scope docs.
                 #     Documents excluded by scope never get $.key.entry, so the Flatten
                 #     over $.docResults[*].entry drops them from the ZIP.
                 - type: If@1
@@ -8460,8 +8511,8 @@ entities:
                       format: '{$.key.prefix}/{$.key.fnbase}.pdf'
                       targetPath: $.key.entryName
                     - type: FormatString@1
-                      description: Build zip-entry JSON
-                      format: '{"fileName":"{$.key.entryName}","contentBase64":"{$.key.finalPdf}"}'
+                      description: Build zip-entry JSON (scratch reference, not inline base64)
+                      format: '{"fileName":"{$.key.entryName}","scratchFileToken":"{$.key.finalPdf.scratchFileToken}","length":{$.key.finalPdf.length}}'
                       targetPath: $.key.entryJson
                     - type: WriteJson@1
                       jsonStringPath: $.key.entryJson
@@ -8472,27 +8523,23 @@ entities:
               description: Collect per-document zip entries into one array
               path: $.docResults[*].entry
               targetPath: $.zipEntries
-            - type: CreateZipArchive@1
-              description: Bundle all merged PDFs into the handover ZIP
-              path: $.zipEntries
-              targetPath: $.zip.data
-              contentLengthTargetPath: $.zip.length
-            # base64 length -> byte length is needed by CreateFileSystemUpdate; the node
-            # accepts a ContentLengthPath, but a static contentType/fileName is simplest.
             - type: FormatString@1
               description: ZIP file name
               nullValue: handover
               format: 'handover-{$.query.fiscalYearId}.zip'
               targetPath: $.zip.fileName
-            - type: CreateFileSystemUpdate@1
-              description: Persist the ZIP as a FileSystemItem under the Documents root
-              path: $.zip.data
-              generateRtId: true
+            # Stream each entry's merged PDF from the scratch space into the ZIP (also on the
+            # scratch space) and persist it directly as a FileSystemItem — no whole-ZIP byte[]
+            # or base64 on the heap, and no separate CreateFileSystemUpdate round-trip (AB#4642).
+            - type: CreateZipArchive@1
+              description: Stream merged PDFs into the handover ZIP and persist it as a FileSystemItem
+              path: $.zipEntries
+              persistAsFileSystemItem: true
+              rootFolderWellKnownName: Documents
               fileNamePath: $.zip.fileName
               contentType: application/zip
-              contentLengthPath: $.zip.length
-              rootFolderWellKnownName: Documents
-              targetPath: $.zip.item
+              generateRtId: true
+              targetPath: $.zip.itemRtId
 
             # -- 4) Return { fileSystemItem: <rtId> } -----------------------------------
             # The HTTP response body is the final data context. Put the id at the root so
@@ -8501,7 +8548,7 @@ entities:
             - type: SetPrimitiveValue@1
               description: Response id at root
               targetPath: $.fileSystemItem
-              valuePath: $.zip.item.RtId
+              valuePath: $.zip.itemRtId
               valueType: String
             - type: SetPipelineExecutionResult@1
               path: $.fileSystemItem
@@ -8575,7 +8622,7 @@ entities:
               targetValueWriteMode: Overwrite
               transformations:
                 - type: ForEach@1
-                  description: Stage each PDF attachment for asynchronous analysis
+                  description: Stage each attachment (PDF or image) for asynchronous analysis
                   iterationPath: $.key.Attachments
                   targetPath: $.attachmentResults
                   targetValueKind: Simple
@@ -8583,10 +8630,9 @@ entities:
                   maxDegreeOfParallelism: 1
                   transformations:
                     - type: If@1
-                      description: Only process PDF attachments
+                      description: Only process attachments that carry a content type (PDF or image)
                       path: $.key.ContentType
-                      operator: Equals
-                      value: "application/pdf"
+                      operator: NotEquals
                       valueType: String
                       transformations:
                         - type: If@1
@@ -8618,13 +8664,45 @@ entities:
                                   description: Upload timestamp
                                   operation: Now
                                   targetPath: $.uploadedAt
+                                # Image attachments -> single-page PDF (same rationale as
+                                # the upload pipeline: preview + BMD handover need a PDF).
+                                # Dedup hash was taken on the original bytes above.
+                                - type: If@1
+                                  description: Convert image attachments to PDF (PDFs pass through)
+                                  path: $.key.ContentType
+                                  operator: NotEquals
+                                  value: "application/pdf"
+                                  valueType: String
+                                  transformations:
+                                    - type: FormatString@1
+                                      description: Wrap the image as a full-width data-URI in minimal HTML
+                                      format: '<!DOCTYPE html><html><body style="margin:0;padding:0"><img src="data:{$.key.ContentType};base64,{$.key.Data}" style="display:block;width:100%;height:auto"></body></html>'
+                                      targetPath: $.imageHtml
+                                    - type: RenderHtmlPdf@1
+                                      description: Render the image HTML to a single-page PDF
+                                      path: $.imageHtml
+                                      targetPath: $.imagePdf
+                                      contentLengthTargetPath: $.imagePdfLen
+                                    - type: SetPrimitiveValue@1
+                                      description: Replace the stored bytes with the rendered PDF
+                                      targetPath: $.key.Data
+                                      valuePath: $.imagePdf
+                                      valueType: String
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.key.ContentType
+                                      value: "application/pdf"
+                                      valueType: String
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.key.Length
+                                      valuePath: $.imagePdfLen
+                                      valueType: Int64
                                 - type: CreateFileSystemUpdate@1
-                                  description: Store PDF in file system
+                                  description: Store the attachment (always a PDF after image conversion)
                                   targetPath: $.fileSystemItem
                                   path: $.key.Data
                                   generateRtId: true
                                   fileNamePath: $.key.FileName
-                                  contentType: application/pdf
+                                  contentTypePath: $.key.ContentType
                                   contentLengthPath: $.key.Length
                                   rootFolderWellKnownName: "Documents"
                                 - type: CreateUpdateInfo@1
@@ -8682,16 +8760,17 @@ entities:
                                   description: Persist the staged upload and file link
                                   entityUpdatesPath: $.updates._items
                                   associationUpdatesPath: $.updates._assocItems
-                # --- Mail without a PDF attachment: keep the mail itself as the receipt ---
-                # A forwarded mail that carries no PDF (only inline logos, or nothing at
-                # all) is rendered to a PDF from its body — HTML or plain text — and staged
-                # exactly like an uploaded document, so the mail itself becomes the receipt.
+                # --- Mail without ANY attachment: keep the mail itself as the receipt ---
+                # A forwarded mail that carries no attachment at all is rendered to a PDF
+                # from its body — HTML or plain text — and staged like an uploaded
+                # document, so the mail itself becomes the receipt. Keyed on the absence
+                # of any attachment (not just "no PDF") so an image-only mail is staged
+                # once by the attachment ForEach above, never double-staged here.
                 - type: If@1
-                  description: Only when the mail has no PDF attachment
-                  path: $.key.HasPdfAttachment
+                  description: Only when the mail has no attachment at all
+                  path: $.key.Attachments[0].ContentType
                   operator: Equals
-                  value: false
-                  valueType: Boolean
+                  valueType: String
                   transformations:
                     - type: Hash@1
                       description: Hash the mail body (UTF-8) so the same mail is not saved twice
