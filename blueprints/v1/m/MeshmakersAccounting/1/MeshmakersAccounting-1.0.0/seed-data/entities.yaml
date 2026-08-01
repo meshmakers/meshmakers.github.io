@@ -8630,10 +8630,11 @@ entities:
                   maxDegreeOfParallelism: 1
                   transformations:
                     - type: If@1
-                      description: Only process attachments that carry a content type (PDF or image)
-                      path: $.key.ContentType
-                      operator: NotEquals
-                      valueType: String
+                      description: Only stage PDFs and receipt-like images; skip signature logos/icons (AB#4647)
+                      path: $.key.IsLikelyDocument
+                      operator: Equals
+                      value: true
+                      valueType: Boolean
                       transformations:
                         - type: If@1
                           description: Skip files above the 10 MB analysis limit
@@ -8760,17 +8761,21 @@ entities:
                                   description: Persist the staged upload and file link
                                   entityUpdatesPath: $.updates._items
                                   associationUpdatesPath: $.updates._assocItems
-                # --- Mail without ANY attachment: keep the mail itself as the receipt ---
-                # A forwarded mail that carries no attachment at all is rendered to a PDF
-                # from its body — HTML or plain text — and staged like an uploaded
-                # document, so the mail itself becomes the receipt. Keyed on the absence
-                # of any attachment (not just "no PDF") so an image-only mail is staged
-                # once by the attachment ForEach above, never double-staged here.
+                # --- Mail without a stageable attachment: keep the mail itself as the receipt ---
+                # A forwarded mail that carries no PDF and no receipt-like image is rendered
+                # to a PDF from its body — HTML or plain text — and staged like an uploaded
+                # document, so the mail itself becomes the receipt. Keyed on
+                # HasStageableAttachment (PDF or receipt image) rather than "no attachment
+                # at all" so (a) an image receipt is staged once by the attachment ForEach
+                # above and never double-staged here, and (b) a body receipt is still
+                # rendered even when the mail also carries a signature logo, which the
+                # adapter now surfaces as an inline attachment (AB#4647).
                 - type: If@1
-                  description: Only when the mail has no attachment at all
-                  path: $.key.Attachments[0].ContentType
+                  description: Only when the mail has no PDF and no receipt-like image (AB#4647)
+                  path: $.key.HasStageableAttachment
                   operator: Equals
-                  valueType: String
+                  value: false
+                  valueType: Boolean
                   transformations:
                     - type: Hash@1
                       description: Hash the mail body (UTF-8) so the same mail is not saved twice
