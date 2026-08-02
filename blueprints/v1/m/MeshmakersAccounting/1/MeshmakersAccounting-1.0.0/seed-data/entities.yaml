@@ -2871,6 +2871,15 @@ entities:
                 # --- Return the merged upload rtId to the HTTP caller ---
                 - type: SetPipelineExecutionResult@1
                   path: $.mergedUploadRtId
+            # Terminal response shaping (top-level, always runs — also on the guard-skip
+            # path): rebuild the root with ONLY the merged rtId so the HTTP response never
+            # echoes the request headers (Authorization/Bearer), body or intermediate
+            # state. See feedback_fromhttprequest_response_echo_leak.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.mergedUploadRtId
+                  inclusion: true
   - rtId: 67d4a2f0b2e4d8c3a1f000f0
     ckTypeId: System.Communication/DataFlow
     attributes:
