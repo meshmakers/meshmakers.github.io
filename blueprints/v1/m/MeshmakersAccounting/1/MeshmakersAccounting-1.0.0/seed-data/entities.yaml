@@ -2669,6 +2669,208 @@ entities:
                 - path: $.response
                   inclusion: true
   # --- Pipelines: upload-documents ---
+  - rtId: 67d4a2f0b2e4d8c3a1f00120
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Merge Documents
+      - id: System/Description
+        value: Merges several selected inbox items into one multi-page PDF document
+  - rtId: 67d4a2f0b2e4d8c3a1f00121
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00120
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Merge Documents Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@1
+              path: /mergeDocuments
+              method: POST
+          transformations:
+            # Guard: need at least two documents to merge (index [1] must exist / be non-null)
+            - type: If@1
+              description: Only proceed when at least two documents are selected
+              path: $.body.uploadRtIds[1]
+              operator: NotEquals
+              valueType: String
+              transformations:
+                # --- Load the FIRST source's metadata (inherited onto the merged doc) ---
+                - type: FormatString@1
+                  description: First rtId as a single-element JSON array
+                  format: '["{$.body.uploadRtIds[0]}"]'
+                  targetPath: $.firstIdJson
+                - type: WriteJson@1
+                  jsonStringPath: $.firstIdJson
+                  targetPath: $.firstIdArr
+                - type: GetRtEntitiesById@1
+                  description: Load first source UploadedDocument for inherited metadata
+                  ckTypeId: Meshmakers.Accounting/UploadedDocument
+                  rtIdsPath: $.firstIdArr
+                  targetPath: $.firstDoc
+                # --- Collect each selected item's stored PDF, IN ORDER ---
+                - type: ForEach@1
+                  description: Load each source PDF in the given page order
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.docResults
+                  mergePath: $.pdf
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: FormatString@1
+                      description: Current rtId as single-element JSON array
+                      format: '["{$.key}"]'
+                      targetPath: $.idJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.idJson
+                      targetPath: $.idArr
+                    - type: GetRtEntitiesById@1
+                      description: Load the UploadedDocument to read its stored file rtId
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdsPath: $.idArr
+                      targetPath: $.doc
+                    - type: GetFileSystemContent@1
+                      description: Read the stored PDF bytes (base64) into the merge path
+                      rtIdPath: $.doc.Items[0].Attributes.FileRtId
+                      targetPath: $.pdf
+                # --- Merge the ordered base64 PDFs into one multi-page PDF ---
+                # ForEach with mergePath collects the per-iteration value directly, so
+                # $.docResults is already the ordered array of base64 PDF strings.
+                - type: MergePdf@1
+                  description: Concatenate the PDFs into one document (in page order)
+                  path: $.docResults
+                  targetPath: $.mergedPdf
+                  contentLengthTargetPath: $.mergedLen
+                - type: ComputeFileHash@1
+                  description: SHA-256 of the merged PDF (fresh content, own hash)
+                  path: $.mergedPdf
+                  targetPath: $.fileHash
+                - type: SetPrimitiveValue@1
+                  description: Merged document file name (re-analysis sets the real identity)
+                  targetPath: $.mergedFileName
+                  value: 'Zusammengeführt.pdf'
+                  valueType: String
+                - type: DateTime@1
+                  description: Upload timestamp
+                  operation: Now
+                  targetPath: $.uploadedAt
+                - type: CreateFileSystemUpdate@1
+                  description: Store the merged PDF
+                  targetPath: $.fileSystemItem
+                  path: $.mergedPdf
+                  generateRtId: true
+                  fileNamePath: $.mergedFileName
+                  contentType: application/pdf
+                  contentLengthPath: $.mergedLen
+                  rootFolderWellKnownName: "Documents"
+                - type: CreateUpdateInfo@1
+                  description: Stage the merged document (NEW -> analysis)
+                  targetPath: $.updates._items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Insert
+                  ckTypeId: Meshmakers.Accounting/UploadedDocument
+                  rtIdPath: $.mergedUploadRtId
+                  generateRtId: true
+                  attributeUpdates:
+                    - attributeName: OriginalFileName
+                      attributeValueType: String
+                      valuePath: $.mergedFileName
+                    - attributeName: FileRtId
+                      attributeValueType: String
+                      valuePath: $.fileSystemItem.RtId
+                    - attributeName: FileHash
+                      attributeValueType: String
+                      valuePath: $.fileHash
+                    - attributeName: UploadedAt
+                      attributeValueType: DateTime
+                      valuePath: $.uploadedAt
+                    - attributeName: ProcessingState
+                      attributeValueType: Enum
+                      value: NEW
+                    - attributeName: SourceChannel
+                      attributeValueType: Enum
+                      valuePath: $.firstDoc.Items[0].Attributes.SourceChannel
+                    - attributeName: SourceSender
+                      attributeValueType: String
+                      valuePath: $.firstDoc.Items[0].Attributes.SourceSender
+                    - attributeName: SourceReceivedAt
+                      attributeValueType: DateTime
+                      valuePath: $.firstDoc.Items[0].Attributes.SourceReceivedAt
+                - type: CreateAssociationUpdate@1
+                  description: Link merged upload to its stored file
+                  targetPath: $.updates._assocItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Create
+                  originRtIdPath: $.updates._items[0].RtEntity.RtId
+                  originCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
+                  targetRtIdPath: $.fileSystemItem.RtId
+                  targetCkTypeIdPath: $.fileSystemItem.CkTypeId
+                  associationRoleId: System/Related
+                - type: ApplyChanges@2
+                  description: Persist the merged document + file link FIRST
+                  entityUpdatesPath: $.updates._items
+                  associationUpdatesPath: $.updates._assocItems
+                # --- Now that the merged doc is safe, delete the source items + their files ---
+                # Two sequential loops: each iteration contributes ONE delete via the merge
+                # path (Simple), so the collected result is a flat array of EntityUpdateInfo.
+                # Files first (while the source docs still exist so FileRtId resolves), then docs.
+                - type: ForEach@1
+                  description: Delete each source's stored file
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.fileDeletes
+                  mergePath: $.fd
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: FormatString@1
+                      format: '["{$.key}"]'
+                      targetPath: $.idJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.idJson
+                      targetPath: $.idArr
+                    - type: GetRtEntitiesById@1
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdsPath: $.idArr
+                      targetPath: $.doc
+                    - type: CreateUpdateInfo@1
+                      description: Delete the stored file (single object into the merge path)
+                      targetPath: $.fd
+                      updateKind: Delete
+                      ckTypeId: System.Reporting/FileSystemItem
+                      rtIdPath: $.doc.Items[0].Attributes.FileRtId
+                - type: ApplyChanges@2
+                  description: Delete the source stored files
+                  entityUpdatesPath: $.fileDeletes
+                - type: ForEach@1
+                  description: Delete each source UploadedDocument
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.docDeletes
+                  mergePath: $.dd
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: CreateUpdateInfo@1
+                      description: Delete the source upload (single object into the merge path)
+                      targetPath: $.dd
+                      updateKind: Delete
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdPath: $.key
+                - type: ApplyChanges@2
+                  description: Delete the source UploadedDocuments
+                  entityUpdatesPath: $.docDeletes
+                # --- Return the merged upload rtId to the HTTP caller ---
+                - type: SetPipelineExecutionResult@1
+                  path: $.mergedUploadRtId
   - rtId: 67d4a2f0b2e4d8c3a1f000f0
     ckTypeId: System.Communication/DataFlow
     attributes:
