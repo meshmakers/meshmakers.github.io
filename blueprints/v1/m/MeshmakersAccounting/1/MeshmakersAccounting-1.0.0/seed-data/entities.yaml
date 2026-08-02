@@ -2880,6 +2880,67 @@ entities:
               fields:
                 - path: $.mergedUploadRtId
                   inclusion: true
+  # --- Pipelines: notify-todo (ToDo e-mail notifications, AB#4656) ---
+  # HTTP endpoint POST /notifyTodo — the meshmakers-app calls it on ToDo
+  # assignment/completion and from the "Erinnerung senden" action. Body:
+  # { toEmails: [string], subject: string, body: string (Markdown) }.
+  # Sends via SendMicrosoftGraphEmail@1 (Graph app-only, needs Mail.Send) from
+  # the accounting mailbox. NOTE: the sender mailbox is a per-tenant literal —
+  # edit it per tenant (same as the e-mail-import mailbox).
+  - rtId: 67d4a2f0b2e4d8c3a1f00130
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Notify ToDo
+      - id: System/Description
+        value: Sends ToDo notification e-mails (assignment / completion / reminder) via Microsoft Graph
+  - rtId: 67d4a2f0b2e4d8c3a1f00131
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00130
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: 67d4a2f0b2e4d8c3a1f000a0
+        targetCkTypeId: System.Communication/MicrosoftGraphConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Notify ToDo Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@1
+              path: /notifyTodo
+              method: POST
+          transformations:
+            # Guard: only send when a recipient e-mail is present (index [0] non-null).
+            - type: If@1
+              description: Only send when a recipient e-mail is present
+              path: $.body.toEmails[0]
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: SendMicrosoftGraphEmail@1
+                  description: Send the ToDo notification e-mail via Microsoft Graph
+                  serverConfiguration: MicrosoftGraphDocuments
+                  mailbox: accounting@meshmakers.io
+                  subjectPath: $.body.subject
+                  toPath: $.body.toEmails
+                  path: $.body.body
+            # Terminal echo-leak guard: never echo the request (Authorization/Bearer,
+            # body or intermediate state). See feedback_fromhttprequest_response_echo_leak.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
   - rtId: 67d4a2f0b2e4d8c3a1f000f0
     ckTypeId: System.Communication/DataFlow
     attributes:
