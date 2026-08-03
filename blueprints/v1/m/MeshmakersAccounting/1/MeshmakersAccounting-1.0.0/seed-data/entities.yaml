@@ -2941,6 +2941,341 @@ entities:
               fields:
                 - path: $.ok
                   inclusion: true
+  # --- Pipelines: notify-todo INBOUND (ToDo reply handling, AB#4656 v1.1) ---
+  # Polls accounting@ folder "ToDoReplies" (a server mail rule moves replies whose
+  # subject carries "[ToDo #<rtId>]" there). Parses each reply, updates the ToDo
+  # state (leading command word erledigt/in arbeit/offen) and/or appends a
+  # TodoActivity comment (Source=EMAIL), then notifies the ToDo creator.
+  # NOTE: sender mailbox + folder are per-tenant literals; requires Graph
+  # Mail.ReadWrite + Mail.Send, and MailboxSettings.ReadWrite to create the rule.
+  - rtId: 67d4a2f0b2e4d8c3a1f00132
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Notify ToDo Inbound
+      - id: System/Description
+        value: Parses ToDo reply e-mails and updates the ToDo (state + comment) + notifies the creator
+  - rtId: 67d4a2f0b2e4d8c3a1f00133
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00132
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: 67d4a2f0b2e4d8c3a1f000a0
+        targetCkTypeId: System.Communication/MicrosoftGraphConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Notify ToDo Inbound Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |
+          triggers:
+            - type: FromMicrosoftGraphEmail@1
+              serverConfiguration: MicrosoftGraphDocuments
+              pollingIntervalSeconds: 120
+              mailbox: accounting@meshmakers.io
+              folderPath: ToDoReplies
+              moveToFolderPathOnSuccess: ToDoReplies/Done
+          transformations:
+            - type: ForEach@1
+              description: Process each reply mail (the trigger sends one mail per run)
+              iterationPath: $.Emails
+              targetPath: $._results
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                # 1. Parse the Todo rtId out of the reply subject "[ToDo #<24-hex>] ...".
+                - type: TransformString@1
+                  description: Extract the 24-hex Todo rtId from the subject
+                  operation: RegexExtract
+                  sourcePath: $.key.Subject
+                  pattern: '\[ToDo #([0-9a-f]{24})\]'
+                  groupIndex: 1
+                  targetPath: $.key.todoRtId
+                # 2. Only continue when a valid Todo rtId was found in the subject.
+                - type: If@1
+                  description: A valid Todo rtId was parsed from the subject
+                  path: $.key.todoRtId
+                  operator: RegexMatch
+                  value: '^[0-9a-f]{24}$'
+                  valueType: String
+                  transformations:
+                    # 2a. Load the referenced Todo (RtIdsPath needs an array).
+                    - type: SetPrimitiveValue@1
+                      description: Wrap the single rtId into an array for GetRtEntitiesById
+                      targetPath: $.key.todoRtIds
+                      valuePath: $.key.todoRtId
+                      valueType: String
+                      targetValueKind: Array
+                    - type: GetRtEntitiesById@1
+                      description: Load the Todo by rtId
+                      ckTypeId: Meshmakers.Accounting/Todo
+                      rtIdsPath: $.key.todoRtIds
+                      targetPath: $.key.todo
+                    # 2b. Only continue when the Todo actually exists.
+                    - type: If@1
+                      description: The Todo exists
+                      path: $.key.todo.TotalCount
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Int
+                      transformations:
+                        # Prefer the plain-text reply body; fall back to the (HTML) body.
+                        - type: SetPrimitiveValue@1
+                          description: Default working body = raw body
+                          targetPath: $.key.workingBody
+                          valuePath: $.key.Body
+                          valueType: String
+                        - type: If@1
+                          description: Prefer the plain-text body when present
+                          path: $.key.TextBody
+                          operator: RegexMatch
+                          value: '\S'
+                          valueType: String
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: Use the plain-text body
+                              targetPath: $.key.workingBody
+                              valuePath: $.key.TextBody
+                              valueType: String
+                        # 2c. Detect a command word ONLY at the very start of the reply
+                        # (leading whitespace / &nbsp; / HTML tags skipped). Anchoring to
+                        # the start avoids false positives from negations ("nicht erledigt")
+                        # and from quoted history further down — the user must lead with the
+                        # command word. HTML-only replies with a <head><style> preamble may
+                        # not match; they then fall through to comment-only (no state change),
+                        # which is the safe degradation.
+                        - type: TransformString@1
+                          description: Extract a leading state command word from the reply body
+                          operation: RegexExtract
+                          sourcePath: $.key.workingBody
+                          pattern: '(?is)^(?:\s|&nbsp;|<[^>]*>)*(erledigt|done|fertig|in\s+arbeit|in\s+progress|wip|offen|reopen)\b'
+                          groupIndex: 1
+                          targetPath: $.key.cmdWord
+                        - type: TransformString@1
+                          description: Normalise the command word to lower case
+                          operation: ToLower
+                          sourcePath: $.key.cmdWord
+                          targetPath: $.key.cmdWord
+                        # Defaults: no state change, activity kind = COMMENT (0).
+                        - type: SetPrimitiveValue@1
+                          description: Default - no state command present
+                          targetPath: $.key.hasCmd
+                          value: false
+                          valueType: Boolean
+                        - type: SetPrimitiveValue@1
+                          description: Default activity kind = COMMENT (0)
+                          targetPath: $.key.activityKind
+                          value: 0
+                          valueType: Int
+                        - type: SetPrimitiveValue@1
+                          description: Placeholder new state (only used when hasCmd)
+                          targetPath: $.key.newState
+                          value: 0
+                          valueType: Int
+                        # 2c-map. Map the command word to a TodoState + STATECHANGED kind.
+                        - type: Switch@1
+                          description: Map the command word to a Todo state
+                          path: $.key.cmdWord
+                          valueType: String
+                          cases:
+                            - value: ['done', 'erledigt', 'fertig']
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.newState
+                                  value: 2
+                                  valueType: Int
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.hasCmd
+                                  value: true
+                                  valueType: Boolean
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.activityKind
+                                  value: 2
+                                  valueType: Int
+                            - value: ['in arbeit', 'in progress', 'wip']
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.newState
+                                  value: 1
+                                  valueType: Int
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.hasCmd
+                                  value: true
+                                  valueType: Boolean
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.activityKind
+                                  value: 2
+                                  valueType: Int
+                            - value: ['offen', 'reopen']
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.newState
+                                  value: 0
+                                  valueType: Int
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.hasCmd
+                                  value: true
+                                  valueType: Boolean
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key.activityKind
+                                  value: 2
+                                  valueType: Int
+                        # 2d. Comment text: strip quoted history best-effort, else whole body.
+                        - type: SetPrimitiveValue@1
+                          description: Default comment = whole working body
+                          targetPath: $.key.comment
+                          valuePath: $.key.workingBody
+                          valueType: String
+                        - type: TransformString@1
+                          description: Cut the reply at the first quoted-history marker
+                          operation: RegexExtract
+                          sourcePath: $.key.workingBody
+                          pattern: '(?is)^(.*?)(?:\r?\n\s*(?:On .*wrote:|Am .*schrieb|Von:|From:|-{4,}|_{4,}|>)).*$'
+                          groupIndex: 1
+                          targetPath: $.key.commentTrimmed
+                        - type: If@1
+                          description: Use the trimmed comment when the cut matched
+                          path: $.key.commentTrimmed
+                          operator: RegexMatch
+                          value: '\S'
+                          valueType: String
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.comment
+                              valuePath: $.key.commentTrimmed
+                              valueType: String
+                        - type: TransformString@1
+                          description: Trim whitespace from the comment
+                          operation: Trim
+                          sourcePath: $.key.comment
+                          targetPath: $.key.comment
+                        # 2e. Timestamp for the activity entry.
+                        - type: DateTime@1
+                          description: Now (UTC) for the activity timestamp
+                          operation: Now
+                          targetPath: $.key.now
+                        # 2f/2g. Build the TodoActivity (index 0) + the ParentChild link,
+                        # then optionally the Todo state update (index 1).
+                        - type: CreateUpdateInfo@1
+                          description: New TodoActivity child (comment / state-change entry)
+                          targetPath: $.key.entityUpdates
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Insert
+                          generateRtId: true
+                          # Materialise the generated rtId into a path so the ParentChild
+                          # association below can reference it (generateRtId alone does not
+                          # populate RtEntity.RtId early enough — mirrors the seed's
+                          # `rtIdPath: $.documentRtId` + generateRtId pattern).
+                          rtIdPath: $.key.activityRtId
+                          ckTypeId: Meshmakers.Accounting/TodoActivity
+                          attributeUpdates:
+                            - attributeName: Timestamp
+                              attributeValueType: DateTime
+                              valuePath: $.key.now
+                            - attributeName: Kind
+                              attributeValueType: Enum
+                              valuePath: $.key.activityKind
+                            - attributeName: Source
+                              attributeValueType: Enum
+                              value: EMAIL
+                            - attributeName: Text
+                              attributeValueType: String
+                              valuePath: $.key.comment
+                            - attributeName: AuthorName
+                              attributeValueType: String
+                              valuePath: $.key.From
+                        - type: CreateAssociationUpdate@1
+                          description: Link the TodoActivity (child) to its Todo (parent) via ParentChild
+                          targetPath: $.key.assocUpdates
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Create
+                          # The generated rtId lands in the emitted update-info's
+                          # RtEntity.RtId (NOT written back to rtIdPath); read it there,
+                          # exactly like the seed's $.updates._items[0].RtEntity.RtId.
+                          # (rtIdPath above must be set for generateRtId to fire at all.)
+                          originRtIdPath: $.key.entityUpdates[0].RtEntity.RtId
+                          originCkTypeIdPath: $.key.entityUpdates[0].RtEntity.CkTypeId
+                          targetRtIdPath: $.key.todoRtId
+                          targetCkTypeId: Meshmakers.Accounting/Todo
+                          associationRoleId: System/ParentChild
+                        - type: If@1
+                          description: A state command was present - update the Todo state
+                          path: $.key.hasCmd
+                          operator: Equal
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: CreateUpdateInfo@1
+                              description: Update the Todo State
+                              targetPath: $.key.entityUpdates
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Update
+                              rtIdPath: $.key.todoRtId
+                              ckTypeId: Meshmakers.Accounting/Todo
+                              attributeUpdates:
+                                - attributeName: State
+                                  attributeValueType: Enum
+                                  valuePath: $.key.newState
+                        # 2h. Persist the activity, the ParentChild link and the state update.
+                        - type: ApplyChanges@2
+                          description: Persist the TodoActivity, its link and the state update
+                          entityUpdatesPath: $.key.entityUpdates
+                          associationUpdatesPath: $.key.assocUpdates
+                        # 2i. Notify the Todo creator (skip when the creator is the replier).
+                        - type: If@1
+                          description: The Todo has a creator e-mail
+                          path: $.key.todo.Items[0].Attributes.CreatedByEmail
+                          operator: RegexMatch
+                          value: '@'
+                          valueType: String
+                          transformations:
+                            - type: If@1
+                              description: The creator is not the person who replied
+                              path: $.key.todo.Items[0].Attributes.CreatedByEmail
+                              operator: NotEqual
+                              valuePath: $.key.FromAddress
+                              valueType: String
+                              transformations:
+                                - type: FormatString@1
+                                  description: Notification subject
+                                  format: '[ToDo #{$.key.todoRtId}] {$.key.todo.Items[0].Attributes.Title}'
+                                  targetPath: $.key.notifySubject
+                                - type: FormatString@1
+                                  description: Notification body (Markdown)
+                                  format: "**{$.key.From}** hat per E-Mail geantwortet:\n\n{$.key.comment}\n\n[ToDo öffnen](https://meshmakers-accounting.prod-1.octo-mesh.com/de-AT/todos/{$.key.todoRtId})"
+                                  targetPath: $.key.notifyBody
+                                - type: SendMicrosoftGraphEmail@1
+                                  description: Send the notification to the Todo creator
+                                  serverConfiguration: MicrosoftGraphDocuments
+                                  mailbox: accounting@meshmakers.io
+                                  subjectPath: $.key.notifySubject
+                                  toPath: $.key.todo.Items[0].Attributes.CreatedByEmail
+                                  path: $.key.notifyBody
+            # Terminal projection: keep only the success flag (avoid echoing the mail batch).
+            - type: SetPrimitiveValue@1
+              description: Success marker
+              targetPath: $.ok
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              description: Clear the context down to the success flag
+              path: $
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
   - rtId: 67d4a2f0b2e4d8c3a1f000f0
     ckTypeId: System.Communication/DataFlow
     attributes:
