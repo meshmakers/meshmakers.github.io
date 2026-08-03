@@ -725,6 +725,80 @@ entities:
           - role
           - allowed_tenants
           - octo_api
+  # --- App roles + groups (AB#4677) ---------------------------------------------
+  # Role-based access of the accounting SPA: AccountingManagement (full access),
+  # AccountingEmployee (inbox/documents/todos, own items only) and
+  # AccountingShareholder (finance cockpit only). Roles are additive — a user may
+  # hold several. User administration is group membership: each group carries its
+  # role via the AssignedRole association (same pattern as the identity bootstrap
+  # blueprint's TenantOwners group). Role SubjectIds/IdentityRoleIds are runtime
+  # state and preserved on blueprint re-apply.
+  - rtId: aa0000000000000000000301
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: AccountingManagement
+    attributes:
+      - id: System/Name
+        value: AccountingManagement
+      - id: System.Identity/NormalizedName
+        value: ACCOUNTINGMANAGEMENT
+  - rtId: aa0000000000000000000302
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: AccountingEmployee
+    attributes:
+      - id: System/Name
+        value: AccountingEmployee
+      - id: System.Identity/NormalizedName
+        value: ACCOUNTINGEMPLOYEE
+  - rtId: aa0000000000000000000303
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: AccountingShareholder
+    attributes:
+      - id: System/Name
+        value: AccountingShareholder
+      - id: System.Identity/NormalizedName
+        value: ACCOUNTINGSHAREHOLDER
+  - rtId: aa0000000000000000000311
+    ckTypeId: System.Identity/Group
+    rtWellKnownName: Accounting
+    attributes:
+      - id: System.Identity/GroupName
+        value: Accounting
+      - id: System.Identity/NormalizedGroupName
+        value: ACCOUNTING
+      - id: System.Identity/GroupDescription
+        value: Accounting responsibles — full access to the accounting app.
+    associations:
+      - roleId: System.Identity/AssignedRole
+        targetRtId: aa0000000000000000000301
+        targetCkTypeId: System.Identity/Role
+  - rtId: aa0000000000000000000312
+    ckTypeId: System.Identity/Group
+    rtWellKnownName: Employees
+    attributes:
+      - id: System.Identity/GroupName
+        value: Employees
+      - id: System.Identity/NormalizedGroupName
+        value: EMPLOYEES
+      - id: System.Identity/GroupDescription
+        value: Employees — inbox, documents and ToDos of the accounting app, own items only.
+    associations:
+      - roleId: System.Identity/AssignedRole
+        targetRtId: aa0000000000000000000302
+        targetCkTypeId: System.Identity/Role
+  - rtId: aa0000000000000000000313
+    ckTypeId: System.Identity/Group
+    rtWellKnownName: Shareholders
+    attributes:
+      - id: System.Identity/GroupName
+        value: Shareholders
+      - id: System.Identity/NormalizedGroupName
+        value: SHAREHOLDERS
+      - id: System.Identity/GroupDescription
+        value: Shareholders — finance cockpit dashboard of the accounting app (read-only).
+    associations:
+      - roleId: System.Identity/AssignedRole
+        targetRtId: aa0000000000000000000303
+        targetCkTypeId: System.Identity/Role
   # --- Anthropic AI configuration -----------------------------------------------
   # Referenced by name (apiKeyConfigurationName: AnthropicAiConfig) from the
   # AnthropicAiQuery nodes in the ai-prompt, upload-documents and
@@ -8733,6 +8807,17 @@ entities:
           #      live with a document linked to two transactions.
           #  [DATA] Assigning documents to a FiscalYear (DocumentToFiscalYear) is a
           #      precondition; on salzburgdev this was done manually for the test.
+          #  [STRUCT] ZIP layout v2: entries are grouped as
+          #      {fiscal year name}/{month yyyy-MM}/{type} where type is "Verträge" for
+          #      recurring master documents (DocumentState RECURRING=4) and
+          #      "Eingangsrechnungen"/"Ausgangsrechnungen" by DocumentType otherwise.
+          #      File names are {document date}_{vendor or customer}_{NNN}.pdf — the
+          #      running number and per-segment sanitizing come from CreateZipArchive@1
+          #      (appendSequenceNumber; pathSegments entries). A belege.csv index
+          #      (semicolon CSV, UTF-8 BOM) in the ZIP root lists every document's
+          #      parsed data (Datum/Belegnummer/Typ/LieferantKunde/Netto/USt/Brutto/
+          #      Waehrung) plus its final path — usable as a BMD-import starting point
+          #      (no Kontierung/account mapping by design).
           # =============================================================================
 
           triggers:
@@ -8741,6 +8826,29 @@ entities:
               method: POST
 
           transformations:
+            # -- 0) Resolve the fiscal-year name (top-level ZIP folder, AB#4392 v2) -----
+            - type: SetPrimitiveValue@1
+              description: Wrap the fiscal-year id into an array for GetRtEntitiesById
+              targetPath: $.fyIds
+              valuePath: $.query.fiscalYearId
+              valueType: String
+              targetValueKind: Array
+            - type: GetRtEntitiesById@1
+              description: Load the fiscal year (folder name)
+              ckTypeId: Meshmakers.Accounting/FiscalYear
+              rtIdsPath: $.fyIds
+              targetPath: $.fy
+            - type: SetPrimitiveValue@1
+              description: Default top-level folder when the fiscal year has no name
+              targetPath: $.fyName
+              value: Geschaeftsjahr
+              valueType: String
+            - type: SelectByPath@1
+              description: Copy the fiscal-year name when present (skips missing/null)
+              selectPath:
+                - path: $.fy.Items[0].Attributes.Name
+                  targetPath: $.fyName
+
             # -- 1) Load the fiscal year's documents via DocumentToFiscalYear -----------
             - type: GetAssociationTargets@1
               description: Documents assigned to the requested fiscal year
@@ -8880,6 +8988,106 @@ entities:
                       value: "no"
                       valueType: String
 
+                # Folder + file-name building blocks (AB#4392 v2): the ZIP is grouped
+                # as {fiscal year}/{month yyyy-MM}/{type} and files are named
+                # {document date}_{vendor or customer}_{sequence}.pdf. The sequence
+                # number is appended by CreateZipArchive@1 (appendSequenceNumber) and
+                # all segments are sanitized there, so vendor names with slashes or
+                # other invalid characters cannot break the archive structure.
+                - type: SetPrimitiveValue@1
+                  description: Default document date (documents without a date)
+                  targetPath: $.key.docDate
+                  value: "0000-00-00"
+                  valueType: String
+                - type: SelectByPath@1
+                  description: Copy the document date when present
+                  selectPath:
+                    - path: $.key.Attributes.DocumentDate
+                      targetPath: $.key.docDate
+                - type: TransformString@1
+                  description: Trim to the date (yyyy-MM-dd)
+                  sourcePath: $.key.docDate
+                  targetPath: $.key.docDate
+                  operation: SubstringFromStart
+                  length: 10
+                - type: TransformString@1
+                  description: Month folder (yyyy-MM)
+                  sourcePath: $.key.docDate
+                  targetPath: $.key.monthFolder
+                  operation: SubstringFromStart
+                  length: 7
+                # Type folder: recurring master documents (Dauerbelege — contracts,
+                # insurance, subscriptions; DocumentState RECURRING=4) go to
+                # "Verträge", the rest split by DocumentType into incoming/outgoing
+                # invoices. Defaults to incoming (DocumentType 0).
+                - type: SetPrimitiveValue@1
+                  description: Default type folder (incoming invoices)
+                  targetPath: $.key.typeFolder
+                  value: Eingangsrechnungen
+                  valueType: String
+                - type: If@1
+                  description: Outgoing invoice folder
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 1
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.typeFolder
+                      value: Ausgangsrechnungen
+                      valueType: String
+                - type: If@1
+                  description: Recurring master document (Dauerbeleg) -> contracts folder
+                  path: $.key.Attributes.DocumentState
+                  operator: Equal
+                  value: 4
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.typeFolder
+                      value: Verträge
+                      valueType: String
+                # Party for the file name: vendor for incoming, customer for outgoing
+                # documents; falls back to "Unbekannt" when no name is present.
+                - type: SetPrimitiveValue@1
+                  description: Default party (no vendor/customer name)
+                  targetPath: $.key.party
+                  value: Unbekannt
+                  valueType: String
+                - type: If@1
+                  description: Incoming -> vendor name
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: SelectByPath@1
+                      selectPath:
+                        - path: $.key.Attributes.Vendor.Attributes.CompanyName
+                          targetPath: $.key.party
+                - type: If@1
+                  description: Outgoing -> customer name
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 1
+                  valueType: Int
+                  transformations:
+                    - type: SelectByPath@1
+                      selectPath:
+                        - path: $.key.Attributes.Customer.Attributes.CompanyName
+                          targetPath: $.key.party
+                - type: If@1
+                  description: Empty party name -> Unbekannt
+                  path: $.key.party
+                  operator: Equal
+                  value: ""
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.party
+                      value: Unbekannt
+                      valueType: String
+
                 # 2a) original stored PDF via System/Related
                 - type: GetAssociationTargets@1
                   description: Original stored PDF (FileSystemItem)
@@ -8926,13 +9134,13 @@ entities:
                       targetPath: $.key.sheet.sections[0].rows[3].value
                     - path: $.key.Attributes.GrossTotal
                       targetPath: $.key.sheet.sections[0].rows[4].value
-                    - path: $.key.Attributes.Vendor.CompanyName
+                    - path: $.key.Attributes.Vendor.Attributes.CompanyName
                       targetPath: $.key.sheet.sections[1].rows[0].value
-                    - path: $.key.Attributes.Vendor.TaxIdentificationNumber
+                    - path: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
                       targetPath: $.key.sheet.sections[1].rows[1].value
-                    - path: $.key.Attributes.Vendor.IBAN
+                    - path: $.key.Attributes.Vendor.Attributes.IBAN
                       targetPath: $.key.sheet.sections[1].rows[2].value
-                    - path: $.key.Attributes.Customer.CompanyName
+                    - path: $.key.Attributes.Customer.Attributes.CompanyName
                       targetPath: $.key.sheet.sections[1].rows[3].value
                     - path: $.key.Attributes.NetTotal
                       targetPath: $.key.sheet.sections[2].rows[0].value
@@ -9084,9 +9292,12 @@ entities:
                       targetPath: $.key.finalPdf
                       outputAsScratchFile: true
 
-                # 2e) zip entry { fileName, scratchFileToken, length } — only in-scope docs.
-                #     Documents excluded by scope never get $.key.entry, so the Flatten
-                #     over $.docResults[*].entry drops them from the ZIP.
+                # 2e) zip entry { pathSegments, scratchFileToken, length, manifest } —
+                #     only in-scope docs. Documents excluded by scope never get
+                #     $.key.entry, so the Flatten over $.docResults[*].entry drops them
+                #     from the ZIP. Values are copied as JSON nodes (SelectByPath), so
+                #     quotes/newlines in vendor names cannot break the entry; the ZIP
+                #     node sanitizes each path segment and appends the running number.
                 - type: If@1
                   description: Emit entry only when in scope
                   path: $.key.include
@@ -9094,36 +9305,45 @@ entities:
                   value: "yes"
                   valueType: String
                   transformations:
-                    # File-name base = DocumentNumber, falling back to the RtId when the
-                    # number is empty so entries stay unique (a ZIP can't have two AP/.pdf).
-                    - type: SetPrimitiveValue@1
-                      description: File-name base from document number
-                      targetPath: $.key.fnbase
-                      valuePath: $.key.Attributes.DocumentNumber
-                      valueType: String
-                    - type: If@1
-                      description: Empty number -> use RtId
-                      path: $.key.fnbase
-                      operator: Equal
-                      value: ""
-                      valueType: String
-                      transformations:
-                        - type: SetPrimitiveValue@1
-                          targetPath: $.key.fnbase
-                          valuePath: $.key.RtId
-                          valueType: String
                     - type: FormatString@1
-                      description: Archive entry file name (grouped AP/AR)
-                      nullValue: doc
-                      format: '{$.key.prefix}/{$.key.fnbase}.pdf'
-                      targetPath: $.key.entryName
-                    - type: FormatString@1
-                      description: Build zip-entry JSON (scratch reference, not inline base64)
-                      format: '{"fileName":"{$.key.entryName}","scratchFileToken":"{$.key.finalPdf.scratchFileToken}","length":{$.key.finalPdf.length}}'
-                      targetPath: $.key.entryJson
+                      description: File name (sequence number appended by the ZIP node)
+                      format: '{$.key.docDate}_{$.key.party}.pdf'
+                      targetPath: $.key.baseFileName
                     - type: WriteJson@1
-                      jsonStringPath: $.key.entryJson
+                      description: Entry skeleton (path segments + belege.csv manifest columns)
+                      jsonString: '{"pathSegments":["","","",""],"scratchFileToken":"","length":0,"manifest":{"Datum":"","Belegnummer":"","Typ":"","LieferantKunde":"","Netto":"","USt":"","Brutto":"","Waehrung":""}}'
                       targetPath: $.key.entry
+                    - type: SelectByPath@1
+                      description: Fill path, content reference and manifest (skips missing)
+                      selectPath:
+                        - path: $.full.fyName
+                          targetPath: $.key.entry.pathSegments[0]
+                        - path: $.key.monthFolder
+                          targetPath: $.key.entry.pathSegments[1]
+                        - path: $.key.typeFolder
+                          targetPath: $.key.entry.pathSegments[2]
+                        - path: $.key.baseFileName
+                          targetPath: $.key.entry.pathSegments[3]
+                        - path: $.key.finalPdf.scratchFileToken
+                          targetPath: $.key.entry.scratchFileToken
+                        - path: $.key.finalPdf.length
+                          targetPath: $.key.entry.length
+                        - path: $.key.docDate
+                          targetPath: $.key.entry.manifest.Datum
+                        - path: $.key.Attributes.DocumentNumber
+                          targetPath: $.key.entry.manifest.Belegnummer
+                        - path: $.key.typeFolder
+                          targetPath: $.key.entry.manifest.Typ
+                        - path: $.key.party
+                          targetPath: $.key.entry.manifest.LieferantKunde
+                        - path: $.key.Attributes.NetTotal
+                          targetPath: $.key.entry.manifest.Netto
+                        - path: $.key.Attributes.TaxTotal
+                          targetPath: $.key.entry.manifest.USt
+                        - path: $.key.Attributes.GrossTotal
+                          targetPath: $.key.entry.manifest.Brutto
+                        - path: $.key.Attributes.Currency
+                          targetPath: $.key.entry.manifest.Waehrung
 
             # -- 3) Collect entries, build ZIP, store as FileSystemItem -----------------
             - type: Flatten@1
@@ -9146,6 +9366,11 @@ entities:
               fileNamePath: $.zip.fileName
               contentType: application/zip
               generateRtId: true
+              # Unique file names ({date}_{party}_{NNN}.pdf) + belege.csv index in the
+              # ZIP root listing every document's parsed data and its final path.
+              appendSequenceNumber: true
+              manifestFileName: belege.csv
+              manifestFileNameColumn: Dateiname
               targetPath: $.zip.itemRtId
 
             # -- 4) Return { fileSystemItem: <rtId> } -----------------------------------
@@ -9160,6 +9385,203 @@ entities:
             - type: SetPipelineExecutionResult@1
               path: $.fileSystemItem
             # Project the context down to just the id so the HTTP body is clean.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.fileSystemItem
+                  inclusion: true
+  # --- Pipeline: SEPA credit-transfer export (AB#4658) -----------------------
+  # On-demand outbound export triggered via POST /exportSepa. Body:
+  #   { "documentIds": ["<rtId>", ...],       # selected OPEN incoming invoices
+  #     "debtorBankAccountId": "<rtId>",       # the paying company BankAccount
+  #     "executionDate": "yyyy-MM-dd" }        # optional; defaults to today
+  # Builds an ISO 20022 pain.001.001.03 (Austrian variant) SEPA credit-transfer
+  # batch from the selected documents (payee name = Vendor.AccountName, falling
+  # back to Vendor.CompanyName; payee IBAN/BIC = Vendor.IBAN/Vendor.Bic; amount =
+  # GrossTotal; remittance = DocumentNumber) and returns it as a FileSystemItem:
+  #   { "fileSystemItem": "<rtId>" }
+  # The frontend resolves the download URL via GetFileSystemItem and bearer-fetches
+  # the XML blob (same pattern as /exportHandover). The user imports the file into
+  # their e-banking and approves it there — the app never executes the payment
+  # (no finAPI PIS; SCA stays at the bank). Post-install: DeployDataFlow for this
+  # DataFlow. Uses the BuildSepaCreditTransfer@1 mesh-adapter node (AB#4658).
+  - rtId: aa0000000000000000000700
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: SEPA Credit Transfer Export
+      - id: System/Description
+        value: Exports selected open incoming invoices as a pain.001.001.03 SEPA credit-transfer file for e-banking import
+  - rtId: aa0000000000000000000701
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000700
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: SEPA Credit Transfer Export Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |
+          triggers:
+            - type: FromHttpRequest@1
+              path: /exportSepa
+              method: POST
+          transformations:
+            # Payment-order workflow (AB#4658): the body carries the selected payment
+            # orders and the paying account:
+            #   { "paymentOrderIds": ["<rtId>", ...], "debtorBankAccountId": "<rtId>" }
+            # Each PaymentOrder already holds recipient + amount + its own ExecutionDate,
+            # so the node groups them into per-date PmtInf blocks. After the file is
+            # stored, every order is marked Executed with PaymentExternalId = file rtId.
+            # -- 1) Debtor: our company (name) + the paying bank account (IBAN) ----------
+            # BankAccount stores no BIC; the BuildSepaCreditTransfer node emits the
+            # debtor agent as Othr/Id=NOTPROVIDED when no BIC is supplied.
+            - type: GetRtEntitiesByType@1
+              description: Load our own company profile for the debtor name
+              ckTypeId: Meshmakers.Accounting/CompanyProfile
+              take: 1
+              targetPath: $.company
+            - type: FormatString@1
+              description: Debtor bank account rtId as a single-element JSON array
+              format: '["{$.body.debtorBankAccountId}"]'
+              targetPath: $.debtorIdJson
+            - type: WriteJson@1
+              jsonStringPath: $.debtorIdJson
+              targetPath: $.debtorIdArr
+            - type: GetRtEntitiesById@1
+              description: Load the paying bank account (debtor)
+              ckTypeId: Basic.Accounting/BankAccount
+              rtIdsPath: $.debtorIdArr
+              targetPath: $.debtorAcct
+
+            # -- 2) Per selected payment order: project one SEPA payment item ------------
+            # paymentOrderIds is an array of rtId strings; load each PaymentOrder and
+            # copy its (top-level) fields into a payment item collected via the ForEach
+            # merge path. SelectByPath skips missing/null sources, leaving the defaults.
+            - type: ForEach@1
+              description: Build one SEPA payment item per selected payment order
+              iterationPath: $.body.paymentOrderIds
+              targetPath: $.payments
+              mergePath: $.item
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: FormatString@1
+                  format: '["{$.key}"]'
+                  targetPath: $.idJson
+                - type: WriteJson@1
+                  jsonStringPath: $.idJson
+                  targetPath: $.idArr
+                - type: GetRtEntitiesById@1
+                  description: Load the PaymentOrder
+                  ckTypeId: Basic.Accounting/PaymentOrder
+                  rtIdsPath: $.idArr
+                  targetPath: $.po
+                - type: SetPrimitiveValue@1
+                  targetPath: $.item.recipientName
+                  value: ""
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.item.recipientIban
+                  value: ""
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.item.remittance
+                  value: ""
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.item.currency
+                  value: EUR
+                  valueType: String
+                # PaymentOrder attributes are top-level (not a record). Attribute
+                # names are the CK 'name' values (Amount, RecipientName, ...).
+                - type: SelectByPath@1
+                  description: Copy recipient, amount, remittance and execution date
+                  selectPath:
+                    - path: $.po.Items[0].Attributes.RecipientName
+                      targetPath: $.item.recipientName
+                    - path: $.po.Items[0].Attributes.RecipientIban
+                      targetPath: $.item.recipientIban
+                    - path: $.po.Items[0].Attributes.RecipientBic
+                      targetPath: $.item.recipientBic
+                    - path: $.po.Items[0].Attributes.Amount
+                      targetPath: $.item.amount
+                    - path: $.po.Items[0].Attributes.Currency
+                      targetPath: $.item.currency
+                    - path: $.po.Items[0].Attributes.Purpose
+                      targetPath: $.item.remittance
+                    - path: $.po.Items[0].Attributes.EndToEndReference
+                      targetPath: $.item.endToEndId
+                    - path: $.po.Items[0].Attributes.ExecutionDate
+                      targetPath: $.item.executionDate
+
+            # -- 3) Build the pain.001.001.03 batch (Austrian variant) -------------------
+            - type: BuildSepaCreditTransfer@1
+              description: Build the SEPA credit-transfer XML from the payment items
+              path: $.payments
+              targetPath: $.sepaXml
+              contentLengthTargetPath: $.sepaLen
+              debtorNamePath: $.company.Items[0].Attributes.Name
+              debtorIbanPath: $.debtorAcct.Items[0].Attributes.Iban
+
+            # -- 4) Store the XML as a FileSystemItem ------------------------------------
+            - type: SetPrimitiveValue@1
+              description: Export file name
+              targetPath: $.fileName
+              value: SEPA-Ueberweisung.xml
+              valueType: String
+            - type: CreateFileSystemUpdate@1
+              description: Store the SEPA XML
+              targetPath: $.fsItem
+              path: $.sepaXml
+              generateRtId: true
+              fileNamePath: $.fileName
+              contentType: application/xml
+              contentLengthPath: $.sepaLen
+              rootFolderWellKnownName: "Documents"
+
+            # -- 5) Mark every exported order Executed + stamp the file rtId -------------
+            - type: ForEach@1
+              description: Mark each payment order as exported
+              iterationPath: $.body.paymentOrderIds
+              targetPath: $.orderUpdates
+              mergePath: $.u
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Set PaymentOrder Status=Executed + ExternalId=file rtId
+                  targetPath: $.u
+                  updateKind: Update
+                  ckTypeId: Basic.Accounting/PaymentOrder
+                  rtIdPath: $.key
+                  attributeUpdates:
+                    - attributeName: Status
+                      attributeValueType: Enum
+                      value: Executed
+                    - attributeName: ExternalId
+                      attributeValueType: String
+                      valuePath: $.full.fsItem.RtId
+            - type: ApplyChanges@2
+              description: Persist the exported status on the payment orders
+              entityUpdatesPath: $.orderUpdates
+
+            # -- 6) Return { fileSystemItem: <rtId> } ------------------------------------
+            - type: SetPrimitiveValue@1
+              description: Response id at root
+              targetPath: $.fileSystemItem
+              valuePath: $.fsItem.RtId
+              valueType: String
+            - type: SetPipelineExecutionResult@1
+              path: $.fileSystemItem
+            # Scrub the context so the HTTP body is a clean { "fileSystemItem": "<rtId>" }
+            # and never echoes the request headers/body (echo-leak guard).
             - type: Project@1
               clear: true
               fields:
