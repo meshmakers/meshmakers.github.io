@@ -1,0 +1,52 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: MeshmakersAccounting.Tesla-1.0.0
+description: |
+  Tesla Supercharger invoice fetcher add-on for the Meshmakers Accounting app
+  (AB#4678). Periodically pulls charging invoices from the Tesla Fleet API and
+  stages them in the accounting inbox as UploadedDocument entities
+  (ProcessingState NEW, SourceChannel API) — the existing analysis pipeline
+  picks them up like any uploaded or e-mailed document; the SHA-256 hash dedup
+  makes re-polls idempotent.
+
+  Installs:
+  - the Meshmakers.Accounting.Tesla construction kit model (TeslaConfiguration)
+  - the TeslaConfiguration entity (placeholder credentials)
+  - the "Tesla Charging Invoices" DataFlow with the fetcher pipeline
+    (cron via PipelineTrigger, daily 05:30, plus manual ExecutePipeline)
+
+  REQUIRES an installed MeshmakersAccounting base blueprint (declared via
+  blueprintDependencies) — the fetcher stages into the base app's inbox
+  (Meshmakers.Accounting/UploadedDocument, Documents root folder).
+
+  Tesla prerequisites (one-time):
+  - Tesla developer app (developer.tesla.com) with OAuth grant types
+    Authorization Code + Machine-to-Machine and the "Vehicle Charging
+    Management" scope; partner registration needs a domain hosting the public
+    key at /.well-known/appspecific/com.tesla.3p.public-key.pem
+  - a refresh token generated once via the localhost OAuth callback
+
+  Post-install:
+  - Set ClientId/ClientSecret/RefreshToken on the TeslaConfiguration entity —
+    every blueprint re-apply resets them to placeholders
+    (scripts/om_set_secrets.ps1, tesla section)
+  - DeployDataFlow "Tesla Charging Invoices" + DeployTriggers (cron)
+  - NOTE: Tesla rotates refresh tokens; the pipeline persists the newest token
+    back to TeslaConfiguration on every run. Keep secrets.local.json in sync
+    before a blueprint re-apply, or the stored token is lost.
+# The blueprint engine installs each dependency's range FLOOR as the exact
+# version, and transitive CK dependencies are NOT resolved on install — list
+# everything explicitly, install order = list order (same rules as the base
+# blueprint). The base app model floor must carry the API enum value on
+# DocumentSource (1.17.0).
+ckModelDependencies:
+- System-[2.0,)
+- System.Bot-[3.0,4.0)
+- System.Communication-[3.0,4.0)
+- System.Reporting-[2.0,3.0)
+- Basic-[2.0.2,3.0)
+- Basic.Accounting-[1.6.0,2.0)
+- Meshmakers.Accounting-[1.17.0,2.0)
+- Meshmakers.Accounting.Tesla-[1.0.0,2.0)
+blueprintDependencies:
+- MeshmakersAccounting-[1.0.0,)
+seedDataPath: seed-data/entities.yaml
