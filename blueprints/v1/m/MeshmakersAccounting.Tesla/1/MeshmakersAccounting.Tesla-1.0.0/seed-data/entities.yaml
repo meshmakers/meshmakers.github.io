@@ -1,0 +1,322 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.17,2.0)
+  - Meshmakers.Accounting.Tesla-[1.0,2.0)
+  - System.Bot-[3.0,4.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+entities:
+  # --- Tesla Fleet API configuration --------------------------------------------
+  # Loaded via GetPipelineConfigByWellKnownName (wellKnownName: TeslaConfiguration)
+  # through the pipeline's Uses association (the well-known name alone fails with
+  # "not found in GlobalConfiguration" — same trap as FinApiConfiguration).
+  #
+  # SECRET — real values are intentionally NOT committed. After install (and after
+  # EVERY blueprint re-apply, which resets these to the placeholders) restore them
+  # via scripts/om_set_secrets.ps1 (tesla section of scripts/secrets.local.json).
+  # NOTE: Tesla ROTATES refresh tokens — the pipeline writes the newest token back
+  # to this entity on every run, so after the first run the entity holds a newer
+  # token than secrets.local.json. Before re-applying the blueprint, copy the
+  # current RefreshToken value back into secrets.local.json.
+  - rtId: 67d4a2f0b2e4d8c3a1f00300
+    ckTypeId: Meshmakers.Accounting.Tesla/TeslaConfiguration
+    rtWellKnownName: TeslaConfiguration
+    attributes:
+      - id: Meshmakers.Accounting.Tesla/BaseUrl
+        value: "https://fleet-api.prd.eu.vn.cloud.tesla.com"
+      - id: Meshmakers.Accounting.Tesla/TokenUrl
+        value: "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
+      - id: Meshmakers.Accounting.Tesla/ClientId
+        value: "<tesla-client-id-here>"
+      - id: Meshmakers.Accounting.Tesla/ClientSecret
+        value: "<tesla-client-secret-here>"
+      - id: Meshmakers.Accounting.Tesla/RefreshToken
+        value: "<tesla-refresh-token-here>"
+      - id: Meshmakers.Accounting.Tesla/PageSize
+        value: 25
+  # --- DataFlow -----------------------------------------------------------------
+  - rtId: 67d4a2f0b2e4d8c3a1f00301
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: "Tesla Charging Invoices"
+      - id: System/Description
+        value: "Fetches Tesla Supercharger invoices via the Fleet API and stages them in the accounting inbox (AB#4678)."
+  # --- Pipeline: tesla-fetch-charging-invoices ----------------------------------
+  # Cron-triggered (PipelineTrigger below) and manually executable. Refreshes the
+  # OAuth access token (persisting the rotated refresh token), fetches the most
+  # recent charging sessions, downloads each session invoice PDF and stages it
+  # exactly like the base app's upload pipeline: SHA-256 hash dedup against
+  # UploadedDocument.FileHash, file stored under the Documents root, entity with
+  # ProcessingState NEW so the analysis pipeline picks it up.
+  - rtId: 67d4a2f0b2e4d8c3a1f00302
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00301
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: 67d4a2f0b2e4d8c3a1f00300
+        targetCkTypeId: Meshmakers.Accounting.Tesla/TeslaConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Tesla Charging Invoice Fetcher Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |
+          triggers:
+            - type: FromPipelineTriggerEvent@1
+            - type: FromExecutePipelineCommand@1
+          transformations:
+            - type: GetPipelineConfigByWellKnownName@1
+              description: Load the Tesla Fleet API configuration
+              wellKnownName: TeslaConfiguration
+              targetPath: $.config
+            # --- OAuth: refresh the access token --------------------------------
+            - type: SetPrimitiveValue@1
+              targetPath: $.tokenRequest.grant_type
+              value: "refresh_token"
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.tokenRequest.client_id
+              valuePath: $.config.attributes.ClientId
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.tokenRequest.refresh_token
+              valuePath: $.config.attributes.RefreshToken
+              valueType: String
+            - type: MakeHttpRequest@1
+              description: Exchange the refresh token for an access token
+              method: POST
+              urlPath: $.config.attributes.TokenUrl
+              bodyPath: $.tokenRequest
+              bodyContentType: application/x-www-form-urlencoded
+              targetPath: $.token
+            - type: If@1
+              description: Tesla rotates refresh tokens - persist the newest one
+              path: $.token.refresh_token
+              operator: NotEquals
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Write the rotated refresh token back to the configuration
+                  targetPath: $.tokenPersist._items
+                  targetValueKind: Array
+                  targetValueWriteMode: Overwrite
+                  updateKind: Update
+                  ckTypeId: Meshmakers.Accounting.Tesla/TeslaConfiguration
+                  rtId: 67d4a2f0b2e4d8c3a1f00300
+                  attributeUpdates:
+                    - attributeName: RefreshToken
+                      attributeValueType: String
+                      valuePath: $.token.refresh_token
+                - type: ApplyChanges@2
+                  entityUpdatesPath: $.tokenPersist._items
+            - type: Concat@1
+              description: Build the bearer authorization header
+              path: $.token
+              concatSubPath: $.authHeader
+              parts:
+                - value: "Bearer "
+                - valuePath: $.access_token
+            # --- fetch the most recent charging sessions ------------------------
+            - type: Concat@1
+              description: Build the charging-history URL (newest sessions first)
+              path: $
+              concatSubPath: $.historyUrl
+              parts:
+                - valuePath: $.config.attributes.BaseUrl
+                - value: "/api/1/dx/charging/history?pageNo=1&pageSize="
+                - valuePath: $.config.attributes.PageSize
+            - type: MakeHttpRequest@1
+              description: Fetch the charging history page
+              method: GET
+              urlPath: $.historyUrl
+              headerParameters:
+                - name: Authorization
+                  valuePath: $.token.authHeader
+              targetPath: $.history
+            - type: If@1
+              description: Only iterate when the response carries session data (String probe into the first element - If cannot read arrays)
+              path: $.history.data[0].vin
+              operator: NotEquals
+              transformations:
+                - type: ForEach@1
+                  description: Stage the invoices of each charging session
+                  iterationPath: $.history.data
+                  targetPath: $.results
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: If@1
+                      description: Sessions without an invoice (e.g. free supercharging) are skipped (String probe - If cannot read arrays)
+                      path: $.key.invoices[0].contentId
+                      operator: NotEquals
+                      transformations:
+                        - type: ForEach@1
+                          description: Download and stage each invoice PDF of the session
+                          iterationPath: $.key.invoices
+                          targetPath: $.key.staging
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: Concat@1
+                              description: Build the invoice download URL
+                              path: $
+                              concatSubPath: $.invoiceUrl
+                              parts:
+                                - valuePath: $.full.full.config.attributes.BaseUrl
+                                - value: "/api/1/dx/charging/invoice/"
+                                - valuePath: $.key.contentId
+                            - type: MakeHttpRequest@1
+                              description: Download the invoice PDF
+                              method: GET
+                              urlPath: $.invoiceUrl
+                              responseFormat: Base64
+                              contentLengthTargetPath: $.pdfLength
+                              headerParameters:
+                                - name: Authorization
+                                  valuePath: $.full.full.token.authHeader
+                              targetPath: $.pdfData
+                            - type: ComputeFileHash@1
+                              description: SHA-256 hash for duplicate detection
+                              path: $.pdfData
+                              targetPath: $.fileHash
+                            - type: CheckDuplicate@1
+                              description: Skip invoices that are already staged
+                              ckTypeId: Meshmakers.Accounting/UploadedDocument
+                              attributeName: FileHash
+                              valuePath: $.fileHash
+                              targetPath: $.isDuplicate
+                              existingEntityPath: $.existingUpload
+                            - type: If@1
+                              description: Invoice already staged - skip
+                              path: $.isDuplicate
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key._resultType
+                                  value: "duplicate"
+                                  valueType: String
+                            - type: If@1
+                              description: New invoice - store the file and stage it
+                              path: $.isDuplicate
+                              operator: NotEquals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: DateTime@1
+                                  description: Staging timestamp
+                                  operation: Now
+                                  targetPath: $.stagedAt
+                                - type: Concat@1
+                                  description: Session context shown as source subject in the inbox
+                                  path: $
+                                  concatSubPath: $.sourceSubject
+                                  parts:
+                                    - value: "Tesla Supercharging "
+                                    - valuePath: $.full.key.siteLocationName
+                                - type: CreateFileSystemUpdate@1
+                                  description: Store the invoice PDF under the Documents root
+                                  targetPath: $.fileSystemItem
+                                  path: $.pdfData
+                                  generateRtId: true
+                                  fileNamePath: $.key.fileName
+                                  contentType: application/pdf
+                                  contentLengthPath: $.pdfLength
+                                  rootFolderWellKnownName: "Documents"
+                                - type: CreateUpdateInfo@1
+                                  description: Stage the invoice for the analysis pipeline
+                                  targetPath: $.updates._items
+                                  targetValueKind: Array
+                                  targetValueWriteMode: Overwrite
+                                  updateKind: Insert
+                                  ckTypeId: Meshmakers.Accounting/UploadedDocument
+                                  rtIdPath: $.uploadRtId
+                                  generateRtId: true
+                                  attributeUpdates:
+                                    - attributeName: OriginalFileName
+                                      attributeValueType: String
+                                      valuePath: $.key.fileName
+                                    - attributeName: FileRtId
+                                      attributeValueType: String
+                                      valuePath: $.fileSystemItem.RtId
+                                    - attributeName: FileHash
+                                      attributeValueType: String
+                                      valuePath: $.fileHash
+                                    - attributeName: UploadedAt
+                                      attributeValueType: DateTime
+                                      valuePath: $.stagedAt
+                                    - attributeName: ProcessingState
+                                      attributeValueType: Enum
+                                      value: NEW
+                                    - attributeName: SourceChannel
+                                      attributeValueType: Enum
+                                      value: API
+                                    - attributeName: SourceSender
+                                      attributeValueType: String
+                                      value: "Tesla Fleet API"
+                                    - attributeName: SourceSubject
+                                      attributeValueType: String
+                                      valuePath: $.sourceSubject
+                                    - attributeName: SourceReceivedAt
+                                      attributeValueType: DateTime
+                                      valuePath: $.full.key.chargeStartDateTime
+                                - type: CreateAssociationUpdate@1
+                                  description: Link the staged upload to the stored file
+                                  targetPath: $.updates._assocItems
+                                  targetValueKind: Array
+                                  targetValueWriteMode: Overwrite
+                                  updateKind: Create
+                                  originRtIdPath: $.updates._items[0].RtEntity.RtId
+                                  originCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
+                                  targetRtIdPath: $.fileSystemItem.RtId
+                                  targetCkTypeIdPath: $.fileSystemItem.CkTypeId
+                                  associationRoleId: System/Related
+                                - type: ApplyChanges@2
+                                  entityUpdatesPath: $.updates._items
+                                  associationUpdatesPath: $.updates._assocItems
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.key._resultType
+                                  value: "staged"
+                                  valueType: String
+                    - type: Project@1
+                      description: Keep only the compact staging results per session
+                      path: $.key
+                      clear: true
+                      fields:
+                        - path: $.sessionId
+                          inclusion: true
+                        - path: $.siteLocationName
+                          inclusion: true
+                        - path: $.chargeStartDateTime
+                          inclusion: true
+                        - path: $.staging
+                          inclusion: true
+            - type: SetPipelineExecutionResult@1
+              path: $.results
+      - id: System.Communication/StatusMessage
+  # --- PipelineTrigger: daily fetch ---------------------------------------------
+  - rtId: 67d4a2f0b2e4d8c3a1f00303
+    ckTypeId: System.Communication/PipelineTrigger
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00301
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Triggers
+        targetRtId: 67d4a2f0b2e4d8c3a1f00302
+        targetCkTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: Fetch Tesla Charging Invoices Daily
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System.Bot/CronExpression
+        value: "30 5 * * *"
