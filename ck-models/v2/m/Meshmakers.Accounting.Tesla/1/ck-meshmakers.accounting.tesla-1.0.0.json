@@ -1,0 +1,92 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "TeslaConfiguration-1",
+      "derivedFromCkTypeId": "System-2.2.2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Configuration for the Tesla Fleet API connection used by the Supercharger invoice fetcher.",
+      "attributes": [
+        {
+          "id": "Meshmakers.Accounting.Tesla-1.0.0/BaseUrl-1",
+          "name": "BaseUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting.Tesla-1.0.0/TokenUrl-1",
+          "name": "TokenUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting.Tesla-1.0.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting.Tesla-1.0.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": true
+        },
+        {
+          "id": "Meshmakers.Accounting.Tesla-1.0.0/RefreshToken-1",
+          "name": "RefreshToken",
+          "isOptional": false
+        },
+        {
+          "id": "Meshmakers.Accounting.Tesla-1.0.0/PageSize-1",
+          "name": "PageSize",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "BaseUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Base URL of the Tesla Fleet API for the account\u0027s region (EU: https://fleet-api.prd.eu.vn.cloud.tesla.com)."
+    },
+    {
+      "id": "ClientId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Client id of the Tesla developer app."
+    },
+    {
+      "id": "ClientSecret-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Client secret of the Tesla developer app (not needed for the refresh-token grant, kept for completeness)."
+    },
+    {
+      "id": "PageSize-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of most-recent charging sessions fetched per run (dedup drops already-staged invoices)."
+    },
+    {
+      "id": "RefreshToken-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Current OAuth refresh token. Tesla rotates refresh tokens \u2014 the fetcher pipeline persists the newest one back to this attribute on every run."
+    },
+    {
+      "id": "TokenUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "OAuth token endpoint for server-to-server calls (https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token)."
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "Meshmakers.Accounting.Tesla-1.0.0",
+  "description": "Tesla Fleet API integration for the Meshmakers Accounting app \u2014 configuration for the Supercharger invoice fetcher add-on."
+}
