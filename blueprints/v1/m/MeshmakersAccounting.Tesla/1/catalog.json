@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "MeshmakersAccounting.Tesla",
+  "majorVersion": 1,
+  "latestVersion": "1.0.0",
+  "description": "Tesla Supercharger invoice fetcher add-on for the Meshmakers Accounting app\n(AB#4678). Periodically pulls charging invoices from the Tesla Fleet API and\nstages them in the accounting inbox as UploadedDocument entities\n(ProcessingState NEW, SourceChannel API) \u2014 the existing analysis pipeline\npicks them up like any uploaded or e-mailed document; the SHA-256 hash dedup\nmakes re-polls idempotent.\n\nInstalls:\n- the Meshmakers.Accounting.Tesla construction kit model (TeslaConfiguration)\n- the TeslaConfiguration entity (placeholder credentials)\n- the \u0022Tesla Charging Invoices\u0022 DataFlow with the fetcher pipeline\n  (cron via PipelineTrigger, daily 05:30, plus manual ExecutePipeline)\n\nREQUIRES an installed MeshmakersAccounting base blueprint (declared via\nblueprintDependencies) \u2014 the fetcher stages into the base app\u0027s inbox\n(Meshmakers.Accounting/UploadedDocument, Documents root folder).\n\nTesla prerequisites (one-time):\n- Tesla developer app (developer.tesla.com) with OAuth grant types\n  Authorization Code \u002B Machine-to-Machine and the \u0022Vehicle Charging\n  Management\u0022 scope; partner registration needs a domain hosting the public\n  key at /.well-known/appspecific/com.tesla.3p.public-key.pem\n- a refresh token generated once via the localhost OAuth callback\n\nPost-install:\n- Set ClientId/ClientSecret/RefreshToken on the TeslaConfiguration entity \u2014\n  every blueprint re-apply resets them to placeholders\n  (scripts/om_set_secrets.ps1, tesla section)\n- DeployDataFlow \u0022Tesla Charging Invoices\u0022 \u002B DeployTriggers (cron)\n- NOTE: Tesla rotates refresh tokens; the pipeline persists the newest token\n  back to TeslaConfiguration on every run. Keep secrets.local.json in sync\n  before a blueprint re-apply, or the stored token is lost.\n",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "directoryPath": "blueprints/v1/m/MeshmakersAccounting.Tesla/1/MeshmakersAccounting.Tesla-1.0.0",
+      "publishedAt": "2026-08-04T12:24:57.9068359Z"
+    }
+  ],
+  "updatedAt": "2026-08-04T12:24:57.9089364Z"
+}
