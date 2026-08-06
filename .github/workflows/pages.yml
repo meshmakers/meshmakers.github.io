@@ -1,0 +1,147 @@
+name: Deploy Pages (serialized)
+
+# Custom GitHub Pages deployment for this static catalog/site.
+#
+# Context: this repo's publishing source is written by automation (release
+# trains / CI) that pushes many commits in a rapid burst, and the repo is a
+# `<org>.github.io` / catalog site served verbatim. The legacy "Deploy from a
+# branch" flow wedged: bursts produced cancelled/hard-failed runs and the
+# `pages_build_version` (= constant SHA on non-changing publishes) left Pages
+# stuck on a stale build. Two problems are solved here:
+#
+# 1. Overlapping deploys. GitHub Pages allows only one active deployment per
+#    site, so bursts produced cancelled/hard-failed runs ("Deployment failed,
+#    try again later").
+#    - The `concurrency` group serializes runs (one at a time, queued).
+#    - The `guard` step additionally SKIPS any run whose commit is no longer
+#      main HEAD (a newer push already superseded it). During a burst only the
+#      final push actually deploys; earlier runs exit green without touching
+#      Pages. Last write wins; the site ends identical.
+#
+# 2. Transient backend failures. actions/deploy-pages@v4 treats the transient
+#    `deployment_failed` as a hard error with no retry, so a single blip failed
+#    the run. We deploy via the Pages API directly (same OIDC + create + poll
+#    flow as deploy-pages) wrapped in a RETRY loop, so transient failures are
+#    absorbed silently instead of paging the team.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read        # deploy step looks up the github-pages artifact id via REST
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Skip if superseded by a newer commit on main
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head="$(gh api "repos/${{ github.repository }}/commits/main" --jq '.sha')"
+          if [ "$head" != "${{ github.sha }}" ]; then
+            echo "Superseded: main HEAD=$head != this run's sha=${{ github.sha }} — skipping (a newer run will deploy)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "This run's commit is main HEAD — will deploy."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact (repo root, served verbatim — no Jekyll)
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages (direct API, with retry)
+        id: deployment
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BUILD_VERSION: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+
+          deploy_once() {
+            local id_token artifact_id resp status
+            id_token="$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r '.value')"
+            if [ -z "$id_token" ] || [ "$id_token" = "null" ]; then
+              echo "Failed to obtain OIDC token"; return 2   # non-retryable
+            fi
+
+            artifact_id="$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              --jq '.artifacts[] | select(.name=="github-pages") | .id' | head -n1)"
+            if [ -z "$artifact_id" ]; then
+              echo "github-pages artifact not found"; return 2   # non-retryable
+            fi
+
+            echo "Creating Pages deployment: artifact_id=$artifact_id pages_build_version=$BUILD_VERSION"
+            resp="$(gh api --method POST "repos/$REPO/pages/deployments" \
+              -f oidc_token="$id_token" \
+              -F artifact_id="$artifact_id" \
+              -f pages_build_version="$BUILD_VERSION" 2>&1)" || { echo "create failed: $resp"; return 1; }
+            page_url="$(printf '%s' "$resp" | jq -r '.page_url // empty' 2>/dev/null)"
+            [ -n "$page_url" ] && echo "page_url=$page_url" >> "$GITHUB_OUTPUT"
+
+            for i in $(seq 1 60); do
+              sleep 5
+              status="$(gh api "repos/$REPO/pages/deployments/$BUILD_VERSION" --jq '.status' 2>/dev/null || echo '')"
+              echo "status[$i]=${status:-<none>}"
+              case "$status" in
+                succeed) echo "Reported success!"; return 0 ;;
+                deployment_failed|deployment_content_failed|deployment_lost)
+                  echo "Transient failure: $status"; return 1 ;;   # retryable
+                deployment_cancelled)
+                  # Superseded mid-flight by a newer push -> let that run handle it.
+                  now="$(gh api "repos/$REPO/commits/main" --jq '.sha' 2>/dev/null || echo '')"
+                  if [ -n "$now" ] && [ "$now" != "$BUILD_VERSION" ]; then
+                    echo "Cancelled because superseded (HEAD now $now) — treating as OK."; return 0
+                  fi
+                  echo "Cancelled: $status"; return 1 ;;
+                deployment_perms_error)
+                  echo "Permanent error: $status"; return 2 ;;   # non-retryable
+              esac
+            done
+            echo "Timed out waiting for deployment"; return 1
+          }
+
+          for attempt in 1 2 3 4; do
+            echo "=== deploy attempt $attempt/4 ==="
+            deploy_once && exit 0
+            rc=$?
+            if [ "$rc" -eq 2 ]; then
+              echo "::error::Non-retryable Pages deployment error"; exit 1
+            fi
+            # If a newer commit landed while we retried, drop out quietly.
+            head="$(gh api "repos/$REPO/commits/main" --jq '.sha' 2>/dev/null || echo '')"
+            if [ -n "$head" ] && [ "$head" != "$BUILD_VERSION" ]; then
+              echo "Superseded during retry (HEAD now $head) — a newer run will deploy. Exiting green."; exit 0
+            fi
+            back=$((attempt * 15))
+            echo "Attempt $attempt failed (rc=$rc); backing off ${back}s..."
+            sleep "$back"
+          done
+          echo "::error::Pages deployment still failing after 4 attempts"; exit 1
