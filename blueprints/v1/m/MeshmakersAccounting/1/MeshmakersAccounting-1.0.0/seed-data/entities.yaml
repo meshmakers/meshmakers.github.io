@@ -488,11 +488,16 @@ entities:
         targetRtId: '670000000000000000000001'
         targetCkTypeId: System.Communication/Pool
         attributes: []
-      # Chart source: meshmakers-dev Helm repo (dev channel, 003) — pre-seeded by
-      # the System.Communication blueprint. Without this link DeployWorkload
-      # fails with "no Helm repository is linked". Release channel would be 005.
+      # Chart source: shared meshmakers-apps Helm repo (670...005), pinned to the
+      # SAME rtId on both channels since System.Communication MainLatest-1.5.0 /
+      # Release-1.5.0 seed it with the environment-correct URL (dev channel on
+      # dev/test, /apps on staging/production) — AB#4706. The old 670...003 pin
+      # was the dev-only repo, absent on Release tenants, producing an invisible
+      # zombie association edge and "no Helm repository is linked" deploy
+      # failures (mirrors EnergyCommunity.Base 2.2.6 / commit 6b9c8f6).
+      # REQUIRES the tenant's System.Communication blueprint >= 1.5.0.
       - roleId: System.Communication/HelmRepository
-        targetRtId: '670000000000000000000003'
+        targetRtId: '670000000000000000000005'
         targetCkTypeId: System.Communication/HelmRepositoryConfiguration
         attributes: []
     attributes:
@@ -603,8 +608,39 @@ entities:
                 value: 'https://adapter-finapi.{{domain.default}}'
               - id: System.Communication/IsSecret
                 value: false
+          # Private container registry + image-pull secret. The chart defaults
+          # image.repository to the public docker.io/meshmakers/meshmakers, which
+          # is NOT pullable -> ImagePullBackOff ("pull access denied"). The
+          # Communication Operator's automatic privateRegistry injection does not
+          # cover Application workloads on prod-1, so we pin them explicitly here
+          # (matches the running meshmakers tenant's app). These two values are
+          # cluster-specific — salzburgdev.azurecr.io / salzburgdev-pull is the
+          # prod-1 (Exoscale SKS) registry + its namespace pull secret. A cluster
+          # with a different registry must override these at install/deploy time.
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: image.privateRegistry
+              - id: System.Communication/Value
+                value: salzburgdev.azurecr.io
+              - id: System.Communication/IsSecret
+                value: false
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: imagePullSecretName
+              - id: System.Communication/Value
+                value: salzburgdev-pull
+              - id: System.Communication/IsSecret
+                value: false
+      # True so the Communication Operator attaches the cluster image-pull secret
+      # to the workload ServiceAccount on fresh tenant namespaces (the Mesh
+      # Adapter 670...002 sets this true and pulls the private image fine). The
+      # explicit image.privateRegistry / imagePullSecretName ValueOverrides above
+      # supply the registry host + secret name the operator does not inject for
+      # Application workloads.
       - id: System.Communication/ReceivesClusterSecrets
-        value: false
+        value: true
       - id: System.Communication/IngressEnabled
         value: true
       - id: System.Communication/Hostname
@@ -1032,6 +1068,49 @@ entities:
                   rtIdTargetPath: $._accountRtId
                   ckTypeIdTargetPath: $._accountCkTypeId
                   modOperationPath: $._accountModOp
+                # AB#4720: GetOrCreate only matches by ExternalId, so a manually
+                # created account (no ExternalId yet) or a re-imported finAPI
+                # connection (new account id, same IBAN) would insert a duplicate
+                # entity. Adopt the existing account by IBAN instead - the update
+                # below then writes the current ExternalId onto it.
+                - type: If@1
+                  description: No ExternalId match - adopt an existing account with the same IBAN
+                  path: $._accountModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    - type: If@1
+                      description: Only when finAPI reports an IBAN (PayPal-style accounts have none)
+                      path: $.key.iban
+                      operator: NotEquals
+                      transformations:
+                        - type: GetRtEntitiesByType@1
+                          description: Find an existing BankAccount with the same IBAN
+                          ckTypeId: Basic.Accounting/BankAccount
+                          targetPath: $._ibanMatch
+                          take: 1
+                          fieldFilters:
+                            - attributePath: Iban
+                              operator: Equals
+                              comparisonValuePath: $.key.iban
+                        - type: If@1
+                          description: Reuse the matched account instead of inserting a duplicate
+                          path: $._ibanMatch.TotalCount
+                          operator: GreaterThan
+                          value: 0
+                          valueType: Int64
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: Take over the matched account's rtId
+                              targetPath: $._accountRtId
+                              valuePath: $._ibanMatch.Items[0].RtId
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              description: Switch the upsert from Insert to Update
+                              targetPath: $._accountModOp
+                              value: 1
+                              valueType: Int
                 - type: CreateUpdateInfo@1
                   description: Map finAPI account to BankAccount entity
                   targetPath: $._updates._accountUpdate
@@ -1354,29 +1433,39 @@ entities:
               targetValueWriteMode: Overwrite
               targetValueKind: Simple
               documentMode: Extend
-            - type: CreateUpdateInfo@1
-              targetPath: $._updateItems
-              targetValueKind: Array
-              targetValueWriteMode: Append
-              updateKind: Update
-              ckTypeId: Basic.Accounting/BankConnection
-              rtIdPath: $.body.bankConnectionRtId
-              attributeUpdates:
-                - attributeName: ExternalId
-                  valuePath: $.finApiBankConnectionId
-                  attributeValueType: String
-                - attributeName: AccountIds
-                  valuePath: $.finApiAccountIds
-                  attributeValueType: IntArray
-                - attributeName: SyncStatus
-                  value: Connected
-                  attributeValueType: String
-                - attributeName: LastSuccessfulSync
-                  attributeValueType: DateTime
-                  valuePath: $.completedAt
-            - type: ApplyChanges@2
-              description: Persist BankConnection update
-              entityUpdatesPath: $._updateItems
+            # AB#4720: only stamp the connection when the web form actually yielded
+            # the finAPI connection id — without this guard a not-yet-completed web
+            # form left ExternalId/AccountIds null but still wrote SyncStatus=
+            # Connected, so the transaction sync could never match the connection
+            # and created a duplicate BankAccount.
+            - type: If@1
+              description: Stamp the connection only when the finAPI connection id is present
+              path: $.finApiBankConnectionId
+              operator: NotEquals
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $._updateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Update
+                  ckTypeId: Basic.Accounting/BankConnection
+                  rtIdPath: $.body.bankConnectionRtId
+                  attributeUpdates:
+                    - attributeName: ExternalId
+                      valuePath: $.finApiBankConnectionId
+                      attributeValueType: String
+                    - attributeName: AccountIds
+                      valuePath: $.finApiAccountIds
+                      attributeValueType: IntArray
+                    - attributeName: SyncStatus
+                      value: Connected
+                      attributeValueType: String
+                    - attributeName: LastSuccessfulSync
+                      attributeValueType: DateTime
+                      valuePath: $.completedAt
+                - type: ApplyChanges@2
+                  description: Persist BankConnection update
+                  entityUpdatesPath: $._updateItems
             # Security: reduce the HTTP response to just the web-form status
             # result (the status/accountIds it read) so it can never leak
             # finApiConfig (clientSecret/password/clientId/username), the finAPI
@@ -1475,6 +1564,49 @@ entities:
                   rtIdTargetPath: $._accountRtId
                   ckTypeIdTargetPath: $._accountCkTypeId
                   modOperationPath: $._accountModOp
+                # AB#4720: GetOrCreate only matches by ExternalId, so a manually
+                # created account (no ExternalId yet) or a re-imported finAPI
+                # connection (new account id, same IBAN) would insert a duplicate
+                # entity. Adopt the existing account by IBAN instead - the update
+                # below then writes the current ExternalId onto it.
+                - type: If@1
+                  description: No ExternalId match - adopt an existing account with the same IBAN
+                  path: $._accountModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    - type: If@1
+                      description: Only when finAPI reports an IBAN (PayPal-style accounts have none)
+                      path: $.key.iban
+                      operator: NotEquals
+                      transformations:
+                        - type: GetRtEntitiesByType@1
+                          description: Find an existing BankAccount with the same IBAN
+                          ckTypeId: Basic.Accounting/BankAccount
+                          targetPath: $._ibanMatch
+                          take: 1
+                          fieldFilters:
+                            - attributePath: Iban
+                              operator: Equals
+                              comparisonValuePath: $.key.iban
+                        - type: If@1
+                          description: Reuse the matched account instead of inserting a duplicate
+                          path: $._ibanMatch.TotalCount
+                          operator: GreaterThan
+                          value: 0
+                          valueType: Int64
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: Take over the matched account's rtId
+                              targetPath: $._accountRtId
+                              valuePath: $._ibanMatch.Items[0].RtId
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              description: Switch the upsert from Insert to Update
+                              targetPath: $._accountModOp
+                              value: 1
+                              valueType: Int
                 - type: CreateUpdateInfo@1
                   description: Map finAPI account to BankAccount entity
                   targetPath: $._accUpdates._accountUpdate
@@ -8381,8 +8513,15 @@ entities:
             #     attributes do not coerce (AB#4389). RECURRING master documents
             #     (state 4) are templates, not receipts, and are excluded (the
             #     NotEquals filter also matches documents without a state).
-            #     Caps: 50 fiscal years, 1000 documents per run — the 15-minute
-            #     polling loop drains any backlog beyond that.
+            #     Caps (AB#4702): 50 fiscal years, 2000 documents per run. The
+            #     document load is sorted RtId DESCENDING (newest first), so
+            #     newly created documents are always inside the window and the
+            #     cap only ever cuts off the oldest (long-assigned) tail. There
+            #     is NO paging — a run never revisits documents beyond the cap
+            #     (an association-absence filter is not available in ad-hoc
+            #     runtime queries), so the cap breach below is logged loudly
+            #     instead of being silently ignored (which un-assigned 250+
+            #     documents when the tenant crossed 1000 documents in 2026-08).
             - type: GetRtEntitiesByType@1
               description: Load fiscal years ascending by start date (first match wins)
               ckTypeId: Meshmakers.Accounting/FiscalYear
@@ -8392,14 +8531,26 @@ entities:
                 - sortOrder: Ascending
                   attributeName: StartDate
             - type: GetRtEntitiesByType@1
-              description: Load documents (recurring masters excluded)
+              description: Load documents newest-first (recurring masters excluded)
               ckTypeId: Meshmakers.Accounting/AccountingDocument
               targetPath: $.fyDocs
-              take: 1000
+              take: 2000
+              sortOrders:
+                - sortOrder: Descending
+                  attributeName: RtId
               fieldFilters:
                 - attributePath: DocumentState
                   operator: NotEquals
                   comparisonValue: 4
+            - type: If@1
+              description: Document count exceeds the load cap — never skip silently (AB#4702)
+              path: $.fyDocs.TotalCount
+              operator: GreaterThan
+              value: 2000
+              valueType: Int64
+              transformations:
+                - type: Logger@1
+                  message: FY assignment pass cap exceeded — more than 2000 non-recurring documents; documents beyond the 2000 newest are NOT checked this run. Raise the take cap or add paging (AB#4702).
             - type: ForEach@1
               description: Assign each unassigned document to its fiscal year
               iterationPath: $.fyDocs.Items
@@ -8940,6 +9091,21 @@ entities:
                       value: "yes"
                       valueType: String
 
+                # cancelled gate (AB#4704): cancelled receipts (DocumentState 3)
+                # are never handed over to the tax advisor. The If does not fire
+                # for documents without a state (missing path), which stay in.
+                - type: If@1
+                  description: Cancelled document — exclude from the handover
+                  path: $.key.Attributes.DocumentState
+                  operator: Equal
+                  value: 3
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "no"
+                      valueType: String
+
                 # period gate (AB#4535): optional query from/to narrow the export
                 # to a month or quarter — a document dated outside [from, to] is
                 # flipped back to include=no. The params are ABSENT for a
@@ -9117,7 +9283,14 @@ entities:
                 #     transaction only ([5] multi-payment is a follow-up).
                 - type: WriteJson@1
                   description: Cover-sheet skeleton (labels + empty values)
-                  jsonString: '{"title":"Belegübergabe an den Steuerberater","subtitle":"","sections":[{"heading":"Beleg","rows":[{"label":"Belegnummer","value":""},{"label":"Belegdatum","value":""},{"label":"Fälligkeit","value":""},{"label":"Belegart","value":""},{"label":"Brutto","value":""},{"label":"Ersatzbeleg","value":"Nein"}]},{"heading":"Kontakt","rows":[{"label":"Lieferant","value":""},{"label":"UID","value":""},{"label":"IBAN","value":""},{"label":"Kunde","value":""}]},{"heading":"Beträge","rows":[{"label":"Netto","value":""},{"label":"USt","value":""},{"label":"Steuersatz %","value":""}]},{"heading":"Zahlungsnachweis","rows":[]}],"footerHeading":"Notiz an den Steuerberater","footerText":""}'
+                  # Amounts carry format N2 with explicit Austrian separators so the
+                  # cover sheet shows "1.186,96 EUR" — BMD document recognition does
+                  # not accept the raw JSON number ("1186.96") as an amount. The
+                  # separators are explicit (not culture-derived) because containers
+                  # without ICU fall back to invariant globalization. The currency
+                  # suffix defaults to EUR (Currency attribute missing = EUR) and is
+                  # overridden below.
+                  jsonString: '{"title":"Belegübergabe an den Steuerberater","subtitle":"","culture":"de-AT","numberDecimalSeparator":",","numberGroupSeparator":".","sections":[{"heading":"Beleg","rows":[{"label":"Belegnummer","value":""},{"label":"Belegdatum","value":""},{"label":"Fälligkeit","value":""},{"label":"Belegart","value":""},{"label":"Brutto","value":"","format":"N2","suffix":"EUR"},{"label":"Ersatzbeleg","value":"Nein"}]},{"heading":"Kontakt","rows":[{"label":"Lieferant","value":""},{"label":"UID","value":""},{"label":"IBAN","value":""},{"label":"Kunde","value":""}]},{"heading":"Beträge","rows":[{"label":"Netto","value":"","format":"N2","suffix":"EUR"},{"label":"USt","value":"","format":"N2","suffix":"EUR"},{"label":"Steuersatz %","value":"","format":"0.##"},{"label":"Währung","value":"EUR"}]},{"heading":"Zahlungsnachweis","rows":[]}],"footerHeading":"Notiz an den Steuerberater","footerText":""}'
                   targetPath: $.key.sheet
                 - type: SelectByPath@1
                   description: Copy present document values into the skeleton (skips missing/null)
@@ -9148,6 +9321,16 @@ entities:
                       targetPath: $.key.sheet.sections[2].rows[1].value
                     - path: $.key.Attributes.TaxRate
                       targetPath: $.key.sheet.sections[2].rows[2].value
+                    # Currency (missing = EUR, then the skeleton defaults stay): explicit
+                    # Währung row + suffix on the amount rows (Brutto/Netto/USt).
+                    - path: $.key.Attributes.Currency
+                      targetPath: $.key.sheet.sections[2].rows[3].value
+                    - path: $.key.Attributes.Currency
+                      targetPath: $.key.sheet.sections[0].rows[4].suffix
+                    - path: $.key.Attributes.Currency
+                      targetPath: $.key.sheet.sections[2].rows[0].suffix
+                    - path: $.key.Attributes.Currency
+                      targetPath: $.key.sheet.sections[2].rows[1].suffix
                     - path: $.key.txGroups[0].Items[0].Attributes.BookingDate
                       targetPath: $.key.sheet.sections[3].rows[0].value
                     - path: $.key.txGroups[0].Items[0].Attributes.Amount
