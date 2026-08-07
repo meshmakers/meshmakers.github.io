@@ -2323,6 +2323,185 @@ entities:
               fields:
                 - path: $.done
                   inclusion: true
+  # --- Pipeline: import-camt053 (AB#4757) ---
+  - rtId: 67d4a2f0b2e4d8c3a1f00060
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: camt.053 Import
+      - id: System/Description
+        value: Imports bank transactions from camt.053 XML statements (both Raiffeisen/STUZZA and ISO dialects)
+  - rtId: 67d4a2f0b2e4d8c3a1f00061
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00060
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: camt.053 Import Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |
+          # camt.053 bank-statement import pipeline (BelegCockpit / Klaus Bernkopf).
+          #
+          # POST a single camt.053 XML file (multipart/form-data) to the mesh adapter at
+          #   {adapterUrl}/{tenantId}/importCamt053
+          # → parses both dialects (Raiffeisen/STUZZA + Hypo/ISO) via ImportFromCamt053@1,
+          #   upserts one Basic.Accounting/BankTransaction per Ntry (idempotent by TransactionId,
+          #   MatchState=Unreviewed) and links it to the tenant's BankAccount by IBAN.
+          # The existing "Match Transactions Pipeline" then picks up the Unreviewed rows.
+          #
+          # Structure mirrors the proven CSV-import pipeline in the blueprint seed; only the
+          # source node (ImportFromCamt053@1 instead of ImportFromCsv@1) and the field paths differ,
+          # because ImportFromCamt053@1 already emits a signed amount, a direction (0/1) and accountIban.
+          triggers:
+            - type: FromHttpRequest@1
+              method: POST
+              path: /importCamt053
+
+          transformations:
+            - type: ImportFromCamt053@1
+              description: Parse the uploaded camt.053 XML into normalized booking objects (one per Ntry)
+              fileIndex: 0
+              targetPath: $.camtEntries
+
+            - type: ForEach@1
+              description: Upsert BankTransaction entities from camt entries (idempotent by TransactionId)
+              iterationPath: $.camtEntries
+              targetPath: $._updateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: GetOrCreateRtEntitiesByType@1
+                  description: Resolve the existing BankTransaction by TransactionId or generate a new id
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  fieldFilters:
+                    - attributePath: TransactionId
+                      operator: Equals
+                      comparisonValuePath: $.key.transactionId
+                  rtIdTargetPath: $._txRtId
+                  ckTypeIdTargetPath: $._txCkTypeId
+                  modOperationPath: $._txModOp
+
+                - type: If@1
+                  description: Only insert new transactions — re-importing the same statement is a no-op
+                  path: $._txModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    - type: GetRtEntitiesByType@1
+                      description: Find the BankAccount by the statement account IBAN
+                      ckTypeId: Basic.Accounting/BankAccount
+                      targetPath: $._account
+                      take: 1
+                      fieldFilters:
+                        - attributePath: Iban
+                          operator: Equals
+                          comparisonValuePath: $.key.accountIban
+
+                    - type: CreateUpdateInfo@1
+                      targetPath: $._txUpdate
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Insert
+                      ckTypeId: Basic.Accounting/BankTransaction
+                      rtIdPath: $._txRtId
+                      rtWellKnownNamePath: $.key.transactionId
+                      attributeUpdates:
+                        - attributeName: TransactionId
+                          attributeValueType: String
+                          valuePath: $.key.transactionId
+                        - attributeName: Amount
+                          attributeValueType: Double
+                          valuePath: $.key.amount
+                        - attributeName: Currency
+                          attributeValueType: String
+                          valuePath: $.key.currency
+                        - attributeName: BookingDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.bookingDate
+                        - attributeName: ValueDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.valueDate
+                        - attributeName: Purpose
+                          attributeValueType: String
+                          valuePath: $.key.purpose
+                        - attributeName: CounterpartName
+                          attributeValueType: String
+                          valuePath: $.key.counterpartName
+                        - attributeName: CounterpartIban
+                          attributeValueType: String
+                          valuePath: $.key.counterpartIban
+                        - attributeName: CounterpartBic
+                          attributeValueType: String
+                          valuePath: $.key.counterpartBic
+                        - attributeName: PaymentReference
+                          attributeValueType: String
+                          valuePath: $.key.paymentReference
+                        - attributeName: EndToEndReference
+                          attributeValueType: String
+                          valuePath: $.key.endToEndReference
+                        - attributeName: MandateReference
+                          attributeValueType: String
+                          valuePath: $.key.mandateReference
+                        - attributeName: CreditorId
+                          attributeValueType: String
+                          valuePath: $.key.creditorId
+                        - attributeName: BankTransactionCode
+                          attributeValueType: String
+                          valuePath: $.key.bankTransactionCode
+                        - attributeName: Direction
+                          attributeValueType: Int
+                          valuePath: $.key.direction
+                        - attributeName: MatchState
+                          attributeValueType: Enum
+                          value: Unreviewed
+
+                    - type: If@1
+                      description: Link the transaction to its bank account when known
+                      path: $._account.TotalCount
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Int64
+                      transformations:
+                        - type: CreateAssociationUpdate@1
+                          description: BankTransaction -> BankAccount via ParentChild (mandatory)
+                          targetPath: $._assocUpdate
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Create
+                          originRtIdPath: $._txRtId
+                          originCkTypeId: Basic.Accounting/BankTransaction
+                          targetRtIdPath: $._account.Items[0].RtId
+                          targetCkTypeId: Basic.Accounting/BankAccount
+                          associationRoleId: System/ParentChild
+
+                    - type: ApplyChanges@2
+                      description: Persist transaction and association
+                      entityUpdatesPath: $._txUpdate
+                      associationUpdatesPath: $._assocUpdate
+
+            # Security: the HTTP response body is the whole data context. Reduce it to a
+            # minimal acknowledgement so it can never echo the caller's request headers /
+            # Authorization or the raw uploaded statement (FromHttpRequest echo-leak trap).
+            - type: SetPrimitiveValue@1
+              targetPath: $.done
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
   # --- Pipelines: ai-prompt ---
   - rtId: 67d4a2f0b2e4d8c3a1f000e0
     ckTypeId: System.Communication/DataFlow
@@ -8487,8 +8666,17 @@ entities:
                       operator: Equals
                       valueType: String
                       transformations:
+                        # This branch is the remaining SOFT-degraded case: the model
+                        # answered but returned neither a matches nor an unmatched array
+                        # (a refusal or JSON that could not be parsed as the expected
+                        # shape). HARD token/API failures — output truncated at
+                        # max_tokens, a rate-limit / token-quota 429, an overloaded 529,
+                        # or an input over the context window — now fail the AnthropicAiQuery
+                        # node with a specific message that is recorded on the pipeline
+                        # execution (Status=Failed, ErrorMessage), so those causes are
+                        # visible in the audit trail rather than folded into this log line.
                         - type: Logger@1
-                          message: AI match pass received a degraded AI response (no matches/unmatched arrays) — leaving the batch Unreviewed for the next run (AB#4544)
+                          message: AI match pass received a soft-degraded AI response (model answered but with no usable matches/unmatched arrays — refusal or unparseable JSON) — leaving the batch Unreviewed for the next run. Hard token-limit / rate-limit / API errors instead fail the execution with a specific ErrorMessage in the pipeline execution audit trail (AB#4544).
             # --- Fiscal-year assignment pass (AB#4395) — runs LAST, after all
             #     matching passes, so a PAYMENTDATE-based document can follow a
             #     payment that was linked earlier in this very run. Assigns every
