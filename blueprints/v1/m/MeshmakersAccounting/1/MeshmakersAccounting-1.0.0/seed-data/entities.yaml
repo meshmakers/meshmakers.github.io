@@ -2614,8 +2614,8 @@ entities:
                       responseFormat: json
                       temperature: 0.1
                       question: >-
-                        Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal; otherwise false. Determine the ISO 4217 currency code of the invoice amounts (from the currency symbol or code printed next to the totals, e.g. "$"/"USD", "£"/"GBP", "CHF") and output it as "currency" ONLY when it is NOT euro; OMIT "currency" entirely for euro (€/EUR) invoices. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section.
-                      jsonFormatSample: '{ "extractionComplete": true, "documentType": "INCOMING", "documentNumber": "RE-2026-001", "documentDate": "2026-03-01", "dueDate": "2026-03-31", "vendor": { "companyName": "Supplier GmbH", "iban": "AT123456789012345678", "accountName": "Supplier Trading Ltd", "address": { "street": "Hauptstrasse 1", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "customer": { "companyName": "Our Company GmbH", "address": { "street": "Firmianstrasse 31A", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "grossTotal": 1200.00, "netTotal": 1000.00, "taxTotal": 200.00, "taxRate": 20.0, "currency": "USD" }'
+                        Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal; otherwise false. Determine the ISO 4217 currency code of the invoice amounts (from the currency symbol or code printed next to the totals, e.g. "$"/"USD", "£"/"GBP", "CHF") and output it as "currency" ONLY when it is NOT euro; OMIT "currency" entirely for euro (€/EUR) invoices. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section. For BOTH parties independently, extract the printed VAT identification number (UID, USt-IdNr., VAT Reg No, e.g. "ATU12345678", "DE123456789") into that party's "vatId" WITHOUT inner spaces; assign each VAT id to the correct party (the vendor's UID is usually in its letterhead, footer or legal block; the customer's next to the billing address); OMIT "vatId" when none is printed for that party.
+                      jsonFormatSample: '{ "extractionComplete": true, "documentType": "INCOMING", "documentNumber": "RE-2026-001", "documentDate": "2026-03-01", "dueDate": "2026-03-31", "vendor": { "companyName": "Supplier GmbH", "iban": "AT123456789012345678", "accountName": "Supplier Trading Ltd", "vatId": "ATU12345678", "address": { "street": "Hauptstrasse 1", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "customer": { "companyName": "Our Company GmbH", "address": { "street": "Firmianstrasse 31A", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "grossTotal": 1200.00, "netTotal": 1000.00, "taxTotal": 200.00, "taxRate": 20.0, "currency": "USD" }'
                       targetPath: $.ai.result
                       continueOnError: true
                     - type: CheckDuplicate@1
@@ -2894,6 +2894,9 @@ entities:
                                 - attributeName: Vendor.AccountName
                                   attributeValueType: String
                                   valuePath: $.ai.result.vendor.accountName
+                                - attributeName: Vendor.TaxIdentificationNumber
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.vendor.vatId
                                 # Address from the SANITIZED staging path ($.san.*),
                                 # populated above only when the party's mandatory
                                 # Street + CityTown are both present — a partial AI
@@ -2923,6 +2926,9 @@ entities:
                                 - attributeName: Customer.AccountName
                                   attributeValueType: String
                                   valuePath: $.ai.result.customer.accountName
+                                - attributeName: Customer.TaxIdentificationNumber
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.customer.vatId
                                 - attributeName: Customer.Address.Street
                                   attributeValueType: String
                                   valuePath: $.san.customer.address.street
@@ -3264,6 +3270,266 @@ entities:
               clear: true
               fields:
                 - path: $.mergedUploadRtId
+                  inclusion: true
+  # --- Pipelines: edit-document (document page editor, AB#4760) ---
+  # Server side of the document page editor: assembles a corrected PDF from one or
+  # more source uploads via an ordered page-op list (rotate 90° steps, crop,
+  # reorder, delete pages, merge across sources — TransformPdf@1), stages it as a
+  # NEW UploadedDocument (re-runs analysis) and cascade-deletes the source uploads,
+  # their stored files and — when the caller passes deleteDocRtIds — the superseded
+  # AccountingDocuments that were built from the old (wrongly oriented/split)
+  # source. Callers editing a shared multi-invoice source (PageFrom/PageTo,
+  # AB#4543) must pass ALL documents that depend on the edited uploads, because
+  # the source files are always deleted.
+  - rtId: 67d4a2f0b2e4d8c3a1f00140
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Edit Document
+      - id: System/Description
+        value: Rotates, crops, reorders and merges source PDF pages into a corrected document that re-runs analysis
+  - rtId: 67d4a2f0b2e4d8c3a1f00141
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00140
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Edit Document Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@1
+              path: /editDocument
+              method: POST
+          transformations:
+            # Guard: need at least one source upload. The op list is validated by
+            # TransformPdf@1 itself (fails the run when empty or out of range).
+            - type: If@1
+              description: Only proceed when at least one source upload is given
+              path: $.body.uploadRtIds[0]
+              operator: NotEquals
+              valueType: String
+              transformations:
+                # --- Load the FIRST source's metadata (inherited onto the edited doc) ---
+                - type: FormatString@1
+                  description: First rtId as a single-element JSON array
+                  format: '["{$.body.uploadRtIds[0]}"]'
+                  targetPath: $.firstIdJson
+                - type: WriteJson@1
+                  jsonStringPath: $.firstIdJson
+                  targetPath: $.firstIdArr
+                - type: GetRtEntitiesById@1
+                  description: Load first source UploadedDocument for inherited metadata
+                  ckTypeId: Meshmakers.Accounting/UploadedDocument
+                  rtIdsPath: $.firstIdArr
+                  targetPath: $.firstDoc
+                # --- Collect each source's stored PDF, IN uploadRtIds ORDER ---
+                # The op list's sourceIndex refers to positions in this array.
+                - type: ForEach@1
+                  description: Load each source PDF in the given source order
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.docResults
+                  mergePath: $.pdf
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: FormatString@1
+                      description: Current rtId as single-element JSON array
+                      format: '["{$.key}"]'
+                      targetPath: $.idJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.idJson
+                      targetPath: $.idArr
+                    - type: GetRtEntitiesById@1
+                      description: Load the UploadedDocument to read its stored file rtId
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdsPath: $.idArr
+                      targetPath: $.doc
+                    - type: GetFileSystemContent@1
+                      description: Read the stored PDF bytes (base64) into the merge path
+                      rtIdPath: $.doc.Items[0].Attributes.FileRtId
+                      targetPath: $.pdf
+                # --- Assemble the corrected PDF from the ordered page ops ---
+                # Strict: an unreadable source aborts the edit instead of silently
+                # dropping pages from a receipt.
+                - type: TransformPdf@1
+                  description: Apply rotate/crop/reorder/delete/merge page ops
+                  path: $.docResults
+                  opsPath: $.body.ops
+                  targetPath: $.editedPdf
+                  contentLengthTargetPath: $.editedLen
+                  failOnInvalidPdf: true
+                - type: ComputeFileHash@1
+                  description: SHA-256 of the edited PDF (fresh content, own hash)
+                  path: $.editedPdf
+                  targetPath: $.fileHash
+                - type: SetPrimitiveValue@1
+                  description: Edited document file name (re-analysis sets the real identity)
+                  targetPath: $.editedFileName
+                  value: 'Bearbeitet.pdf'
+                  valueType: String
+                - type: DateTime@1
+                  description: Upload timestamp
+                  operation: Now
+                  targetPath: $.uploadedAt
+                - type: CreateFileSystemUpdate@1
+                  description: Store the edited PDF
+                  targetPath: $.fileSystemItem
+                  path: $.editedPdf
+                  generateRtId: true
+                  fileNamePath: $.editedFileName
+                  contentType: application/pdf
+                  contentLengthPath: $.editedLen
+                  rootFolderWellKnownName: "Documents"
+                - type: CreateUpdateInfo@1
+                  description: Stage the edited document (NEW -> analysis)
+                  targetPath: $.updates._items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Insert
+                  ckTypeId: Meshmakers.Accounting/UploadedDocument
+                  rtIdPath: $.editedUploadRtId
+                  generateRtId: true
+                  attributeUpdates:
+                    - attributeName: OriginalFileName
+                      attributeValueType: String
+                      valuePath: $.editedFileName
+                    - attributeName: FileRtId
+                      attributeValueType: String
+                      valuePath: $.fileSystemItem.RtId
+                    - attributeName: FileHash
+                      attributeValueType: String
+                      valuePath: $.fileHash
+                    - attributeName: UploadedAt
+                      attributeValueType: DateTime
+                      valuePath: $.uploadedAt
+                    - attributeName: ProcessingState
+                      attributeValueType: Enum
+                      value: NEW
+                    - attributeName: SourceChannel
+                      attributeValueType: Enum
+                      valuePath: $.firstDoc.Items[0].Attributes.SourceChannel
+                    - attributeName: SourceSender
+                      attributeValueType: String
+                      valuePath: $.firstDoc.Items[0].Attributes.SourceSender
+                    - attributeName: SourceReceivedAt
+                      attributeValueType: DateTime
+                      valuePath: $.firstDoc.Items[0].Attributes.SourceReceivedAt
+                - type: CreateAssociationUpdate@1
+                  description: Link edited upload to its stored file
+                  targetPath: $.updates._assocItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Create
+                  originRtIdPath: $.updates._items[0].RtEntity.RtId
+                  originCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
+                  targetRtIdPath: $.fileSystemItem.RtId
+                  targetCkTypeIdPath: $.fileSystemItem.CkTypeId
+                  associationRoleId: System/Related
+                - type: ApplyChanges@2
+                  description: Persist the edited document + file link FIRST
+                  entityUpdatesPath: $.updates._items
+                  associationUpdatesPath: $.updates._assocItems
+                # --- Now that the edited doc is safe, delete the sources ---
+                # Same two sequential loops as the merge pipeline: files first (while
+                # the source docs still exist so FileRtId resolves), then the docs.
+                - type: ForEach@1
+                  description: Delete each source's stored file
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.fileDeletes
+                  mergePath: $.fd
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: FormatString@1
+                      format: '["{$.key}"]'
+                      targetPath: $.idJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.idJson
+                      targetPath: $.idArr
+                    - type: GetRtEntitiesById@1
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdsPath: $.idArr
+                      targetPath: $.doc
+                    - type: CreateUpdateInfo@1
+                      description: Delete the stored file (single object into the merge path)
+                      targetPath: $.fd
+                      updateKind: Delete
+                      ckTypeId: System.Reporting/FileSystemItem
+                      rtIdPath: $.doc.Items[0].Attributes.FileRtId
+                - type: ApplyChanges@2
+                  description: Delete the source stored files
+                  entityUpdatesPath: $.fileDeletes
+                - type: ForEach@1
+                  description: Delete each source UploadedDocument
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.docDeletes
+                  mergePath: $.dd
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: CreateUpdateInfo@1
+                      description: Delete the source upload (single object into the merge path)
+                      targetPath: $.dd
+                      updateKind: Delete
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdPath: $.key
+                - type: ApplyChanges@2
+                  description: Delete the source UploadedDocuments
+                  entityUpdatesPath: $.docDeletes
+                # --- Optionally delete the superseded AccountingDocuments ---
+                # The re-analysis of the edited upload produces the corrected
+                # document(s); the old ones (built from the wrong source, e.g. with
+                # wrong amounts) are removed together with their category/fiscal-year
+                # links. Their System/Related file link pointed at the source files
+                # deleted above.
+                - type: If@1
+                  description: Only when the caller passed superseded document rtIds
+                  path: $.body.deleteDocRtIds[0]
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    - type: ForEach@1
+                      description: Delete each superseded AccountingDocument
+                      iterationPath: $.body.deleteDocRtIds
+                      targetPath: $.accDocDeletes
+                      mergePath: $.ad
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          description: Delete the superseded document (single object into the merge path)
+                          targetPath: $.ad
+                          updateKind: Delete
+                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                          rtIdPath: $.key
+                    - type: ApplyChanges@2
+                      description: Delete the superseded AccountingDocuments
+                      entityUpdatesPath: $.accDocDeletes
+                # --- Return the edited upload rtId to the HTTP caller ---
+                # generateRtId does NOT write the generated id back to rtIdPath, so
+                # copy it out of the staged update info (same place the association
+                # update reads it from).
+                - type: SetPrimitiveValue@1
+                  description: Expose the new upload's rtId for the response
+                  targetPath: $.editedUploadRtId
+                  valuePath: $.updates._items[0].RtEntity.RtId
+                  valueType: String
+                - type: SetPipelineExecutionResult@1
+                  path: $.editedUploadRtId
+            # Terminal response shaping (top-level, always runs — also on the guard-skip
+            # path): rebuild the root with ONLY the edited rtId so the HTTP response never
+            # echoes the request headers (Authorization/Bearer), body or intermediate
+            # state. See feedback_fromhttprequest_response_echo_leak.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.editedUploadRtId
                   inclusion: true
   # --- Pipelines: notify-todo (ToDo e-mail notifications, AB#4656) ---
   # HTTP endpoint POST /notifyTodo — the meshmakers-app calls it on ToDo
@@ -4153,8 +4419,8 @@ entities:
                   responseFormat: json
                   temperature: 0.1
                   question: >-
-                    Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. The file may contain ONE invoice or SEVERAL independent invoices concatenated into a single PDF (typical: an Amazon marketplace order produces one invoice per seller for the same order; a scan batch combines several receipts). A new invoice starts ONLY where a new invoice number appears — a multi-page invoice is still ONE invoice; never split by page. Output "invoices" as an array with exactly one element per invoice found and "invoiceCount" as the number of elements. Per invoice also output "pageFrom" and "pageTo" (the 1-based first and last PDF page of that invoice) when the page boundaries are recognizable from the text (page markers, "Seite X von Y", repeated per-invoice headers); OMIT both keys when unsure. Apply ALL of the following rules to EACH invoice element independently. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal for that invoice; otherwise false. Determine the ISO 4217 currency code of the invoice amounts (from the currency symbol or code printed next to the totals, e.g. "$"/"USD", "£"/"GBP", "CHF") and output it as "currency" ONLY when it is NOT euro; OMIT "currency" entirely for euro (€/EUR) invoices. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section.
-                  jsonFormatSample: '{ "invoiceCount": 1, "invoices": [ { "extractionComplete": true, "documentType": "INCOMING", "documentNumber": "RE-2026-001", "documentDate": "2026-03-01", "dueDate": "2026-03-31", "pageFrom": 1, "pageTo": 2, "vendor": { "companyName": "Supplier GmbH", "iban": "AT123456789012345678", "accountName": "Supplier Trading Ltd", "address": { "street": "Hauptstrasse 1", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "customer": { "companyName": "Our Company GmbH", "address": { "street": "Firmianstrasse 31A", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "grossTotal": 1200.00, "netTotal": 1000.00, "taxTotal": 200.00, "taxRate": 20.0, "currency": "USD" } ] }'
+                    Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. The file may contain ONE invoice or SEVERAL independent invoices concatenated into a single PDF (typical: an Amazon marketplace order produces one invoice per seller for the same order; a scan batch combines several receipts). A new invoice starts ONLY where a new invoice number appears — a multi-page invoice is still ONE invoice; never split by page. Output "invoices" as an array with exactly one element per invoice found and "invoiceCount" as the number of elements. Per invoice also output "pageFrom" and "pageTo" (the 1-based first and last PDF page of that invoice) when the page boundaries are recognizable from the text (page markers, "Seite X von Y", repeated per-invoice headers); OMIT both keys when unsure. Apply ALL of the following rules to EACH invoice element independently. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal for that invoice; otherwise false. Determine the ISO 4217 currency code of the invoice amounts (from the currency symbol or code printed next to the totals, e.g. "$"/"USD", "£"/"GBP", "CHF") and output it as "currency" ONLY when it is NOT euro; OMIT "currency" entirely for euro (€/EUR) invoices. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section. For BOTH parties independently, extract the printed VAT identification number (UID, USt-IdNr., VAT Reg No, e.g. "ATU12345678", "DE123456789") into that party's "vatId" WITHOUT inner spaces; assign each VAT id to the correct party (the vendor's UID is usually in its letterhead, footer or legal block; the customer's next to the billing address); OMIT "vatId" when none is printed for that party.
+                  jsonFormatSample: '{ "invoiceCount": 1, "invoices": [ { "extractionComplete": true, "documentType": "INCOMING", "documentNumber": "RE-2026-001", "documentDate": "2026-03-01", "dueDate": "2026-03-31", "pageFrom": 1, "pageTo": 2, "vendor": { "companyName": "Supplier GmbH", "iban": "AT123456789012345678", "accountName": "Supplier Trading Ltd", "vatId": "ATU12345678", "address": { "street": "Hauptstrasse 1", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "customer": { "companyName": "Our Company GmbH", "address": { "street": "Firmianstrasse 31A", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "grossTotal": 1200.00, "netTotal": 1000.00, "taxTotal": 200.00, "taxRate": 20.0, "currency": "USD" } ] }'
                   targetPath: $.ai.result
                   continueOnError: true
                 - type: DateTime@1
@@ -4205,6 +4471,9 @@ entities:
                     - attributeName: Extraction.VendorIban
                       attributeValueType: String
                       valuePath: $.ai.result.invoices[0].vendor.iban
+                    - attributeName: Extraction.VendorTaxId
+                      attributeValueType: String
+                      valuePath: $.ai.result.invoices[0].vendor.vatId
                     - attributeName: Extraction.VendorStreet
                       attributeValueType: String
                       valuePath: $.ai.result.invoices[0].vendor.address.street
@@ -4794,6 +5063,10 @@ entities:
                                 - attributeName: Vendor.AccountName
                                   attributeValueType: String
                                   valuePath: $.key.vendor.accountName
+                                # UID (VAT id) — the tax advisor keys vendors on it (BMD).
+                                - attributeName: Vendor.TaxIdentificationNumber
+                                  attributeValueType: String
+                                  valuePath: $.key.vendor.vatId
                                 # Address is written from the SANITIZED staging path
                                 # ($.san.*), populated above only when the party's mandatory
                                 # Street + CityTown are both present. This prevents a partial
@@ -4828,6 +5101,9 @@ entities:
                                 - attributeName: Customer.AccountName
                                   attributeValueType: String
                                   valuePath: $.key.customer.accountName
+                                - attributeName: Customer.TaxIdentificationNumber
+                                  attributeValueType: String
+                                  valuePath: $.key.customer.vatId
                                 - attributeName: Customer.Address.Street
                                   attributeValueType: String
                                   valuePath: $.san.customer.address.street
@@ -9480,12 +9756,28 @@ entities:
                   # overridden below.
                   jsonString: '{"title":"Belegübergabe an den Steuerberater","subtitle":"","culture":"de-AT","numberDecimalSeparator":",","numberGroupSeparator":".","sections":[{"heading":"Beleg","rows":[{"label":"Belegnummer","value":""},{"label":"Belegdatum","value":""},{"label":"Fälligkeit","value":""},{"label":"Belegart","value":""},{"label":"Brutto","value":"","format":"N2","suffix":"EUR"},{"label":"Ersatzbeleg","value":"Nein"}]},{"heading":"Kontakt","rows":[{"label":"Lieferant","value":""},{"label":"UID","value":""},{"label":"IBAN","value":""},{"label":"Kunde","value":""}]},{"heading":"Beträge","rows":[{"label":"Netto","value":"","format":"N2","suffix":"EUR"},{"label":"USt","value":"","format":"N2","suffix":"EUR"},{"label":"Steuersatz %","value":"","format":"0.##"},{"label":"Währung","value":"EUR"}]},{"heading":"Zahlungsnachweis","rows":[]}],"footerHeading":"Notiz an den Steuerberater","footerText":""}'
                   targetPath: $.key.sheet
+                # BMD keys on the Belegnummer, and numbers extracted from scans often
+                # carry (inner) whitespace ("26-7010 / 6554") — strip ALL whitespace for
+                # the handover package (cover sheet + belege.csv). The stored document
+                # keeps its original number. Null-safe: a missing DocumentNumber stays
+                # null and SelectByPath skips it (defaults remain "").
+                - type: ExecuteCSharp@1
+                  description: Document number without whitespace for the tax-advisor package
+                  code: 'docNumber == null ? null : string.Concat(docNumber.Where(ch => !char.IsWhiteSpace(ch)))'
+                  usings:
+                    - System.Linq
+                  returnType: String
+                  arguments:
+                    - name: docNumber
+                      valuePath: $.key.Attributes.DocumentNumber
+                      dataType: String
+                  targetPath: $.key.docNumberClean
                 - type: SelectByPath@1
                   description: Copy present document values into the skeleton (skips missing/null)
                   selectPath:
-                    - path: $.key.Attributes.DocumentNumber
+                    - path: $.key.docNumberClean
                       targetPath: $.key.sheet.subtitle
-                    - path: $.key.Attributes.DocumentNumber
+                    - path: $.key.docNumberClean
                       targetPath: $.key.sheet.sections[0].rows[0].value
                     - path: $.key.Attributes.DocumentDate
                       targetPath: $.key.sheet.sections[0].rows[1].value
@@ -9682,7 +9974,7 @@ entities:
                       targetPath: $.key.baseFileName
                     - type: WriteJson@1
                       description: Entry skeleton (path segments + belege.csv manifest columns)
-                      jsonString: '{"pathSegments":["","","",""],"scratchFileToken":"","length":0,"manifest":{"Datum":"","Belegnummer":"","Typ":"","LieferantKunde":"","Netto":"","USt":"","Brutto":"","Waehrung":""}}'
+                      jsonString: '{"pathSegments":["","","",""],"scratchFileToken":"","length":0,"manifest":{"Datum":"","Belegnummer":"","Typ":"","LieferantKunde":"","UID":"","Netto":"","USt":"","Brutto":"","Waehrung":""}}'
                       targetPath: $.key.entry
                     - type: SelectByPath@1
                       description: Fill path, content reference and manifest (skips missing)
@@ -9701,12 +9993,14 @@ entities:
                           targetPath: $.key.entry.length
                         - path: $.key.docDate
                           targetPath: $.key.entry.manifest.Datum
-                        - path: $.key.Attributes.DocumentNumber
+                        - path: $.key.docNumberClean
                           targetPath: $.key.entry.manifest.Belegnummer
                         - path: $.key.typeFolder
                           targetPath: $.key.entry.manifest.Typ
                         - path: $.key.party
                           targetPath: $.key.entry.manifest.LieferantKunde
+                        - path: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
+                          targetPath: $.key.entry.manifest.UID
                         - path: $.key.Attributes.NetTotal
                           targetPath: $.key.entry.manifest.Netto
                         - path: $.key.Attributes.TaxTotal
@@ -9715,12 +10009,88 @@ entities:
                           targetPath: $.key.entry.manifest.Brutto
                         - path: $.key.Attributes.Currency
                           targetPath: $.key.entry.manifest.Waehrung
+                    # Vendor row for the lieferanten.csv index — incoming documents only
+                    # (on outgoing invoices the vendor is our own company). Built in C#
+                    # so names with semicolons/quotes are CSV-quoted correctly; returns
+                    # null (no row) when no vendor name is present.
+                    - type: If@1
+                      description: Vendor list row only for incoming documents
+                      path: $.key.Attributes.DocumentType
+                      operator: Equals
+                      value: 0
+                      valueType: Int
+                      transformations:
+                        - type: ExecuteCSharp@1
+                          description: Quoted lieferanten.csv row (Lieferant;UID;IBAN;Kontoinhaber;Strasse;PLZ;Ort;Land)
+                          code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is System.Text.Json.JsonElement e) { if (e.ValueKind == System.Text.Json.JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == System.Text.Json.JsonValueKind.Null || e.ValueKind == System.Text.Json.JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; var nm = S(name); if (string.IsNullOrWhiteSpace(nm)) return null; Func<string,string> q = v => (v.Contains(";") || v.Contains("\"") || v.Contains("\n") || v.Contains("\r")) ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; return string.Join(";", new[] { q(nm), q(S(uid)), q(S(iban)), q(S(accountName)), q(S(street)), q(S(zip)), q(S(city)), q(S(country)) });'
+                          returnType: String
+                          arguments:
+                            - name: name
+                              valuePath: $.key.Attributes.Vendor.Attributes.CompanyName
+                              dataType: Record
+                            - name: uid
+                              valuePath: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
+                              dataType: Record
+                            - name: iban
+                              valuePath: $.key.Attributes.Vendor.Attributes.IBAN
+                              dataType: Record
+                            - name: accountName
+                              valuePath: $.key.Attributes.Vendor.Attributes.AccountName
+                              dataType: Record
+                            - name: street
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.Street
+                              dataType: Record
+                            - name: zip
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.Zipcode
+                              dataType: Record
+                            - name: city
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.CityTown
+                              dataType: Record
+                            - name: country
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.NationalCode
+                              dataType: Record
+                          targetPath: $.key.vendorLine
 
             # -- 3) Collect entries, build ZIP, store as FileSystemItem -----------------
             - type: Flatten@1
               description: Collect per-document zip entries into one array
               path: $.docResults[*].entry
               targetPath: $.zipEntries
+            # -- 3b) lieferanten.csv: distinct vendors of the exported incoming docs ----
+            # BMD users key vendors on the UID; a deduplicated vendor list beside the
+            # belege.csv saves re-typing master data. Shipped as a VERBATIM zip entry
+            # (exact name, no sequence number, no belege.csv row).
+            - type: Flatten@1
+              description: Collect per-document vendor rows
+              path: $.docResults[*].vendorLine
+              targetPath: $.vendorLines
+            - type: ExecuteCSharp@1
+              description: Deduplicate + sort vendor rows, emit base64 CSV (UTF-8 BOM)
+              code: 'var list = new System.Collections.Generic.List<string>(); if (lines is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array) { foreach (var el in je.EnumerateArray()) { if (el.ValueKind == System.Text.Json.JsonValueKind.String) { var s = el.GetString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } } else if (lines is System.Collections.IEnumerable seq) { foreach (var o in seq) { var s = o == null ? null : o.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } var rows = list.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(l => l, StringComparer.OrdinalIgnoreCase).ToList(); if (rows.Count == 0) return null; var csv = "\uFEFF" + "Lieferant;UID;IBAN;Kontoinhaber;Strasse;PLZ;Ort;Land\r\n" + string.Join("\r\n", rows) + "\r\n"; return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(csv));'
+              usings:
+                - System.Linq
+              returnType: String
+              arguments:
+                - name: lines
+                  valuePath: $.vendorLines
+                  dataType: StringArray
+              targetPath: $.lieferantenB64
+            - type: If@1
+              description: Append the vendor list only when there is at least one row
+              path: $.lieferantenB64
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: FormatString@1
+                  description: Verbatim zip entry for the vendor list (base64 is JSON-safe)
+                  format: '{"fileName":"lieferanten.csv","contentBase64":"{$.lieferantenB64}","verbatim":true}'
+                  targetPath: $.lieferantenEntryJson
+                - type: WriteJson@1
+                  description: Append the entry to the zip entries
+                  jsonStringPath: $.lieferantenEntryJson
+                  targetPath: $.zipEntries
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
             - type: FormatString@1
               description: ZIP file name
               nullValue: handover
