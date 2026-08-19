@@ -1,0 +1,984 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Industry.Basic-2.2.0",
+    "Basic-2.0.3",
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "DemandResponseEvent-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.2.2/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.3/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A demand response event representing participation in energy flexibility markets",
+      "attributes": [
+        {
+          "id": "Industry.Energy-3.2.0/ReductionKw-1",
+          "name": "ReductionKw",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/DemandResponseStartTime-1",
+          "name": "StartTime",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/DemandResponseEndTime-1",
+          "name": "EndTime",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Revenue-1",
+          "name": "Revenue",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/DemandResponseMarket-1",
+          "name": "Market",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/DemandResponseStatus-1",
+          "name": "Status",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EnergyConsumer-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.2.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Energy consuming equipment with nominal power and load tracking",
+      "attributes": [
+        {
+          "id": "Industry.Basic-2.2.0/Power-1",
+          "name": "Power",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.2.0/ImportedEnergy-1",
+          "name": "ImportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/NominalPower-1",
+          "name": "NominalPower",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/LoadPercent-1",
+          "name": "LoadPercent",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EnergyCost-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From",
+                "TimeRange.To",
+                "TariffType"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-2.2.2/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.3/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Time-series data for energy costs including actual and forecasted amounts",
+      "attributes": [
+        {
+          "id": "Basic-2.0.3/TimeRange-1",
+          "name": "TimeRange",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/CostAmount-1",
+          "name": "CostAmount",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/ForecastAmount-1",
+          "name": "ForecastAmount",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/TariffType-1",
+          "name": "TariffType",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EnergyForecast-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-2.2.2/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.3/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "AI-generated load forecast data for energy consumption prediction",
+      "attributes": [
+        {
+          "id": "Basic-2.0.3/TimeRange-1",
+          "name": "TimeRange",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/PredictedLoad-1",
+          "name": "PredictedLoad",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Confidence-1",
+          "name": "Confidence",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/ForecastModel-1",
+          "name": "ForecastModel",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EnergyMeter-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.2.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-3.2.0/Voltage-1",
+          "name": "Voltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Ampere-1",
+          "name": "Ampere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.2.0/Power-1",
+          "name": "Power",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/ApparentPower-1",
+          "name": "ApparentPower",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/ReactivePower-1",
+          "name": "ReactivePower",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Basic-2.2.0/ImportedEnergy-1",
+          "name": "ImportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/ExportedEnergy-1",
+          "name": "ExportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Frequency-1",
+          "name": "Frequency",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/PhaseInfoL1-1",
+          "name": "ACL1",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/PhaseInfoL2-1",
+          "name": "ACL2",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/PhaseInfoL3-1",
+          "name": "ACL3",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EnergyPerformanceIndicator-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "TimeRange.From"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "System-2.2.2/ParentChild-1",
+          "targetCkTypeId": "Basic-2.0.3/TreeNode-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Energy Performance Indicator (EnPI) for tracking energy efficiency metrics like kWh/unit",
+      "attributes": [
+        {
+          "id": "Basic-2.0.3/TimeRange-1",
+          "name": "TimeRange",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/IndicatorValue-1",
+          "name": "IndicatorValue",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/IndicatorUnit-1",
+          "name": "IndicatorUnit",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/ReferenceValue-1",
+          "name": "ReferenceValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "EnergyStorage-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.2.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-3.2.0/Voltage-1",
+          "name": "Voltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Ampere-1",
+          "name": "Ampere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.2.0/Power-1",
+          "name": "Power",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.2.0/ImportedEnergy-1",
+          "name": "ImportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/ExportedEnergy-1",
+          "name": "ExportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/SoC-1",
+          "name": "SoC",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/SoH-1",
+          "name": "SoH",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/NumOfCycles-1",
+          "name": "NumOfCycles",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Capacity-1",
+          "name": "Capacity",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.0.3/Temperature-1",
+          "name": "Temperature",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Inverter-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.2.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-3.2.0/DCVoltage-1",
+          "name": "DCVoltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/DCAmpere-1",
+          "name": "DCAmpere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Voltage-1",
+          "name": "Voltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Ampere-1",
+          "name": "Ampere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/MaximumPower-1",
+          "name": "MaximumPower",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.2.0/Power-1",
+          "name": "Power",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/PhaseInfoL1-1",
+          "name": "ACL1",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/PhaseInfoL2-1",
+          "name": "ACL2",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/PhaseInfoL3-1",
+          "name": "ACL3",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "PhotovoltaicSystem-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/Asset-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "PhotovoltaicSystem.Module-1",
+      "derivedFromCkTypeId": "Industry.Basic-2.2.0/Machine-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-3.2.0/PeakPower-1",
+          "name": "PeakPower",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.2.0/Power-1",
+          "name": "Power",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "PhotovoltaicSystem.String-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/Asset-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-3.2.0/NumOfModules-1",
+          "name": "NumOfModules",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.2.0/Power-1",
+          "name": "Power",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "Ampere-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "A"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "ApparentPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kVA"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "Capacity-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Total Capacity which the battery can store",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWh"
+        },
+        {
+          "key": "semanticId",
+          "value": "0173-1#02-BAA564#007",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "Confidence-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Confidence level of the forecast prediction",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "%"
+        },
+        {
+          "key": "Decimals",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "id": "CostAmount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Energy cost amount",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "DCAmpere-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "A"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "DCVoltage-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "V"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "DemandResponseEndTime-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "End time of the demand response event"
+    },
+    {
+      "id": "DemandResponseMarket-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Energy-3.2.0/DemandResponseMarket-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "DemandResponseStartTime-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Start time of the demand response event"
+    },
+    {
+      "id": "DemandResponseStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Energy-3.2.0/DemandResponseStatus-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ExportedEnergy-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWh"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "ForecastAmount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Forecasted energy cost amount",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "ForecastModel-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name or identifier of the AI forecast model used"
+    },
+    {
+      "id": "Frequency-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "Hz"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "IndicatorUnit-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Unit of the energy performance indicator (e.g. kWh/Stk, kWh/m2)"
+    },
+    {
+      "id": "IndicatorValue-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Current value of the energy performance indicator"
+    },
+    {
+      "id": "LoadPercent-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Current load as percentage of nominal power (0-100)",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "%"
+        },
+        {
+          "key": "Decimals",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "id": "MaximumPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kW"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "NominalPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Nominal or rated power capacity of the energy consumer",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kW"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "NumOfCycles-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of full loading cycles since production",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "id": "NumOfModules-1",
+      "valueType": "Int",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PeakPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kW"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "PhaseInfoL1-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Industry.Energy-3.2.0/PhaseInfo-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PhaseInfoL2-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Industry.Energy-3.2.0/PhaseInfo-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PhaseInfoL3-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Industry.Energy-3.2.0/PhaseInfo-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PredictedLoad-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Predicted load from AI forecast model",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kW"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "ReactivePower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kVAr"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "ReductionKw-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Power reduction in kW during demand response event",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kW"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "ReferenceValue-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Reference or baseline value for comparison"
+    },
+    {
+      "id": "Revenue-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Revenue earned from demand response participation",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "EUR"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "SoC-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "State of Charge",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "%"
+        }
+      ]
+    },
+    {
+      "id": "SoH-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "State of Health",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "%"
+        }
+      ]
+    },
+    {
+      "id": "TariffType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Energy-3.2.0/TariffType-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "Voltage-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "V"
+        },
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    }
+  ],
+  "records": [
+    {
+      "recordId": "PhaseInfo-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "Industry.Energy-3.2.0/Voltage-1",
+          "name": "Voltage",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Ampere-1",
+          "name": "Ampere",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Basic-2.2.0/Power-1",
+          "name": "Power",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Energy-3.2.0/Frequency-1",
+          "name": "Frequency",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "DemandResponseMarket-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "APCS",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "EXAA",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Spot",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "DemandResponseStatus-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Active",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Completed",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Cancelled",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "TariffType-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Standard",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Peak",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "OffPeak",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "Industry.Energy-3.2.0"
+}
