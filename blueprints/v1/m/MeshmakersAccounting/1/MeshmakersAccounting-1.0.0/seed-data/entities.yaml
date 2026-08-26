@@ -4296,6 +4296,125 @@ entities:
                 - path: $._errorMessage
                   inclusion: true
       - id: System.Communication/StatusMessage
+  # --- Pipeline: attach-upload-to-document (AB#4874) ---
+  # Attaches one or more EXISTING inbox items (UploadedDocuments) to an EXISTING
+  # AccountingDocument as ADDITIONAL files — the non-destructive counterpart of
+  # the page editor's merge: nothing is merged, deleted or re-analyzed. POST
+  # /attachUploadToDocument with a JSON body { documentRtId, uploadRtIds: [...] }.
+  # Each upload's stored file is linked to the document via System/Related (the
+  # association the preview resolves) and the upload is advanced to COMPLETED so
+  # the inbox default filter hides it. Use case: adding a rent-increase letter to
+  # a contract's recurring master document (Dauerbeleg).
+  - rtId: 67d4a2f0b2e4d8c3a1f00150
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Attach Upload To Document
+      - id: System/Description
+        value: Attaches inbox items to an existing accounting document as additional files
+  - rtId: 67d4a2f0b2e4d8c3a1f00151
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00150
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Attach Upload To Document Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@1
+              path: /attachUploadToDocument
+              method: POST
+          transformations:
+            - type: If@1
+              description: Guard - need a target document
+              path: $.body.documentRtId
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: If@1
+                  description: Guard - need at least one upload to attach
+                  path: $.body.uploadRtIds[0]
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    - type: ForEach@1
+                      description: Link each picked upload's stored file to the target document
+                      iterationPath: $.body.uploadRtIds
+                      targetPath: $.linkResults
+                      mergePath: $.linked
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: FormatString@1
+                          description: Current rtId as single-element JSON array
+                          format: '["{$.key}"]'
+                          targetPath: $.idJson
+                        - type: WriteJson@1
+                          jsonStringPath: $.idJson
+                          targetPath: $.idArr
+                        - type: GetRtEntitiesById@1
+                          description: Load the UploadedDocument to read its stored file rtId
+                          ckTypeId: Meshmakers.Accounting/UploadedDocument
+                          rtIdsPath: $.idArr
+                          targetPath: $.up
+                        - type: If@1
+                          description: Only link uploads that actually have a stored file
+                          path: $.up.Items[0].Attributes.FileRtId
+                          operator: NotEquals
+                          valueType: String
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              description: Link the target document to the upload's stored file
+                              targetPath: $.assocs
+                              targetValueKind: Array
+                              targetValueWriteMode: Overwrite
+                              updateKind: Create
+                              originRtIdPath: $.full.body.documentRtId
+                              originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetRtIdPath: $.up.Items[0].Attributes.FileRtId
+                              targetCkTypeId: System.Reporting/FileSystemItem
+                              associationRoleId: System/Related
+                            - type: CreateUpdateInfo@1
+                              description: Mark the upload as processed (COMPLETED)
+                              targetPath: $.ups
+                              targetValueKind: Array
+                              targetValueWriteMode: Overwrite
+                              updateKind: Update
+                              ckTypeId: Meshmakers.Accounting/UploadedDocument
+                              rtIdPath: $.key
+                              attributeUpdates:
+                                - attributeName: ProcessingState
+                                  attributeValueType: Enum
+                                  value: COMPLETED
+                            - type: ApplyChanges@2
+                              entityUpdatesPath: $.ups
+                              associationUpdatesPath: $.assocs
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.linked
+                              value: "attached"
+                              valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $._resultType
+                      value: "attached"
+                      valueType: String
+            # Terminal response shaping (top-level, always runs - also on the guard-skip
+            # path): rebuild the root with ONLY the result marker so the HTTP response
+            # never echoes the request headers (Authorization/Bearer) or body.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $._resultType
+                  inclusion: true
+      - id: System.Communication/StatusMessage
   # --- Pipelines: document analysis (asynchronous OCR + AI extraction) ---
   # Picks up staged uploads (ProcessingState NEW) every 5 minutes, or on demand
   # via POST /processDocuments (the app's "Analyze now" button). Each document
