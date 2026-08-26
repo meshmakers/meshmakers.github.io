@@ -5825,8 +5825,229 @@ entities:
               description: Persist recurring matches (transactions + document links)
               entityUpdatesPath: $._recEntityUpdates
               associationUpdatesPath: $._recAssocUpdates
-            # --- Auto-categorization pass (rule-based) — runs after the recurring pass
-            #     and before the document/AI passes so receiptless costs (bank fees ->
+            # --- Executed payment-order pass (AB#4888) — the app creates ONE
+            #     Basic.Accounting/PaymentOrder over the TOTAL of several expense
+            #     documents (collective reimbursement, AB#4887; single-document
+            #     orders via "Mark for transfer" too). Once the SEPA file is
+            #     imported at the bank the order is Executed, and the later bank
+            #     debit matches NO single document's GrossTotal — the debit is
+            #     the group sum — so the amount-anchored passes below can never
+            #     settle it. This pass anchors on the ORDER instead: a pending
+            #     debit whose absolute amount and counterpart IBAN equal a
+            #     UNIQUE Executed order's Amount and RecipientIban settles every
+            #     linked document (DocumentToPaymentOrder) that is still OPEN
+            #     and unlinked — each paid with its OWN gross total. Runs right
+            #     after the recurring pass and BEFORE the auto-categorization
+            #     pass: the reimbursement purpose the app writes ("Spesen
+            #     <numbers>") collides with the bank-fee rule's "Spesen" token,
+            #     which would otherwise terminally claim the debit as a bank
+            #     fee — an executed order over exactly this amount to exactly
+            #     this IBAN is the stronger deterministic anchor. Orders
+            #     without linked documents (e.g. vendor orders created before
+            #     AB#4887) never fire and the transaction flows on to the later
+            #     passes unchanged. Idempotent via the MatchState In [0,2] gate
+            #     plus the per-document OPEN/unlinked guards; a second identical
+            #     debit against the same order finds no settleable document and
+            #     falls through.
+            - type: GetRtEntitiesByType@1
+              description: Pending debits with a counterpart IBAN (payment-order candidates)
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.poPending
+              take: 500
+              fieldFilters:
+                - attributePath: MatchState
+                  operator: In
+                  comparisonValue:
+                    - 0
+                    - 2
+                - attributePath: Direction
+                  operator: Equals
+                  comparisonValue: 1
+                # Null-guard: the RecipientIban filter below compares against the
+                # transaction's counterpart IBAN — only consider transactions
+                # that actually carry one.
+                - attributePath: CounterpartIban
+                  operator: MatchRegEx
+                  comparisonValue: .+
+            - type: ForEach@1
+              description: Executed payment-order pass — settle the order's linked documents against the debit
+              iterationPath: $.poPending.Items
+              targetPath: $.poResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: Math@1
+                  description: Expected order amount = absolute value of the debit amount
+                  path: $.key
+                  itemPath: $.Attributes.Amount
+                  itemTargetPath: $._poAmount
+                  operation: Multiply
+                  value: -1
+                - type: GetRtEntitiesByType@1
+                  description: Executed payment orders over exactly this amount to this recipient IBAN
+                  ckTypeId: Basic.Accounting/PaymentOrder
+                  targetPath: $.key._poOrders
+                  take: 5
+                  fieldFilters:
+                    - attributePath: Status
+                      operator: Equals
+                      comparisonValue: 2
+                    - attributePath: Amount
+                      operator: Equals
+                      comparisonValuePath: $.key._poAmount
+                    - attributePath: RecipientIban
+                      operator: Equals
+                      comparisonValuePath: $.key.Attributes.CounterpartIban
+                - type: If@1
+                  description: Exactly ONE matching executed order — unambiguous
+                  path: $.key._poOrders.TotalCount
+                  operator: Equals
+                  value: 1
+                  valueType: Int64
+                  transformations:
+                    - type: GetAssociationTargets@1
+                      description: Documents linked to the order (DocumentToPaymentOrder is declared on the document side)
+                      originRtIdPath: $.key._poOrders.Items[0].RtId
+                      originCkTypeId: Basic.Accounting/PaymentOrder
+                      targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                      associationRoleId: Meshmakers.Accounting/DocumentToPaymentOrder
+                      graphDirection: Inbound
+                      targetPath: $.key._poDocs
+                    - type: If@1
+                      description: The order carries at least one linked document (vendor orders without documents never fire)
+                      path: $.key._poDocs[0].TotalCount
+                      operator: GreaterEqualsThan
+                      value: 1
+                      valueType: Int64
+                      transformations:
+                        - type: ForEach@1
+                          description: Check every linked document — settle it when still OPEN and unlinked
+                          iterationPath: $.key._poDocs[0].Items
+                          targetPath: $.key._poDocChecks
+                          targetValueKind: Simple
+                          targetValueWriteMode: Overwrite
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: Document not settled by this pass (default)
+                              targetPath: $.key._settled
+                              value: 0
+                              valueType: Int
+                            - type: GetRtEntitiesByType@1
+                              description: Load the linked document (state and gross total needed)
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              targetPath: $.poDoc
+                              take: 1
+                              fieldFilters:
+                                - attributePath: RtId
+                                  operator: Equals
+                                  comparisonValuePath: $.key.RtId
+                            - type: If@1
+                              description: Document resolved
+                              path: $.poDoc.TotalCount
+                              operator: GreaterEqualsThan
+                              value: 1
+                              valueType: Int64
+                              transformations:
+                                - type: If@1
+                                  description: Document is still OPEN
+                                  path: $.poDoc.Items[0].Attributes.DocumentState
+                                  operator: Equals
+                                  value: 0
+                                  valueType: Int64
+                                  transformations:
+                                    - type: GetAssociationTargets@1
+                                      description: Existing transaction links of the document (idempotency guard, AB#4398)
+                                      originRtIdPath: $.key.RtId
+                                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                      targetCkTypeId: Basic.Accounting/BankTransaction
+                                      associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                      graphDirection: Outbound
+                                      targetPath: $.poDocLinks
+                                    - type: If@1
+                                      description: Document not yet linked to any transaction
+                                      path: $.poDocLinks[0].TotalCount
+                                      operator: Equals
+                                      value: 0
+                                      valueType: Int64
+                                      transformations:
+                                        - type: CreateUpdateInfo@1
+                                          description: Document is paid with its OWN gross total (the debit covers the group sum)
+                                          targetPath: $.key._upd
+                                          updateKind: Update
+                                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                          rtIdPath: $.key.RtId
+                                          attributeUpdates:
+                                            - attributeName: DocumentState
+                                              attributeValueType: Enum
+                                              value: PAID
+                                            - attributeName: PaidAmount
+                                              attributeValueType: Double
+                                              valuePath: $.poDoc.Items[0].Attributes.GrossTotal
+                                        - type: CreateAssociationUpdate@1
+                                          description: Link the document to the settling transaction
+                                          targetPath: $.key._assoc
+                                          updateKind: Create
+                                          originRtIdPath: $.key.RtId
+                                          originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                                          targetRtIdPath: $.full.key.RtId
+                                          targetCkTypeId: Basic.Accounting/BankTransaction
+                                          associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.key._settled
+                                          value: 1
+                                          valueType: Int
+                        - type: SumAggregation@1
+                          description: Documents settled by this pass
+                          targetPath: $.key._poSettledCount
+                          aggregations:
+                            - path: $.key._poDocChecks[*]
+                              aggregationPath: $._settled
+                              value: 1
+                              filterPath: null
+                              comparisonValue: null
+                        - type: If@1
+                          description: At least one document settled — commit the group and match the transaction
+                          path: $.key._poSettledCount
+                          operator: GreaterThan
+                          value: 0
+                          valueType: Double
+                          transformations:
+                            - type: Flatten@1
+                              description: Collect the document updates
+                              path: $.key._poDocChecks[*]._upd
+                              targetPath: $.key._poUpdates
+                              targetValueKind: Simple
+                              targetValueWriteMode: Overwrite
+                            - type: Flatten@1
+                              description: Collect the document links
+                              path: $.key._poDocChecks[*]._assoc
+                              targetPath: $.key._poAssocs
+                              targetValueKind: Simple
+                              targetValueWriteMode: Overwrite
+                            - type: CreateUpdateInfo@1
+                              description: Transaction is matched (executed payment order)
+                              targetPath: $.key._poUpdates
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Update
+                              ckTypeId: Basic.Accounting/BankTransaction
+                              rtIdPath: $.key.RtId
+                              attributeUpdates:
+                                - attributeName: MatchState
+                                  attributeValueType: Enum
+                                  value: Matched
+                                - attributeName: MatchComment
+                                  attributeValueType: String
+                                  value: Auto-matched to executed payment order (collective reimbursement)
+                            - type: ApplyChanges@2
+                              entityUpdatesPath: $.key._poUpdates
+                              associationUpdatesPath: $.key._poAssocs
+            # --- Auto-categorization pass (rule-based) — runs after the recurring and
+            #     payment-order passes (AB#4888: the reimbursement purpose "Spesen …"
+            #     must not be claimed by the bank-fee rule first) and before the
+            #     document/AI passes so receiptless costs (bank fees ->
             #     MATCHED, private -> IGNORED) are resolved before AI spend. Each
             #     CategorizationRule matches transactions on exactly ONE field
             #     (case-insensitive regex) and assigns a cost category of its target
