@@ -49,6 +49,12 @@ description: |
     the finAPI credentials on FinApiConfiguration — every blueprint re-apply
     resets both to the placeholders (scripts/om_set_secrets.ps1 restores them
     from the gitignored scripts/secrets.local.json)
+  - The two ToDo-notification pipelines (Notify ToDo / Notify ToDo Inbound)
+    ship DISABLED with a TODO_SET_NOTIFICATION_MAILBOX placeholder (AB#4934 —
+    the mailbox is tenant-specific; earlier seeds hardcoded the meshmakers
+    mailbox, so every tenant polled a foreign mailbox). Set the mailbox in
+    both pipeline definitions, fill MicrosoftGraphDocuments, then enable +
+    DeployDataFlow. Every re-apply resets them to this shipped state.
   - The Microsoft 365 e-mail import ships disabled — activate it in the
     meshmakers-app under Settings -> E-Mail Import after filling the Azure
     app-registration secrets on MicrosoftGraphDocuments via
