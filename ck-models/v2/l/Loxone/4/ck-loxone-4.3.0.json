@@ -1,0 +1,380 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.0.3",
+    "System.Communication-3.28.0",
+    "System-2.2.2",
+    "System.Bot-3.1.1"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Category-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents a category in a Loxone installation (e.g., Lighting, Shading)",
+      "attributes": [
+        {
+          "id": "Loxone-4.3.0/LoxoneUuid-1",
+          "name": "LoxoneUuid",
+          "isOptional": false
+        },
+        {
+          "id": "Loxone-4.3.0/CategoryType-1",
+          "name": "CategoryType",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/Color-1",
+          "name": "Color",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/Image-1",
+          "name": "Image",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Control-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents a control element in a Loxone installation (e.g., Switch, Dimmer, Jalousie, Sensor)",
+      "attributes": [
+        {
+          "id": "Loxone-4.3.0/LoxoneUuid-1",
+          "name": "LoxoneUuid",
+          "isOptional": false
+        },
+        {
+          "id": "Loxone-4.3.0/ControlType-1",
+          "name": "ControlType",
+          "isOptional": false
+        },
+        {
+          "id": "Loxone-4.3.0/CurrentValue-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/IsEnabled-1",
+          "name": "IsEnabled",
+          "isOptional": false
+        },
+        {
+          "id": "Loxone-4.3.0/States-1",
+          "name": "States",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/LastStateUpdate-1",
+          "name": "LastStateUpdate",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Miniserver-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/Tree-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents a Loxone Miniserver smart home controller",
+      "attributes": [
+        {
+          "id": "Loxone-4.3.0/Host-1",
+          "name": "Host",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/Port-1",
+          "name": "Port",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/SerialNumber-1",
+          "name": "SerialNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/FirmwareVersion-1",
+          "name": "FirmwareVersion",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/ProjectName-1",
+          "name": "ProjectName",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/MacAddress-1",
+          "name": "MacAddress",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/LastSyncTimestamp-1",
+          "name": "LastSyncTimestamp",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/ConnectionState-1",
+          "name": "ConnectionState",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Room-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents a room in a Loxone installation",
+      "attributes": [
+        {
+          "id": "Loxone-4.3.0/LoxoneUuid-1",
+          "name": "LoxoneUuid",
+          "isOptional": false
+        },
+        {
+          "id": "Loxone-4.3.0/RoomType-1",
+          "name": "RoomType",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/Image-1",
+          "name": "Image",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "SubControl-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents a sub-control element (e.g., individual outputs of a light controller)",
+      "attributes": [
+        {
+          "id": "Loxone-4.3.0/LoxoneUuid-1",
+          "name": "LoxoneUuid",
+          "isOptional": false
+        },
+        {
+          "id": "Loxone-4.3.0/ControlType-1",
+          "name": "ControlType",
+          "isOptional": false
+        },
+        {
+          "id": "Loxone-4.3.0/CurrentValue-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        },
+        {
+          "id": "Loxone-4.3.0/States-1",
+          "name": "States",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "CategoryType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Loxone category type identifier"
+    },
+    {
+      "id": "Color-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Color code for the category (hex format)"
+    },
+    {
+      "id": "ConnectionState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Loxone-4.3.0/ConnectionState-1",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Current connection state to the Miniserver"
+    },
+    {
+      "id": "ControlType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Type of the Loxone control (e.g., Switch, Dimmer, Jalousie, InfoOnlyAnalog)"
+    },
+    {
+      "id": "ControlUuids-1",
+      "valueType": "StringArray",
+      "isRuntimeState": false,
+      "description": "List of Loxone control UUIDs to poll. Populated automatically by the Configure Polling pipeline from DataPointMappings."
+    },
+    {
+      "id": "CurrentValue-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Current value of the control as reported by the Miniserver"
+    },
+    {
+      "id": "FirmwareVersion-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Firmware version of the Loxone Miniserver"
+    },
+    {
+      "id": "Host-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Host or IP address of the Loxone Miniserver"
+    },
+    {
+      "id": "Image-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Image identifier for the room or category"
+    },
+    {
+      "id": "IsEnabled-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "isRuntimeState": false,
+      "description": "Whether this control is currently enabled for synchronization"
+    },
+    {
+      "id": "LastStateUpdate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Timestamp of the last state update for this control"
+    },
+    {
+      "id": "LastSyncTimestamp-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Timestamp of the last successful synchronization"
+    },
+    {
+      "id": "LoxoneUuid-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "UUID as assigned by the Loxone Miniserver"
+    },
+    {
+      "id": "MacAddress-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "MAC address of the Loxone Miniserver"
+    },
+    {
+      "id": "Password-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Password for Miniserver authentication"
+    },
+    {
+      "id": "PollIntervalSeconds-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "30"
+      ],
+      "isRuntimeState": false,
+      "description": "Interval in seconds between state polls"
+    },
+    {
+      "id": "Port-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "80"
+      ],
+      "isRuntimeState": false,
+      "description": "Port number of the Loxone Miniserver"
+    },
+    {
+      "id": "ProjectName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Loxone Config project name"
+    },
+    {
+      "id": "RoomType-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Loxone room type identifier"
+    },
+    {
+      "id": "SerialNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Serial number of the Loxone Miniserver"
+    },
+    {
+      "id": "States-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Communication-3.28.0/DataPoint-1",
+      "isRuntimeState": false,
+      "description": "Array of data points for this control (each with Name, ExternalId, CurrentValue, LastUpdate)"
+    },
+    {
+      "id": "UseSsl-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Whether to use SSL/TLS for the connection"
+    },
+    {
+      "id": "Username-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Username for Miniserver authentication"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "ConnectionState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Disconnected",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Connected",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Error",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Reconnecting",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "Loxone-4.3.0"
+}
