@@ -3562,8 +3562,13 @@ entities:
         value: 0
       - id: System/Name
         value: Notify ToDo Pipeline
+      # Ships DISABLED: the notification mailbox is tenant-specific (AB#4934 —
+      # the previous hardcoded meshmakers mailbox leaked into every tenant).
+      # Enable after replacing TODO_SET_NOTIFICATION_MAILBOX and filling the
+      # MicrosoftGraphDocuments credentials. Every blueprint re-apply resets
+      # mailbox + Enabled to this shipped state — re-enable manually afterwards.
       - id: System/Enabled
-        value: true
+        value: false
       - id: System.Communication/PipelineDefinition
         value: >-
           triggers:
@@ -3581,7 +3586,7 @@ entities:
                 - type: SendMicrosoftGraphEmail@1
                   description: Send the ToDo notification e-mail via Microsoft Graph
                   serverConfiguration: MicrosoftGraphDocuments
-                  mailbox: accounting@meshmakers.io
+                  mailbox: TODO_SET_NOTIFICATION_MAILBOX
                   subjectPath: $.body.subject
                   toPath: $.body.toEmails
                   path: $.body.body
@@ -3623,15 +3628,20 @@ entities:
         value: 0
       - id: System/Name
         value: Notify ToDo Inbound Pipeline
+      # Ships DISABLED (AB#4934): polls a tenant-specific mailbox — the previous
+      # hardcoded meshmakers mailbox made every tenant poll a foreign mailbox
+      # every 2 minutes (Graph token 400 noise). Enable after replacing
+      # TODO_SET_NOTIFICATION_MAILBOX + Graph credentials. Every blueprint
+      # re-apply resets mailbox + Enabled — re-enable manually afterwards.
       - id: System/Enabled
-        value: true
+        value: false
       - id: System.Communication/PipelineDefinition
         value: |
           triggers:
             - type: FromMicrosoftGraphEmail@1
               serverConfiguration: MicrosoftGraphDocuments
               pollingIntervalSeconds: 120
-              mailbox: accounting@meshmakers.io
+              mailbox: TODO_SET_NOTIFICATION_MAILBOX
               folderPath: ToDoReplies
               moveToFolderPathOnSuccess: ToDoReplies/Done
           transformations:
@@ -3905,12 +3915,12 @@ entities:
                                   targetPath: $.key.notifySubject
                                 - type: FormatString@1
                                   description: Notification body (Markdown)
-                                  format: "**{$.key.From}** hat per E-Mail geantwortet:\n\n{$.key.comment}\n\n[ToDo öffnen](https://meshmakers-accounting.prod-1.octo-mesh.com/de-AT/todos/{$.key.todoRtId})"
+                                  format: "**{$.key.From}** hat per E-Mail geantwortet:\n\n{$.key.comment}\n\n[ToDo öffnen](${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}/de-AT/todos/{$.key.todoRtId})"
                                   targetPath: $.key.notifyBody
                                 - type: SendMicrosoftGraphEmail@1
                                   description: Send the notification to the Todo creator
                                   serverConfiguration: MicrosoftGraphDocuments
-                                  mailbox: accounting@meshmakers.io
+                                  mailbox: TODO_SET_NOTIFICATION_MAILBOX
                                   subjectPath: $.key.notifySubject
                                   toPath: $.key.todo.Items[0].Attributes.CreatedByEmail
                                   path: $.key.notifyBody
