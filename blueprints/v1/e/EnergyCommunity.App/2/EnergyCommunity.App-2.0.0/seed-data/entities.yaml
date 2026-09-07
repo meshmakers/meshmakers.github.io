@@ -1,0 +1,267 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- System-[2.2,3.0)
+- System.Communication-[3.28,4.0)
+- System.Identity-[2.11,3.0)
+
+entities:
+
+# ─── energy-community-app OIDC client ─────────────────────────────────────
+# rtId ec0000000000000000000f10.
+#
+# AutoProvisionInChildTenants is the whole point of seeding this here. Clients are
+# per-tenant records, and one shared host does not change that: the app is served
+# from a single origin but authenticates against whichever tenant is in the route,
+# so every child tenant needs a client record carrying THIS deployment's redirect
+# URI. Without it sign-in against a child fails with `Invalid redirect_uri`, and
+# because the tenant then fails to resolve, identity validates the client in a
+# fallback tenant — which is why the error names a redirect URI nobody configured.
+#
+# The URIs use the same placeholders as the Application below, so the client and the
+# deployment cannot drift apart. The app sends `${origin}/` for both the redirect and
+# the post-logout redirect (`configuration.service.ts` derives them from
+# window.location), and the CORS entry is the bare origin — no trailing slash.
+#
+# No secret: this is a public client (authorization code + PKCE from a browser).
+- rtId: ec0000000000000000000f10
+  ckTypeId: System.Identity/Client-1
+  associations: []
+  attributes:
+  # Verified against the live CK model: the display name is System/Name-1 and `enabled` is
+  # System/Enabled-1 — neither lives in the System.Identity model.
+  - id: System/Name-1
+    value: Energy Community App
+  - id: System/Description-1
+    value: ''
+  - id: System.Identity/ClientId-1
+    value: energy-community-app
+  - id: System/Enabled-1
+    value: true
+  - id: System.Identity/ProtocolType-1
+    value: oidc
+  - id: System.Identity/AutoProvisionInChildTenants-1
+    value: true
+  # Public client: browser code flow with PKCE, so no secret and none may be added here.
+  - id: System.Identity/Secrets-1
+    value: []
+  - id: System.Identity/RequireClientSecret-1
+    value: false
+  - id: System.Identity/RequirePkce-1
+    value: true
+  - id: System.Identity/AllowPlainTextPkce-1
+    value: false
+  - id: System.Identity/RequireRequestObject-1
+    value: false
+  - id: System.Identity/AllowAccessTokensViaBrowser-1
+    value: true
+  - id: System.Identity/AllowRememberConsent-1
+    value: true
+  - id: System.Identity/RequireConsent-1
+    value: false
+  - id: System.Identity/RequireDPoP-1
+    value: false
+  - id: System.Identity/DPoPValidationMode-1
+    value: 1
+  - id: System.Identity/DPoPClockSkew-1
+    value: 300
+  - id: System.Identity/FrontChannelLogoutSessionRequired-1
+    value: true
+  - id: System.Identity/BackChannelLogoutSessionRequired-1
+    value: true
+  # offline_access is governed by this flag, not by AllowedScopes — the live client grants
+  # refresh tokens while listing no such scope.
+  - id: System.Identity/AllowOfflineAccess-1
+    value: true
+  - id: System.Identity/AllowedGrantTypes-1
+    value:
+    - authorization_code
+  - id: System.Identity/AllowedScopes-1
+    value:
+    - openid
+    - profile
+    - email
+    - role
+    - octo_api
+  - id: System.Identity/AlwaysIncludeUserClaimsInIdToken-1
+    value: true
+  - id: System.Identity/IdentityTokenLifetime-1
+    value: 300
+  - id: System.Identity/AllowedIdentityTokenSigningAlgorithms-1
+    value: []
+  - id: System.Identity/AccessTokenLifetime-1
+    value: 3600
+  - id: System.Identity/AuthorizationCodeLifetime-1
+    value: 300
+  - id: System.Identity/AbsoluteRefreshTokenLifetime-1
+    value: 2592000
+  - id: System.Identity/SlidingRefreshTokenLifetime-1
+    value: 1296000
+  - id: System.Identity/UpdateAccessTokenClaimsOnRefresh-1
+    value: false
+  - id: System.Identity/RefreshTokenExpiration-1
+    value: ABSOLUTE
+  - id: System.Identity/AccessTokenType-1
+    value: JWT
+  - id: System.Identity/EnableLocalLogin-1
+    value: true
+  - id: System.Identity/IdentityProviderRestrictions-1
+    value: []
+  - id: System.Identity/IncludeJwtId-1
+    value: true
+  - id: System.Identity/ClientClaims-1
+    value: []
+  - id: System.Identity/AlwaysSendClientClaims-1
+    value: false
+  - id: System.Identity/DynamicRegistration-1
+    value: false
+  # `${octo.scheme}` / `${octo.domain}`, NOT `{{domain.DEFAULT}}`: the two are resolved by
+  # different things. The blueprint runner substitutes `${octo.*}` at SEED time (it is what
+  # System.Identity.Bootstrap uses for the MCP client URIs), while `{{domain.DEFAULT}}` is
+  # resolved by the Communication Operator at DEPLOY time and therefore only works on workload
+  # entities like the Application below. Seeding a client with `{{domain.DEFAULT}}` stores the
+  # literal placeholder, and identity then rejects every sign-in with `Invalid redirect_uri`.
+  #
+  # The app sends `${origin}/` for both redirects (configuration.service.ts derives them from
+  # window.location) and the bare origin for CORS — the trailing slash difference is not a typo.
+  # The host matches the Application's Hostname below, so client and deployment cannot drift.
+  - id: System.Identity/RedirectUris-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: '${octo.scheme}://energy-community.${octo.domain}/'
+      - id: System.Identity/Source-1
+        value: blueprint
+  - id: System.Identity/PostLogoutRedirectUris-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: '${octo.scheme}://energy-community.${octo.domain}/'
+      - id: System.Identity/Source-1
+        value: blueprint
+  - id: System.Identity/AllowedCorsOrigins-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: '${octo.scheme}://energy-community.${octo.domain}'
+      - id: System.Identity/Source-1
+        value: blueprint
+
+# ─── energy-community-app deployment ──────────────────────────────────────
+# rtId ec0000000000000000000f01 — DELIBERATELY NOT 6a1f14de0b5979da7108457e.
+# That rtId belongs to EnergyCommunity.Base, which seeds one Application per tenant
+# under `energy-community-${octo.tenantId}.{{domain.DEFAULT}}`. Reusing it would mean
+# this blueprint and Base fighting over the same entity: whichever ran last would own
+# it, and uninstalling either erases everything carrying its rtBlueprintSource — on a
+# productive tenant that is the live UI going away.
+#
+# Pool and HelmRepository are referenced, never seeded: both come from the
+# service-managed System.Communication blueprint and return on every
+# EnableCommunication.
+#
+# rootTenantId is bound to the tenant this is installed on, which is what makes the
+# management tenant self-contained — the app authenticates against it and offers its
+# children. `tenantId` is deliberately NOT set: the chart falls back to it only for
+# releases predating the rename, and seeding both would let a stale value keep
+# working after the alias is dropped.
+- rtId: ec0000000000000000000f01
+  ckTypeId: System.Communication/Application-1
+  associations:
+  - roleId: System.Communication/Manages-1
+    targetRtId: '670000000000000000000001'
+    targetCkTypeId: System.Communication/Pool-1
+    attributes: []
+  - roleId: System.Communication/HelmRepository-1
+    targetRtId: '670000000000000000000005'
+    targetCkTypeId: System.Communication/HelmRepositoryConfiguration-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: energy-community-app
+  - id: System/Description-1
+    value: ''
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/LastDeploymentError-1
+  - id: System.Communication/LastDeploymentErrorTimestamp-1
+  - id: System.Communication/ChartName-1
+    value: energy-community-app
+  - id: System.Communication/ChartVersion-1
+    value: ''
+  - id: System.Communication/ValuesYaml-1
+    value: ''
+  - id: System.Communication/ReceivesClusterSecrets-1
+    value: false
+  - id: System.Communication/IngressEnabled-1
+    value: true
+  - id: System.Communication/Hostname-1
+    value: 'energy-community.{{domain.DEFAULT}}'
+  - id: System.Communication/Values-1
+    value:
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: publicUri
+      - id: System.Communication/Value-1
+        value: 'https://energy-community.{{domain.DEFAULT}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: authUri
+      - id: System.Communication/Value-1
+        value: '{{service.AUTHORITY}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: assetRepoUri
+      - id: System.Communication/Value-1
+        value: '{{service.ASSETREPOSITORY}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: reportingUri
+      - id: System.Communication/Value-1
+        value: 'https://reporting.{{domain.DEFAULT}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: meshAdapterUri
+      - id: System.Communication/Value-1
+        value: 'https://adapter.{{domain.DEFAULT}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: edaAdapterUri
+      - id: System.Communication/Value-1
+        value: 'https://adapter-eda.{{domain.DEFAULT}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: rootTenantId
+      - id: System.Communication/Value-1
+        value: '{{context.tenantId}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: clientId
+      - id: System.Communication/Value-1
+        value: energy-community-app
+      - id: System.Communication/IsSecret-1
+        value: false
