@@ -1,0 +1,3290 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.1,5.0)
+- Basic.Energy-[1.3,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+entities:
+
+# ─── Notification templates ──────────────────────────────────────────────
+# Subject/body texts are neutral defaults. Member name, community name and the
+# billing period are ${...} placeholders resolved at send time (AB#2569).
+#
+# The bank details in offene-abrechnung are ${community.accountHolder} and
+# ${community.iban} - the COMMUNITY's account, not the member's. Mapping them to
+# customer.iban would tell a member to pay themselves. They were literal text until
+# System.Communication 3.31.0 added BankAccountHolder / BankAccountIban; a tenant on
+# an older model, or one that never filled the two fields in Settings, still sends
+# this template with those two lines blank.
+# rtIds and rtWellKnownNames are kept stable so pipelines reference them
+# regardless of customization.
+
+- rtId: 684afcd8640a3ca920364d28
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: billing-quarterly
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Abrechnung ${billingDocument.periodFrom} - ${billingDocument.periodTo}'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      Liebe / lieber ${customer.firstName},
+
+      anbei findest du die Quartalsabrechnung für den gewählten Zeitraum.
+
+      Bei Fragen oder Unstimmigkeiten melde dich bitte per E-Mail bei uns.
+
+      Beste Grüße,
+      ${community.name}
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 0
+
+- rtId: 68a34a715241bae7b18c14be
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: billing-quarterly-q2
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Abrechnung Q2'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      Liebe / lieber ${customer.firstName},
+
+      anbei die Quartalsabrechnung Q2.
+
+      Bei Rückfragen melde dich bitte per E-Mail.
+
+      Beste Grüße,
+      ${community.name}
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 0
+
+- rtId: 68c929359c0523ec5bfef80a
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: offene-abrechnung
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Offene Abrechnung'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      Liebe / lieber ${customer.firstName},
+
+      beim Durchsehen unserer Unterlagen ist uns aufgefallen, dass unsere Abrechnung an dich noch nicht beglichen wurde.
+
+      Bitte überweise den offenen Betrag auf folgendes Konto:
+
+      Kontoinhaber: ${community.accountHolder}
+
+      IBAN: ${community.iban}
+
+      Solltest du die Zahlung bereits veranlasst haben, betrachte diese Nachricht bitte als gegenstandslos.
+
+      Beste Grüße,
+      ${community.name}
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 0
+
+- rtId: 68c933969c0523ec5bfef80b
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: offene-gutschrift
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Offene Gutschrift'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      Liebe / lieber ${customer.firstName},
+
+      aus deiner Einspeisung in der Energiegemeinschaft steht dir eine Gutschrift zu. Die Auszahlung konnten wir noch nicht durchführen, weil uns deine aktuelle Bankverbindung fehlt.
+
+      Bitte schicke uns deine IBAN und Kontoinhaber:in als Antwort auf dieses E-Mail, dann veranlassen wir die Auszahlung umgehend.
+
+      Beste Grüße,
+      ${community.name}
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 0
+
+- rtId: 68c933ea9c0523ec5bfef80c
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: prae-zahlungserinnerung
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Erinnerung Abrechnung'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      Liebe / lieber ${customer.firstName},
+
+      es ist möglich, dass unsere letzte Abrechnung nicht bei dir angekommen ist. Wir senden dir die Abrechnung daher im Anhang nochmals zu.
+
+      Falls die Zahlung bereits erfolgt ist, betrachte diese Nachricht bitte als gegenstandslos.
+
+      Beste Grüße,
+      ${community.name}
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 0
+
+# ─── Billing & reporting queries ─────────────────────────────────────────
+- rtId: 682f4f297e558c7c4221c1df
+  rtCreationDateTime: 2025-05-22T16:22:01.2530000Z
+  rtChangedDateTime: 2025-05-23T13:09:05.8930000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocument
+  - id: System/Query.Columns-1
+    value:
+    - timeRange.from
+    - timeRange.to
+    - billingDocumentState
+    - documentNumber
+    - billingType
+    - grossTotal
+    - documentDate
+    - bankAccount.accountHolder
+    - bankAccount.bankName
+    - bankAccount.iban
+    - bankAccount.swiftCode
+    - contact.salutation
+    - assignedTo.energyCommunityCustomer->customerNumber
+    - contact.firstName
+    - contact.lastName
+    - contact.companyName
+    - contact.companyRegisterNumber
+    - contact.taxIdentificationNumber
+    - contact.address.street
+    - contact.address.zipcode
+    - contact.address.street
+    - contact.address.cityTown
+    - contact.address.nationalCode
+    - customerNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: _energy_billing_documents
+
+- rtId: 683023e8887d44e03806103c
+  rtCreationDateTime: 2025-05-23T07:29:44.3210000Z
+  rtChangedDateTime: 2025-05-23T09:48:15.2340000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocumentLineItem
+  # EC v2 (ADR 0001): the AssignedBilling -> EnergyQuantity association is gone;
+  # the line item carries quantity + billedTimeRange + the interval snapshot
+  # itself, so the former assignedTo.energyCommunityEnergyQuantity->rtId column
+  # is replaced by the line item's own quantity / billedTimeRange columns.
+  - id: System/Query.Columns-1
+    value:
+    - billingType
+    - grossAmount
+    - netAmount
+    - taxAmount
+    - taxRate
+    - unitPrice
+    - quantity
+    - billedTimeRange.from
+    - billedTimeRange.to
+    - intervalCount
+    - parent.energyCommunityBillingDocument->documentNumber
+    - meteringPoint.basicEnergyMeteringPoint->meteringPointNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: _energy_billing_items
+
+- rtId: 683022ee887d44e03806103b
+  rtCreationDateTime: 2025-05-23T07:25:34.5420000Z
+  rtChangedDateTime: 2025-06-10T20:09:00.0490000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocumentLineItem
+  # EC v2 (ADR 0001 decision 4): the line item is self-contained — it persists
+  # the billed quantity, the billed TimeRange and the interval/quality snapshot,
+  # so the report no longer joins into per-interval EnergyQuantity data (that
+  # type is gone). Metering-point context comes from the BilledMeteringPoint
+  # association (MeteringPoint moved to Basic.Energy; Consumer/Producer are its
+  # subtypes). NOTE: the tenant's Telerik billing report template
+  # (misc/energy-community-deployment) binds to these column names/positions and
+  # MUST be updated to match this shape (AB#4552 follow-up — out of this repo).
+  - id: System/Query.Columns-1
+    value:
+    - parent.energyCommunityBillingDocument->rtId
+    - parent.energyCommunityBillingDocument->contact.legalEntityType
+    - parent.energyCommunityBillingDocument->taxProcedureCreditNote
+    - parent.energyCommunityBillingDocument->timeRange.from
+    - parent.energyCommunityBillingDocument->timeRange.to
+    - unitPrice
+    - grossAmount
+    - taxRate
+    - taxAmount
+    - netAmount
+    - billingType
+    - quantity
+    - billedTimeRange.from
+    - billedTimeRange.to
+    - intervalCount
+    - intervalCountL1
+    - intervalCountL2
+    - intervalCountL3
+    - intervalCountUnknown
+    - meteringPoint.basicEnergyMeteringPoint->parent.basicEnergyOperatingFacility->name
+    - meteringPoint.basicEnergyMeteringPoint->name
+    - meteringPoint.basicEnergyMeteringPoint->meteringPointNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: reporting_energy_billing_items
+
+- rtId: 683177dcb90d979b8ae558a1
+  rtCreationDateTime: 2025-05-24T07:40:12.2110000Z
+  rtChangedDateTime: 2025-06-12T13:02:22.4410000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocument
+  - id: System/Query.Columns-1
+    value:
+    - rtId
+    - ckTypeId
+    - assignedTo.energyCommunityCustomer->rtId
+    - assignedTo.energyCommunityCustomer->contact.taxIdentificationNumber
+    - billingDocumentState
+    - timeRange.from
+    - timeRange.to
+    - taxProcedureCreditNote
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_energy_billings
+
+- rtId: 693996d37a64d9a8f73b3832
+  rtCreationDateTime: 2025-12-10T15:50:43.8680000Z
+  rtChangedDateTime: 2025-12-10T15:52:54.8650000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  # EC v2 (ADR 0001): EnergyCommunity/MeteringPoint was removed — metering points
+  # are Basic.Energy/MeteringPoint (EnergyCommunity/Consumer and /Producer are its
+  # subtypes; the query returns the concrete subtype instances). Columns stay
+  # minimal — the settlement pipeline reads the metering point rtId + ckTypeId
+  # from the QueryResultRow itself ($.RtId / $.CkTypeId), scopes the stream-data
+  # query to the metering point's EnergyMeasurement anchors, and joins to the
+  # billing document by customer [Values[1]].
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/MeteringPoint
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+    - parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->rtId
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: meteringPointNumber
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_customer_meteringpoints
+
+# ─── Stream-data settlement query (EC v2, ADR 0001 / AB#4552) ─────────────
+# Replaces the removed EnergyCommunity/EnergyQuantity RT aggregation used by the
+# 1.x billing. Grouped aggregation over the raw energy-measurements archive
+# (ec0000000000000000000a01): SUM + COUNT of amount.value grouped by dataQuality
+# (+ amount.unit). The settlement pipelines invoke it via GetQueryById@1 and
+# supply the dynamic scope as node fieldFilters (the persisted From/To/rtIds stay
+# blank — the node's static From/To config cannot take the HTTP-body period):
+#   - rtId        IN  <the metering point's EnergyMeasurement anchor rtIds>
+#   - window_start >= <billing period from>   (fully-contained interval rule)
+#   - window_end   <= <billing period to>
+# Output: one row per (dataQuality, amount.unit) present in scope,
+#   Values = [dataQuality, amount.unit, amountvalue_sum, amountvalue_count].
+# The pipeline sums amountvalue_sum over L1/L2 for the billed quantity and uses
+# amountvalue_count per quality for the LineItem intervalCount* snapshot.
+# NOTE: dataQuality is an INTEGER enum column in CrateDB — quality filtering /
+# bucketing uses the integer keys (Unknown 0, L1 1, L2 2, L3 3), not the names.
+- rtId: ec000000000000000000e001
+  ckTypeId: System/GroupingAggregationSdQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: billing-energy-by-quality
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/StreamDataQuery.ArchiveRtId-1
+    value: ec0000000000000000000a01
+  - id: System/Query.GroupByColumns-1
+    value:
+    - dataQuality
+    - amount.unit
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 4    # Sum
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 0    # Count
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/StreamDataQuery.From-1
+  - id: System/StreamDataQuery.To-1
+  - id: System/StreamDataQuery.Limit-1
+  - id: System/Query.FieldFilter-1
+    value: []
+
+
+# ─── Billing pipelines ───────────────────────────────────────────────────
+
+# Source: _calculation/energy-create-all-billing-documents.yaml
+- rtId: 689e0cafc55441bd624d04cb
+  rtCreationDateTime: 2025-08-14T16:19:59.7210000Z
+  rtChangedDateTime: 2025-08-22T12:23:36.4570000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+    - roleId: System/ParentChild-1
+      targetRtId: 689e0c9bc55441bd624d04ca
+      targetCkTypeId: System.Communication/DataFlow-1
+      attributes: []
+    - roleId: System.Communication/Executes-1
+      targetRtId: '670000000000000000000002'
+      targetCkTypeId: System.Communication/Adapter-1
+      attributes: []
+  attributes:
+    # AB#4633: ship DEPLOYED (2) to match the create-items pipelines — the create
+    # chain (documents + items) must be live after tenant install; before this the
+    # documents endpoint 404'd until a manual DeployDataFlow.
+    - id: System.Communication/DeploymentState-1
+      value: 2
+    - id: System/Name-1
+      value: Mesh Pipeline
+    - id: System/Enabled-1
+      value: true
+    - id: System.Communication/PipelineDefinition-1
+      value: >+
+        triggers:
+          - type: FromHttpRequest@1
+            path: /createAllBillingDocumentsForPeriod
+            method: POST
+        transformations:
+          - type: GetRtEntitiesByType@1
+            description: Get specific customers by ID
+            ckTypeId: EnergyCommunity/Customer
+            targetPath: $.customers
+            fieldFilters:
+              - attributePath: State
+                operator: Equals
+                comparisonValue: 1 # Active
+          - type: GetAssociationTargets@1
+            description: get existing documents
+            associationRoleId: EnergyCommunity/AssignedBilling
+            graphDirection: Inbound
+            originCkTypeId: EnergyCommunity/Customer
+            targetCkTypeId: EnergyCommunity/BillingDocument
+            originRtIdPath: $.customers.Items[*].RtId
+            targetPath: $.billingDocuments
+            fieldFilters:
+              - attributePath: timeRange.from
+                operator: Equals
+                comparisonValuePath: $.body.timeRange.from
+              - attributePath: timeRange.to
+                operator: Equals
+                comparisonValuePath: $.body.timeRange.to
+              - attributePath: billingDocumentState
+                operator: NotEquals
+                comparisonValue: 4
+          - type: Join@1
+            description: Join customers and billings
+            path: $.customers.Items[*]
+            keyPath: $.RtId
+            joinPath: $.billingDocuments[*]
+            joinKeyPath: $.OriginRtId
+            itemPath: $.billingDocument
+          - type: Project@1
+            fields:
+              - path: "$.billingDocuments"
+          - type: ForEach@1
+            description: iterate customers
+            iterationPath: $.customers.Items
+            mergePath: $.updates
+            targetPath: $.updates
+            #targetValueWriteMode: Merge
+            transformations:
+              - type: If@1
+                description: if no billing document
+                path: $.key.billingDocument[0].Items[0].RtId
+                operator: Equals
+                value: null
+                valueType: String
+                transformations:
+                  - type: CreateUpdateInfo@1
+                    targetPath: $.updates._items
+                    updateKind: INSERT
+                    ckTypeId: EnergyCommunity/BillingDocument
+                    rtIdPath: $.rtId
+                    generateRtId: true
+                    attributeUpdates:
+                      - attributeName: CustomerNumber
+                        attributeValueType: String
+                        valuePath: $.key.Attributes.CustomerNumber
+                      - attributeName: TaxProcedureCreditNote
+                        attributeValueType: Enum
+                        valuePath: $.key.Attributes.TaxProcedureCreditNote
+                      - attributeName: Contact
+                        attributeValueType: Record
+                        valuePath: $.key.Attributes.Contact
+                      - attributeName: BankAccount
+                        attributeValueType: Record
+                        valuePath: $.key.Attributes.BankAccount
+                      - attributeName: TimeRange.From
+                        attributeValueType: DateTime
+                        valuePath: $.full.body.timeRange.from
+                      - attributeName: TimeRange.To
+                        attributeValueType: DateTime
+                        valuePath: $.full.body.timeRange.to
+                      - attributeName: BillingType
+                        attributeValueType: Enum
+                        value: "Debit"
+                      - attributeName: GrossTotal
+                        attributeValueType: Double
+                        value: 0.0
+                      - attributeName: BillingDocumentState
+                        attributeValueType: Enum
+                        value: "Draft"
+                      - attributeName: DocumentDate
+                        attributeValueType: DateTime
+                        valuePath: $.full.body.documentDate
+                  - type: CreateAssociationUpdate@1
+                    targetPath: $.updates._assocUpdateItems
+                    targetValueKind: Array
+                    targetValueWriteMode: Append
+                    updateKind: CREATE
+                    originRtIdPath: $.updates._items.RtEntity.RtId
+                    originCkTypeIdPath: $.updates._items.RtEntity.CkTypeId
+                    targetRtIdPath: $.key.RtId
+                    targetCkTypeIdPath: $.key.CkTypeId.SemanticVersionedFullName
+                    associationRoleId: EnergyCommunity/AssignedBilling
+          - type: Flatten@1
+            path: $.updates[*]._items
+            targetPath: $._result._items
+            targetValueKind: Simple
+            targetValueWriteMode: Overwrite
+          - type: Flatten@1
+            path: $.updates[*]._assocUpdateItems[*]
+            targetPath: $._result.assocUpdateItems
+            targetValueKind: Simple
+            targetValueWriteMode: Overwrite
+          - type: Project@1
+            fields:
+              - path: "$.customers"
+              - path: "$.updates"
+          - type: ApplyChanges@2
+            entityUpdatesPath: $._result._items # Path to the array of update info objects
+            associationUpdatesPath: $._result.assocUpdateItems # Path to the array of association update info objects
+    - id: System.Communication/StatusMessage-1
+- rtId: 689e0c9bc55441bd624d04ca
+  rtCreationDateTime: 2025-08-14T16:19:39.1980000Z
+  rtChangedDateTime: 2025-08-20T05:45:19.7600000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+    - id: System/Name-1
+      value: energy-create-all-billing-documents
+    - id: System/Description-1
+
+# Source: _calculation/energy-create-all-billing-items.yaml
+# EC v2 (ADR 0001 decision 4 / AB#4552): settlement is computed from STREAM DATA.
+# Per metering point the raw energy-measurements archive (ec0000000000000000000a01)
+# is aggregated (SUM + COUNT of amount.value, grouped by dataQuality) over the
+# billing period, scoped to the metering point's EnergyMeasurement anchor rtIds
+# via the persisted GroupingAggregationSdQuery billing-energy-by-quality
+# (ec000000000000000000e001) invoked by GetQueryById@1 with node fieldFilters
+# (rtId IN anchors, window_start/window_end within the document period). The
+# billed quantity sums L1 (1) + L2 (2) only; the per-quality COUNTs populate the
+# LineItem intervalCount snapshot; billedTimeRange = the document period. The
+# removed EnergyQuantity + its AssignedBilling associations are gone. dataQuality
+# comes back as an INTEGER enum key (Unknown 0, L1 1, L2 2, L3 3).
+- rtId: 689e0d78c55441bd624d04cf
+  rtCreationDateTime: 2025-08-14T16:23:20.1660000Z
+  rtChangedDateTime: 2026-07-27T00:00:00.0000000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 689e0d65c55441bd624d04ce
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4633: GetPipelineConfigByWellKnownName@1 builds the GlobalConfiguration
+  # from the pipeline's Uses associations — without this the settlement fails
+  # (HTTP 500, "'EnergyCommunityConfiguration' not found in GlobalConfiguration")
+  # on a fresh tenant. Target = the Base-seeded EnergyCommunityConfiguration.
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@1
+          path: /createAllBillingItemsForPeriod
+          method: POST
+      transformations:
+        # Load pricing/tax configuration
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.taxRate
+          valuePath: $.config.taxRate
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.farmerTaxRate
+          valuePath: $.config.farmerTaxRate
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.consumerPrice
+          valuePath: $.config.consumerPrice
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.producerPrice
+          valuePath: $.config.producerPrice
+          valueType: Double
+        - type: Project@1
+          fields:
+            - path: $.config
+
+        # Draft billing documents in the period with grossTotal still 0.
+        # Values: [0]=doc rtId, [1]=doc ckTypeId, [2]=customer rtId,
+        #         [3]=customer taxId, [4]=state, [5]=from, [6]=to, [7]=taxProcedure
+        - type: GetQueryById@1
+          description: get customer/billingdocuments in range
+          queryRtId: "683177dcb90d979b8ae558a1"
+          targetPath: $.documents
+          fieldFilters:
+            - attributePath: billingDocumentState
+              operator: Equals
+              comparisonValue: 0
+            - attributePath: timeRange.from
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.from
+            - attributePath: timeRange.to
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.to
+            - attributePath: grossTotal
+              operator: Equals
+              comparisonValue: 0.0
+
+        # Metering points of those customers (Basic.Energy/MeteringPoint; the row
+        # carries the concrete Consumer/Producer subtype via $.RtId / $.CkTypeId).
+        # Values: [0]=meteringPointNumber, [1]=customer rtId
+        - type: GetQueryById@1
+          description: get metering points
+          queryRtId: "693996d37a64d9a8f73b3832"
+          targetPath: $.meteringPoints
+          fieldFilters:
+            - attributePath: parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->rtId
+              operator: In
+              comparisonValuePath: $.documents.Rows[*].Values[2]
+
+        # EnergyMeasurement anchors of those metering points (one per OBIS code).
+        # anchors[*] = { OriginRtId: <metering point rtId>, Items: [ anchor... ] }
+        - type: GetAssociationTargets@1
+          description: get measurement anchors per metering point
+          associationRoleId: System/ParentChild
+          graphDirection: Inbound
+          originCkTypeId: Basic.Energy/MeteringPoint
+          targetCkTypeId: Basic.Energy/EnergyMeasurement
+          originRtIdPath: $.meteringPoints.Rows[*].RtId
+          targetPath: $.anchors
+
+        - type: Join@1
+          description: attach the anchor group to each metering point
+          path: $.meteringPoints.Rows[*]
+          keyPath: $.RtId
+          joinPath: $.anchors[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.anchorGroup
+
+        - type: Join@1
+          description: attach the metering points to their billing document (by customer)
+          path: $.documents.Rows[*]
+          keyPath: $.Values[2]
+          joinPath: $.meteringPoints.Rows[*]
+          joinKeyPath: $.Values[1]
+          itemPath: $.meteringPoints
+
+        - type: Project@1
+          fields:
+            - path: $.meteringPoints
+            - path: $.anchors
+            - path: $.path
+            - path: $.method
+            - path: $.body
+
+        # process data
+        - type: ForEach@1
+          description: iterate billing documents
+          maxDegreeOfParallelism: 1
+          iterationPath: $.documents.Rows
+          mergePath: $._updateItems
+          targetPath: $._updateItems
+          transformations:
+            - type: ForEach@1
+              description: iterate metering points of the document
+              maxDegreeOfParallelism: 1
+              iterationPath: $.key.meteringPoints
+              mergePath: $.updates
+              targetPath: $.updates
+              transformations:
+                # Stream-data settlement for this metering point over the document
+                # period, scoped to its anchor rtIds. Rows: one per (dataQuality,
+                # amount.unit); Values [0]=dataQuality(int) [1]=unit(int)
+                # [2]=SUM(amount.value) [3]=COUNT(amount.value).
+                - type: GetQueryById@1
+                  description: stream-data settlement (sum + count per quality)
+                  queryRtId: "ec000000000000000000e001"
+                  targetPath: $.key.sd
+                  fieldFilters:
+                    - attributePath: rtId
+                      operator: In
+                      comparisonValuePath: $.key.anchorGroup[0].Items[*].RtId
+                    - attributePath: window_start
+                      operator: GreaterEqualThan
+                      comparisonValuePath: $.full.full.body.timeRange.from
+                    - attributePath: window_end
+                      operator: LessEqualThan
+                      comparisonValuePath: $.full.full.body.timeRange.to
+
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.sum
+                  value: 0
+                  valueType: Double
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntTotal
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntL1
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntL2
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntL3
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntUnknown
+                  value: 0
+                  valueType: Int
+
+                - type: If@1
+                  description: settlement rows present for this metering point (count > 0)
+                  path: $.key.sd.Rows[0].Values[3]
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    # billed quantity = SUM(amount.value) over L1 (1) + L2 (2)
+                    - type: SumAggregation@1
+                      description: sum L1/L2 quantity
+                      targetPath: $.key.data.sum
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 1
+                          aggregationPath: $.Values[2]
+                          value: 1
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 2
+                          aggregationPath: $.Values[2]
+                          value: 1
+                    # per-quality interval counts (COUNT is Values[3])
+                    - type: SumAggregation@1
+                      description: interval count total
+                      targetPath: $.key.data.cntTotal
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count L1
+                      targetPath: $.key.data.cntL1
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 1
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count L2
+                      targetPath: $.key.data.cntL2
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 2
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count L3
+                      targetPath: $.key.data.cntL3
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 3
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count Unknown
+                      targetPath: $.key.data.cntUnknown
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 0
+                          aggregationPath: $.Values[3]
+                          value: 1
+
+                    # tax rate by metering point type (Producer feed-in is tax-free)
+                    - type: Switch@1
+                      description: Define tax rate
+                      path: $.key.CkTypeId
+                      valueType: String
+                      cases:
+                        - value: "EnergyCommunity/Consumer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.taxRate
+                              valuePath: $.full.full.Configuration.taxRate
+                              valueType: Double
+                        - value: "EnergyCommunity/Producer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.taxRate
+                              value: 0
+                              valueType: Double
+                    - type: If@1
+                      description: Reduce tax rate for farmers (FarmerTaxProcedure)
+                      path: $.full.key.Values[7]
+                      operator: Equals
+                      value: 3
+                      valueType: Enum
+                      transformations:
+                        - type: If@1
+                          description: Ensure producer
+                          path: $.key.CkTypeId
+                          operator: Equals
+                          value: EnergyCommunity/Producer
+                          valueType: String
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              valuePath: $.full.full.Configuration.farmerTaxRate
+                              valueType: Int
+                              targetPath: $.key.data.taxRate
+
+                    # unit price by metering point type
+                    - type: Switch@1
+                      description: Define unit price
+                      path: $.key.CkTypeId
+                      valueType: String
+                      cases:
+                        - value: "EnergyCommunity/Consumer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.unitPrice
+                              valuePath: $.full.full.Configuration.consumerPrice
+                              valueType: Double
+                        - value: "EnergyCommunity/Producer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.unitPrice
+                              valuePath: $.full.full.Configuration.producerPrice
+                              valueType: Double
+                    - type: DataMapping@1
+                      description: Define billingType
+                      path: $.key.CkTypeId
+                      targetPath: $.key.data.billingType
+                      sourceValueType: String
+                      targetValueType: String
+                      mappings:
+                        - sourceValue: EnergyCommunity/Consumer
+                          targetValue: "Debit"
+                          description: "consumer"
+                        - sourceValue: EnergyCommunity/Producer
+                          targetValue: "Credit"
+                          description: "producer"
+
+                    # calculations
+                    - type: Math@1
+                      description: calc net amount (unit price * quantity)
+                      path: $.key.data
+                      itemPath: $.sum
+                      operation: Multiply
+                      valuePath: $.key.data.unitPrice
+                      itemTargetPath: $.netAmount
+                    - type: Math@1
+                      description: calc tax factor (tax rate / 100)
+                      path: $.key.data
+                      itemPath: $.taxRate
+                      operation: Divide
+                      value: 100
+                      itemTargetPath: $.taxFactor
+                    - type: Math@1
+                      description: calc tax amount (tax factor * netAmount)
+                      path: $.key.data
+                      itemPath: $.netAmount
+                      operation: Multiply
+                      valuePath: $.key.data.taxFactor
+                      itemTargetPath: $.taxAmount
+                    - type: Math@1
+                      description: calc gross amount (netAmount + taxAmount)
+                      path: $.key.data
+                      itemPath: $.netAmount
+                      operation: Add
+                      valuePath: $.key.data.taxAmount
+                      itemTargetPath: $.grossAmount
+
+                    - type: CreateUpdateInfo@1
+                      description: create billing document line item
+                      targetPath: $.updates._items
+                      updateKind: INSERT
+                      ckTypeId: EnergyCommunity/BillingDocumentLineItem
+                      rtIdPath: $.rtId
+                      generateRtId: true
+                      attributeUpdates:
+                        - attributeName: GrossAmount
+                          attributeValueType: Double
+                          valuePath: $.key.data.grossAmount
+                        - attributeName: UnitPrice
+                          attributeValueType: Double
+                          valuePath: $.key.data.unitPrice
+                        - attributeName: BillingType
+                          attributeValueType: Enum
+                          valuePath: $.key.data.billingType
+                        - attributeName: TaxRate
+                          attributeValueType: Double
+                          valuePath: $.key.data.taxRate
+                        - attributeName: TaxAmount
+                          attributeValueType: Double
+                          valuePath: $.key.data.taxAmount
+                        - attributeName: NetAmount
+                          attributeValueType: Double
+                          valuePath: $.key.data.netAmount
+                        - attributeName: Quantity
+                          attributeValueType: Double
+                          valuePath: $.key.data.sum
+                        - attributeName: BilledTimeRange.From
+                          attributeValueType: DateTime
+                          valuePath: $.full.key.Values[5]
+                        - attributeName: BilledTimeRange.To
+                          attributeValueType: DateTime
+                          valuePath: $.full.key.Values[6]
+                        - attributeName: IntervalCount
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntTotal
+                        - attributeName: IntervalCountL1
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntL1
+                        - attributeName: IntervalCountL2
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntL2
+                        - attributeName: IntervalCountL3
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntL3
+                        - attributeName: IntervalCountUnknown
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntUnknown
+                    - type: CreateAssociationUpdate@1
+                      description: Assign line item to its billing document (parent)
+                      targetPath: $.updates._assocUpdateItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: CREATE
+                      originRtIdPath: $.updates._items.RtId
+                      originCkTypeIdPath: $.updates._items.CkTypeId
+                      targetRtIdPath: $.full.key.Values[0]
+                      targetCkTypeIdPath: $.full.key.CkTypeId
+                      associationRoleId: System/ParentChild
+                    - type: CreateAssociationUpdate@1
+                      description: Assign the billed metering point
+                      targetPath: $.updates._assocUpdateItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: CREATE
+                      originRtIdPath: $.updates._items.RtId
+                      originCkTypeIdPath: $.updates._items.CkTypeId
+                      targetRtIdPath: $.key.RtId
+                      targetCkTypeIdPath: $.key.CkTypeId
+                      associationRoleId: EnergyCommunity/BilledMeteringPoint
+
+            - type: Flatten@1
+              path: $.updates[*]._items
+              targetPath: $._updateItems._items
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Flatten@1
+              path: $.updates[*]._assocUpdateItems[*]
+              targetPath: $._updateItems._assocUpdateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Project@1
+              fields:
+                - path: $.updates
+
+            - type: SumAggregation@1
+              description: billing sum (debit positive, credit negative)
+              targetPath: $.key._billing.sum
+              aggregations:
+                - path: $._updateItems._items[*]
+                  filterPath: $.RtEntity.Attributes.BillingType
+                  comparisonValue: 0
+                  aggregationPath: $.RtEntity.Attributes.GrossAmount
+                  value: 1
+                - path: $._updateItems._items[*]
+                  filterPath: $.RtEntity.Attributes.BillingType
+                  comparisonValue: 1
+                  aggregationPath: $.RtEntity.Attributes.GrossAmount
+                  value: -1
+
+            - type: SetPrimitiveValue@1
+              value: "Debit"
+              targetPath: $.key._billing.billingType
+            - type: If@1
+              description: credit
+              path: $.key._billing.sum
+              operator: LessEqualsThan
+              value: 0
+              valueType: Double
+              transformations:
+                - type: SetPrimitiveValue@1
+                  value: "Credit"
+                  targetPath: $.key._billing.billingType
+            - type: CreateUpdateInfo@1
+              description: update billing document
+              targetPath: $._updateItems._items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: UPDATE
+              ckTypeId: EnergyCommunity/BillingDocument
+              rtIdPath: $.key.Values[0]
+              attributeUpdates:
+                - attributeName: GrossTotal
+                  attributeValueType: Double
+                  valuePath: $.key._billing.sum
+                - attributeName: BillingType
+                  attributeValueType: Enum
+                  valuePath: $.key._billing.billingType
+
+        - type: Flatten@1
+          path: $._updateItems[*]._items[*]
+          targetPath: $._result.billingItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Flatten@1
+          path: $._updateItems[*]._assocUpdateItems[*]
+          targetPath: $._result.assocUpdateItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Project@1
+          fields:
+            - path: "$.documents"
+            - path: "$._updateItems"
+
+        - type: ApplyChanges@2
+          entityUpdatesPath: $._result.billingItems
+          associationUpdatesPath: $._result.assocUpdateItems
+- rtId: 689e0d65c55441bd624d04ce
+  rtCreationDateTime: 2025-08-14T16:23:01.3630000Z
+  rtChangedDateTime: 2026-02-10T14:38:56.0330000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-create-all-billing-items
+  - id: System/Description-1
+
+# Source: _calculation/energy-create-billing-items.yaml
+# Single-document variant of the stream-data settlement (see the all-variant
+# above for the mechanism). Selects the documents by explicit rtId list from the
+# request body instead of by period; each document supplies its own period
+# (Values[5]/[6]).
+- rtId: 6832328b4851994a4fbd5c3e
+  rtCreationDateTime: 2025-05-24T20:56:43.0870000Z
+  rtChangedDateTime: 2026-07-27T00:00:00.0000000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6832328b4851994a4fbd5c3d
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4633: Uses association → EnergyCommunityConfiguration (see createAllBillingItemsForPeriod).
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@1
+          path: /createBillingItems
+          method: POST
+      transformations:
+        # Load pricing/tax configuration
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.taxRate
+          valuePath: $.config.taxRate
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.farmerTaxRate
+          valuePath: $.config.farmerTaxRate
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.consumerPrice
+          valuePath: $.config.consumerPrice
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.producerPrice
+          valuePath: $.config.producerPrice
+          valueType: Double
+        - type: Project@1
+          fields:
+            - path: $.config
+
+        # Draft billing documents selected by explicit rtId list.
+        # Values: [0]=doc rtId, [1]=doc ckTypeId, [2]=customer rtId,
+        #         [3]=customer taxId, [4]=state, [5]=from, [6]=to, [7]=taxProcedure
+        - type: GetQueryById@1
+          description: get customer/billingdocuments
+          queryRtId: "683177dcb90d979b8ae558a1"
+          targetPath: $.documents
+          fieldFilters:
+            - attributePath: billingDocumentState
+              operator: Equals
+              comparisonValue: 0
+            - attributePath: rtId
+              operator: In
+              comparisonValuePath: $.body.billingDocumentRtIds
+
+        - type: GetQueryById@1
+          description: get metering points
+          queryRtId: "693996d37a64d9a8f73b3832"
+          targetPath: $.meteringPoints
+          fieldFilters:
+            - attributePath: parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->rtId
+              operator: In
+              comparisonValuePath: $.documents.Rows[*].Values[2]
+
+        - type: GetAssociationTargets@1
+          description: get measurement anchors per metering point
+          associationRoleId: System/ParentChild
+          graphDirection: Inbound
+          originCkTypeId: Basic.Energy/MeteringPoint
+          targetCkTypeId: Basic.Energy/EnergyMeasurement
+          originRtIdPath: $.meteringPoints.Rows[*].RtId
+          targetPath: $.anchors
+
+        - type: Join@1
+          description: attach the anchor group to each metering point
+          path: $.meteringPoints.Rows[*]
+          keyPath: $.RtId
+          joinPath: $.anchors[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.anchorGroup
+
+        - type: Join@1
+          description: attach the metering points to their billing document (by customer)
+          path: $.documents.Rows[*]
+          keyPath: $.Values[2]
+          joinPath: $.meteringPoints.Rows[*]
+          joinKeyPath: $.Values[1]
+          itemPath: $.meteringPoints
+
+        - type: Project@1
+          fields:
+            - path: $.meteringPoints
+            - path: $.anchors
+            - path: $.path
+            - path: $.method
+            - path: $.body
+
+        - type: ForEach@1
+          description: iterate billing documents
+          maxDegreeOfParallelism: 1
+          iterationPath: $.documents.Rows
+          mergePath: $._updateItems
+          targetPath: $._updateItems
+          transformations:
+            - type: ForEach@1
+              description: iterate metering points of the document
+              maxDegreeOfParallelism: 1
+              iterationPath: $.key.meteringPoints
+              mergePath: $.updates
+              targetPath: $.updates
+              transformations:
+                - type: GetQueryById@1
+                  description: stream-data settlement (sum + count per quality)
+                  queryRtId: "ec000000000000000000e001"
+                  targetPath: $.key.sd
+                  fieldFilters:
+                    - attributePath: rtId
+                      operator: In
+                      comparisonValuePath: $.key.anchorGroup[0].Items[*].RtId
+                    - attributePath: window_start
+                      operator: GreaterEqualThan
+                      comparisonValuePath: $.full.full.body.timeRange.from
+                    - attributePath: window_end
+                      operator: LessEqualThan
+                      comparisonValuePath: $.full.full.body.timeRange.to
+
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.sum
+                  value: 0
+                  valueType: Double
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntTotal
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntL1
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntL2
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntL3
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntUnknown
+                  value: 0
+                  valueType: Int
+
+                - type: If@1
+                  description: settlement rows present for this metering point (count > 0)
+                  path: $.key.sd.Rows[0].Values[3]
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: SumAggregation@1
+                      description: sum L1/L2 quantity
+                      targetPath: $.key.data.sum
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 1
+                          aggregationPath: $.Values[2]
+                          value: 1
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 2
+                          aggregationPath: $.Values[2]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count total
+                      targetPath: $.key.data.cntTotal
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count L1
+                      targetPath: $.key.data.cntL1
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 1
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count L2
+                      targetPath: $.key.data.cntL2
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 2
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count L3
+                      targetPath: $.key.data.cntL3
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 3
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count Unknown
+                      targetPath: $.key.data.cntUnknown
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 0
+                          aggregationPath: $.Values[3]
+                          value: 1
+
+                    - type: Switch@1
+                      description: Define tax rate
+                      path: $.key.CkTypeId
+                      valueType: String
+                      cases:
+                        - value: "EnergyCommunity/Consumer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.taxRate
+                              valuePath: $.full.full.Configuration.taxRate
+                              valueType: Double
+                        - value: "EnergyCommunity/Producer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.taxRate
+                              value: 0
+                              valueType: Double
+                    - type: If@1
+                      description: Reduce tax rate for farmers (FarmerTaxProcedure)
+                      path: $.full.key.Values[7]
+                      operator: Equals
+                      value: 3
+                      valueType: Enum
+                      transformations:
+                        - type: If@1
+                          description: Ensure producer
+                          path: $.key.CkTypeId
+                          operator: Equals
+                          value: EnergyCommunity/Producer
+                          valueType: String
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              valuePath: $.full.full.Configuration.farmerTaxRate
+                              valueType: Int
+                              targetPath: $.key.data.taxRate
+
+                    - type: Switch@1
+                      description: Define unit price
+                      path: $.key.CkTypeId
+                      valueType: String
+                      cases:
+                        - value: "EnergyCommunity/Consumer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.unitPrice
+                              valuePath: $.full.full.Configuration.consumerPrice
+                              valueType: Double
+                        - value: "EnergyCommunity/Producer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.unitPrice
+                              valuePath: $.full.full.Configuration.producerPrice
+                              valueType: Double
+                    - type: DataMapping@1
+                      description: Define billingType
+                      path: $.key.CkTypeId
+                      targetPath: $.key.data.billingType
+                      sourceValueType: String
+                      targetValueType: String
+                      mappings:
+                        - sourceValue: EnergyCommunity/Consumer
+                          targetValue: "Debit"
+                          description: "consumer"
+                        - sourceValue: EnergyCommunity/Producer
+                          targetValue: "Credit"
+                          description: "producer"
+
+                    - type: Math@1
+                      description: calc net amount (unit price * quantity)
+                      path: $.key.data
+                      itemPath: $.sum
+                      operation: Multiply
+                      valuePath: $.key.data.unitPrice
+                      itemTargetPath: $.netAmount
+                    - type: Math@1
+                      description: calc tax factor (tax rate / 100)
+                      path: $.key.data
+                      itemPath: $.taxRate
+                      operation: Divide
+                      value: 100
+                      itemTargetPath: $.taxFactor
+                    - type: Math@1
+                      description: calc tax amount (tax factor * netAmount)
+                      path: $.key.data
+                      itemPath: $.netAmount
+                      operation: Multiply
+                      valuePath: $.key.data.taxFactor
+                      itemTargetPath: $.taxAmount
+                    - type: Math@1
+                      description: calc gross amount (netAmount + taxAmount)
+                      path: $.key.data
+                      itemPath: $.netAmount
+                      operation: Add
+                      valuePath: $.key.data.taxAmount
+                      itemTargetPath: $.grossAmount
+
+                    - type: CreateUpdateInfo@1
+                      description: create billing document line item
+                      targetPath: $.updates._items
+                      updateKind: INSERT
+                      ckTypeId: EnergyCommunity/BillingDocumentLineItem
+                      rtIdPath: $.rtId
+                      generateRtId: true
+                      attributeUpdates:
+                        - attributeName: GrossAmount
+                          attributeValueType: Double
+                          valuePath: $.key.data.grossAmount
+                        - attributeName: UnitPrice
+                          attributeValueType: Double
+                          valuePath: $.key.data.unitPrice
+                        - attributeName: BillingType
+                          attributeValueType: Enum
+                          valuePath: $.key.data.billingType
+                        - attributeName: TaxRate
+                          attributeValueType: Double
+                          valuePath: $.key.data.taxRate
+                        - attributeName: TaxAmount
+                          attributeValueType: Double
+                          valuePath: $.key.data.taxAmount
+                        - attributeName: NetAmount
+                          attributeValueType: Double
+                          valuePath: $.key.data.netAmount
+                        - attributeName: Quantity
+                          attributeValueType: Double
+                          valuePath: $.key.data.sum
+                        - attributeName: BilledTimeRange.From
+                          attributeValueType: DateTime
+                          valuePath: $.full.key.Values[5]
+                        - attributeName: BilledTimeRange.To
+                          attributeValueType: DateTime
+                          valuePath: $.full.key.Values[6]
+                        - attributeName: IntervalCount
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntTotal
+                        - attributeName: IntervalCountL1
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntL1
+                        - attributeName: IntervalCountL2
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntL2
+                        - attributeName: IntervalCountL3
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntL3
+                        - attributeName: IntervalCountUnknown
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntUnknown
+                    - type: CreateAssociationUpdate@1
+                      description: Assign line item to its billing document (parent)
+                      targetPath: $.updates._assocUpdateItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: CREATE
+                      originRtIdPath: $.updates._items.RtId
+                      originCkTypeIdPath: $.updates._items.CkTypeId
+                      targetRtIdPath: $.full.key.Values[0]
+                      targetCkTypeIdPath: $.full.key.CkTypeId
+                      associationRoleId: System/ParentChild
+                    - type: CreateAssociationUpdate@1
+                      description: Assign the billed metering point
+                      targetPath: $.updates._assocUpdateItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: CREATE
+                      originRtIdPath: $.updates._items.RtId
+                      originCkTypeIdPath: $.updates._items.CkTypeId
+                      targetRtIdPath: $.key.RtId
+                      targetCkTypeIdPath: $.key.CkTypeId
+                      associationRoleId: EnergyCommunity/BilledMeteringPoint
+
+            - type: Flatten@1
+              path: $.updates[*]._items
+              targetPath: $._updateItems._items
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Flatten@1
+              path: $.updates[*]._assocUpdateItems[*]
+              targetPath: $._updateItems._assocUpdateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Project@1
+              fields:
+                - path: $.updates
+
+            - type: SumAggregation@1
+              description: billing sum (debit positive, credit negative)
+              targetPath: $.key._billing.sum
+              aggregations:
+                - path: $._updateItems._items[*]
+                  filterPath: $.RtEntity.Attributes.BillingType
+                  comparisonValue: 0
+                  aggregationPath: $.RtEntity.Attributes.GrossAmount
+                  value: 1
+                - path: $._updateItems._items[*]
+                  filterPath: $.RtEntity.Attributes.BillingType
+                  comparisonValue: 1
+                  aggregationPath: $.RtEntity.Attributes.GrossAmount
+                  value: -1
+
+            - type: SetPrimitiveValue@1
+              value: "Debit"
+              targetPath: $.key._billing.billingType
+            - type: If@1
+              description: credit
+              path: $.key._billing.sum
+              operator: LessEqualsThan
+              value: 0
+              valueType: Double
+              transformations:
+                - type: SetPrimitiveValue@1
+                  value: "Credit"
+                  targetPath: $.key._billing.billingType
+            - type: CreateUpdateInfo@1
+              description: update billing document
+              targetPath: $._updateItems._items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: UPDATE
+              ckTypeId: EnergyCommunity/BillingDocument
+              rtIdPath: $.key.Values[0]
+              attributeUpdates:
+                - attributeName: GrossTotal
+                  attributeValueType: Double
+                  valuePath: $.key._billing.sum
+                - attributeName: BillingType
+                  attributeValueType: Enum
+                  valuePath: $.key._billing.billingType
+
+        - type: Flatten@1
+          path: $._updateItems[*]._items[*]
+          targetPath: $._result.billingItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Flatten@1
+          path: $._updateItems[*]._assocUpdateItems[*]
+          targetPath: $._result.assocUpdateItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Project@1
+          fields:
+            - path: "$.documents"
+            - path: "$._updateItems"
+
+        - type: ApplyChanges@2
+          entityUpdatesPath: $._result.billingItems
+          associationUpdatesPath: $._result.assocUpdateItems
+- rtId: 6832328b4851994a4fbd5c3d
+  rtCreationDateTime: 2025-05-24T20:56:43.0130000Z
+  rtChangedDateTime: 2026-02-10T14:39:08.3910000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-create-billing-items
+  - id: System/Description-1
+
+# Source: _calculation/energy-create-billing-documents.yaml
+- rtId: 68332a6f8c1ba1f712e75667
+  rtCreationDateTime: 2025-05-25T14:34:23.5480000Z
+  rtChangedDateTime: 2025-07-15T15:20:57.0170000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68332a6f8c1ba1f712e75666
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  # AB#4633: ship DEPLOYED (2) to match createBillingItems (create chain live after install).
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >
+      triggers:
+        - type: FromHttpRequest@1
+          path: /createBillingDocuments
+          method: POST
+      transformations:
+        - type: GetRtEntitiesById@1
+          description: Get specific customers by ID
+          rtIdsPath: $.body.customerRtIds
+          ckTypeId: EnergyCommunity/Customer
+          targetPath: $.customers
+          fieldFilters:
+            - attributePath: State
+              operator: Equals
+              comparisonValue: 1 # Active
+        - type: GetAssociationTargets@1
+          description: get existing documents
+          associationRoleId: EnergyCommunity/AssignedBilling
+          graphDirection: Inbound
+          originCkTypeId: EnergyCommunity/Customer
+          targetCkTypeId: EnergyCommunity/BillingDocument
+          originRtIdPath: $.customers.Items[*].RtId
+          targetPath: $.billingDocuments
+          fieldFilters:
+            - attributePath: timeRange.from
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.from
+            - attributePath: timeRange.to
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.to
+        - type: Join@1
+          description: Join customers and billings
+          path: $.customers.Items[*]
+          keyPath: $.RtId
+          joinPath: $.billingDocuments[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.billingDocument
+        - type: Project@1
+          fields:
+            - path: "$.billingDocuments"
+        - type: ForEach@1
+          description: iterate customers
+          iterationPath: $.customers.Items
+          mergePath: $.updates
+          targetPath: $.updates
+          #targetValueWriteMode: Merge
+          transformations:
+            - type: If@1
+              description: if no billing document
+              path: $.key.billingDocument[0].Items[0].RtId
+              operator: Equals
+              value: null
+              valueType: String
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.updates._items
+                  updateKind: INSERT
+                  ckTypeId: EnergyCommunity/BillingDocument
+                  rtIdPath: $.rtId
+                  generateRtId: true
+                  attributeUpdates:
+                    - attributeName: CustomerNumber
+                      attributeValueType: String
+                      valuePath: $.key.Attributes.CustomerNumber
+                    - attributeName: TaxProcedureCreditNote
+                      attributeValueType: Enum
+                      valuePath: $.key.Attributes.TaxProcedureCreditNote
+                    - attributeName: Contact
+                      attributeValueType: Record
+                      valuePath: $.key.Attributes.Contact
+                    - attributeName: BankAccount
+                      attributeValueType: Record
+                      valuePath: $.key.Attributes.BankAccount
+                    - attributeName: TimeRange.From
+                      attributeValueType: DateTime
+                      valuePath: $.full.body.timeRange.from
+                    - attributeName: TimeRange.To
+                      attributeValueType: DateTime
+                      valuePath: $.full.body.timeRange.to
+                    - attributeName: BillingType
+                      attributeValueType: Enum
+                      value: "Debit"
+                    - attributeName: GrossTotal
+                      attributeValueType: Double
+                      value: 0.0
+                    - attributeName: BillingDocumentState
+                      attributeValueType: Enum
+                      value: "Draft"
+                    - attributeName: DocumentDate
+                      attributeValueType: DateTime
+                      valuePath: $.full.body.documentDate
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.updates._assocUpdateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.updates._items.RtEntity.RtId
+                  originCkTypeIdPath: $.updates._items.RtEntity.CkTypeId
+                  targetRtIdPath: $.key.RtId
+                  targetCkTypeIdPath: $.key.CkTypeId.SemanticVersionedFullName
+                  associationRoleId: EnergyCommunity/AssignedBilling
+        - type: Flatten@1
+          path: $.updates[*]._items
+          targetPath: $.result.items
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Flatten@1
+          path: $.updates[*]._assocUpdateItems[*]
+          targetPath: $.result.assocUpdateItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Project@1
+          fields:
+            - path: "$.customers"
+            - path: "$.updates"
+            - path: "$.method"
+            - path: "$.path"
+            - path: "$.body"
+        - type: ApplyChanges@2
+          entityUpdatesPath: $.result.items # Path to the array of update info objects
+          associationUpdatesPath: $.result.assocUpdateItems # Path to the array of association update info objects
+        - type: Project@1
+          fields:
+            - path: "$.result.assocUpdateItems"
+  - id: System.Communication/StatusMessage-1
+- rtId: 68332a6f8c1ba1f712e75666
+  rtCreationDateTime: 2025-05-25T14:34:23.4640000Z
+  rtChangedDateTime: 2025-07-06T18:48:57.1490000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-create-billing-documents
+  - id: System/Description-1
+
+# Source: _calculation/energy-release-all-billing-document.yaml
+- rtId: 689e35aa0b31042892179018
+  rtCreationDateTime: 2025-08-14T19:14:50.6020000Z
+  rtChangedDateTime: 2025-08-20T05:45:28.5740000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+    - id: System/Name-1
+      value: energy-release-all-billing-document
+    - id: System/Description-1
+      value: Releases a page (e. g. 5) of billing documents of a time range, by creating PDF documents and setting the corresponding state.
+- rtId: 689e35bb0b31042892179019
+  rtCreationDateTime: 2025-08-14T19:15:07.9380000Z
+  rtChangedDateTime: 2025-08-22T12:23:36.4740000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+    - roleId: System/ParentChild-1
+      targetRtId: 689e35aa0b31042892179018
+      targetCkTypeId: System.Communication/DataFlow-1
+      attributes: []
+    - roleId: System.Communication/Executes-1
+      targetRtId: '670000000000000000000002'
+      targetCkTypeId: System.Communication/Adapter-1
+      attributes: []
+  attributes:
+    - id: System.Communication/DeploymentState-1
+      value: 0
+    - id: System/Name-1
+      value: Mesh Pipeline
+    - id: System/Enabled-1
+      value: true
+    - id: System.Communication/PipelineDefinition-1
+      value: >+
+        triggers:
+          - type: FromHttpRequest@1
+            path: /releaseAllBillingDocumentForPeriod
+            method: POST
+        
+        transformations:
+          # GetRtEntitiesByType to all billing documents for a period and verify its in the staus "DRAFT"
+          - type: GetRtEntitiesByType@1
+            description: Get the billing document and filter by status draft
+            targetPath: $.billingDocuments
+            ckTypeId: EnergyCommunity/BillingDocument
+            skip: 0
+            take: 5
+            fieldFilters:
+              - attributePath: billingDocumentState
+                operator: Equals
+                comparisonValue: 0
+              - attributePath: timeRange.from
+                operator: Equals
+                comparisonValuePath: $.body.timeRange.from
+              - attributePath: timeRange.to
+                operator: Equals
+                comparisonValuePath: $.body.timeRange.to
+              - attributePath: grossTotal
+                operator: NotEquals
+                comparisonValue: 0.0
+          - type: ForEach@1
+            description: iterate billing documents
+            iterationPath: $.billingDocuments.Items
+            mergePath: $.updates
+            targetPath: $.updates
+            transformations:
+              - type: If@1
+                description: Check if billing document was found and is in status DRAFT
+                operator: Equals
+                path: $.key.Attributes.BillingDocumentState
+                value: 0
+                valueType: Integer
+                transformations:
+                  # When we didn't find a billing document we return (IfNode?)
+                  - type: GenerateAndStoreReport@1
+                    description: Call the reporting API to generate and store the Billing Document
+                    # AB#4554: GenerateAndStoreReport@1 exposes no *Path variant for
+                    # reportDefinitionUri / reportFileNamePrefix (literal-only in the node
+                    # schema), so these stay tenant-neutral literals instead of resolving
+                    # from EnergyCommunityConfiguration. Tenants that need a custom report
+                    # template use the single-document /releaseBillingDocument pipeline
+                    # (MakeHttpRequest@1), which IS config-driven.
+                    targetPath: $.reportDetails
+                    fileSystemFolderUri: /
+                    reportDefinitionUri: Billing.trdp
+                    reportFileNamePrefix: Billing_
+                    relatedRtIdPath: $.key.RtId
+                    relatedCkTypeId: EnergyCommunity/BillingDocument
+                    reportParameters:
+                      - name: billingDocumentRtId
+                        valuePath: $.key.RtId  # Billing document RT ID from payload
+                  - type: CreateUpdateInfo@1
+                    targetPath: $.updates._items
+                    targetValueKind: Array
+                    updateKind: UPDATE
+                    ckTypeId: EnergyCommunity/BillingDocument
+                    rtIdPath: $.key.RtId
+                    attributeUpdates:
+                      - attributeName: BillingDocumentState
+                        attributeValueType: Enum
+                        value: 1
+                  - type: ApplyChanges@2 # we update here item-by-item
+                    entityUpdatesPath: $.updates._items
+          - type: Flatten@1
+            path: $.updates[*]._items[*]
+            targetPath: $._result._items
+            targetValueKind: Simple
+            targetValueWriteMode: Overwrite
+          - type: Project@1
+            fields:
+              - path: "$.path"
+              - path: "$.method"
+              - path: "$.body"
+              - path: "$.billingDocuments"
+              - path: "$.updates"
+        
+          # when the http call does not succeed the next nodes are not executed. so we can be sure, we get a path to the report.
+          # we have to get the report file information
+          # we create a association between the billing document and the report file
+          # we create a update item that sets the billing document status to "RELEASED"
+          # we apply changes
+    - id: System.Communication/StatusMessage-1
+
+# Source: _calculation/energy-release-billing-document.yaml
+- rtId: 68487d1da77ca34c4ee57b23
+  rtCreationDateTime: 2025-06-10T18:44:45.9230000Z
+  rtChangedDateTime: 2025-08-14T19:27:26.5110000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68487d1da77ca34c4ee57b22
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4554: Uses → EnergyCommunityConfiguration so GetPipelineConfigByWellKnownName@1
+  # can resolve billingReportName / billingReportFilePrefix (config-driven report).
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >
+      triggers:
+        - type: FromHttpRequest@1
+          path: /releaseBillingDocument
+          method: POST
+
+      transformations:
+        # AB#4554: load billing report config (report name + file prefix) config-driven.
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        # getRtEntitybyId to get the billing document and verify its in the staus "DRAFT"
+        - type: GetRtEntitiesById@1
+          description: Get the billing document and filter by status draft
+          targetPath: $.billingDocuments
+          rtIdsPath: $.body.billingDocumentRtIds  # Billing document RT ID from payload
+          ckTypeId: EnergyCommunity/BillingDocument
+          skip: 0
+          take: 1
+          fieldFilters:
+            - attributePath: billingDocumentState
+              operator: Equals
+              comparisonValue: 0
+              # hier weiter ....
+        - type: ForEach@1
+          description: iterate billing documents
+          iterationPath: $.billingDocuments.Items
+          mergePath: $.updates
+          targetPath: $.updates
+          transformations:
+            - type: If@1
+              description: Check if billing document was found and is in status DRAFT
+              operator: Equals
+              path: $.key.Attributes.BillingDocumentState
+              value: 0
+              valueType: Integer
+              transformations:
+                # When we didn't find a billing document we return (IfNode?)
+                - type: MakeHttpRequest@1
+                  description: Call the reporting API to generate and store the Billing Document
+                  targetPath: $.reportDetails
+                  method: POST
+                  urlPath: $.full.body.reportUrlTemplate # https://localhost:5007/{tenantId}/v1/reports/generateAndStoreWithRelatedEntity?reportUri={reportUri}&fileSystemFolderUri={fileSystemFolderUri}&reportFileNamePrefix={reportFileNamePrefix}&billingDocumentRtId={billingDocumentRtId}&relatedEntityId=EnergyCommunity/BillingDocument@{relatedEntityId}
+                  pathParameters:
+                    # AB#4554: report name + prefix resolve config-driven from
+                    # EnergyCommunityConfiguration (loaded into $.full.config above).
+                    - name: reportUri
+                      valuePath: $.full.config.billingReportName
+                    - name: fileSystemFolderUri
+                      value: /
+                    - name: reportFileNamePrefix
+                      valuePath: $.full.config.billingReportFilePrefix
+                    - name: billingDocumentRtId
+                      valuePath: $.key.RtId  # Billing document RT ID from payload
+                    - name: relatedEntityId
+                      valuePath: $.key.RtId  # Billing document RT ID from payload
+                  headerParameters:
+                    - name: Accept
+                      value: "application/json"
+                    - name: User-Agent
+                      value: "OctoMesh-Pipeline/1.0"
+                - type: CreateUpdateInfo@1
+                  targetPath: $.updates._items
+                  targetValueKind: Array
+                  updateKind: UPDATE
+                  ckTypeId: EnergyCommunity/BillingDocument
+                  rtIdPath: $.key.RtId
+                  attributeUpdates:
+                    - attributeName: BillingDocumentState
+                      attributeValueType: Enum
+                      value: 1
+        - type: Flatten@1
+          path: $.updates[*]._items[*]
+          targetPath: $._result._items
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Project@1
+          fields:
+            - path: "$.path"
+            - path: "$.method"
+            - path: "$.body"
+            - path: "$.billingDocuments"
+            - path: "$.updates"
+        - type: ApplyChanges@2
+          entityUpdatesPath: $._result._items  # Path to the array of update info objects
+        # when the http call does not succeed the next nodes are not executed. so we can be sure, we get a path to the report.
+        # we have to get the report file information
+        # we create a association between the billing document and the report file
+        # we create a update item that sets the billing document status to "RELEASED"
+        # we apply changes
+  - id: System.Communication/StatusMessage-1
+- rtId: 68487d1da77ca34c4ee57b22
+  rtCreationDateTime: 2025-06-10T18:44:45.7520000Z
+  rtChangedDateTime: 2025-07-06T18:49:10.0070000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-release-billing-document
+  - id: System/Description-1
+    value: Releases one billing document by creating a PDF document and set the corresponding state.
+
+# Source: _calculation/energy-send-released-bills.yaml
+- rtId: 684ad571876fb5d86c6a229a
+  rtCreationDateTime: 2025-06-12T13:26:09.2900000Z
+  rtChangedDateTime: 2025-08-15T14:46:37.9880000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 684ad571876fb5d86c6a2299
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4554: Uses → EnergyCommunityConfiguration so the BCC address resolves
+  # config-driven (notificationEmailContact) via GetPipelineConfigByWellKnownName@1.
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >
+      triggers:
+        - type: FromHttpRequest@1
+          path: /sendBillingDocuments
+          method: POST
+      transformations:
+        # AB#4554: load config so the BCC address resolves config-driven.
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        # AB#2569: the community bank details are read from the runtime entity, not from
+        # $.config above. GetPipelineConfigByWellKnownName@1 hands the pipeline a DTO the
+        # communication controller serialises through the CK model compiled into its own
+        # binary, so an attribute added to the tenant model is silently dropped until the
+        # service itself ships that CK version. Verified against a tenant with System.Communication
+        # 3.31.0 imported: the typed config had no BankAccount* keys at all, while this lookup
+        # returned both with their values.
+        - type: GetRtEntitiesByType@1
+          description: read the community configuration as a runtime entity
+          ckTypeId: System.Communication/EnergyCommunityConfiguration
+          targetPath: $.communityConfig
+          take: 1
+        - type: GetRtEntitiesById@1
+          description: Get specific billing documents by ID
+          rtIdsPath: $.body.billingDocumentIds
+          ckTypeId: EnergyCommunity/BillingDocument
+          targetPath: $.billingItems
+        - type: GetAssociationTargets@1
+          description: get file system items for download
+          associationRoleId: System/Related
+          graphDirection: Inbound
+          originCkTypeId: EnergyCommunity/BillingDocument
+          targetCkTypeId: System.Reporting/FileSystemItem
+          originRtIdPath: $.billingItems.Items[*].RtId
+          targetPath: $.fileSystemItems
+        - type: GetAssociationTargets@1
+          description: get customers for billing items
+          associationRoleId: EnergyCommunity/AssignedBilling
+          graphDirection: Outbound
+          originCkTypeId: EnergyCommunity/BillingDocument
+          targetCkTypeId: EnergyCommunity/Customer
+          originRtIdPath: $.billingItems.Items[*].RtId
+          targetPath: $.customers
+        - type: Join@1
+          description: Join billing items with file system items
+          path: $.billingItems.Items[*]
+          keyPath: $.RtId
+          joinPath: $.fileSystemItems[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.fileSystemItem
+        - type: Join@1
+          description: Join billing items with customers
+          path: $.billingItems.Items[*]
+          keyPath: $.RtId
+          joinPath: $.customers[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.customer
+        - type: GetNotificationTemplate@1
+          notificationTemplateNamePath: $.body.notificationTemplateRtWellKnownName
+          targetPath: $.emailBody
+          subjectTargetPath: $.emailSubject
+          # AB#2570: the editor lets an author declare PLAIN or HTML, and until this path
+          # existed that choice reached nobody - every body was run through Markdig.
+          renderingTypeTargetPath: $.emailRenderingType
+        - type: ForEach@1
+          description: iterate billing items and send emails sequentially
+          iterationPath: $.billingItems.Items
+          mergePath: $.results
+          targetPath: $.results
+          transformations:
+            - type: If@1
+              description: check if file system item exists
+              path: $.key.fileSystemItem[0].Items[0].RtId
+              operator: NotEquals
+              valueType: String
+              value: null
+              transformations:
+                - type: If@1
+                  description: check if cusomer exists
+                  path: $.key.customer[0].Items[0].RtId
+                  operator: NotEquals
+                  valueType: String
+                  value: null
+                  transformations:
+                    # AB#2569: one resolver for every send path. Replaced two PlaceholderReplace@1 rule
+                    # blocks generated per pipeline plus hand-written converter nodes - a fourth send path
+                    # meant a fourth copy, and a token wired here but not there produced different mail
+                    # from one template. A token whose source this path does not supply fails the node
+                    # rather than rendering blank. ForEach@1 leaves ContinueOnError unset here, so the first
+                    # refusal aborts the whole batch - the loud end of the choice, on purpose.
+                    #
+                    # What aborting does NOT do is undo the recipients already served. A refusal the template
+                    # causes trips on the first iteration and nothing goes out, but one a single recipient
+                    # causes - a typed address matching no customer - trips mid-run, and everybody ahead of it
+                    # already has their mail. The response carries the failure, not the count, so re-running
+                    # the same batch mails those recipients twice. Fix the offending recipient and send the
+                    # remainder, rather than repeating the batch.
+                    - type: ResolveNotificationPlaceholders@1
+                      subjectPath: $.full.emailSubject
+                      subjectTargetPath: $.renderedSubject
+                      bodyPath: $.full.emailBody
+                      bodyTargetPath: $.renderedBody
+                      communityConfigPath: $.full.communityConfig.Items[0]
+                      renderingTypePath: $.full.emailRenderingType
+                      customerPath: $.key
+                      billingDocumentPath: $.key
+                      # Must equal the contentId on the SendEMail@2 attachment below. They are two halves of
+                      # one reference and nothing checks them: rename one and the body keeps an <img> pointing
+                      # at a cid nobody attached, which the node cannot report because it only strips a
+                      # reference whose own attachment went missing.
+                      logoContentId: community-footer
+                    - type: SendEMail@2
+                      # AB#4554: serverConfiguration is literal-only in the SendEMail
+                      # schema (no *Path variant), so it stays a tenant-neutral name;
+                      # each tenant provides an EMailSenderConfiguration well-known-named
+                      # 'billing-smtp' (mirrors EnergyCommunityConfiguration.billingMailServerConfiguration).
+                      serverConfiguration: billing-smtp
+                      subjectPath: $.renderedSubject
+                      path: $.renderedBody
+                      bodyFormatPath: $.full.emailRenderingType
+                      toPath: $.key.customer[0].Items[0].Attributes.Contact.Attributes.Email
+                      # BCC resolves config-driven from notificationEmailContact
+                      # (empty default → GetArray yields a blank entry that SendEMail skips).
+                      bccPath: $.full.config.notificationEmailContact
+                      attachments:
+                        - binaryIdPath: $.key.fileSystemItem[0].Items[0].Attributes.Content.BinaryId
+                          fileName: Abrechnung.pdf
+                          contentType: application/pdf
+                        # AB#2570: the community's footer image, addressable from the body as
+                        # cid:community-footer. Optional on purpose - a community that never
+                        # uploaded one still gets its billing mail, and the node strips the
+                        # dangling reference rather than leaving a broken image behind.
+                        - binaryIdPath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.BinaryId
+                          fileNamePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.Filename
+                          contentTypePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.ContentType
+                          fileName: footer.png
+                          contentType: image/png
+                          contentId: community-footer
+                          optional: true
+                    - type: CreateUpdateInfo@1
+                      targetPath: $.updates._items
+                      updateKind: UPDATE
+                      targetValueKind: Array
+                      ckTypeId: EnergyCommunity/BillingDocument
+                      rtIdPath: $.key.RtId
+                      attributeUpdates:
+                        - attributeName: BillingDocumentState
+                          attributeValueType: Enum
+                          value: "SENT"
+                    - type: ApplyChanges@2
+                      description: apply state change immediately after email sent
+                      entityUpdatesPath: $.updates._items
+  - id: System.Communication/StatusMessage-1
+- rtId: 684ad571876fb5d86c6a2299
+  rtCreationDateTime: 2025-06-12T13:26:09.1300000Z
+  rtChangedDateTime: 2025-08-15T14:51:54.0520000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-send-released-bills
+  - id: System/Description-1
+    value: Sends a list of billing document ids to the the corresponding customers
+
+# Source: _calculation/energy-send-all-released-bills.yaml
+- rtId: 689f3368ae5c4c800f3f6a41
+  rtCreationDateTime: 2025-08-15T13:17:28.9110000Z
+  rtChangedDateTime: 2025-08-15T14:37:56.8910000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-send-all-released-bills
+  - id: System/Description-1
+    value: Sends ALL released billing documents based on a time range to customers.
+- rtId: 689f3398ae5c4c800f3f6a42
+  rtCreationDateTime: 2025-08-15T13:18:16.1370000Z
+  rtChangedDateTime: 2025-08-15T14:52:27.7240000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 689f3368ae5c4c800f3f6a41
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4554: Uses → EnergyCommunityConfiguration so the BCC address resolves
+  # config-driven (notificationEmailContact) via GetPipelineConfigByWellKnownName@1.
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >
+      triggers:
+        - type: FromHttpRequest@1
+          path: /sendAllBillingDocumentsForPeriod
+          method: POST
+      transformations:
+        # AB#4554: load config so the BCC address resolves config-driven.
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        # AB#2569: the community bank details are read from the runtime entity, not from
+        # $.config above. GetPipelineConfigByWellKnownName@1 hands the pipeline a DTO the
+        # communication controller serialises through the CK model compiled into its own
+        # binary, so an attribute added to the tenant model is silently dropped until the
+        # service itself ships that CK version. Verified against a tenant with System.Communication
+        # 3.31.0 imported: the typed config had no BankAccount* keys at all, while this lookup
+        # returned both with their values.
+        - type: GetRtEntitiesByType@1
+          description: read the community configuration as a runtime entity
+          ckTypeId: System.Communication/EnergyCommunityConfiguration
+          targetPath: $.communityConfig
+          take: 1
+        - type: GetRtEntitiesByType@1
+          description: Get the billing document and filter by status draft
+          targetPath: $.billingItems
+          ckTypeId: EnergyCommunity/BillingDocument
+          fieldFilters:
+            - attributePath: billingDocumentState
+              operator: Equals
+              comparisonValue: 1
+            - attributePath: timeRange.from
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.from
+            - attributePath: timeRange.to
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.to
+        - type: GetAssociationTargets@1
+          description: get file system items for download
+          associationRoleId: System/Related
+          graphDirection: Inbound
+          originCkTypeId: EnergyCommunity/BillingDocument
+          targetCkTypeId: System.Reporting/FileSystemItem
+          originRtIdPath: $.billingItems.Items[*].RtId
+          targetPath: $.fileSystemItems
+        - type: GetAssociationTargets@1
+          description: get customers for billing items
+          associationRoleId: EnergyCommunity/AssignedBilling
+          graphDirection: Outbound
+          originCkTypeId: EnergyCommunity/BillingDocument
+          targetCkTypeId: EnergyCommunity/Customer
+          originRtIdPath: $.billingItems.Items[*].RtId
+          targetPath: $.customers
+        - type: Join@1
+          description: Join billing items with file system items
+          path: $.billingItems.Items[*]
+          keyPath: $.RtId
+          joinPath: $.fileSystemItems[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.fileSystemItem
+        - type: Join@1
+          description: Join billing items with customers
+          path: $.billingItems.Items[*]
+          keyPath: $.RtId
+          joinPath: $.customers[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.customer
+        - type: ForEach@1
+          description: iterate billing items and send emails sequentially
+          iterationPath: $.billingItems.Items
+          mergePath: $.results
+          targetPath: $.results
+          transformations:
+            - type: If@1
+              description: check if file system item exists
+              path: $.key.fileSystemItem[0].Items[0].RtId
+              operator: NotEquals
+              valueType: String
+              value: null
+              transformations:
+                - type: If@1
+                  description: check if cusomer exists
+                  path: $.key.customer[0].Items[0].RtId
+                  operator: NotEquals
+                  valueType: String
+                  value: null
+                  transformations:
+                    - type: GetNotificationTemplate@1
+                      # AB#4554: neutral seeded template name (tenant-neutral).
+                      notificationTemplateName: billing-quarterly-q2
+                      targetPath: $.key.emailBody
+                      subjectTargetPath: $.key.emailSubject
+                      # AB#2570: the editor lets an author declare PLAIN or HTML, and until this
+                      # path existed that choice reached nobody - every body went through Markdig.
+                      renderingTypeTargetPath: $.key.emailRenderingType
+                    # AB#2569: one resolver for every send path. Replaced two PlaceholderReplace@1 rule
+                    # blocks generated per pipeline plus hand-written converter nodes - a fourth send path
+                    # meant a fourth copy, and a token wired here but not there produced different mail
+                    # from one template. A token whose source this path does not supply fails the node
+                    # rather than rendering blank. ForEach@1 leaves ContinueOnError unset here, so the first
+                    # refusal aborts the whole batch - the loud end of the choice, on purpose.
+                    #
+                    # What aborting does NOT do is undo the recipients already served. A refusal the template
+                    # causes trips on the first iteration and nothing goes out, but one a single recipient
+                    # causes - a typed address matching no customer - trips mid-run, and everybody ahead of it
+                    # already has their mail. The response carries the failure, not the count, so re-running
+                    # the same batch mails those recipients twice. Fix the offending recipient and send the
+                    # remainder, rather than repeating the batch.
+                    - type: ResolveNotificationPlaceholders@1
+                      subjectPath: $.key.emailSubject
+                      subjectTargetPath: $.renderedSubject
+                      bodyPath: $.key.emailBody
+                      bodyTargetPath: $.renderedBody
+                      communityConfigPath: $.full.communityConfig.Items[0]
+                      renderingTypePath: $.key.emailRenderingType
+                      customerPath: $.key
+                      billingDocumentPath: $.key
+                      # Must equal the contentId on the SendEMail@2 attachment below. They are two halves of
+                      # one reference and nothing checks them: rename one and the body keeps an <img> pointing
+                      # at a cid nobody attached, which the node cannot report because it only strips a
+                      # reference whose own attachment went missing.
+                      logoContentId: community-footer
+                    - type: SendEMail@2
+                      # AB#4554: literal-only serverConfiguration → tenant-neutral name.
+                      serverConfiguration: billing-smtp
+                      subjectPath: $.renderedSubject
+                      path: $.renderedBody
+                      bodyFormatPath: $.key.emailRenderingType
+                      toPath: $.key.customer[0].Items[0].Attributes.Contact.Attributes.Email
+                      # BCC resolves config-driven from notificationEmailContact.
+                      bccPath: $.full.config.notificationEmailContact
+                      attachments:
+                        - binaryIdPath: $.key.fileSystemItem[0].Items[0].Attributes.Content.BinaryId
+                          fileName: Abrechnung.pdf
+                          contentType: application/pdf
+                        # AB#2570: the community's footer image, addressable as cid:community-footer.
+                        # Optional - a community without one still gets its billing mail.
+                        - binaryIdPath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.BinaryId
+                          fileNamePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.Filename
+                          contentTypePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.ContentType
+                          fileName: footer.png
+                          contentType: image/png
+                          contentId: community-footer
+                          optional: true
+                    - type: CreateUpdateInfo@1
+                      targetPath: $.updates._items
+                      updateKind: UPDATE
+                      targetValueKind: Array
+                      ckTypeId: EnergyCommunity/BillingDocument
+                      rtIdPath: $.key.RtId
+                      attributeUpdates:
+                        - attributeName: BillingDocumentState
+                          attributeValueType: Enum
+                          value: "SENT"
+                    - type: ApplyChanges@2
+                      description: apply state change immediately after email sent
+                      entityUpdatesPath: $.updates._items
+  - id: System.Communication/StatusMessage-1
+
+# Source: _calculation/energy-cancel-billing-document.yaml
+- rtId: 68a83612de6bd740110e2068
+  rtCreationDateTime: 2025-08-22T09:19:14.3610000Z
+  rtChangedDateTime: 2025-08-22T12:23:36.4890000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68a83612de6bd740110e2067
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >
+      triggers:
+        - type: FromHttpRequest@1
+          path: /cancelBillingDocument
+          method: POST
+
+      transformations:
+        # Get the billing documents and filter by cancellable states (DRAFT, RELEASED, SENT)
+        - type: GetRtEntitiesById@1
+          description: Get billing documents in cancellable states
+          targetPath: $.billingDocuments
+          rtIdsPath: $.body.billingDocumentRtIds  # Billing document RT IDs from payload
+          ckTypeId: EnergyCommunity/BillingDocument
+          fieldFilters:
+            - attributePath: billingDocumentState
+              operator: In
+              comparisonValue: [0, 1, 2]  # DRAFT, RELEASED, SENT states
+
+        # Create update info for each billing document
+        - type: ForEach@1
+          description: Iterate billing documents to cancel them
+          iterationPath: $.billingDocuments.Items
+          mergePath: $.updates
+          targetPath: $.updates
+          transformations:
+            - type: CreateUpdateInfo@1
+              targetPath: $.updates._items
+              updateKind: UPDATE
+              ckTypeId: EnergyCommunity/BillingDocument
+              rtIdPath: $.key.RtId
+              attributeUpdates:
+                - attributeName: BillingDocumentState
+                  attributeValueType: Enum
+                  value: 4 # Set to canceled state (4)
+
+        # Flatten the updates array
+        - type: Flatten@1
+          path: $.updates[*]._items
+          targetPath: $._result._items
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+
+        # Apply the changes to cancel the billing documents
+        - type: ApplyChanges@2
+          entityUpdatesPath: $._result._items  # Path to the array of update info objects
+  - id: System.Communication/StatusMessage-1
+- rtId: 68a83612de6bd740110e2067
+  rtCreationDateTime: 2025-08-22T09:19:14.3060000Z
+  rtChangedDateTime: 2025-08-22T09:19:14.3060000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-cancel-billing-document.yaml
+  - id: System/Description-1
+
+# Source: _calculation/energy-unrelease-billing-document.yaml
+- rtId: 686e4d8a196fcd3c42ed8c7b
+  rtCreationDateTime: 2025-07-09T11:07:54.1760000Z
+  rtChangedDateTime: 2025-07-16T16:31:52.4680000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 686e4d6c196fcd3c42ed8c7a
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >+
+      triggers:
+        - type: FromHttpRequest@1
+          description: Trigger pipeline to unrelease billing documents
+          path: /unreleaseBillingDocument
+          method: POST
+
+      transformations:
+        # Get billing documents to undo
+        - type: GetRtEntitiesById@1
+          description: Get billing documents to undo by their RtIds
+          rtIdsPath: $.body.documentRtIds
+          ckTypeId: EnergyCommunity/BillingDocument
+          targetPath: $.billingDocuments
+
+        # Process each billing document
+        - type: ForEach@1
+          description: Process each billing document individually
+          iterationPath: $.billingDocuments.Items
+          targetPath: $.processedDocuments
+          transformations:
+            # Get FileSystemItem
+            - type: GetAssociationTargets@1
+              description: Get FileSystemItem for this billing document
+              associationRoleId: System/Related
+              graphDirection: Inbound
+              originCkTypeId: EnergyCommunity/BillingDocument
+              targetCkTypeId: System.Reporting/FileSystemItem
+              originRtIdPath: $.key.RtId
+              targetPath: $.key.fileSystemItems
+
+            # DELETE FileSystemItem association (immediate)
+            - type: CreateAssociationUpdate@1
+              description: Delete BillingDocument <-> FileSystemItem association
+              targetPath: $.key._assocUpdates
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: Delete
+              targetRtIdPath: $.key.RtId
+              targetCkTypeId: EnergyCommunity/BillingDocument
+              originRtIdPath: $.key.fileSystemItems[0].Items[0].RtId
+              originCkTypeId: System.Reporting/FileSystemItem
+              associationRoleId: System/Related
+
+            # DELETE FileSystemItem entity (immediate)
+            - type: CreateUpdateInfo@1
+              description: Delete FileSystemItem entity
+              targetPath: $.key._entityUpdates
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: Delete
+              ckTypeId: System.Reporting/FileSystemItem
+              rtIdPath: $.key.fileSystemItems[0].Items[0].RtId
+
+            # Get LineItems
+            - type: GetAssociationTargets@1
+              description: Get LineItems for this billing document
+              associationRoleId: System/ParentChild
+              graphDirection: Inbound
+              originCkTypeId: EnergyCommunity/BillingDocument
+              targetCkTypeId: EnergyCommunity/BillingDocumentLineItem
+              originRtIdPath: $.key.RtId
+              targetPath: $.key.lineItems
+
+            # Process each LineItem
+            - type: ForEach@1
+              description: Process each LineItem - ALL operations in one loop
+              iterationPath: $.key.lineItems[0].Items
+              targetPath: $.key.processedLineItems
+              transformations:
+                # EC v2 (ADR 0001 / AB#4552): there is no LineItem -> EnergyQuantity
+                # (AssignedBilling) association any more — the settlement is a
+                # reproducible stream-data query over the line item's stored
+                # billedTimeRange, so unrelease just deletes the line items and
+                # their ParentChild link to the document. The BilledMeteringPoint
+                # association is removed together with the line item entity.
+
+                # DELETE BillingDocument <-> LineItem association (immediate)
+                - type: CreateAssociationUpdate@1
+                  description: Delete BillingDocument <-> LineItem association
+                  targetPath: $.key._assocUpdates
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Delete
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: EnergyCommunity/BillingDocumentLineItem
+                  targetRtIdPath: $.full.key.RtId
+                  targetCkTypeId: EnergyCommunity/BillingDocument
+                  associationRoleId: System/ParentChild
+
+                # DELETE LineItem entity (immediate)
+                - type: CreateUpdateInfo@1
+                  description: Delete LineItem entity
+                  targetPath: $.key._entityUpdates
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Delete
+                  ckTypeId: EnergyCommunity/BillingDocumentLineItem
+                  rtIdPath: $.key.RtId
+
+            # UPDATE BillingDocument to Draft state
+            - type: CreateUpdateInfo@1
+              description: Reset BillingDocument to Draft state
+              targetPath: $.key._entityUpdates
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: Update
+              ckTypeId: EnergyCommunity/BillingDocument
+              rtIdPath: $.key.RtId
+              attributeUpdates:
+                - attributeName: BillingDocumentState
+                  attributeValueType: Enum
+                  value: 0
+                - attributeName: GrossTotal
+                  attributeValueType: Double
+                  value: 0.0
+                - attributeName: BillingType
+                  attributeValueType: Enum
+                  value: 'Debit'
+
+        # Flatten all updates from all billing documents AND line items
+        - type: Flatten@1
+          description: Flatten entity updates from billing document level
+          path: $.processedDocuments[*]._entityUpdates[*]
+          targetPath: $._entityUpdates
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+
+        - type: Flatten@1
+          description: Flatten entity updates from line item level
+          path: $.processedDocuments[*].processedLineItems[*]._entityUpdates[*]
+          targetPath: $._entityUpdates
+          targetValueKind: Simple
+          targetValueWriteMode: Append
+
+        - type: Flatten@1
+          description: Flatten association updates from billing document level
+          path: $.processedDocuments[*]._assocUpdates[*]
+          targetPath: $._assocUpdates
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+
+        - type: Flatten@1
+          description: Flatten association updates from line item level
+          path: $.processedDocuments[*].processedLineItems[*]._assocUpdates[*]
+          targetPath: $._assocUpdates
+          targetValueKind: Simple
+          targetValueWriteMode: Append
+
+        # Apply all changes
+        - type: ApplyChanges@2
+          description: Apply all deletion and update operations
+          entityUpdatesPath: $._entityUpdates
+          associationUpdatesPath: $._assocUpdates
+  - id: System.Communication/StatusMessage-1
+- rtId: 686e4d6c196fcd3c42ed8c7a
+  rtCreationDateTime: 2025-07-09T11:07:24.3390000Z
+  rtChangedDateTime: 2025-07-09T11:07:54.0370000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-unrelease-billing-documents
+  - id: System/Description-1
+
+# ─── Ad-hoc member messaging (AB#4292) ───────────────────────────────────
+# Generic send pipeline: sends a notification template to an explicit list of
+# recipient email addresses. The frontend (energy-community app) resolves the
+# audience (manual addresses / a single customer / all active members) and posts
+# { notificationTemplateRtWellKnownName, toAddresses[] } to /sendMessage.
+- rtId: ec000000000000000000d001
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-send-message
+  - id: System/Description-1
+    value: Sends a notification template to an explicit list of recipient email addresses (ad-hoc member messaging).
+- rtId: ec000000000000000000d002
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec000000000000000000d001
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4554: Uses → EnergyCommunityConfiguration so the BCC address resolves
+  # config-driven (notificationEmailContact) via GetPipelineConfigByWellKnownName@1.
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromHttpRequest@1
+          path: /sendMessage
+          method: POST
+      transformations:
+        # AB#4554: load config so the BCC address resolves config-driven.
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        # AB#2569: the community bank details are read from the runtime entity, not from
+        # $.config above. GetPipelineConfigByWellKnownName@1 hands the pipeline a DTO the
+        # communication controller serialises through the CK model compiled into its own
+        # binary, so an attribute added to the tenant model is silently dropped until the
+        # service itself ships that CK version. Verified against a tenant with System.Communication
+        # 3.31.0 imported: the typed config had no BankAccount* keys at all, while this lookup
+        # returned both with their values.
+        - type: GetRtEntitiesByType@1
+          description: read the community configuration as a runtime entity
+          ckTypeId: System.Communication/EnergyCommunityConfiguration
+          targetPath: $.communityConfig
+          take: 1
+        - type: GetNotificationTemplate@1
+          notificationTemplateNamePath: $.body.notificationTemplateRtWellKnownName
+          targetPath: $.emailBody
+          subjectTargetPath: $.emailSubject
+          # AB#2570: the editor lets an author declare PLAIN or HTML, and until this path
+          # existed that choice reached nobody - every body was run through Markdig.
+          renderingTypeTargetPath: $.emailRenderingType
+        - type: ForEach@1
+          description: iterate recipient addresses and send emails sequentially
+          iterationPath: $.body.toAddresses
+          mergePath: $.results
+          targetPath: $.results
+          maxDegreeOfParallelism: 1
+          transformations:
+            # AB#2569: resolve the recipient address to a customer, so the customer.* placeholders
+            # mean the same thing here as in the billing dispatch. Without this a bulk mail would
+            # render "Liebe / lieber ," - the token would be removed rather than filled.
+            # An address matching no customer yields no items, and the resolver below then has no
+            # customer source at all: it refuses the send rather than blanking the tokens. That is
+            # deliberate - a manually typed address is the one case where nothing else would notice.
+            - type: GetRtEntitiesByType@1
+              description: find the customer behind this recipient address
+              ckTypeId: EnergyCommunity/Customer
+              targetPath: $.customer
+              take: 1
+              fieldFilters:
+                - attributePath: Contact.Email
+                  operator: Equals
+                  comparisonValuePath: $.key
+            # AB#2569: one resolver for every send path. Replaced two PlaceholderReplace@1 rule
+            # blocks generated per pipeline plus hand-written converter nodes - a fourth send path
+            # meant a fourth copy, and a token wired here but not there produced different mail
+            # from one template. A token whose source this path does not supply fails the node
+            # rather than rendering blank. ForEach@1 leaves ContinueOnError unset here, so the first
+            # refusal aborts the whole batch - the loud end of the choice, on purpose.
+            #
+            # What aborting does NOT do is undo the recipients already served. A refusal the template
+            # causes trips on the first iteration and nothing goes out, but one a single recipient
+            # causes - a typed address matching no customer - trips mid-run, and everybody ahead of it
+            # already has their mail. The response carries the failure, not the count, so re-running
+            # the same batch mails those recipients twice. Fix the offending recipient and send the
+            # remainder, rather than repeating the batch.
+            - type: ResolveNotificationPlaceholders@1
+              subjectPath: $.full.emailSubject
+              subjectTargetPath: $.renderedSubject
+              bodyPath: $.full.emailBody
+              bodyTargetPath: $.renderedBody
+              communityConfigPath: $.full.communityConfig.Items[0]
+              renderingTypePath: $.full.emailRenderingType
+              customerPath: $.customer.Items[0]
+              # Must equal the contentId on the SendEMail@2 attachment below. They are two halves of
+              # one reference and nothing checks them: rename one and the body keeps an <img> pointing
+              # at a cid nobody attached, which the node cannot report because it only strips a
+              # reference whose own attachment went missing.
+              logoContentId: community-footer
+            - type: SendEMail@2
+              # AB#4554: literal-only serverConfiguration → tenant-neutral name.
+              serverConfiguration: billing-smtp
+              subjectPath: $.renderedSubject
+              path: $.renderedBody
+              bodyFormatPath: $.full.emailRenderingType
+              toPath: $.key
+              # BCC resolves config-driven from notificationEmailContact.
+              bccPath: $.full.config.notificationEmailContact
+              attachments:
+                # AB#2570: the community's footer image, addressable as cid:community-footer.
+                # Optional - a community without one still gets its message.
+                - binaryIdPath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.BinaryId
+                  fileNamePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.Filename
+                  contentTypePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.ContentType
+                  fileName: footer.png
+                  contentType: image/png
+                  contentId: community-footer
+                  optional: true
+  - id: System.Communication/StatusMessage-1
+
+# ─── Billing MeshBoard queries (EC v2, AB#4578 — Board 1) ────────────────
+# Grouping-aggregation RT queries over the EC v2 billing types that back the
+# BillingOverview dashboard (energy-community-accounting) below. Ported from the
+# retired 1.x meshboard queries (misc/energy-community-deployment/data/boards/
+# BillingOverview.yaml) and re-verified against the EC 4.0 model on energytest.
+# Physical output-column naming (VERIFIED on energytest via the runtime
+# transient grouping-aggregation resolver — the same engine the meshboard widget
+# uses, cross-checked against the committed EDA board's 'state'/'state_count'
+# widget). The 1.x source board's field names are STALE and were NOT copied
+# verbatim — the widget Config category/value fields below use the CURRENT names:
+#   - Group-by columns keep the attribute path EXACTLY (case + '.' + '->'
+#     preserved): contact.legalEntityType, billingDocumentState,
+#     taxProcedureCreditNote, billingType, and the two-hop nav
+#     parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote.
+#   - Aggregation columns are '<attributePath, dots removed, lower-cased>_<agg>':
+#     COUNT rtId -> rtid_count, SUM grossTotal -> grosstotal_sum,
+#     SUM quantity -> quantity_sum.
+# AggregationType: 0 = Count, 4 = Sum.
+# rtId scheme: billing meshboard queries use the ec00…0e0X block (the
+# EnergyCommunity.EdaIntegration board owns the ec00…0dXX block; the settlement
+# SD query above is ec000000000000000000e001).
+
+# Customers grouped by legal entity type (contact.legalEntityType), COUNT.
+- rtId: ec0000000000000000000e01
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - contact.legalEntityType
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: rtId
+      - id: System/AggregationType-1
+        value: 0    # Count
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_customer_by_legal_type
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Customer
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Customers grouped by tax procedure (taxProcedureCreditNote), COUNT.
+- rtId: ec0000000000000000000e02
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - taxProcedureCreditNote
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: rtId
+      - id: System/AggregationType-1
+        value: 0    # Count
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_customer_by_tax_procedure
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Customer
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Billing documents grouped by state, SUM grossTotal (widget adds the
+# timeRange.from/to window filter). Value column: grossTotal.
+- rtId: ec0000000000000000000e03
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - billingDocumentState
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: grossTotal
+      - id: System/AggregationType-1
+        value: 4    # Sum
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_billing_document_by_state_sum_gross_total
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocument
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Billing documents grouped by state, COUNT (KPIs pick the Sent / Paid row).
+- rtId: ec0000000000000000000e04
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - billingDocumentState
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: rtId
+      - id: System/AggregationType-1
+        value: 0    # Count
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_billing_documents_paid_unpaid
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocument
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Line items grouped by the customer's tax procedure (via parent BillingDocument
+# -> AssignedBilling customer nav) and billing type (series), SUM quantity.
+# v2 nav path verified on energytest:
+#   parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote
+# (LineItem -Parent-> BillingDocument -AssignedTo-> Customer). Physical output
+# column keeps the path exactly (widget categoryField):
+#   parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote
+# NavigationFilterMode 1 (nav-path group-by / filter), mirroring the EC
+# pipeline_aggregated_energy_quantities RT query.
+- rtId: ec0000000000000000000e05
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote
+    - billingType
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: quantity
+      - id: System/AggregationType-1
+        value: 4    # Sum
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_billing_item_by_tax_procedure_note
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocumentLineItem
+  - id: System/Query.NavigationFilterMode-1
+    value: 1
+
+# Line items grouped by billing type, SUM quantity (billed energy amounts).
+- rtId: ec0000000000000000000e06
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - billingType
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: quantity
+      - id: System/AggregationType-1
+        value: 4    # Sum
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_billing_items
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocumentLineItem
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+
+# ─── Billing MeshBoard: BillingOverview dashboard (EC v2, AB#4578 — Board 1) ──
+# System.UI/Dashboard `energy-community-accounting` ("Übersicht") + 10 widgets.
+# Adopts and converts the retired 1.x board
+# (misc/energy-community-deployment/data/boards/BillingOverview.yaml): the 8
+# billing widgets stay on the EC v2 runtime types (bound to the six
+# meshboard_* GroupingAggregationRtQuery entities above by rtId, e01..e06), and
+# the 2 metering-value widgets convert to STREAM DATA exactly like Board 2 —
+# they bind to the persisted SD queries in EnergyCommunity.Base by rtId
+# (a22 by-OBIS, a23 by-data-quality) with queryFamily "streamData" so the widget
+# skips the runtime-query lookup. Requires the service-managed System.UI CK model
+# (octo-platform-services). Time window is supplied by the dashboard time filter
+# as ${timeRangeFrom}/${timeRangeTo} (billing widgets) and as
+# StreamDataArguments.from/to (the two SD widgets).
+#
+# Time filter: the source board defaulted to a 2025-Q4 quarter selection; here it
+# defaults to the custom window 2026-07-01..2026-08-01 (matching the EC 4.0 demo
+# billing document period on the test tenants, as Board 2 does) so the
+# time-filtered billing/SD widgets resolve against seeded data out of the box.
+# rtId scheme: dashboard = ec00…0f01, widgets = ec00…0f02..0f0b.
+
+# Dashboard
+- rtId: ec0000000000000000000f01
+  ckTypeId: System.UI/Dashboard-1
+  rtWellKnownName: energy-community-accounting
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Übersicht
+  - id: System/Description-1
+    value: |-
+      Energiegemeinschaft
+      ---MESHBOARD_VARIABLES---
+      {"timeFilter":{"enabled":true,"defaultSelection":{"type":"custom","customFrom":"2026-07-01T00:00:00.000Z","customTo":"2026-08-01T00:00:00.000Z"},"selection":{"type":"custom","customFrom":"2026-07-01T00:00:00.000Z","customTo":"2026-08-01T00:00:00.000Z"}}}
+  - id: System.UI/Dashboard.Columns-1
+    value: 6
+  - id: System.UI/Dashboard.RowHeight-1
+    value: 200
+  - id: System.UI/Dashboard.Gap-1
+    value: 16
+
+# Widget 1: Customer types (pie) — e01, COUNT customers by legal entity type.
+- rtId: ec0000000000000000000f02
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Customer types
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e01
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"contact.legalEntityType","valueField":"rtid_count","showLabels":false,"showLegend":true,"legendPosition":"right","queryName":"meshboard_customer_by_legal_type","queryRtId":"ec0000000000000000000e01"}'
+
+# Widget 2: Billing status (in €) (pie) — e03, SUM grossTotal by state.
+- rtId: ec0000000000000000000f03
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Billing status (in €)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e03
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"billingDocumentState","valueField":"grosstotal_sum","showLabels":false,"showLegend":true,"legendPosition":"right","queryName":"meshboard_billing_document_by_state_sum_gross_total","queryRtId":"ec0000000000000000000e03","filters":[{"attributePath":"timeRange.from","operator":"GREATER_EQUAL_THAN","comparisonValue":"${timeRangeFrom}"},{"attributePath":"timeRange.to","operator":"LESS_EQUAL_THAN","comparisonValue":"${timeRangeTo}"}]}'
+
+# Widget 3: Bills Unpaid (kpi) — e04, COUNT of documents in state Sent.
+- rtId: ec0000000000000000000f04
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Bills Unpaid
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 6
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e04
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","icon":"chart","queryMode":"groupedAggregation","queryValueField":"rtid_count","queryCategoryField":"billingDocumentState","queryCategoryValue":"Sent","filters":[{"attributePath":"timeRange.from","operator":"GREATER_EQUAL_THAN","comparisonValue":"${timeRangeFrom}"},{"attributePath":"timeRange.to","operator":"LESS_EQUAL_THAN","comparisonValue":"${timeRangeTo}"}],"queryName":"meshboard_billing_documents_paid_unpaid","queryRtId":"ec0000000000000000000e04"}'
+
+# Widget 4: Bills Paid (kpi) — e04, COUNT of documents in state Paid.
+- rtId: ec0000000000000000000f05
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Bills Paid
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 5
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e04
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","icon":"chart","queryMode":"groupedAggregation","queryValueField":"rtid_count","queryCategoryField":"billingDocumentState","queryCategoryValue":"Paid","filters":[{"attributePath":"timeRange.from","operator":"GREATER_EQUAL_THAN","comparisonValue":"${timeRangeFrom}"},{"attributePath":"timeRange.to","operator":"LESS_EQUAL_THAN","comparisonValue":"${timeRangeTo}"}],"queryName":"meshboard_billing_documents_paid_unpaid","queryRtId":"ec0000000000000000000e04"}'
+
+# Widget 5: Billed energy amounts by tax procedure (in kWh) (barChart) — e05,
+# SUM quantity grouped by customer tax procedure, series = billingType.
+- rtId: ec0000000000000000000f06
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Billed energy amounts by tax procedure (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: barChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 5
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e05
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"bar","categoryField":"parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote","series":[],"seriesGroupField":"billingType","valueField":"quantity_sum","showLegend":true,"legendPosition":"right","showDataLabels":false,"queryName":"meshboard_billing_item_by_tax_procedure_note","queryRtId":"ec0000000000000000000e05","filters":[{"attributePath":"parent.energyCommunityBillingDocument->timeRange.from","operator":"EQUALS","comparisonValue":"${timeRangeFrom}"},{"attributePath":"parent.energyCommunityBillingDocument->timeRange.to","operator":"EQUALS","comparisonValue":"${timeRangeTo}"}]}'
+
+# Widget 6: Billed energy amounts by tax procedure (in kWh) (table) — e05.
+- rtId: ec0000000000000000000f07
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Billed energy amounts by tax procedure (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: table
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 3
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 4
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 3
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e05
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"columns":[],"sorting":[],"filters":[{"attributePath":"parent.energyCommunityBillingDocument->timeRange.from","operator":"EQUALS","comparisonValue":"${timeRangeFrom}"},{"attributePath":"parent.energyCommunityBillingDocument->timeRange.to","operator":"EQUALS","comparisonValue":"${timeRangeTo}"}],"pageSize":10,"sortable":true,"queryName":"meshboard_billing_item_by_tax_procedure_note","queryRtId":"ec0000000000000000000e05"}'
+
+# Widget 7: Amount of customers by tax procedure (pie) — e02, COUNT by taxProcedure.
+- rtId: ec0000000000000000000f08
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Amount of customers by tax procedure
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 5
+  - id: System.UI/DashboardWidget.Row-1
+    value: 4
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e02
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"taxProcedureCreditNote","valueField":"rtid_count","showLabels":false,"showLegend":true,"legendPosition":"right","queryName":"meshboard_customer_by_tax_procedure","queryRtId":"ec0000000000000000000e02"}'
+
+# Widget 8: Energy Amounts produced vs. consumed (in kWh) (pie) — CONVERTED to
+# STREAM DATA (Board 2 counterpart a22 by-OBIS). queryFamily streamData.
+- rtId: ec0000000000000000000f09
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy Amounts produced vs. consumed (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 6
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"obiscode","valueField":"amountvalue_sum","showLabels":false,"showLegend":true,"legendPosition":"right","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22"}'
+
+# Widget 10: Energy amounts by data quality (in kWh) (donut) — CONVERTED to
+# STREAM DATA (Board 2 counterpart a23 by-data-quality). queryFamily streamData.
+- rtId: ec0000000000000000000f0a
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy amounts by data quality (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 6
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a23
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"donut","categoryField":"dataquality","valueField":"amountvalue_sum","showLabels":true,"showLegend":false,"legendPosition":"right","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-data-quality","queryRtId":"ec0000000000000000000a23"}'
+
+# Widget 9: Billed Energy Amounts (pie) — e06, SUM quantity by billing type.
+- rtId: ec0000000000000000000f0b
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Billed Energy Amounts
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 5
+  - id: System.UI/DashboardWidget.Row-1
+    value: 6
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e06
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"billingType","valueField":"quantity_sum","showLabels":false,"showLegend":true,"legendPosition":"right","queryName":"meshboard_billing_items","queryRtId":"ec0000000000000000000e06","filters":[{"attributePath":"parent.energyCommunityBillingDocument->timeRange.from","operator":"EQUALS","comparisonValue":"${timeRangeFrom}"},{"attributePath":"parent.energyCommunityBillingDocument->timeRange.to","operator":"EQUALS","comparisonValue":"${timeRangeTo}"}]}'
