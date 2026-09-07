@@ -1,0 +1,83 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: EnergyCommunity.EdaIntegration-2.3.1
+description: |
+  EDA (Energiewirtschaftliches Datenaustausch) integration for Energy Community
+  v2 tenants (EnergyCommunity 4.x + Basic.Energy 1.2.x, stream-data storage for
+  metering values — ADR 0001, AB#4550).
+
+  Installs:
+  - EDA adapter (System.Communication/Adapter) — deployed via Communication Operator,
+    AdapterConfiguration skeleton with empty credentials (fill in Refinery Studio before deploy)
+  - 15 EDA pipelines in 8 DataFlows: receive-eda-messages, handle-daten-crmsg,
+    request-all-metering-points, request-consumption-reports,
+    request-missing-consumption-reports, energy-set-states-depending-on-meteringpoints
+    each keep their own DataFlow; start-eda-process carries two (the HTTP endpoint
+    and `Start planned EDA processes`, 2.2.1); the seven process-message handlers (EC_REQ_ONL,
+    EC_PODLIST, EC_PRTFACT_CHANGE, CR_REQ_PT, CM_REV_SP, CM_REV_CUS, CM_REV_IMP)
+    share the DataFlow `eda-handle-process-messages` (6a3ba517dd34215646b7a8a4,
+    AB#4820) and carry their process name on the Pipeline itself. All seven run
+    on FromPolling@1 with staggered intervals (2:05 / 2:55 / 3:10 / 3:35 / 4:20 /
+    5:00 / 5:40) so they never poll the EDA adapter in lockstep;
+    FromExecutePipelineCommand@1 stays in each definition, commented out, as the
+    manual fallback. handle-daten-crmsg is the exception: it stays on
+    FromExecutePipelineCommand@1 with its FromPolling@1 (00:00:35) commented
+    out — the stream-data ingest is driven on demand, not by a 35-second poll
+  - 1 System.Communication/PipelineTrigger: `request-all-metering-points`
+    (69e1b8a1870f4f0d6e91e630) fires its pipeline daily at 04:00 via cron
+    (`0 0 4 * * *`) instead of an explicit ExecutePipelineCommand — ported from
+    the energy-community-deployment reference, hence the new System.Bot
+    dependency (System.Bot/CronExpression)
+  - `Start planned EDA processes` (6a2bc26a6830b2865f042892) starts EdaProcess
+    entities flagged Planned once their StartTime is due; Sender/Receiver are
+    already set by the HTTP pipeline when the process is created, so the update
+    step leaves them untouched (ported from energy-community-deployment, 2.2.1)
+  - 16 EDA-internal queries (process tracking, metering-point lookups,
+    participation periods, planned processes)
+  - EDA cockpit MeshBoard (System.UI/Dashboard `energy-community-eda` +
+    widgets, AB#4578): metering-point count KPI, state donut, and two
+    EdaProcess tables (errored: success==false / open: finished==false) over a
+    new SimpleRtQuery on Basic.Energy/EdaProcess. Requires the service-managed
+    System.UI CK model (octo-platform-services running).
+
+  EC v2 changes vs. the 1.x line:
+  - handle-daten-crmsg writes 15-minute stream data: ParseConsumptionRecord@1 ->
+    Basic.Energy/EnergyMeasurement anchor entities (well-known name
+    <meteringPointRtId>_<obisCode>, deduped via UpdateRtEntityIfNewer@1) ->
+    SaveTimeRangeStreamDataInArchive@1 into the Base 2.x raw archive
+    energy-measurements (ec0000000000000000000a01). No more per-interval
+    EnergyQuantity entities and no overlap delete/insert reconciliation.
+  - All pipelines and queries use the v2 types directly: Basic.Energy/EdaMessage,
+    EdaProcess, EdaMeteringPoint, MeteringPoint, OperatingFacility and the
+    Basic.Energy/MessageToProcess association. EnergyCommunity/Consumer,
+    Producer, Customer and ParticipationPeriod remain EnergyCommunity types.
+  - request-consumption-reports and request-missing-consumption-reports are
+    installed as safe no-ops: their gap/quality detection queried
+    EnergyCommunity/EnergyQuantity and moves to stream-data queries with
+    AB#4551 (see the TODO(AB#4551) markers in the pipeline definitions).
+
+  Prerequisites:
+  - EnergyCommunity.Base 2.x installed (provides the energy-measurements
+    stream-data archives; activate them before deploying the EDA data flows)
+
+  Post-install:
+  - Fill AdapterConfiguration JSON (EdaHttpAdapter.Host, User, Password, IsSimulationMode)
+    on the EDA adapter entity in Refinery Studio
+  - octo-cli -c DeployWorkload -id 686e0f17196fcd3c42ed8c77   # EDA adapter
+  - DeployTriggers activates the cron trigger of request-all-metering-points
+    (it ships DeploymentState 0 like every other EDA entity)
+  - DeployDataFlow per DataFlow — pipelines are pre-assigned to the EDA adapter
+    via Executes-1, no manual assignment needed. One call covers all seven
+    process handlers:
+    octo-cli -c DeployDataFlow --identifier 6a3ba517dd34215646b7a8a4
+
+  Upgrading a tenant from 2.1.x (AB#4820):
+  - The seven per-handler DataFlows were removed from the seed. Removing them
+    from the seed does NOT delete them on an installed tenant — run
+    `UndeployDataFlow` on each, then
+    `octo-cli -c UpdateBlueprint -tv EnergyCommunity.EdaIntegration-2.2.0 -m Full`
+    (preview it first — the delete is a permanent Erase). See README.md.
+blueprintDependencies:
+  # The 2.x EDA integration pairs with Base 2.x (EnergyCommunity 4.x /
+  # stream data, ADR 0001). It must never install on top of Base 1.x.
+  - EnergyCommunity.Base-[2.0,3.0)
+seedDataPath: seed-data/entities.yaml
