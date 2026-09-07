@@ -1,0 +1,111 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: EnergyCommunity.Base-2.3.1
+description: |
+  Base blueprint for Energy Community deployments (EnergyCommunity v2,
+  stream-data storage for metering values — see ADR 0001, AB#4549).
+
+  Installs the foundation every Energy Community v2 tenant needs:
+  - Energy Community runtime configuration entity (neutral defaults; fill via Refinery Studio).
+    Includes the billing report / notification config the Billing pipelines read
+    config-driven (billingReportName, billingReportFilePrefix,
+    billingMailServerConfiguration, notificationEmailContact) — AB#4554 de-SBEG-ing.
+  - Auto-increment counters for customer numbers and billing document numbers
+  - Excel import pipeline (master data import via OctoMesh Office Add-In)
+  - Shared queries used by EDA and Billing pipelines, plus Excel-import queries
+  - Stream-data archives for Basic.Energy/EnergyMeasurement:
+    - energy-measurements (raw TimeRangeArchive, 15-min windows) with the cascaded
+      rollup ladder raw -> hourly -> daily -> {weekly, monthly} -> yearly
+      (calendar-aligned, Europe/Vienna; SUM amountvalue_sum + MAX dataquality_max)
+    - energy-measurements-legacy-daily (TimeRangeArchive, 1-day windows) with its
+      own monthly + yearly rollup sub-ladder — migration tenants only, carries
+      over pre-cutover daily EnergyQuantity history (ADR 0001 decision 3)
+  - Persisted stream-data queries over the raw archive (SimpleSdQuery + two
+    GroupingAggregationSdQuery: by ObisCode and by DataQuality)
+  - Energy-statistics MeshBoard (System.UI/Dashboard
+    `energy-community-energy-quantities` + widgets, AB#4578) bound to the SD
+    queries above — Erzeuger/Verbraucher KPIs, by-OBIS pie, by-data-quality
+    donut, 15-min time-series line chart. Requires the service-managed
+    System.UI CK model (octo-platform-services running).
+  - manual-metering-entry pipeline (AB#4558): a deployed HTTP endpoint
+    (POST /manualMeteringEntry) that upserts manual/corrected 15-min windows into
+    the raw energy-measurements archive (ec0000000000000000000a01) for an existing
+    EnergyMeasurement anchor, tagged dataQuality = Manual (Basic.Energy DataQuality
+    key 4). CrateDB upsert on (window_start, window_end, rtId, ckTypeId) means a
+    re-written window corrects it; retroactive writes auto-schedule rollup recompute.
+    2.1.4 (AB#4558 fix): the pipeline now resolves the anchor EnergyMeasurement
+    (GetRtEntitiesById@1) and carries its ObisCode into every write — ObisCode is a
+    required non-null archive column, so omitting it made every write fail with a
+    CrateDB XX000 "obiscode must not be null" 500. An orphan anchorRtId now returns
+    status=error (HTTP 200) instead of a 500.
+  - aggregated-energy-report pipeline (AB#4710, 2.2.0): a deployed HTTP endpoint
+    (POST /aggregatedEnergyReport) that returns the aggregated measured energy per
+    metering point x OBIS anchor over a caller-supplied time range as JSON, with
+    hard completeness (every 15-minute interval present) and quality (no L3
+    intervals; Manual is a corrected value and OK) gates. Backed by the new
+    Base-owned GroupingAggregationSdQuery ec0000000000000000000a24 (SUM + COUNT
+    of amount.value by dataQuality + amount.unit over the raw archive).
+
+  All archives are seeded Disabled (Archive.Status = 2). Activation is NOT part
+  of the blueprint install — run install-tenant.ps1 (ActivateArchive phase,
+  bottom-up) or activate manually via octo-cli -c ActivateArchive. Legacy
+  archives are only activated on migration tenants (-IncludeLegacyArchives).
+
+  Prerequisites:
+  - System.Communication blueprint installed on the tenant (provides default
+    Pool 670…001, Mesh Adapter 670…002 and the meshmakers-apps Helm repo
+    670…005 the app's HelmRepository association pins — seeded by BOTH
+    variants since Release-1.5.0 / MainLatest-1.5.0 with the
+    environment-correct URL (dev channel on dev/test, /apps on
+    staging/production), AB#4706. On dev/test clusters the controller must
+    carry MainLatest >= 1.5.0 or the app association targets a missing
+    entity.
+  - Stream data enabled on the tenant (octo-cli -c EnableStreamData; CrateDB
+    reachable) before activating the archives.
+
+  Post-install:
+  - Fill EnergyCommunityConfiguration values in Refinery Studio
+  - Activate the archives (see above)
+  - octo-cli -c DeployDataFlow --identifier <excelDataFlowRtId>
+ckModelDependencies:
+  # Pin to the minimum versions that share the System-2.2.0 baseline — the
+  # older Basic-2.0.0 in the catalog pins System-2.0.2 and would conflict with
+  # System.Communication-3.22's System-2.2.0 pin. EnergyCommunity 4.x builds on
+  # Basic.Energy (ADR 0001 decision 1). The System.StreamData 1.7.0 floor is
+  # required for (a) calendar-aligned rollups with RollupArchive.ReferenceTimeZone
+  # (>= 1.6.4) and (b) the AB#4582 fix that marks Archive.Status runtime-state so a
+  # bare InstallBlueprint -f re-apply no longer deactivates already-activated
+  # archives (>= 1.7.0 — the runtime-state flip is a MINOR CK bump).
+  - Basic-[2.0.2,3.0)
+  # 1.3 floor: adds the DataQuality/Manual (key 4) enum value used by the
+  # manual-metering-entry pipeline (AB#4558) to tag manually entered/corrected
+  # windows in the raw energy-measurements archive.
+  - Basic.Energy-[1.3,2.0)
+  # 4.1 floor (NOT 4.0): the blueprint engine installs the FLOOR of a
+  # ckModelDependencies range (catalog/compiler resolution picks the highest —
+  # see octo-documentation constructionKits/versioningRules.md), and
+  # EnergyCommunity 4.0.0 in the catalog was built against Basic.Energy
+  # 1.2.x. Combined with the [1.3,2.0) pin above that is unsatisfiable, so a
+  # fresh install failed with "CK model 'EnergyCommunity-4.0.0' could not be
+  # installed; required CK model dependencies may be missing or still
+  # importing". 4.1.0 is the version rebuilt against Basic.Energy 1.3.0
+  # (octo-construction-kit e4c0b04, AB#4558). Rule of thumb: whenever a
+  # Basic.Energy floor moves, the EnergyCommunity floor must move with it.
+  #
+  # 4.2 rather than 4.1 because the FLOOR is what a fresh install lands on — verified on a
+  # tenant installed with Base 2.3.0, which ended up on EnergyCommunity 4.1.0 while the
+  # catalog offered 4.3.0. The frontend needs 4.2.0: AB#4718 makes
+  # EnergyCommunity/AssociatedFacilities ZeroOrOne, and without that a customer-less tenant
+  # cannot create an operating facility at all. Basic and Basic.Energy stay where they are —
+  # EnergyCommunity 4.2.0 resolves to Basic 2.0.2 + Basic.Energy 1.3.0 in the public catalog,
+  # exactly the current floors.
+  - EnergyCommunity-[4.2,5.0)
+  # 3.26 floor: adds BillingReportFilePrefix + BillingMailServerConfiguration on
+  # EnergyCommunityConfiguration (AB#4554 — de-SBEG-ing config-driven billing).
+  - System.Communication-[3.26,4.0)
+  - System.StreamData-[1.7.0,2.0)
+  # System.UI is service-managed (octo-platform-services seeds it on tenant
+  # create/enable/startup) — required for the energy-statistics MeshBoard
+  # (Dashboard + widgets, AB#4578). platform-services must be running for the
+  # board seed entities to resolve.
+  - System.UI-[2.4,3.0)
+seedDataPath: seed-data/entities.yaml
