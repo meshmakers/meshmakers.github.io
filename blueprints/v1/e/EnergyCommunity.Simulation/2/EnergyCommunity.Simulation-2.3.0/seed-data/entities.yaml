@@ -1,0 +1,2238 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+
+entities:
+
+# ─── Energy simulation (AB#4571, ported from voest-app) ──────────────────
+#
+# rtId scheme (documented in ../../README.md): ec0000000000000000000bXX
+#   …b01  DataFlow  simulate-energy-measurements
+#   …b02  Pipeline  energy-simulator        (fixed backfill window)
+#   …b03  Pipeline  energy-simulator-range  (window from command input)
+#   …b04  Pipeline  create-demo-community   (AB#4579 — creates demo master
+#                                            data + measurement anchors)
+#   …b05  DataFlow  create-demo-community
+#
+# Both pipelines run SimulateEnergyMeasurements@1: they load ALL existing
+# Basic.Energy/EnergyMeasurement anchor entities (no query entity involved),
+# resolve each anchor's parent metering point via System/ParentChild, pick the
+# PV profile when the parent is an EnergyCommunity/Producer (exact type match
+# — the EC subtype, NOT Basic.Energy/Producer) and the BDEW H0 load profile
+# otherwise, and emit one datapoint per 15-minute slot keyed by the anchor's
+# existing rtId, which satisfies the archive-write integrity guard of
+# SaveTimeRangeStreamDataInArchive@1. No RT entities are created.
+#
+# DISABLED-BY-DEFAULT CONTRACT: System/Enabled = false and only
+# FromExecutePipelineCommand@1 triggers — a fresh install can never write
+# simulated data on its own. Re-apply the blueprint (InstallBlueprint -f)
+# after a simulation run to restore this state.
+
+- rtId: ec0000000000000000000b01
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: simulate-energy-measurements
+  - id: System/Description-1
+    value: >-
+      Synthetic 15-min metering values for the existing EnergyMeasurement
+      anchors (EnergyCommunity/Producer parent = PV curve, everything else =
+      BDEW H0 load profile). Simulation-only — NOT for productive tenants.
+
+- rtId: ec0000000000000000000b02
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000b01
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: energy-simulator
+  - id: System/Description-1
+    value: >-
+      Backfills deterministic 15-min archive history for the existing
+      EnergyMeasurement anchors (EnergyCommunity/Producer parent = PV,
+      otherwise BDEW H0 load profile), keyed by each anchor's stable rtId.
+      Fixed window (edit startDate/numDays in the definition). Stream-only
+      write into archive ec0000000000000000000a01. Disabled by default;
+      trigger via ExecutePipelineCommand only.
+  - id: System/Enabled-1
+    value: false
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: SimulateEnergyMeasurements@1
+          description: >-
+            15-min history for every existing EnergyMeasurement anchor — PV
+            for EnergyCommunity/Producer parents, BDEW H0 load profile for
+            all other parents, keyed by the existing anchor rtId. One-year
+            backfill, stream-only.
+          startDate: 2025-01-01T00:00:00Z
+          numDays: 365
+          energyMeasurementCkTypeId: Basic.Energy/EnergyMeasurement
+          timeRangeCkRecordId: Basic/TimeRange
+          amountCkRecordId: Basic/Amount
+          amountUnit: 1
+          dataQuality: 1
+          parentAssociationRoleId: System/ParentChild
+          meteringPointCkTypeId: Basic.Energy/MeteringPoint
+          producerCkTypeId: EnergyCommunity/Producer
+          loadProfileSubKey: H0
+          consumerDailyKWh: 500
+          producerPeakKWp: 50
+          entityUpdatesOutputPath: $.entityUpdates
+        - type: SaveTimeRangeStreamDataInArchive@1
+          description: Stream-only write into the 15-min energy-measurements archive.
+          path: $.entityUpdates
+          archiveRtId: "ec0000000000000000000a01"
+          fromAttributePath: TimeRange.From
+          toAttributePath: TimeRange.To
+
+- rtId: ec0000000000000000000b03
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000b01
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: energy-simulator-range
+  - id: System/Description-1
+    value: >-
+      Parameterised deterministic 15-min simulator: startDate + numDays come
+      from the ExecutePipelineCommand input, passed as a JSON file via
+      ExecutePipeline -f (the file holds { "startDate": "2026-07-20T00:00:00Z",
+      "numDays": 3 }). Upserts by
+      rtId + time range into archive ec0000000000000000000a01 — use it to
+      append current days on demand. Disabled by default; trigger via
+      ExecutePipelineCommand only.
+  - id: System/Enabled-1
+    value: false
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: SimulateEnergyMeasurements@1
+          description: >-
+            15-min data for every existing EnergyMeasurement anchor over the
+            window [startDate, startDate + numDays), read from the command
+            input.
+          startDateAttributePath: $.startDate
+          numDaysAttributePath: $.numDays
+          energyMeasurementCkTypeId: Basic.Energy/EnergyMeasurement
+          timeRangeCkRecordId: Basic/TimeRange
+          amountCkRecordId: Basic/Amount
+          amountUnit: 1
+          dataQuality: 1
+          parentAssociationRoleId: System/ParentChild
+          meteringPointCkTypeId: Basic.Energy/MeteringPoint
+          producerCkTypeId: EnergyCommunity/Producer
+          loadProfileSubKey: H0
+          consumerDailyKWh: 500
+          producerPeakKWp: 50
+          entityUpdatesOutputPath: $.entityUpdates
+        - type: SaveTimeRangeStreamDataInArchive@1
+          description: Stream-only write into the 15-min energy-measurements archive.
+          path: $.entityUpdates
+          archiveRtId: "ec0000000000000000000a01"
+          fromAttributePath: TimeRange.From
+          toAttributePath: TimeRange.To
+
+# ─── Daily simulator + anchor sync (AB#4701) ─────────────────────────────
+#
+#   …b06  Pipeline  daily-simulation (child of DataFlow b01)
+#
+# Runs once per day (FromPolling, 24 h interval; also manually triggerable
+# via ExecutePipelineCommand). Two phases:
+#   A) ANCHOR SYNC: for EVERY EnergyCommunity/Consumer (2 anchors,
+#      1-1:1.9.0 P.01 + G.01) and EnergyCommunity/Producer (1 anchor,
+#      1-1:2.9.0 G.01) the EnergyMeasurement anchors are created if missing
+#      (GetOrCreate by wkn <mpRtId>_<obisCode>, ParentChild on first create) —
+#      metering points added later via the API automatically join the
+#      simulation without any manual anchor step (mirrors the EDA-ingest
+#      auto-anchor behaviour for tenants without EDA).
+#   B) SIMULATE YESTERDAY: SimulateEnergyMeasurements over the previous UTC
+#      CALENDAR day (whole-day window, aligned with the rollup buckets; the
+#      window is computed at run time, so the firing hour does not matter).
+#      Deterministic values + archive upsert make re-runs and overlaps
+#      harmless.
+- rtId: ec0000000000000000000b06
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000b01
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: daily-simulation
+  - id: System/Description-1
+    value: >-
+      Daily demo-data continuation (AB#4701): creates missing
+      EnergyMeasurement anchors for ALL Consumer/Producer metering points
+      (idempotent GetOrCreate by well-known name), then simulates the
+      previous UTC calendar day into archive ec0000000000000000000a01.
+      Fires every 24 h via FromPolling once deployed; also triggerable via
+      ExecutePipelineCommand. Disabled by default; simulation-only — NOT
+      for productive tenants.
+  - id: System/Enabled-1
+    value: false
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromPolling@1
+          interval: "1.00:00:00"
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: Logger@1
+          message: "Daily simulation (AB#4701): anchor sync + previous-day window starting"
+
+        # ===== Init shared update collections (Flatten-Append pattern) =====
+        - type: WriteJson@1
+          description: Init entity-update collection
+          targetPath: $.updates.items
+          jsonString: "[]"
+        - type: WriteJson@1
+          description: Init association-update collection
+          targetPath: $.updates.assocs
+          jsonString: "[]"
+
+        # ===== Shared mandatory anchor records (placeholder values) =====
+        - type: SetPrimitiveValue@1
+          description: Amount.CkRecordId
+          targetPath: $.rec.amount.CkRecordId
+          value: Basic/Amount
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.amount.Attributes.Value
+          value: 0.0
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.amount.Attributes.Unit
+          value: 1
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: TimeRange.CkRecordId
+          targetPath: $.rec.timeRange.CkRecordId
+          value: Basic/TimeRange
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.timeRange.Attributes.From
+          value: 2025-01-01T00:00:00Z
+          valueType: DateTime
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.timeRange.Attributes.To
+          value: 2025-01-01T00:15:00Z
+          valueType: DateTime
+
+        # ===== A1. Anchor sync for ALL consumers (2 OBIS codes) =====
+        - type: GetRtEntitiesByType@1
+          description: Load all consumer metering points
+          ckTypeId: EnergyCommunity/Consumer
+          targetPath: $.cons
+          take: 10000
+        - type: ForEach@1
+          description: Ensure the two consumer anchors exist per metering point
+          iterationPath: $.cons.Items
+          mergePath: $.key.u
+          targetPath: $.consAnchorUpdates
+          maxDegreeOfParallelism: 1
+          transformations:
+            # anchor 1-1:1.9.0 G.01 (total grid consumption)
+            - type: FormatString@1
+              description: Build wkn for the consumption anchor
+              format: "{$.key.RtId}_1-1:1.9.0 G.01"
+              targetPath: $.key.ag.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the consumption anchor by well-known name
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              rtIdTargetPath: $.key.ag.rtId
+              ckTypeIdTargetPath: $.key.ag.ckTypeId
+              modOperationPath: $.key.ag.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.ag.wkn
+            - type: If@1
+              description: Create the consumption anchor only if missing
+              path: $.key.ag.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Insert the consumption anchor
+                  targetPath: $.key.u.items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKindPath: $.key.ag.modOp
+                  ckTypeIdPath: $.key.ag.ckTypeId
+                  rtIdPath: $.key.ag.rtId
+                  rtWellKnownNamePath: $.key.ag.wkn
+                  attributeUpdates:
+                    - attributeName: ObisCode
+                      attributeValueType: String
+                      value: "1-1:1.9.0 G.01"
+                    - attributeName: DataQuality
+                      attributeValueType: Enum
+                      value: 1
+                    - attributeName: Amount
+                      attributeValueType: Record
+                      valuePath: $.full.rec.amount
+                    - attributeName: TimeRange
+                      attributeValueType: Record
+                      valuePath: $.full.rec.timeRange
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.ag.rtId
+                  originCkTypeIdPath: $.key.ag.ckTypeId
+                  targetRtIdPath: $.key.RtId
+                  targetCkTypeIdPath: $.key.CkTypeId
+                  associationRoleId: System/ParentChild
+            # anchor 1-1:1.9.0 P.01 (community partition)
+            - type: FormatString@1
+              description: Build wkn for the partition anchor
+              format: "{$.key.RtId}_1-1:1.9.0 P.01"
+              targetPath: $.key.ap.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the partition anchor by well-known name
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              rtIdTargetPath: $.key.ap.rtId
+              ckTypeIdTargetPath: $.key.ap.ckTypeId
+              modOperationPath: $.key.ap.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.ap.wkn
+            - type: If@1
+              description: Create the partition anchor only if missing
+              path: $.key.ap.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Insert the partition anchor
+                  targetPath: $.key.u.items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKindPath: $.key.ap.modOp
+                  ckTypeIdPath: $.key.ap.ckTypeId
+                  rtIdPath: $.key.ap.rtId
+                  rtWellKnownNamePath: $.key.ap.wkn
+                  attributeUpdates:
+                    - attributeName: ObisCode
+                      attributeValueType: String
+                      value: "1-1:1.9.0 P.01"
+                    - attributeName: DataQuality
+                      attributeValueType: Enum
+                      value: 1
+                    - attributeName: Amount
+                      attributeValueType: Record
+                      valuePath: $.full.rec.amount
+                    - attributeName: TimeRange
+                      attributeValueType: Record
+                      valuePath: $.full.rec.timeRange
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.ap.rtId
+                  originCkTypeIdPath: $.key.ap.ckTypeId
+                  targetRtIdPath: $.key.RtId
+                  targetCkTypeIdPath: $.key.CkTypeId
+                  associationRoleId: System/ParentChild
+
+        # ===== A2. Anchor sync for ALL producers (1 OBIS code) =====
+        - type: GetRtEntitiesByType@1
+          description: Load all producer metering points
+          ckTypeId: EnergyCommunity/Producer
+          targetPath: $.prods
+          take: 10000
+        - type: ForEach@1
+          description: Ensure the feed-in anchor exists per producer
+          iterationPath: $.prods.Items
+          mergePath: $.key.u
+          targetPath: $.prodAnchorUpdates
+          maxDegreeOfParallelism: 1
+          transformations:
+            - type: FormatString@1
+              description: Build wkn for the feed-in anchor
+              format: "{$.key.RtId}_1-1:2.9.0 G.01"
+              targetPath: $.key.af.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the feed-in anchor by well-known name
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              rtIdTargetPath: $.key.af.rtId
+              ckTypeIdTargetPath: $.key.af.ckTypeId
+              modOperationPath: $.key.af.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.af.wkn
+            - type: If@1
+              description: Create the feed-in anchor only if missing
+              path: $.key.af.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Insert the feed-in anchor
+                  targetPath: $.key.u.items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKindPath: $.key.af.modOp
+                  ckTypeIdPath: $.key.af.ckTypeId
+                  rtIdPath: $.key.af.rtId
+                  rtWellKnownNamePath: $.key.af.wkn
+                  attributeUpdates:
+                    - attributeName: ObisCode
+                      attributeValueType: String
+                      value: "1-1:2.9.0 G.01"
+                    - attributeName: DataQuality
+                      attributeValueType: Enum
+                      value: 1
+                    - attributeName: Amount
+                      attributeValueType: Record
+                      valuePath: $.full.rec.amount
+                    - attributeName: TimeRange
+                      attributeValueType: Record
+                      valuePath: $.full.rec.timeRange
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.af.rtId
+                  originCkTypeIdPath: $.key.af.ckTypeId
+                  targetRtIdPath: $.key.RtId
+                  targetCkTypeIdPath: $.key.CkTypeId
+                  associationRoleId: System/ParentChild
+
+        # ===== Collect + persist anchor inserts in one transaction =====
+        - type: Flatten@1
+          description: Collect consumer anchor entity updates
+          path: $.consAnchorUpdates[*].items[*]
+          targetPath: $.updates.items
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect consumer anchor association updates
+          path: $.consAnchorUpdates[*].assocs[*]
+          targetPath: $.updates.assocs
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect producer anchor entity updates
+          path: $.prodAnchorUpdates[*].items[*]
+          targetPath: $.updates.items
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect producer anchor association updates
+          path: $.prodAnchorUpdates[*].assocs[*]
+          targetPath: $.updates.assocs
+          targetValueWriteMode: Append
+        - type: ApplyChanges@2
+          description: Persist missing anchors + their parent associations
+          entityUpdatesPath: $.updates.items
+          associationUpdatesPath: $.updates.assocs
+
+        # ===== B. Simulate the previous UTC calendar day =====
+        - type: ExecuteCSharp@1
+          description: Compute yesterday 00:00 UTC (whole-day window, rollup-bucket aligned)
+          targetPath: $.calc.yesterday
+          returnType: DateTime
+          arguments: []
+          code: |
+            return DateTime.UtcNow.Date.AddDays(-1);
+        - type: SimulateEnergyMeasurements@1
+          description: >-
+            15-min data for every existing EnergyMeasurement anchor (including
+            the ones just created) over the previous calendar day.
+          startDateAttributePath: $.calc.yesterday
+          numDays: 1
+          energyMeasurementCkTypeId: Basic.Energy/EnergyMeasurement
+          timeRangeCkRecordId: Basic/TimeRange
+          amountCkRecordId: Basic/Amount
+          amountUnit: 1
+          dataQuality: 1
+          parentAssociationRoleId: System/ParentChild
+          meteringPointCkTypeId: Basic.Energy/MeteringPoint
+          producerCkTypeId: EnergyCommunity/Producer
+          loadProfileSubKey: H0
+          consumerDailyKWh: 500
+          producerPeakKWp: 50
+          entityUpdatesOutputPath: $.entityUpdates
+        - type: SaveTimeRangeStreamDataInArchive@1
+          description: Stream-only write into the 15-min energy-measurements archive.
+          path: $.entityUpdates
+          archiveRtId: "ec0000000000000000000a01"
+          fromAttributePath: TimeRange.From
+          toAttributePath: TimeRange.To
+
+# ─── Demo-community generator (AB#4579, extended AB#4703) ────────────────
+#
+#   …b05  DataFlow  create-demo-community
+#   …b04  Pipeline  create-demo-community
+#
+# CREATES a PRESENTABLE, self-contained demo energy community so demo/test
+# tenants need no hand-seeded data and no EDA:
+#   - 14 EnergyCommunity/Customer (obviously fictional contacts; CustomerNumber
+#     is auto-assigned via the Base-seeded AutoIncrement)
+#   - 14 Basic.Energy/OperatingFacility (the original "EC Demo Community"
+#     shared facility + 13 member facilities; each facility is wired to
+#     exactly ONE customer via EnergyCommunity/AssociatedFacilities — the
+#     model's inbound multiplicity on that role is One, so the 4 original
+#     metering points belong to the community-operator customer 01)
+#   - 14 EnergyCommunity/Consumer (0801..0814) + 3 EnergyCommunity/Producer
+#     (0901..0903) metering points (ParentChild to their facility; varied
+#     PartitionFactor 50..100 so distribution logic is visible in the UI)
+#   - 31 Basic.Energy/EnergyMeasurement anchors (consumers 2 OBIS codes,
+#     producers 1; wkn <meteringPointRtId>_<obisCode>, ParentChild to the
+#     metering point)
+#   - 17 EnergyCommunity/ParticipationPeriod (one per metering point, wkn
+#     <meteringPointRtId>_participation, EnergyCommunity/ParticipationPeriod
+#     association to the metering point; From 2025-08-04, far-future To —
+#     the Basic/TimeRange record has no optional end)
+#   - 2 EnergyCommunity/EnergyPrice (consumption / feed-in, EUR; the type
+#     carries only Price + Currency — no validity range in the model)
+# The value simulator (b02/b03) then fills archive history for the anchors —
+# a Producer's anchors get the PV curve because the metering point is an
+# EnergyCommunity/Producer (exact-type match).
+#
+# IDEMPOTENT: every entity is upserted via GetOrCreateRtEntitiesByType@1 keyed on
+# a stable natural key (facility Name, metering-point MeteringPointNumber,
+# customer/anchor/period/price RtWellKnownName) so re-running never duplicates;
+# associations are only emitted on first create (modOp == Insert == 0).
+# ALL demo data is OBVIOUSLY fictional (Muster/Beispiel/Test names,
+# example.com mails, all-zero IBANs) — the blueprint is published to a
+# public-ish catalog.
+#
+# DISABLED-BY-DEFAULT CONTRACT: System/Enabled = false and only a
+# FromExecutePipelineCommand@1 trigger — a fresh install never creates data on
+# its own. Re-apply the blueprint (InstallBlueprint -f) after a run to restore.
+
+- rtId: ec0000000000000000000b05
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: create-demo-community
+  - id: System/Description-1
+    value: >-
+      Creates a presentable, self-contained Energy Community demo dataset
+      (customers with fictional contacts, facilities, consumer/producer
+      metering points, participation periods, energy prices) and
+      Basic.Energy/EnergyMeasurement measurement anchors so the value
+      simulator can fill archive history. Simulation-only — NOT for
+      productive tenants.
+
+- rtId: ec0000000000000000000b04
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000b05
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: create-demo-community
+  - id: System/Description-1
+    value: >-
+      Generates a fixed, presentable demo energy community for EC v2 demo/test
+      tenants: 14 Customers (fictional contacts), 14 OperatingFacilities,
+      14 EnergyCommunity/Consumer + 3 EnergyCommunity/Producer metering points
+      (varied PartitionFactor), 31 EnergyMeasurement anchors, 17
+      ParticipationPeriods and 2 EnergyPrices. Idempotent (GetOrCreate upsert
+      by natural key). Disabled by default; trigger via ExecutePipelineCommand
+      only. Run the value simulator (energy-simulator-range) afterwards to
+      fill archive history.
+  - id: System/Enabled-1
+    value: false
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        # ===== Init the shared update collections (AB#4703) =====
+        # Pre-seeding both as empty arrays keeps the later Flatten@1 Append
+        # writes flat (Append onto a missing path would nest the flattened
+        # array as a single element).
+        - type: WriteJson@1
+          description: Init entity-update collection
+          targetPath: $.updates.items
+          jsonString: "[]"
+        - type: WriteJson@1
+          description: Init association-update collection
+          targetPath: $.updates.assocs
+          jsonString: "[]"
+        # ===== 0. Build the shared mandatory records (Address / Amount / TimeRange) =====
+        - type: SetPrimitiveValue@1
+          description: Address.CkRecordId
+          targetPath: $.rec.address.CkRecordId
+          value: Basic/Address
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.address.Attributes.Street
+          value: Demo Community Str. 1
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.address.Attributes.Zipcode
+          value: 1010
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.address.Attributes.CityTown
+          value: Vienna
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.address.Attributes.NationalCode
+          value: AT
+          valueType: String
+        - type: SetPrimitiveValue@1
+          description: Amount.CkRecordId
+          targetPath: $.rec.amount.CkRecordId
+          value: Basic/Amount
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.amount.Attributes.Value
+          value: 0.0
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.amount.Attributes.Unit
+          value: 1
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: TimeRange.CkRecordId
+          targetPath: $.rec.timeRange.CkRecordId
+          value: Basic/TimeRange
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.timeRange.Attributes.From
+          value: 2025-01-01T00:00:00Z
+          valueType: DateTime
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.timeRange.Attributes.To
+          value: 2025-01-01T00:15:00Z
+          valueType: DateTime
+        # ===== 1. Operating facility (idempotent GetOrCreate by Name) =====
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create the demo operating facility
+          ckTypeId: Basic.Energy/OperatingFacility
+          rtIdTargetPath: $.facility.rtId
+          ckTypeIdTargetPath: $.facility.ckTypeId
+          modOperationPath: $.facility.modOp
+          fieldFilters:
+            - attributePath: Name
+              operator: Equals
+              comparisonValue: EC Demo Community
+        - type: CreateUpdateInfo@1
+          description: Upsert the demo operating facility
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.facility.modOp
+          ckTypeIdPath: $.facility.ckTypeId
+          rtIdPath: $.facility.rtId
+          attributeUpdates:
+            - attributeName: Name
+              attributeValueType: String
+              value: EC Demo Community
+            - attributeName: State
+              attributeValueType: Enum
+              value: 1
+            - attributeName: FacilityType
+              attributeValueType: Enum
+              value: 1
+            - attributeName: Address
+              attributeValueType: Record
+              valuePath: $.rec.address
+        # ===== Metering point Demo Consumer 1 (EnergyCommunity/Consumer) =====
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create Demo Consumer 1 by MeteringPointNumber
+          ckTypeId: EnergyCommunity/Consumer
+          rtIdTargetPath: $.c1.rtId
+          ckTypeIdTargetPath: $.c1.ckTypeId
+          modOperationPath: $.c1.modOp
+          fieldFilters:
+            - attributePath: MeteringPointNumber
+              operator: Equals
+              comparisonValue: AT0000000000000000000000000000801
+        - type: CreateUpdateInfo@1
+          description: Upsert Demo Consumer 1
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.c1.modOp
+          ckTypeIdPath: $.c1.ckTypeId
+          rtIdPath: $.c1.rtId
+          attributeUpdates:
+            - attributeName: Name
+              attributeValueType: String
+              value: Demo Consumer 1
+            - attributeName: MeteringPointNumber
+              attributeValueType: String
+              value: AT0000000000000000000000000000801
+            - attributeName: State
+              attributeValueType: Enum
+              value: 1
+            - attributeName: CarrierType
+              attributeValueType: Enum
+              value: 1
+            - attributeName: PartitionFactor
+              attributeValueType: Int
+              value: 80
+        - type: If@1
+          description: Link Demo Consumer 1 to the facility only on first create
+          path: $.c1.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.c1.rtId
+              originCkTypeIdPath: $.c1.ckTypeId
+              targetRtIdPath: $.facility.rtId
+              targetCkTypeIdPath: $.facility.ckTypeId
+              associationRoleId: System/ParentChild
+        # ===== Metering point Demo Consumer 2 (EnergyCommunity/Consumer) =====
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create Demo Consumer 2 by MeteringPointNumber
+          ckTypeId: EnergyCommunity/Consumer
+          rtIdTargetPath: $.c2.rtId
+          ckTypeIdTargetPath: $.c2.ckTypeId
+          modOperationPath: $.c2.modOp
+          fieldFilters:
+            - attributePath: MeteringPointNumber
+              operator: Equals
+              comparisonValue: AT0000000000000000000000000000802
+        - type: CreateUpdateInfo@1
+          description: Upsert Demo Consumer 2
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.c2.modOp
+          ckTypeIdPath: $.c2.ckTypeId
+          rtIdPath: $.c2.rtId
+          attributeUpdates:
+            - attributeName: Name
+              attributeValueType: String
+              value: Demo Consumer 2
+            - attributeName: MeteringPointNumber
+              attributeValueType: String
+              value: AT0000000000000000000000000000802
+            - attributeName: State
+              attributeValueType: Enum
+              value: 1
+            - attributeName: CarrierType
+              attributeValueType: Enum
+              value: 1
+            - attributeName: PartitionFactor
+              attributeValueType: Int
+              value: 80
+        - type: If@1
+          description: Link Demo Consumer 2 to the facility only on first create
+          path: $.c2.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.c2.rtId
+              originCkTypeIdPath: $.c2.ckTypeId
+              targetRtIdPath: $.facility.rtId
+              targetCkTypeIdPath: $.facility.ckTypeId
+              associationRoleId: System/ParentChild
+        # ===== Metering point Demo Consumer 3 (EnergyCommunity/Consumer) =====
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create Demo Consumer 3 by MeteringPointNumber
+          ckTypeId: EnergyCommunity/Consumer
+          rtIdTargetPath: $.c3.rtId
+          ckTypeIdTargetPath: $.c3.ckTypeId
+          modOperationPath: $.c3.modOp
+          fieldFilters:
+            - attributePath: MeteringPointNumber
+              operator: Equals
+              comparisonValue: AT0000000000000000000000000000803
+        - type: CreateUpdateInfo@1
+          description: Upsert Demo Consumer 3
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.c3.modOp
+          ckTypeIdPath: $.c3.ckTypeId
+          rtIdPath: $.c3.rtId
+          attributeUpdates:
+            - attributeName: Name
+              attributeValueType: String
+              value: Demo Consumer 3
+            - attributeName: MeteringPointNumber
+              attributeValueType: String
+              value: AT0000000000000000000000000000803
+            - attributeName: State
+              attributeValueType: Enum
+              value: 1
+            - attributeName: CarrierType
+              attributeValueType: Enum
+              value: 1
+            - attributeName: PartitionFactor
+              attributeValueType: Int
+              value: 80
+        - type: If@1
+          description: Link Demo Consumer 3 to the facility only on first create
+          path: $.c3.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.c3.rtId
+              originCkTypeIdPath: $.c3.ckTypeId
+              targetRtIdPath: $.facility.rtId
+              targetCkTypeIdPath: $.facility.ckTypeId
+              associationRoleId: System/ParentChild
+        # ===== Metering point Demo Producer PV (EnergyCommunity/Producer) =====
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create Demo Producer PV by MeteringPointNumber
+          ckTypeId: EnergyCommunity/Producer
+          rtIdTargetPath: $.p1.rtId
+          ckTypeIdTargetPath: $.p1.ckTypeId
+          modOperationPath: $.p1.modOp
+          fieldFilters:
+            - attributePath: MeteringPointNumber
+              operator: Equals
+              comparisonValue: AT0000000000000000000000000000901
+        - type: CreateUpdateInfo@1
+          description: Upsert Demo Producer PV
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.p1.modOp
+          ckTypeIdPath: $.p1.ckTypeId
+          rtIdPath: $.p1.rtId
+          attributeUpdates:
+            - attributeName: Name
+              attributeValueType: String
+              value: Demo Producer PV
+            - attributeName: MeteringPointNumber
+              attributeValueType: String
+              value: AT0000000000000000000000000000901
+            - attributeName: State
+              attributeValueType: Enum
+              value: 1
+            - attributeName: CarrierType
+              attributeValueType: Enum
+              value: 1
+            - attributeName: PartitionFactor
+              attributeValueType: Int
+              value: 80
+            - attributeName: ProductionType
+              attributeValueType: Enum
+              value: 1
+        - type: If@1
+          description: Link Demo Producer PV to the facility only on first create
+          path: $.p1.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.p1.rtId
+              originCkTypeIdPath: $.p1.ckTypeId
+              targetRtIdPath: $.facility.rtId
+              targetCkTypeIdPath: $.facility.ckTypeId
+              associationRoleId: System/ParentChild
+        # ===== EnergyMeasurement anchors (one per metering point x OBIS code) =====
+        # wkn = <meteringPointRtId>_<obisCode>; idempotent GetOrCreate by RtWellKnownName.
+        # anchor a1: c1 / 1-1:1.9.0 G.01
+        - type: FormatString@1
+          description: Build wkn for c1 / 1-1:1.9.0 G.01
+          format: "{$.c1.rtId}_1-1:1.9.0 G.01"
+          targetPath: $.a1.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create anchor a1 by well-known name
+          ckTypeId: Basic.Energy/EnergyMeasurement
+          rtIdTargetPath: $.a1.rtId
+          ckTypeIdTargetPath: $.a1.ckTypeId
+          modOperationPath: $.a1.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.a1.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert anchor a1
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.a1.modOp
+          ckTypeIdPath: $.a1.ckTypeId
+          rtIdPath: $.a1.rtId
+          rtWellKnownNamePath: $.a1.wkn
+          attributeUpdates:
+            - attributeName: ObisCode
+              attributeValueType: String
+              value: "1-1:1.9.0 G.01"
+            - attributeName: DataQuality
+              attributeValueType: Enum
+              value: 1
+            - attributeName: Amount
+              attributeValueType: Record
+              valuePath: $.rec.amount
+            - attributeName: TimeRange
+              attributeValueType: Record
+              valuePath: $.rec.timeRange
+        - type: If@1
+          description: Link anchor a1 to its metering point only on first create
+          path: $.a1.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.a1.rtId
+              originCkTypeIdPath: $.a1.ckTypeId
+              targetRtIdPath: $.c1.rtId
+              targetCkTypeIdPath: $.c1.ckTypeId
+              associationRoleId: System/ParentChild
+        # anchor a2: c1 / 1-1:1.9.0 P.01
+        - type: FormatString@1
+          description: Build wkn for c1 / 1-1:1.9.0 P.01
+          format: "{$.c1.rtId}_1-1:1.9.0 P.01"
+          targetPath: $.a2.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create anchor a2 by well-known name
+          ckTypeId: Basic.Energy/EnergyMeasurement
+          rtIdTargetPath: $.a2.rtId
+          ckTypeIdTargetPath: $.a2.ckTypeId
+          modOperationPath: $.a2.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.a2.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert anchor a2
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.a2.modOp
+          ckTypeIdPath: $.a2.ckTypeId
+          rtIdPath: $.a2.rtId
+          rtWellKnownNamePath: $.a2.wkn
+          attributeUpdates:
+            - attributeName: ObisCode
+              attributeValueType: String
+              value: "1-1:1.9.0 P.01"
+            - attributeName: DataQuality
+              attributeValueType: Enum
+              value: 1
+            - attributeName: Amount
+              attributeValueType: Record
+              valuePath: $.rec.amount
+            - attributeName: TimeRange
+              attributeValueType: Record
+              valuePath: $.rec.timeRange
+        - type: If@1
+          description: Link anchor a2 to its metering point only on first create
+          path: $.a2.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.a2.rtId
+              originCkTypeIdPath: $.a2.ckTypeId
+              targetRtIdPath: $.c1.rtId
+              targetCkTypeIdPath: $.c1.ckTypeId
+              associationRoleId: System/ParentChild
+        # anchor a3: c2 / 1-1:1.9.0 G.01
+        - type: FormatString@1
+          description: Build wkn for c2 / 1-1:1.9.0 G.01
+          format: "{$.c2.rtId}_1-1:1.9.0 G.01"
+          targetPath: $.a3.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create anchor a3 by well-known name
+          ckTypeId: Basic.Energy/EnergyMeasurement
+          rtIdTargetPath: $.a3.rtId
+          ckTypeIdTargetPath: $.a3.ckTypeId
+          modOperationPath: $.a3.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.a3.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert anchor a3
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.a3.modOp
+          ckTypeIdPath: $.a3.ckTypeId
+          rtIdPath: $.a3.rtId
+          rtWellKnownNamePath: $.a3.wkn
+          attributeUpdates:
+            - attributeName: ObisCode
+              attributeValueType: String
+              value: "1-1:1.9.0 G.01"
+            - attributeName: DataQuality
+              attributeValueType: Enum
+              value: 1
+            - attributeName: Amount
+              attributeValueType: Record
+              valuePath: $.rec.amount
+            - attributeName: TimeRange
+              attributeValueType: Record
+              valuePath: $.rec.timeRange
+        - type: If@1
+          description: Link anchor a3 to its metering point only on first create
+          path: $.a3.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.a3.rtId
+              originCkTypeIdPath: $.a3.ckTypeId
+              targetRtIdPath: $.c2.rtId
+              targetCkTypeIdPath: $.c2.ckTypeId
+              associationRoleId: System/ParentChild
+        # anchor a4: c2 / 1-1:1.9.0 P.01
+        - type: FormatString@1
+          description: Build wkn for c2 / 1-1:1.9.0 P.01
+          format: "{$.c2.rtId}_1-1:1.9.0 P.01"
+          targetPath: $.a4.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create anchor a4 by well-known name
+          ckTypeId: Basic.Energy/EnergyMeasurement
+          rtIdTargetPath: $.a4.rtId
+          ckTypeIdTargetPath: $.a4.ckTypeId
+          modOperationPath: $.a4.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.a4.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert anchor a4
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.a4.modOp
+          ckTypeIdPath: $.a4.ckTypeId
+          rtIdPath: $.a4.rtId
+          rtWellKnownNamePath: $.a4.wkn
+          attributeUpdates:
+            - attributeName: ObisCode
+              attributeValueType: String
+              value: "1-1:1.9.0 P.01"
+            - attributeName: DataQuality
+              attributeValueType: Enum
+              value: 1
+            - attributeName: Amount
+              attributeValueType: Record
+              valuePath: $.rec.amount
+            - attributeName: TimeRange
+              attributeValueType: Record
+              valuePath: $.rec.timeRange
+        - type: If@1
+          description: Link anchor a4 to its metering point only on first create
+          path: $.a4.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.a4.rtId
+              originCkTypeIdPath: $.a4.ckTypeId
+              targetRtIdPath: $.c2.rtId
+              targetCkTypeIdPath: $.c2.ckTypeId
+              associationRoleId: System/ParentChild
+        # anchor a5: c3 / 1-1:1.9.0 G.01
+        - type: FormatString@1
+          description: Build wkn for c3 / 1-1:1.9.0 G.01
+          format: "{$.c3.rtId}_1-1:1.9.0 G.01"
+          targetPath: $.a5.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create anchor a5 by well-known name
+          ckTypeId: Basic.Energy/EnergyMeasurement
+          rtIdTargetPath: $.a5.rtId
+          ckTypeIdTargetPath: $.a5.ckTypeId
+          modOperationPath: $.a5.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.a5.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert anchor a5
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.a5.modOp
+          ckTypeIdPath: $.a5.ckTypeId
+          rtIdPath: $.a5.rtId
+          rtWellKnownNamePath: $.a5.wkn
+          attributeUpdates:
+            - attributeName: ObisCode
+              attributeValueType: String
+              value: "1-1:1.9.0 G.01"
+            - attributeName: DataQuality
+              attributeValueType: Enum
+              value: 1
+            - attributeName: Amount
+              attributeValueType: Record
+              valuePath: $.rec.amount
+            - attributeName: TimeRange
+              attributeValueType: Record
+              valuePath: $.rec.timeRange
+        - type: If@1
+          description: Link anchor a5 to its metering point only on first create
+          path: $.a5.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.a5.rtId
+              originCkTypeIdPath: $.a5.ckTypeId
+              targetRtIdPath: $.c3.rtId
+              targetCkTypeIdPath: $.c3.ckTypeId
+              associationRoleId: System/ParentChild
+        # anchor a6: c3 / 1-1:1.9.0 P.01
+        - type: FormatString@1
+          description: Build wkn for c3 / 1-1:1.9.0 P.01
+          format: "{$.c3.rtId}_1-1:1.9.0 P.01"
+          targetPath: $.a6.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create anchor a6 by well-known name
+          ckTypeId: Basic.Energy/EnergyMeasurement
+          rtIdTargetPath: $.a6.rtId
+          ckTypeIdTargetPath: $.a6.ckTypeId
+          modOperationPath: $.a6.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.a6.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert anchor a6
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.a6.modOp
+          ckTypeIdPath: $.a6.ckTypeId
+          rtIdPath: $.a6.rtId
+          rtWellKnownNamePath: $.a6.wkn
+          attributeUpdates:
+            - attributeName: ObisCode
+              attributeValueType: String
+              value: "1-1:1.9.0 P.01"
+            - attributeName: DataQuality
+              attributeValueType: Enum
+              value: 1
+            - attributeName: Amount
+              attributeValueType: Record
+              valuePath: $.rec.amount
+            - attributeName: TimeRange
+              attributeValueType: Record
+              valuePath: $.rec.timeRange
+        - type: If@1
+          description: Link anchor a6 to its metering point only on first create
+          path: $.a6.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.a6.rtId
+              originCkTypeIdPath: $.a6.ckTypeId
+              targetRtIdPath: $.c3.rtId
+              targetCkTypeIdPath: $.c3.ckTypeId
+              associationRoleId: System/ParentChild
+        # anchor a7: p1 / 1-1:2.9.0 G.01
+        - type: FormatString@1
+          description: Build wkn for p1 / 1-1:2.9.0 G.01
+          format: "{$.p1.rtId}_1-1:2.9.0 G.01"
+          targetPath: $.a7.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create anchor a7 by well-known name
+          ckTypeId: Basic.Energy/EnergyMeasurement
+          rtIdTargetPath: $.a7.rtId
+          ckTypeIdTargetPath: $.a7.ckTypeId
+          modOperationPath: $.a7.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.a7.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert anchor a7
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.a7.modOp
+          ckTypeIdPath: $.a7.ckTypeId
+          rtIdPath: $.a7.rtId
+          rtWellKnownNamePath: $.a7.wkn
+          attributeUpdates:
+            - attributeName: ObisCode
+              attributeValueType: String
+              value: "1-1:2.9.0 G.01"
+            - attributeName: DataQuality
+              attributeValueType: Enum
+              value: 1
+            - attributeName: Amount
+              attributeValueType: Record
+              valuePath: $.rec.amount
+            - attributeName: TimeRange
+              attributeValueType: Record
+              valuePath: $.rec.timeRange
+        - type: If@1
+          description: Link anchor a7 to its metering point only on first create
+          path: $.a7.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.a7.rtId
+              originCkTypeIdPath: $.a7.ckTypeId
+              targetRtIdPath: $.p1.rtId
+              targetCkTypeIdPath: $.p1.ckTypeId
+              associationRoleId: System/ParentChild
+        # ===== Community-operator customer (AB#4703) =====
+        # EnergyCommunity/AssociatedFacilities has inbound multiplicity One
+        # (every facility belongs to exactly ONE customer), so the shared
+        # "EC Demo Community" facility (with the 4 original metering points)
+        # is owned by the community-operator customer 01.
+        - type: SetPrimitiveValue@1
+          description: Well-known name of the community-operator customer
+          targetPath: $.cu1.wkn
+          value: demo-customer-01
+          valueType: String
+        - type: WriteJson@1
+          description: Contact record of the community-operator customer (obviously fictional)
+          targetPath: $.cu1.contact
+          jsonString: |
+            { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 1, "CompanyName": "Energiegemeinschaft Musterstadt eGen", "Email": "office.ec-musterstadt@example.com", "TaxIdentificationNumber": "ATU00000001", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Am Energiepark 1", "Zipcode": 4020, "CityTown": "Musterstadt", "NationalCode": "AT" } } } }
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create the community-operator customer by well-known name
+          ckTypeId: EnergyCommunity/Customer
+          rtIdTargetPath: $.cu1.rtId
+          ckTypeIdTargetPath: $.cu1.ckTypeId
+          modOperationPath: $.cu1.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.cu1.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert the community-operator customer (CustomerNumber set explicitly — the AutoIncrement is only consumed by the app's create flow, an import leaves the mandatory attribute null and breaks the customer list, AB#4703)
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.cu1.modOp
+          ckTypeIdPath: $.cu1.ckTypeId
+          rtIdPath: $.cu1.rtId
+          rtWellKnownNamePath: $.cu1.wkn
+          attributeUpdates:
+            - attributeName: Contact
+              attributeValueType: Record
+              valuePath: $.cu1.contact
+            - attributeName: CustomerNumber
+              attributeValueType: String
+              value: '10001'
+            - attributeName: BillingCycle
+              attributeValueType: Enum
+              value: 3
+            - attributeName: State
+              attributeValueType: Enum
+              value: 1
+            - attributeName: TaxProcedureCreditNote
+              attributeValueType: Enum
+              value: 2
+        - type: If@1
+          description: Link the shared facility to customer 01 only on first create
+          path: $.cu1.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.cu1.rtId
+              originCkTypeIdPath: $.cu1.ckTypeId
+              targetRtIdPath: $.facility.rtId
+              targetCkTypeIdPath: $.facility.ckTypeId
+              associationRoleId: EnergyCommunity/AssociatedFacilities
+        # ===== Participation periods for the 4 original metering points (AB#4703) =====
+        # One EnergyCommunity/ParticipationPeriod per metering point, wkn
+        # <meteringPointRtId>_participation. The Basic/TimeRange record has no
+        # optional end, so the "open" demo period uses a far-future To.
+        # period pp1: c1
+        - type: FormatString@1
+          description: Build wkn for the c1 participation period
+          format: "{$.c1.rtId}_participation"
+          targetPath: $.pp1.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create the c1 participation period by well-known name
+          ckTypeId: EnergyCommunity/ParticipationPeriod
+          rtIdTargetPath: $.pp1.rtId
+          ckTypeIdTargetPath: $.pp1.ckTypeId
+          modOperationPath: $.pp1.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.pp1.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert the c1 participation period
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.pp1.modOp
+          ckTypeIdPath: $.pp1.ckTypeId
+          rtIdPath: $.pp1.rtId
+          rtWellKnownNamePath: $.pp1.wkn
+          attributeUpdates:
+            - attributeName: TimeRange.From
+              attributeValueType: DateTime
+              value: "2025-08-04T00:00:00Z"
+            - attributeName: TimeRange.To
+              attributeValueType: DateTime
+              value: "2099-12-31T23:59:59Z"
+        - type: If@1
+          description: Link the c1 participation period only on first create
+          path: $.pp1.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.pp1.rtId
+              originCkTypeIdPath: $.pp1.ckTypeId
+              targetRtIdPath: $.c1.rtId
+              targetCkTypeIdPath: $.c1.ckTypeId
+              associationRoleId: EnergyCommunity/ParticipationPeriod
+        # period pp2: c2
+        - type: FormatString@1
+          description: Build wkn for the c2 participation period
+          format: "{$.c2.rtId}_participation"
+          targetPath: $.pp2.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create the c2 participation period by well-known name
+          ckTypeId: EnergyCommunity/ParticipationPeriod
+          rtIdTargetPath: $.pp2.rtId
+          ckTypeIdTargetPath: $.pp2.ckTypeId
+          modOperationPath: $.pp2.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.pp2.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert the c2 participation period
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.pp2.modOp
+          ckTypeIdPath: $.pp2.ckTypeId
+          rtIdPath: $.pp2.rtId
+          rtWellKnownNamePath: $.pp2.wkn
+          attributeUpdates:
+            - attributeName: TimeRange.From
+              attributeValueType: DateTime
+              value: "2025-08-04T00:00:00Z"
+            - attributeName: TimeRange.To
+              attributeValueType: DateTime
+              value: "2099-12-31T23:59:59Z"
+        - type: If@1
+          description: Link the c2 participation period only on first create
+          path: $.pp2.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.pp2.rtId
+              originCkTypeIdPath: $.pp2.ckTypeId
+              targetRtIdPath: $.c2.rtId
+              targetCkTypeIdPath: $.c2.ckTypeId
+              associationRoleId: EnergyCommunity/ParticipationPeriod
+        # period pp3: c3
+        - type: FormatString@1
+          description: Build wkn for the c3 participation period
+          format: "{$.c3.rtId}_participation"
+          targetPath: $.pp3.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create the c3 participation period by well-known name
+          ckTypeId: EnergyCommunity/ParticipationPeriod
+          rtIdTargetPath: $.pp3.rtId
+          ckTypeIdTargetPath: $.pp3.ckTypeId
+          modOperationPath: $.pp3.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.pp3.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert the c3 participation period
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.pp3.modOp
+          ckTypeIdPath: $.pp3.ckTypeId
+          rtIdPath: $.pp3.rtId
+          rtWellKnownNamePath: $.pp3.wkn
+          attributeUpdates:
+            - attributeName: TimeRange.From
+              attributeValueType: DateTime
+              value: "2025-08-04T00:00:00Z"
+            - attributeName: TimeRange.To
+              attributeValueType: DateTime
+              value: "2099-12-31T23:59:59Z"
+        - type: If@1
+          description: Link the c3 participation period only on first create
+          path: $.pp3.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.pp3.rtId
+              originCkTypeIdPath: $.pp3.ckTypeId
+              targetRtIdPath: $.c3.rtId
+              targetCkTypeIdPath: $.c3.ckTypeId
+              associationRoleId: EnergyCommunity/ParticipationPeriod
+        # period pp4: p1
+        - type: FormatString@1
+          description: Build wkn for the p1 participation period
+          format: "{$.p1.rtId}_participation"
+          targetPath: $.pp4.wkn
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create the p1 participation period by well-known name
+          ckTypeId: EnergyCommunity/ParticipationPeriod
+          rtIdTargetPath: $.pp4.rtId
+          ckTypeIdTargetPath: $.pp4.ckTypeId
+          modOperationPath: $.pp4.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.pp4.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert the p1 participation period
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.pp4.modOp
+          ckTypeIdPath: $.pp4.ckTypeId
+          rtIdPath: $.pp4.rtId
+          rtWellKnownNamePath: $.pp4.wkn
+          attributeUpdates:
+            - attributeName: TimeRange.From
+              attributeValueType: DateTime
+              value: "2025-08-04T00:00:00Z"
+            - attributeName: TimeRange.To
+              attributeValueType: DateTime
+              value: "2099-12-31T23:59:59Z"
+        - type: If@1
+          description: Link the p1 participation period only on first create
+          path: $.pp4.modOp
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: CreateAssociationUpdate@1
+              targetPath: $.updates.assocs
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: CREATE
+              originRtIdPath: $.pp4.rtId
+              originCkTypeIdPath: $.pp4.ckTypeId
+              targetRtIdPath: $.p1.rtId
+              targetCkTypeIdPath: $.p1.ckTypeId
+              associationRoleId: EnergyCommunity/ParticipationPeriod
+        # ===== Additional community members (AB#4703) =====
+        # 11 consumer members (0804..0814) + 2 producer members (0902, 0903),
+        # each with their own customer + facility (AssociatedFacilities inbound
+        # multiplicity is One — a facility belongs to exactly one customer).
+        # ALL names/addresses/mails/IBANs are OBVIOUSLY fictional.
+        - type: WriteJson@1
+          description: Seed data for the 11 additional consumer members (obviously fictional)
+          targetPath: $.seed.consumerMembers
+          jsonString: |
+            [
+              { "wkn": "demo-customer-02", "customerNumber": "10002", "billingCycle": 1, "taxProcedure": 2, "facilityName": "Haus Musterweber", "facilityType": 1, "mpName": "Demo Consumer 4", "mpn": "AT0000000000000000000000000000804", "partitionFactor": 50,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 0, "Salutation": 1, "FirstName": "Max", "LastName": "Musterweber", "Email": "max.musterweber@example.com", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Musterweg 12", "Zipcode": 4020, "CityTown": "Musterstadt", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Musterweg 2", "Zipcode": 4020, "CityTown": "Musterstadt", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-03", "customerNumber": "10003", "billingCycle": 1, "taxProcedure": 2, "facilityName": "Haus Beispielhuber", "facilityType": 1, "mpName": "Demo Consumer 5", "mpn": "AT0000000000000000000000000000805", "partitionFactor": 60,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 0, "Salutation": 2, "FirstName": "Erika", "LastName": "Beispielhuber", "Email": "erika.beispielhuber@example.com", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Beispielgasse 5", "Zipcode": 4021, "CityTown": "Musterstadt", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Beispielgasse 3", "Zipcode": 4020, "CityTown": "Musterstadt", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-04", "customerNumber": "10004", "billingCycle": 0, "taxProcedure": 1, "facilityName": "Bäckerei Beispielbrot", "facilityType": 2, "mpName": "Demo Consumer 6", "mpn": "AT0000000000000000000000000000806", "partitionFactor": 55,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 2, "CompanyName": "Bäckerei Beispielbrot GmbH", "Email": "office.beispielbrot@example.com", "TaxIdentificationNumber": "ATU00000004", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Hauptplatz 3", "Zipcode": 4020, "CityTown": "Musterstadt", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Hauptplatz 4", "Zipcode": 4021, "CityTown": "Musterstadt", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-05", "customerNumber": "10005", "billingCycle": 1, "taxProcedure": 2, "facilityName": "Haus Musterbauer", "facilityType": 1, "mpName": "Demo Consumer 7", "mpn": "AT0000000000000000000000000000807", "partitionFactor": 70,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 0, "Salutation": 2, "FirstName": "Anna", "LastName": "Musterbauer", "Email": "anna.musterbauer@example.com", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Feldstraße 8", "Zipcode": 4022, "CityTown": "Musterdorf", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Feldweg 5", "Zipcode": 4020, "CityTown": "Musterstadt", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-06", "customerNumber": "10006", "billingCycle": 1, "taxProcedure": 2, "facilityName": "Haus Probegger", "facilityType": 1, "mpName": "Demo Consumer 8", "mpn": "AT0000000000000000000000000000808", "partitionFactor": 65,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 0, "Salutation": 1, "FirstName": "Felix", "LastName": "Probegger", "Email": "felix.probegger@example.com", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Bergblick 21", "Zipcode": 4022, "CityTown": "Musterdorf", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Am Testberg 6", "Zipcode": 4022, "CityTown": "Testdorf", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-07", "customerNumber": "10007", "billingCycle": 0, "taxProcedure": 1, "facilityName": "Gasthaus Probewirt", "facilityType": 2, "mpName": "Demo Consumer 9", "mpn": "AT0000000000000000000000000000809", "partitionFactor": 75,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 2, "CompanyName": "Gasthaus Probewirt e.U.", "Email": "office.probewirt@example.com", "TaxIdentificationNumber": "ATU00000007", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Wirtsgasse 2", "Zipcode": 4021, "CityTown": "Musterstadt", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Dorfstraße 7", "Zipcode": 4021, "CityTown": "Musterstadt", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-08", "customerNumber": "10008", "billingCycle": 1, "taxProcedure": 2, "facilityName": "Haus Mustermoser", "facilityType": 1, "mpName": "Demo Consumer 10", "mpn": "AT0000000000000000000000000000810", "partitionFactor": 85,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 0, "Salutation": 2, "FirstName": "Maria", "LastName": "Mustermoser", "Email": "maria.mustermoser@example.com", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Sonnenallee 14", "Zipcode": 4020, "CityTown": "Musterstadt", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Wiesenweg 8", "Zipcode": 4020, "CityTown": "Musterstadt", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-09", "customerNumber": "10009", "billingCycle": 1, "taxProcedure": 3, "facilityName": "Hof Beispielgruber", "facilityType": 1, "mpName": "Demo Consumer 11", "mpn": "AT0000000000000000000000000000811", "partitionFactor": 95,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 0, "Salutation": 1, "FirstName": "Josef", "LastName": "Beispielgruber", "Email": "josef.beispielgruber@example.com", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Alte Landstraße 33", "Zipcode": 4023, "CityTown": "Beispielhausen", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Bergstraße 9", "Zipcode": 4023, "CityTown": "Beispieldorf", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-10", "customerNumber": "10010", "billingCycle": 3, "taxProcedure": 2, "facilityName": "Kindergarten Musterdorf", "facilityType": 4, "mpName": "Demo Consumer 12", "mpn": "AT0000000000000000000000000000812", "partitionFactor": 90,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 3, "CompanyName": "Kindergarten Musterdorf", "Email": "office.kiga-musterdorf@example.com", "TaxIdentificationNumber": "ATU00000010", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Schulweg 4", "Zipcode": 4022, "CityTown": "Musterdorf", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Schulgasse 10", "Zipcode": 4023, "CityTown": "Beispieldorf", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-11", "customerNumber": "10011", "billingCycle": 1, "taxProcedure": 2, "facilityName": "Haus Testleitner", "facilityType": 1, "mpName": "Demo Consumer 13", "mpn": "AT0000000000000000000000000000813", "partitionFactor": 100,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 0, "Salutation": 2, "FirstName": "Lena", "LastName": "Testleitner", "Email": "lena.testleitner@example.com", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Gartenstraße 9", "Zipcode": 4023, "CityTown": "Beispielhausen", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Sonnenallee 11", "Zipcode": 4022, "CityTown": "Testdorf", "NationalCode": "AT" } } },
+              { "wkn": "demo-customer-12", "customerNumber": "10012", "billingCycle": 0, "taxProcedure": 1, "facilityName": "Tischlerei Testholz", "facilityType": 2, "mpName": "Demo Consumer 14", "mpn": "AT0000000000000000000000000000814", "partitionFactor": 80,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 2, "CompanyName": "Tischlerei Testholz GmbH", "Email": "office.testholz@example.com", "TaxIdentificationNumber": "ATU00000012", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Gewerbestraße 7", "Zipcode": 4021, "CityTown": "Musterstadt", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Gewerbepark 12", "Zipcode": 4021, "CityTown": "Musterstadt", "NationalCode": "AT" } } }
+            ]
+        - type: ForEach@1
+          description: Upsert facility, customer, consumer metering point, anchors and participation period per consumer member
+          iterationPath: $.seed.consumerMembers
+          mergePath: $.key.u
+          targetPath: $.consumerUpdates
+          maxDegreeOfParallelism: 1
+          transformations:
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the member facility by Name
+              ckTypeId: Basic.Energy/OperatingFacility
+              rtIdTargetPath: $.key.fac.rtId
+              ckTypeIdTargetPath: $.key.fac.ckTypeId
+              modOperationPath: $.key.fac.modOp
+              fieldFilters:
+                - attributePath: Name
+                  operator: Equals
+                  comparisonValuePath: $.key.facilityName
+            - type: CreateUpdateInfo@1
+              description: Upsert the member facility
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.fac.modOp
+              ckTypeIdPath: $.key.fac.ckTypeId
+              rtIdPath: $.key.fac.rtId
+              attributeUpdates:
+                - attributeName: Name
+                  attributeValueType: String
+                  valuePath: $.key.facilityName
+                - attributeName: State
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: FacilityType
+                  attributeValueType: Enum
+                  valuePath: $.key.facilityType
+                - attributeName: Address
+                  attributeValueType: Record
+                  valuePath: $.key.address
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the member customer by well-known name
+              ckTypeId: EnergyCommunity/Customer
+              rtIdTargetPath: $.key.cu.rtId
+              ckTypeIdTargetPath: $.key.cu.ckTypeId
+              modOperationPath: $.key.cu.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.wkn
+            - type: CreateUpdateInfo@1
+              description: Upsert the member customer (CustomerNumber from the seed item — see operator note, AB#4703)
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.cu.modOp
+              ckTypeIdPath: $.key.cu.ckTypeId
+              rtIdPath: $.key.cu.rtId
+              rtWellKnownNamePath: $.key.wkn
+              attributeUpdates:
+                - attributeName: Contact
+                  attributeValueType: Record
+                  valuePath: $.key.contact
+                - attributeName: CustomerNumber
+                  attributeValueType: String
+                  valuePath: $.key.customerNumber
+                - attributeName: BillingCycle
+                  attributeValueType: Enum
+                  valuePath: $.key.billingCycle
+                - attributeName: State
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: TaxProcedureCreditNote
+                  attributeValueType: Enum
+                  valuePath: $.key.taxProcedure
+            - type: If@1
+              description: Link the member facility to its customer only on first create
+              path: $.key.cu.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.cu.rtId
+                  originCkTypeIdPath: $.key.cu.ckTypeId
+                  targetRtIdPath: $.key.fac.rtId
+                  targetCkTypeIdPath: $.key.fac.ckTypeId
+                  associationRoleId: EnergyCommunity/AssociatedFacilities
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the consumer metering point by MeteringPointNumber
+              ckTypeId: EnergyCommunity/Consumer
+              rtIdTargetPath: $.key.mp.rtId
+              ckTypeIdTargetPath: $.key.mp.ckTypeId
+              modOperationPath: $.key.mp.modOp
+              fieldFilters:
+                - attributePath: MeteringPointNumber
+                  operator: Equals
+                  comparisonValuePath: $.key.mpn
+            - type: CreateUpdateInfo@1
+              description: Upsert the consumer metering point
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.mp.modOp
+              ckTypeIdPath: $.key.mp.ckTypeId
+              rtIdPath: $.key.mp.rtId
+              attributeUpdates:
+                - attributeName: Name
+                  attributeValueType: String
+                  valuePath: $.key.mpName
+                - attributeName: MeteringPointNumber
+                  attributeValueType: String
+                  valuePath: $.key.mpn
+                - attributeName: State
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: CarrierType
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: PartitionFactor
+                  attributeValueType: Int
+                  valuePath: $.key.partitionFactor
+            - type: If@1
+              description: Link the metering point to the member facility only on first create
+              path: $.key.mp.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.mp.rtId
+                  originCkTypeIdPath: $.key.mp.ckTypeId
+                  targetRtIdPath: $.key.fac.rtId
+                  targetCkTypeIdPath: $.key.fac.ckTypeId
+                  associationRoleId: System/ParentChild
+            # anchor 1-1:1.9.0 G.01
+            - type: FormatString@1
+              description: Build wkn for the consumption anchor
+              format: "{$.key.mp.rtId}_1-1:1.9.0 G.01"
+              targetPath: $.key.ag.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the consumption anchor by well-known name
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              rtIdTargetPath: $.key.ag.rtId
+              ckTypeIdTargetPath: $.key.ag.ckTypeId
+              modOperationPath: $.key.ag.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.ag.wkn
+            - type: CreateUpdateInfo@1
+              description: Upsert the consumption anchor
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.ag.modOp
+              ckTypeIdPath: $.key.ag.ckTypeId
+              rtIdPath: $.key.ag.rtId
+              rtWellKnownNamePath: $.key.ag.wkn
+              attributeUpdates:
+                - attributeName: ObisCode
+                  attributeValueType: String
+                  value: "1-1:1.9.0 G.01"
+                - attributeName: DataQuality
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: Amount
+                  attributeValueType: Record
+                  valuePath: $.full.rec.amount
+                - attributeName: TimeRange
+                  attributeValueType: Record
+                  valuePath: $.full.rec.timeRange
+            - type: If@1
+              description: Link the consumption anchor to its metering point only on first create
+              path: $.key.ag.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.ag.rtId
+                  originCkTypeIdPath: $.key.ag.ckTypeId
+                  targetRtIdPath: $.key.mp.rtId
+                  targetCkTypeIdPath: $.key.mp.ckTypeId
+                  associationRoleId: System/ParentChild
+            # anchor 1-1:1.9.0 P.01
+            - type: FormatString@1
+              description: Build wkn for the partition anchor
+              format: "{$.key.mp.rtId}_1-1:1.9.0 P.01"
+              targetPath: $.key.ap.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the partition anchor by well-known name
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              rtIdTargetPath: $.key.ap.rtId
+              ckTypeIdTargetPath: $.key.ap.ckTypeId
+              modOperationPath: $.key.ap.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.ap.wkn
+            - type: CreateUpdateInfo@1
+              description: Upsert the partition anchor
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.ap.modOp
+              ckTypeIdPath: $.key.ap.ckTypeId
+              rtIdPath: $.key.ap.rtId
+              rtWellKnownNamePath: $.key.ap.wkn
+              attributeUpdates:
+                - attributeName: ObisCode
+                  attributeValueType: String
+                  value: "1-1:1.9.0 P.01"
+                - attributeName: DataQuality
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: Amount
+                  attributeValueType: Record
+                  valuePath: $.full.rec.amount
+                - attributeName: TimeRange
+                  attributeValueType: Record
+                  valuePath: $.full.rec.timeRange
+            - type: If@1
+              description: Link the partition anchor to its metering point only on first create
+              path: $.key.ap.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.ap.rtId
+                  originCkTypeIdPath: $.key.ap.ckTypeId
+                  targetRtIdPath: $.key.mp.rtId
+                  targetCkTypeIdPath: $.key.mp.ckTypeId
+                  associationRoleId: System/ParentChild
+            # participation period
+            - type: FormatString@1
+              description: Build wkn for the participation period
+              format: "{$.key.mp.rtId}_participation"
+              targetPath: $.key.pp.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the participation period by well-known name
+              ckTypeId: EnergyCommunity/ParticipationPeriod
+              rtIdTargetPath: $.key.pp.rtId
+              ckTypeIdTargetPath: $.key.pp.ckTypeId
+              modOperationPath: $.key.pp.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.pp.wkn
+            - type: CreateUpdateInfo@1
+              description: Upsert the participation period
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.pp.modOp
+              ckTypeIdPath: $.key.pp.ckTypeId
+              rtIdPath: $.key.pp.rtId
+              rtWellKnownNamePath: $.key.pp.wkn
+              attributeUpdates:
+                - attributeName: TimeRange.From
+                  attributeValueType: DateTime
+                  value: "2025-08-04T00:00:00Z"
+                - attributeName: TimeRange.To
+                  attributeValueType: DateTime
+                  value: "2099-12-31T23:59:59Z"
+            - type: If@1
+              description: Link the participation period to its metering point only on first create
+              path: $.key.pp.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.pp.rtId
+                  originCkTypeIdPath: $.key.pp.ckTypeId
+                  targetRtIdPath: $.key.mp.rtId
+                  targetCkTypeIdPath: $.key.mp.ckTypeId
+                  associationRoleId: EnergyCommunity/ParticipationPeriod
+        - type: WriteJson@1
+          description: Seed data for the 2 additional producer members (obviously fictional)
+          targetPath: $.seed.producerMembers
+          jsonString: |
+            [
+              { "wkn": "demo-customer-13", "customerNumber": "10013", "billingCycle": 1, "taxProcedure": 0, "facilityName": "Sonnenhof Musterfelder", "facilityType": 1, "mpName": "Demo Producer PV 2", "mpn": "AT0000000000000000000000000000902", "partitionFactor": 60, "productionType": 1,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 0, "Salutation": 1, "FirstName": "Johann", "LastName": "Musterfelder", "Email": "johann.musterfelder@example.com", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Felderweg 18", "Zipcode": 4023, "CityTown": "Beispielhausen", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Sonnenfeldweg 13", "Zipcode": 4024, "CityTown": "Musterdorf", "NationalCode": "AT" } },
+                "bankAccount": { "CkRecordId": "Basic/BankAccount", "Attributes": { "Iban": "AT000000000000000902", "AccountHolder": "Johann Musterfelder" } } },
+              { "wkn": "demo-customer-14", "customerNumber": "10014", "billingCycle": 3, "taxProcedure": 1, "facilityName": "Solarpark Beispieltal", "facilityType": 2, "mpName": "Demo Producer PV 3", "mpn": "AT0000000000000000000000000000903", "partitionFactor": 90, "productionType": 1,
+                "contact": { "CkRecordId": "Basic/Contact", "Attributes": { "LegalEntityType": 2, "CompanyName": "Solarpark Beispieltal GmbH", "Email": "office.solarpark-beispieltal@example.com", "TaxIdentificationNumber": "ATU00000014", "Address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Im Beispieltal 1", "Zipcode": 4024, "CityTown": "Beispieltal", "NationalCode": "AT" } } } },
+                "address": { "CkRecordId": "Basic/Address", "Attributes": { "Street": "Energieallee 14", "Zipcode": 4024, "CityTown": "Musterdorf", "NationalCode": "AT" } },
+                "bankAccount": { "CkRecordId": "Basic/BankAccount", "Attributes": { "Iban": "AT000000000000000903", "AccountHolder": "Solarpark Beispieltal GmbH" } } }
+            ]
+        - type: ForEach@1
+          description: Upsert facility, customer, producer metering point, anchor and participation period per producer member
+          iterationPath: $.seed.producerMembers
+          mergePath: $.key.u
+          targetPath: $.producerUpdates
+          maxDegreeOfParallelism: 1
+          transformations:
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the member facility by Name
+              ckTypeId: Basic.Energy/OperatingFacility
+              rtIdTargetPath: $.key.fac.rtId
+              ckTypeIdTargetPath: $.key.fac.ckTypeId
+              modOperationPath: $.key.fac.modOp
+              fieldFilters:
+                - attributePath: Name
+                  operator: Equals
+                  comparisonValuePath: $.key.facilityName
+            - type: CreateUpdateInfo@1
+              description: Upsert the member facility
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.fac.modOp
+              ckTypeIdPath: $.key.fac.ckTypeId
+              rtIdPath: $.key.fac.rtId
+              attributeUpdates:
+                - attributeName: Name
+                  attributeValueType: String
+                  valuePath: $.key.facilityName
+                - attributeName: State
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: FacilityType
+                  attributeValueType: Enum
+                  valuePath: $.key.facilityType
+                - attributeName: Address
+                  attributeValueType: Record
+                  valuePath: $.key.address
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the member customer by well-known name
+              ckTypeId: EnergyCommunity/Customer
+              rtIdTargetPath: $.key.cu.rtId
+              ckTypeIdTargetPath: $.key.cu.ckTypeId
+              modOperationPath: $.key.cu.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.wkn
+            - type: CreateUpdateInfo@1
+              description: Upsert the member customer (CustomerNumber from the seed item — see operator note, AB#4703)
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.cu.modOp
+              ckTypeIdPath: $.key.cu.ckTypeId
+              rtIdPath: $.key.cu.rtId
+              rtWellKnownNamePath: $.key.wkn
+              attributeUpdates:
+                - attributeName: Contact
+                  attributeValueType: Record
+                  valuePath: $.key.contact
+                - attributeName: CustomerNumber
+                  attributeValueType: String
+                  valuePath: $.key.customerNumber
+                - attributeName: BankAccount
+                  attributeValueType: Record
+                  valuePath: $.key.bankAccount
+                - attributeName: BillingCycle
+                  attributeValueType: Enum
+                  valuePath: $.key.billingCycle
+                - attributeName: State
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: TaxProcedureCreditNote
+                  attributeValueType: Enum
+                  valuePath: $.key.taxProcedure
+            - type: If@1
+              description: Link the member facility to its customer only on first create
+              path: $.key.cu.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.cu.rtId
+                  originCkTypeIdPath: $.key.cu.ckTypeId
+                  targetRtIdPath: $.key.fac.rtId
+                  targetCkTypeIdPath: $.key.fac.ckTypeId
+                  associationRoleId: EnergyCommunity/AssociatedFacilities
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the producer metering point by MeteringPointNumber
+              ckTypeId: EnergyCommunity/Producer
+              rtIdTargetPath: $.key.mp.rtId
+              ckTypeIdTargetPath: $.key.mp.ckTypeId
+              modOperationPath: $.key.mp.modOp
+              fieldFilters:
+                - attributePath: MeteringPointNumber
+                  operator: Equals
+                  comparisonValuePath: $.key.mpn
+            - type: CreateUpdateInfo@1
+              description: Upsert the producer metering point
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.mp.modOp
+              ckTypeIdPath: $.key.mp.ckTypeId
+              rtIdPath: $.key.mp.rtId
+              attributeUpdates:
+                - attributeName: Name
+                  attributeValueType: String
+                  valuePath: $.key.mpName
+                - attributeName: MeteringPointNumber
+                  attributeValueType: String
+                  valuePath: $.key.mpn
+                - attributeName: State
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: CarrierType
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: PartitionFactor
+                  attributeValueType: Int
+                  valuePath: $.key.partitionFactor
+                - attributeName: ProductionType
+                  attributeValueType: Enum
+                  valuePath: $.key.productionType
+            - type: If@1
+              description: Link the metering point to the member facility only on first create
+              path: $.key.mp.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.mp.rtId
+                  originCkTypeIdPath: $.key.mp.ckTypeId
+                  targetRtIdPath: $.key.fac.rtId
+                  targetCkTypeIdPath: $.key.fac.ckTypeId
+                  associationRoleId: System/ParentChild
+            # anchor 1-1:2.9.0 G.01
+            - type: FormatString@1
+              description: Build wkn for the feed-in anchor
+              format: "{$.key.mp.rtId}_1-1:2.9.0 G.01"
+              targetPath: $.key.ag.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the feed-in anchor by well-known name
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              rtIdTargetPath: $.key.ag.rtId
+              ckTypeIdTargetPath: $.key.ag.ckTypeId
+              modOperationPath: $.key.ag.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.ag.wkn
+            - type: CreateUpdateInfo@1
+              description: Upsert the feed-in anchor
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.ag.modOp
+              ckTypeIdPath: $.key.ag.ckTypeId
+              rtIdPath: $.key.ag.rtId
+              rtWellKnownNamePath: $.key.ag.wkn
+              attributeUpdates:
+                - attributeName: ObisCode
+                  attributeValueType: String
+                  value: "1-1:2.9.0 G.01"
+                - attributeName: DataQuality
+                  attributeValueType: Enum
+                  value: 1
+                - attributeName: Amount
+                  attributeValueType: Record
+                  valuePath: $.full.rec.amount
+                - attributeName: TimeRange
+                  attributeValueType: Record
+                  valuePath: $.full.rec.timeRange
+            - type: If@1
+              description: Link the feed-in anchor to its metering point only on first create
+              path: $.key.ag.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.ag.rtId
+                  originCkTypeIdPath: $.key.ag.ckTypeId
+                  targetRtIdPath: $.key.mp.rtId
+                  targetCkTypeIdPath: $.key.mp.ckTypeId
+                  associationRoleId: System/ParentChild
+            # participation period
+            - type: FormatString@1
+              description: Build wkn for the participation period
+              format: "{$.key.mp.rtId}_participation"
+              targetPath: $.key.pp.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the participation period by well-known name
+              ckTypeId: EnergyCommunity/ParticipationPeriod
+              rtIdTargetPath: $.key.pp.rtId
+              ckTypeIdTargetPath: $.key.pp.ckTypeId
+              modOperationPath: $.key.pp.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.pp.wkn
+            - type: CreateUpdateInfo@1
+              description: Upsert the participation period
+              targetPath: $.key.u.items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKindPath: $.key.pp.modOp
+              ckTypeIdPath: $.key.pp.ckTypeId
+              rtIdPath: $.key.pp.rtId
+              rtWellKnownNamePath: $.key.pp.wkn
+              attributeUpdates:
+                - attributeName: TimeRange.From
+                  attributeValueType: DateTime
+                  value: "2025-08-04T00:00:00Z"
+                - attributeName: TimeRange.To
+                  attributeValueType: DateTime
+                  value: "2099-12-31T23:59:59Z"
+            - type: If@1
+              description: Link the participation period to its metering point only on first create
+              path: $.key.pp.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.pp.rtId
+                  originCkTypeIdPath: $.key.pp.ckTypeId
+                  targetRtIdPath: $.key.mp.rtId
+                  targetCkTypeIdPath: $.key.mp.ckTypeId
+                  associationRoleId: EnergyCommunity/ParticipationPeriod
+        # ===== Collect the per-member updates into the shared collections =====
+        - type: Flatten@1
+          description: Collect consumer-member entity updates
+          path: $.consumerUpdates[*].items[*]
+          targetPath: $.updates.items
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect consumer-member association updates
+          path: $.consumerUpdates[*].assocs[*]
+          targetPath: $.updates.assocs
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect producer-member entity updates
+          path: $.producerUpdates[*].items[*]
+          targetPath: $.updates.items
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect producer-member association updates
+          path: $.producerUpdates[*].assocs[*]
+          targetPath: $.updates.assocs
+          targetValueWriteMode: Append
+        # ===== Demo energy prices (AB#4703) =====
+        # EnergyCommunity/EnergyPrice carries only Price + Currency (no name,
+        # no validity range, no price-type attribute in the 4.x model), so the
+        # consumption/feed-in roles are encoded in the well-known names.
+        - type: SetPrimitiveValue@1
+          description: Well-known name of the consumption price
+          targetPath: $.ep1.wkn
+          value: demo-energy-price-consumption
+          valueType: String
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create the consumption price by well-known name
+          ckTypeId: EnergyCommunity/EnergyPrice
+          rtIdTargetPath: $.ep1.rtId
+          ckTypeIdTargetPath: $.ep1.ckTypeId
+          modOperationPath: $.ep1.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.ep1.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert the consumption price (EUR per kWh)
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.ep1.modOp
+          ckTypeIdPath: $.ep1.ckTypeId
+          rtIdPath: $.ep1.rtId
+          rtWellKnownNamePath: $.ep1.wkn
+          attributeUpdates:
+            - attributeName: Price
+              attributeValueType: Double
+              value: 0.18
+            - attributeName: Currency
+              attributeValueType: String
+              value: EUR
+        - type: SetPrimitiveValue@1
+          description: Well-known name of the feed-in price
+          targetPath: $.ep2.wkn
+          value: demo-energy-price-feed-in
+          valueType: String
+        - type: GetOrCreateRtEntitiesByType@1
+          description: Get or create the feed-in price by well-known name
+          ckTypeId: EnergyCommunity/EnergyPrice
+          rtIdTargetPath: $.ep2.rtId
+          ckTypeIdTargetPath: $.ep2.ckTypeId
+          modOperationPath: $.ep2.modOp
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValuePath: $.ep2.wkn
+        - type: CreateUpdateInfo@1
+          description: Upsert the feed-in price (EUR per kWh)
+          targetPath: $.updates.items
+          targetValueKind: Array
+          targetValueWriteMode: Append
+          updateKindPath: $.ep2.modOp
+          ckTypeIdPath: $.ep2.ckTypeId
+          rtIdPath: $.ep2.rtId
+          rtWellKnownNamePath: $.ep2.wkn
+          attributeUpdates:
+            - attributeName: Price
+              attributeValueType: Double
+              value: 0.10
+            - attributeName: Currency
+              attributeValueType: String
+              value: EUR
+        # ===== Persist all entities + associations in one transaction =====
+        - type: ApplyChanges@2
+          entityUpdatesPath: $.updates.items
+          associationUpdatesPath: $.updates.assocs
+
