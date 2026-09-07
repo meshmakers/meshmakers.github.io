@@ -1,0 +1,1950 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.2,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.7.0,2.0)
+- System.UI-[2.4,3.0)
+
+entities:
+
+# ─── Energy Community runtime configuration ──────────────────────────────
+# Neutral defaults — fill EnergyCommunityId, NetworkPartnerId and pricing
+# per tenant via Refinery Studio after install. Tax rates are pre-filled with
+# Austrian standard / agricultural rates as conservative defaults.
+- rtId: 69775cca547399077ac963a1
+  ckTypeId: System.Communication/EnergyCommunityConfiguration-1
+  rtWellKnownName: EnergyCommunityConfiguration
+  associations: []
+  attributes:
+  - id: System.Communication/EnergyCommunityId-1
+    value: ''
+  - id: System.Communication/NetworkPartnerId-1
+    value: ''
+  - id: System.Communication/ConsumptionRecordRequestDelay-1
+    value: 5
+  - id: System.Communication/ConsumerPrice-1
+    value: 0
+  - id: System.Communication/ProducerPrice-1
+    value: 0
+  - id: System.Communication/TaxRate-1
+    value: 20
+  - id: System.Communication/FarmerTaxRate-1
+    value: 13
+  # Billing report / notification config (AB#4554 — de-SBEG-ing). Neutral empty
+  # defaults; each tenant fills these via Refinery Studio. The Billing pipelines
+  # resolve billingReportName / billingReportFilePrefix / notificationEmailContact
+  # from here (config-driven). billingMailServerConfiguration names the tenant's
+  # EMailSenderConfiguration (see Billing blueprint notes).
+  - id: System.Communication/BillingReportName-1
+    value: ''
+  - id: System.Communication/BillingReportFilePrefix-1
+    value: ''
+  - id: System.Communication/BillingMailServerConfiguration-1
+    value: ''
+  - id: System.Communication/NotificationEmailContact-1
+    value: ''
+
+# ─── Auto-increment counters ─────────────────────────────────────────────
+- rtId: 68480f3ef579d8c26f35ad47
+  ckTypeId: System/AutoIncrement-1
+  rtWellKnownName: BillingDocumentDocumentNumber
+  attributes:
+  - id: System/AutoIncrement.End-1
+    value: 9999
+  - id: System/AutoIncrement.Format-1
+    value: 25-{0:D4}
+  - id: System/AutoIncrement.CurrentValue-1
+    value: 0
+
+- rtId: 686ad5878ae68659b20571d0
+  ckTypeId: System/AutoIncrement-1
+  rtWellKnownName: CustomerNumber
+  attributes:
+  - id: System/AutoIncrement.End-1
+    value: 9999
+  - id: System/AutoIncrement.CurrentValue-1
+    value: 0
+
+# ─── Excel import pipeline ───────────────────────────────────────────────
+# Used by the OctoMesh Office Add-In for tree / customer / facility /
+# metering-point master-data import. (EC v2: energy quantities are stream
+# data — no longer part of the Excel master-data import.)
+- rtId: 67e10c68fe3e19891bbfd262
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Excel Pipeline
+  - id: System/Description-1
+    value: ''
+
+- rtId: 67e10c68fe3e19891bbfd263
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 67e10c68fe3e19891bbfd262
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@1
+          path: /import/tree
+          method: POST
+      transformations:
+        - type: ImportFromExcel@1
+
+# ─── Shared queries: Excel-import ────────────────────────────────────────
+- rtId: 682f0020af1fe4dd0f346f3c
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _trees
+  - id: System/Query.CkTypeId-1
+    value: Basic/Tree
+  - id: System/Query.Columns-1
+    value:
+    - rtId
+    - name
+    - description
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+
+- rtId: 682f0758900aec7bc66dcb74
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _energy_customers
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Customer
+  - id: System/Query.Columns-1
+    value:
+    - contact.legalEntityType
+    - taxProcedureCreditNote
+    - contact.salutation
+    - contact.firstName
+    - contact.lastName
+    - contact.companyName
+    - contact.address.street
+    - contact.address.zipcode
+    - contact.address.cityTown
+    - contact.address.nationalCode
+    - customerNumber
+    - contact.taxIdentificationNumber
+    - contact.companyRegisterNumber
+    - contact.email
+    - bankAccount.iban
+    - bankAccount.swiftCode
+    - bankAccount.bankName
+    - bankAccount.accountHolder
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+
+- rtId: 682f0d3cce5a9c50f9241cc8
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _energy_operating_facilities
+  # EC v2 (ADR 0001): OperatingFacility moved to Basic.Energy — EnergyCommunity 4.x
+  # no longer duplicates it.
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/OperatingFacility
+  - id: System/Query.Columns-1
+    value:
+    - address.street
+    - address.zipcode
+    - address.cityTown
+    - address.nationalCode
+    - facilityType
+    - name
+    - customer.energyCommunityCustomer->customerNumber
+    - parent.basicCity->zipcode
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+
+- rtId: 682f1209ce5a9c50f9242880
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _energy_meter_consumer
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Consumer
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+    - name
+    - energyConsumption
+    - parent.basicEnergyOperatingFacility->name
+    - parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->customerNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+
+- rtId: 682f1218ce5a9c50f9242881
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _energy_meter_producer
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Producer
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+    - energyProductionCapacity
+    - name
+    - productionType
+    - parent.basicEnergyOperatingFacility->name
+    - parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->customerNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+# The per-tenant energy-community-app Application was REMOVED here (AB#3683).
+#
+# One deployment now serves every tenant: it lives on the MANAGEMENT tenant, seeded by
+# EnergyCommunity.App (rtId ec0000000000000000000f01, hostname
+# energy-community.{{domain.DEFAULT}}), and reads the tenant from its `/:tenantId` route.
+# Seeding a second app per operating tenant produced a workload nobody deploys and a
+# hostname nobody visits, and `install-tenant.ps1` still told operators to deploy it.
+#
+# Existing tenants keep their entity: blueprint upsert never deletes, so
+# 6a1f14de0b5979da7108457e survives this version and stays deployable — which is what makes
+# the migration reversible per tenant. Undeploy it once the tenant is served by the shared
+# host (`UndeployWorkload -id 6a1f14de0b5979da7108457e`), and drop it for good with
+# `UpdateBlueprint -m Full` only when every tenant has moved.
+
+
+- rtId: ec0000000000000000000a01
+  ckTypeId: System.StreamData/TimeRangeArchive-1
+  rtWellKnownName: energy-measurements
+  associations: []
+  attributes:
+  - id: System.StreamData/TimeRangeArchive.Period-1
+    value: 9000000000
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: Amount.Value
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: false
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: Amount.Unit
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: false
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: ObisCode
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: DataQuality
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# Hourly rollup over the raw archive. FixedSize (0) — an hour is a
+# whole-hour-offset-invariant window for Europe/Vienna, so no calendar
+# alignment needed. BucketSizeMs 3600000 is an exact multiple of the 15-min
+# source window. Aggregations SUM(Amount.Value) -> amountvalue_sum,
+# MAX(DataQuality) -> dataquality_max (derived column names).
+- rtId: ec0000000000000000000a02
+  ckTypeId: System.StreamData/RollupArchive-1
+  rtWellKnownName: energy-measurements-hourly
+  associations: []
+  attributes:
+  - id: System.StreamData/RollupArchive.SourceArchiveRtId-1
+    value: 'ec0000000000000000000a01'
+  - id: System.StreamData/RollupArchive.BucketSizeMs-1
+    value: 3600000
+  - id: System.StreamData/RollupArchive.WatermarkLagMs-1
+    value: 900000
+  - id: System.StreamData/RollupArchive.BucketAlignment-1
+    value: 0
+  - id: System.StreamData/RollupArchive.Aggregations-1
+    value:
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: Amount.Value
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 3
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: DataQuality
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 2
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: dataquality_max
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# Daily rollup CHAINED on hourly (cascade keeps open-bucket recompute cheap).
+# CalendarDay (1) + Europe/Vienna: buckets snap to local Austrian midnight,
+# DST-correct (requires System.StreamData >= 1.6.4). Reads the hourly PHYSICAL
+# columns and re-aggregates SUM-of-sums / MAX-of-maxes; TargetColumnName keeps
+# the stored column names identical so query shapes match all levels.
+# BucketSizeMs 86400000 is informational under calendar alignment.
+- rtId: ec0000000000000000000a03
+  ckTypeId: System.StreamData/RollupArchive-1
+  rtWellKnownName: energy-measurements-daily
+  associations: []
+  attributes:
+  - id: System.StreamData/RollupArchive.SourceArchiveRtId-1
+    value: 'ec0000000000000000000a02'
+  - id: System.StreamData/RollupArchive.BucketSizeMs-1
+    value: 86400000
+  - id: System.StreamData/RollupArchive.WatermarkLagMs-1
+    value: 900000
+  - id: System.StreamData/RollupArchive.BucketAlignment-1
+    value: 1
+  - id: System.StreamData/RollupArchive.ReferenceTimeZone-1
+    value: Europe/Vienna
+  - id: System.StreamData/RollupArchive.Aggregations-1
+    value:
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 3
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: amountvalue_sum
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: dataquality_max
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 2
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: dataquality_max
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: dataquality_max
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# Weekly rollup CHAINED on daily — an ISO week is 7 whole Vienna calendar
+# days, so SUM-of-sums / MAX-of-maxes over daily is exact. Leaf of the ladder
+# (nothing chains on weekly; weeks do not tile months). Iso8601Week (2) +
+# Europe/Vienna: buckets snap to Monday 00:00 local time.
+- rtId: ec0000000000000000000a04
+  ckTypeId: System.StreamData/RollupArchive-1
+  rtWellKnownName: energy-measurements-weekly
+  associations: []
+  attributes:
+  - id: System.StreamData/RollupArchive.SourceArchiveRtId-1
+    value: 'ec0000000000000000000a03'
+  - id: System.StreamData/RollupArchive.BucketSizeMs-1
+    value: 604800000
+  - id: System.StreamData/RollupArchive.WatermarkLagMs-1
+    value: 900000
+  - id: System.StreamData/RollupArchive.BucketAlignment-1
+    value: 2
+  - id: System.StreamData/RollupArchive.ReferenceTimeZone-1
+    value: Europe/Vienna
+  - id: System.StreamData/RollupArchive.Aggregations-1
+    value:
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 3
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: amountvalue_sum
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: dataquality_max
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 2
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: dataquality_max
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: dataquality_max
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# Monthly rollup CHAINED on daily (NOT weekly — weeks do not tile months).
+# CalendarMonth (3) + Europe/Vienna. BucketSizeMs 2419200000 (28 d) is the
+# informational lower bound; actual month length comes from the calendar.
+- rtId: ec0000000000000000000a05
+  ckTypeId: System.StreamData/RollupArchive-1
+  rtWellKnownName: energy-measurements-monthly
+  associations: []
+  attributes:
+  - id: System.StreamData/RollupArchive.SourceArchiveRtId-1
+    value: 'ec0000000000000000000a03'
+  - id: System.StreamData/RollupArchive.BucketSizeMs-1
+    value: 2419200000
+  - id: System.StreamData/RollupArchive.WatermarkLagMs-1
+    value: 900000
+  - id: System.StreamData/RollupArchive.BucketAlignment-1
+    value: 3
+  - id: System.StreamData/RollupArchive.ReferenceTimeZone-1
+    value: Europe/Vienna
+  - id: System.StreamData/RollupArchive.Aggregations-1
+    value:
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 3
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: amountvalue_sum
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: dataquality_max
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 2
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: dataquality_max
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: dataquality_max
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# Yearly rollup CHAINED on monthly — a calendar year is exactly 12 calendar
+# months, so it reads ~12 rows per year. CalendarYear (4) + Europe/Vienna.
+# BucketSizeMs 29030400000 (336 d = 12 x the monthly 28-d bucket) — must be an
+# integer multiple of the source granularity; 365 d would be rejected by the
+# rollup-over-rollup validator.
+- rtId: ec0000000000000000000a06
+  ckTypeId: System.StreamData/RollupArchive-1
+  rtWellKnownName: energy-measurements-yearly
+  associations: []
+  attributes:
+  - id: System.StreamData/RollupArchive.SourceArchiveRtId-1
+    value: 'ec0000000000000000000a05'
+  - id: System.StreamData/RollupArchive.BucketSizeMs-1
+    value: 29030400000
+  - id: System.StreamData/RollupArchive.WatermarkLagMs-1
+    value: 900000
+  - id: System.StreamData/RollupArchive.BucketAlignment-1
+    value: 4
+  - id: System.StreamData/RollupArchive.ReferenceTimeZone-1
+    value: Europe/Vienna
+  - id: System.StreamData/RollupArchive.Aggregations-1
+    value:
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 3
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: amountvalue_sum
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: dataquality_max
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 2
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: dataquality_max
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: dataquality_max
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# ─── Legacy daily archive + sub-ladder (migration tenants only) ──────────
+# Carries over pre-cutover daily EnergyQuantity history 1:1 (ADR 0001
+# decision 3). Day-sized windows MUST NOT go into the 900 s raw archive —
+# the rollup engine's fully-contained-window rule would silently drop them
+# from the entire ladder. Day windows DO tile calendar months/years, so a
+# small monthly + yearly sub-ladder works on top. Period is advisory
+# (TimeSpan ticks: 864000000000 = 1 d). Fresh (greenfield) tenants leave
+# these three archives Disabled — install-tenant.ps1 only activates them
+# with -IncludeLegacyArchives.
+- rtId: ec0000000000000000000a11
+  ckTypeId: System.StreamData/TimeRangeArchive-1
+  rtWellKnownName: energy-measurements-legacy-daily
+  associations: []
+  attributes:
+  - id: System.StreamData/TimeRangeArchive.Period-1
+    value: 864000000000
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: Amount.Value
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: false
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: Amount.Unit
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: false
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: ObisCode
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: DataQuality
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# Legacy monthly rollup over the legacy daily archive. Same parametrization
+# as the main monthly rollup (CalendarMonth (3) + Europe/Vienna), but the
+# source is a raw TimeRangeArchive, so the aggregations read the source
+# ENTITY paths (Amount.Value / DataQuality); TargetColumnName pins the stored
+# columns to amountvalue_sum / dataquality_max so query shapes match the main
+# ladder.
+- rtId: ec0000000000000000000a12
+  ckTypeId: System.StreamData/RollupArchive-1
+  rtWellKnownName: energy-measurements-legacy-monthly
+  associations: []
+  attributes:
+  - id: System.StreamData/RollupArchive.SourceArchiveRtId-1
+    value: 'ec0000000000000000000a11'
+  - id: System.StreamData/RollupArchive.BucketSizeMs-1
+    value: 2419200000
+  - id: System.StreamData/RollupArchive.WatermarkLagMs-1
+    value: 900000
+  - id: System.StreamData/RollupArchive.BucketAlignment-1
+    value: 3
+  - id: System.StreamData/RollupArchive.ReferenceTimeZone-1
+    value: Europe/Vienna
+  - id: System.StreamData/RollupArchive.Aggregations-1
+    value:
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: Amount.Value
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 3
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: amountvalue_sum
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: DataQuality
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 2
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: dataquality_max
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: dataquality_max
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# Legacy yearly rollup CHAINED on legacy monthly — same parametrization as
+# the main yearly rollup (CalendarYear (4) + Europe/Vienna, 336 d = 12 x 28 d
+# informational bucket size), reading the monthly PHYSICAL columns.
+- rtId: ec0000000000000000000a13
+  ckTypeId: System.StreamData/RollupArchive-1
+  rtWellKnownName: energy-measurements-legacy-yearly
+  associations: []
+  attributes:
+  - id: System.StreamData/RollupArchive.SourceArchiveRtId-1
+    value: 'ec0000000000000000000a12'
+  - id: System.StreamData/RollupArchive.BucketSizeMs-1
+    value: 29030400000
+  - id: System.StreamData/RollupArchive.WatermarkLagMs-1
+    value: 900000
+  - id: System.StreamData/RollupArchive.BucketAlignment-1
+    value: 4
+  - id: System.StreamData/RollupArchive.ReferenceTimeZone-1
+    value: Europe/Vienna
+  - id: System.StreamData/RollupArchive.Aggregations-1
+    value:
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 3
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: amountvalue_sum
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: dataquality_max
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 2
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: dataquality_max
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: dataquality_max
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# ─── Persisted stream-data queries over the raw archive ──────────────────
+# Replacements for the removed EnergyQuantity RT queries (see NOTE above).
+# Mirror the voest-app query shapes (voest-app/data/_queries/*).
+
+# Row-level list query (frontend raw-data views; scope via
+# StreamDataArguments from/to + rtIds of the EnergyMeasurement anchors).
+- rtId: ec0000000000000000000a21
+  ckTypeId: System/SimpleSdQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy_measurements
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/StreamDataQuery.ArchiveRtId-1
+    value: ec0000000000000000000a01
+  - id: System/StreamDataQuery.Columns-1
+    value:
+    - window_start
+    - window_end
+    - amount.unit
+    - amount.value
+    - obisCode
+    - dataQuality
+    - was_updated
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: window_start
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/StreamDataQuery.From-1
+  - id: System/StreamDataQuery.To-1
+  - id: System/StreamDataQuery.Limit-1
+  - id: System/Query.FieldFilter-1
+    value: []
+
+# SUM(amount.value) grouped by obisCode + amount.unit (AggregationType 4 = SUM).
+- rtId: ec0000000000000000000a22
+  ckTypeId: System/GroupingAggregationSdQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-measurements-aggregation-by-obiscode
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/StreamDataQuery.ArchiveRtId-1
+    value: ec0000000000000000000a01
+  - id: System/Query.GroupByColumns-1
+    value:
+    - obisCode
+    - amount.unit
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 4
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/StreamDataQuery.From-1
+  - id: System/StreamDataQuery.To-1
+  - id: System/StreamDataQuery.Limit-1
+  - id: System/Query.FieldFilter-1
+    value: []
+
+# SUM(amount.value) grouped by dataQuality + amount.unit (gap/quality views).
+- rtId: ec0000000000000000000a23
+  ckTypeId: System/GroupingAggregationSdQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-measurements-aggregation-by-data-quality
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/StreamDataQuery.ArchiveRtId-1
+    value: ec0000000000000000000a01
+  - id: System/Query.GroupByColumns-1
+    value:
+    - dataQuality
+    - amount.unit
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 4
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/StreamDataQuery.From-1
+  - id: System/StreamDataQuery.To-1
+  - id: System/StreamDataQuery.Limit-1
+  - id: System/Query.FieldFilter-1
+    value: []
+
+# SUM + COUNT of amount.value grouped by dataQuality + amount.unit (AB#4710).
+# The aggregated-energy-report pipeline (a33/a34 below) needs COUNT per quality
+# for its completeness gate; a23 above only delivers SUM and its Values layout
+# must stay stable for the MeshBoard by-quality donut, so this is a separate
+# query. Same shape as Billing's settlement query billing-energy-by-quality
+# (ec000000000000000000e001) but Base-owned — Base pipelines must not depend
+# on Billing-owned queries (cross-blueprint rule, see CLAUDE.md).
+# The pipeline invokes it via GetQueryById@1 with node fieldFilters (rtId of
+# the anchor + window_start/window_end bounds); the persisted From/To/rtIds
+# stay blank. Output per (dataQuality, amount.unit) group:
+#   Values = [dataQuality, amount.unit, amountvalue_sum, amountvalue_count].
+# NOTE: dataQuality and amount.unit are INTEGER enum columns in CrateDB —
+# bucketing uses the keys (Unknown 0, L1 1, L2 2, L3 3, Manual 4; KWh 1, MWh 2).
+- rtId: ec0000000000000000000a24
+  ckTypeId: System/GroupingAggregationSdQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-measurements-sum-count-by-data-quality
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/StreamDataQuery.ArchiveRtId-1
+    value: ec0000000000000000000a01
+  - id: System/Query.GroupByColumns-1
+    value:
+    - dataQuality
+    - amount.unit
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 4    # Sum
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 0    # Count
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/StreamDataQuery.From-1
+  - id: System/StreamDataQuery.To-1
+  - id: System/StreamDataQuery.Limit-1
+  - id: System/Query.FieldFilter-1
+    value: []
+
+# ─── Energy-statistics MeshBoard (EC v2, AB#4578 — Board 2) ──────────────
+# System.UI/Dashboard `energy-community-energy-quantities` + widgets. Adopts
+# and converts the retired EnergyCommunity/EnergyQuantity board
+# (misc/energy-community-deployment/data/boards/Energy_quantity_statistics.yaml)
+# to stream data: the widgets bind to the persisted SD queries above by rtId
+# (a21/a22/a23), so those queries MUST be seeded before the board — they are,
+# just above. Requires the service-managed System.UI CK model
+# (octo-platform-services). The old RT navigation
+# (parent...energyCommunityMeteringPoint->ckTypeId) and the RT
+# quantity/timeRange field filters are gone — the time window is supplied by
+# the dashboard time filter as StreamDataArguments.from/to.
+#
+# Binding notes (verified against the meshboard widget source):
+#   - KPI groupedAggregation picks the FIRST aggregation row whose
+#     queryCategoryField cell == queryCategoryValue (it does NOT sum rows).
+#     Producer feed-in is a single OBIS (1-1:2.9.0 …) so its KPI is exact;
+#     consumer consumption is split over two OBIS series (1-1:1.9.0 G.01 /
+#     P.01) — the KPI shows the primary grid series (…1.9.0 G.01). The
+#     by-OBIS pie below shows every series (production vs both consumption
+#     series) so nothing is hidden.
+#   - Physical SD columns: group-by columns are lower-cased with no suffix
+#     (obiscode, dataquality, amountunit); SUM(amount.value) -> amountvalue_sum.
+#   - queryFamily is set to streamData explicitly to skip the runtime lookup.
+#   - rtId scheme: dashboard/widgets use the ec00…0cXX block.
+
+# Dashboard
+- rtId: ec0000000000000000000c01
+  ckTypeId: System.UI/Dashboard-1
+  rtWellKnownName: energy-community-energy-quantities
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Energy quantity statistics
+  - id: System/Description-1
+    value: |-
+      ---MESHBOARD_VARIABLES---
+      {"timeFilter":{"enabled":true,"defaultSelection":{"type":"custom","customFrom":"2026-07-01T00:00:00.000Z","customTo":"2026-08-01T00:00:00.000Z"},"selection":{"type":"custom","customFrom":"2026-07-01T00:00:00.000Z","customTo":"2026-08-01T00:00:00.000Z"}}}
+  - id: System.UI/Dashboard.Columns-1
+    value: 4
+  - id: System.UI/Dashboard.RowHeight-1
+    value: 200
+  - id: System.UI/Dashboard.Gap-1
+    value: 16
+
+# Widget: Erzeuger (producer feed-in) KPI — a22 by OBIS 1-1:2.9.0.
+- rtId: ec0000000000000000000c02
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeuger
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"queryMode":"groupedAggregation","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.01","queryValueField":"amountvalue_sum","suffix":"kWh","icon":"chart","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22"}'
+
+# Widget: Verbraucher (consumer) KPI — a22 by OBIS 1-1:1.9.0 G.01.
+- rtId: ec0000000000000000000c03
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Verbraucher
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"queryMode":"groupedAggregation","queryCategoryField":"obiscode","queryCategoryValue":"1-1:1.9.0 G.01","queryValueField":"amountvalue_sum","suffix":"kWh","icon":"chart","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22"}'
+
+# Widget: Energy amounts by OBIS code (pie) — a22, all series
+# (production 2.9.0 vs consumption 1.9.0). Replaces the old
+# produced-vs-consumed RT pie.
+- rtId: ec0000000000000000000c04
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy amounts by OBIS code (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"obiscode","valueField":"amountvalue_sum","showLabels":false,"showLegend":true,"legendPosition":"right","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22"}'
+
+# Widget: Energy amounts by data quality (donut) — a23.
+- rtId: ec0000000000000000000c05
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy amounts by data quality (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a23
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"donut","categoryField":"dataquality","valueField":"amountvalue_sum","showLabels":true,"showLegend":false,"legendPosition":"right","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-data-quality","queryRtId":"ec0000000000000000000a23"}'
+
+# Widget: energy time series (lineChart) — one line per OBIS code, each the SUM
+# over all metering registers of that code (the community total). Resolution-aware
+# (AB#4290) so the server picks the rollup grain for the window (hourly for a month,
+# coarser for a year) instead of scanning the raw 15-min archive; aggregateSeriesByGroup
+# (AB#4714) buckets the source EnergyMeasurement entities by obisCode and sums each
+# group server-side — without it the per-rtId fan-out would render one arbitrary meter
+# per OBIS code, not the total. queryRtId a21 supplies only the base archive family.
+- rtId: ec0000000000000000000c06
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy over time
+  - id: System.UI/DashboardWidget.Type-1
+    value: lineChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 4
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 4
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a21
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"line","categoryField":"window_start","seriesGroupField":"obisCode","valueField":"amount.value","unitField":"amount.unit","showLegend":true,"legendPosition":"right","showMarkers":false,"showDataBadge":true,"queryFamily":"streamData","queryName":"energy_measurements","queryRtId":"ec0000000000000000000a21","resolutionAware":true,"requiredAggregation":"SUM","aggregateSeriesByGroup":true}'
+
+# ─── Manual metering entry / correction pipeline (AB#4558) ───────────────
+# Deployed HTTP endpoint the Energy Community frontend (Phase 2) calls to enter
+# or correct a metering value directly on the stream data. Base owns it because
+# Base owns the raw archive (ec0000000000000000000a01).
+#
+# Contract:
+#   POST /manualMeteringEntry
+#   { "anchorRtId": "<Basic.Energy/EnergyMeasurement rtId>",
+#     "unit": "KWh",
+#     "entries": [ { "from": "<iso>", "to": "<iso>", "value": <number> } ] }
+#
+# For each entry a single window is upserted into the raw archive for anchorRtId
+# with amount.value = entry.value, amount.unit = unit, dataQuality = Manual
+# (Basic.Energy DataQuality key 4), window = [from, to). SaveTimeRangeStreamDataInArchive@1
+# writes via an EnergyMeasurement UPDATE update-info keyed to the EXISTING anchor
+# (no ApplyChanges — the anchor must already exist; the node hard-fails with a
+# clear error if anchorRtId is not an existing entity). The CrateDB write is an
+# UPSERT on (window_start, window_end, rtId, ckTypeId), so re-writing an existing
+# window corrects it; retroactive writes auto-schedule rollup recompute.
+#
+# Ships DeploymentState 2 (Deployed) — the frontend calls it live. Executes on the
+# default Mesh Adapter 670000000000000000000002.
+- rtId: ec0000000000000000000a31
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: manual-metering-entry
+  - id: System/Description-1
+    value: Manual entry / correction of metering values on stream data (AB#4558)
+
+- rtId: ec0000000000000000000a32
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a31
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@1
+          path: /manualMeteringEntry
+          method: POST
+      transformations:
+        - type: Logger@1
+          message: "Manual metering entry (AB#4558): request received on /manualMeteringEntry"
+
+        # Audit trail: the full request payload (anchorRtId, unit, entries) is
+        # dumped to the adapter log; the adapter log line carries the timestamp
+        # (when). Caller identity (who), if present, is in the request headers.
+        - type: PrintDebug@1
+          severity: Information
+
+        # Default response — overwritten with status=ok on the happy path. Bad
+        # input leaves this in place and returns HTTP 200 with a clear error body
+        # instead of a raw 500.
+        - type: SetPrimitiveValue@1
+          targetPath: $.response.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.response.message
+          value: "Invalid request: 'anchorRtId' (string) and a non-empty 'entries' array of { from, to, value } are required."
+          valueType: String
+
+        # Guard 1: anchorRtId present
+        - type: If@1
+          description: anchorRtId present
+          path: $.body.anchorRtId
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            # Guard 2: at least one entry present (entries[0] carries a 'to')
+            - type: If@1
+              description: at least one entry present
+              path: $.body.entries[0].to
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                # Resolve the anchor EnergyMeasurement so its ObisCode can be
+                # carried into every write. ObisCode is a REQUIRED non-null column
+                # on the raw archive (ec0000000000000000000a01); the write fails at
+                # CrateDB (XX000 "obiscode" must not be null) if it is omitted.
+                # The anchor already carries the correct ObisCode, so preserve it.
+                - type: GetRtEntitiesById@1
+                  description: Resolve the anchor EnergyMeasurement (carries ObisCode)
+                  ckTypeId: Basic.Energy/EnergyMeasurement
+                  rtIdsPath: $.body.anchorRtId
+                  take: 1
+                  targetPath: $.anchor
+
+                # Guard 3: the anchor exists. An orphan anchorRtId now returns
+                # status=error (HTTP 200) instead of a null-ObisCode CrateDB 500.
+                - type: If@1
+                  description: anchor EnergyMeasurement exists
+                  path: $.anchor.Items[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    # Build one EnergyMeasurement UPDATE update-info per entry, keyed
+                    # to the existing anchor. Per-entry guard drops windows where
+                    # from >= to so degenerate ranges never reach the archive.
+                    - type: ForEach@1
+                      description: Build archive write items (skip entries where from >= to)
+                      maxDegreeOfParallelism: 1
+                      iterationPath: $.body.entries
+                      mergePath: $.key.updateInfo
+                      targetPath: $.writeItems
+                      transformations:
+                        - type: If@1
+                          description: Valid window (from < to)
+                          path: $.key.from
+                          operator: LessThan
+                          valuePath: $.key.to
+                          valueType: DateTime
+                          transformations:
+                            - type: Logger@1
+                              message: "Manual metering entry: writing corrected window with dataQuality=Manual"
+                            - type: CreateUpdateInfo@1
+                              targetPath: $.key.updateInfo
+                              updateKind: UPDATE
+                              ckTypeId: Basic.Energy/EnergyMeasurement
+                              rtIdPath: $.full.body.anchorRtId
+                              attributeUpdates:
+                                - attributeName: Amount.Value
+                                  attributeValueType: Double
+                                  valuePath: $.key.value
+                                - attributeName: Amount.Unit
+                                  attributeValueType: Enum
+                                  valuePath: $.full.body.unit
+                                - attributeName: DataQuality
+                                  attributeValueType: Enum
+                                  value: Manual
+                                - attributeName: TimeRange.From
+                                  attributeValueType: DateTime
+                                  valuePath: $.key.from
+                                - attributeName: TimeRange.To
+                                  attributeValueType: DateTime
+                                  valuePath: $.key.to
+                                # Preserve the anchor's ObisCode (required non-null
+                                # archive column) so the manual/corrected window
+                                # stays on the same OBIS meter channel.
+                                - attributeName: ObisCode
+                                  attributeValueType: String
+                                  valuePath: $.full.anchor.Items[0].Attributes.ObisCode
+
+                    # Upsert the manual/corrected windows into the raw archive. The
+                    # node enforces that anchorRtId exists as an EnergyMeasurement
+                    # entity (orphan-row guard) and skips rows without a usable window.
+                    - type: SaveTimeRangeStreamDataInArchive@1
+                      description: Upsert manual/corrected windows into the raw energy-measurements archive
+                      path: $.writeItems
+                      archiveRtId: ec0000000000000000000a01
+                      fromAttributePath: TimeRange.From
+                      toAttributePath: TimeRange.To
+
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.response.status
+                      value: ok
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.response.message
+                      value: "Manual metering entries written to the raw archive with dataQuality=Manual."
+                      valueType: String
+
+        # Persist the status/message as OutputData (retrievable via
+        # GetLatestPipelineExecution) — the per-execution audit record.
+        - type: SetPipelineExecutionResult@1
+          path: $.response
+
+# ─── Aggregated energy report pipeline (AB#4710) ─────────────────────────
+# Deployed HTTP endpoint that returns the aggregated measured energy per
+# metering point over a caller-supplied time range, with hard completeness and
+# quality gates. Base owns it because Base owns the raw archive
+# (ec0000000000000000000a01) and the SUM+COUNT query (ec0000000000000000000a24).
+#
+# Contract:
+#   POST /aggregatedEnergyReport
+#   { "from": "<iso-utc>", "to": "<iso-utc>",
+#     "meteringPointNumbers": [ "AT0000000000000000000000000000801", ... ] }
+#
+# Always answers HTTP 200; the outcome is in the JSON body (same pattern as
+# /manualMeteringEntry). Body top level: from, to, expectedIntervals
+# ((to - from) / 900 s), status ("ok" only if EVERY entry is ok), message,
+# results. One result entry per metering point x OBIS anchor
+# (Basic.Energy/EnergyMeasurement child of the metering point):
+#   { meteringPointNumber, obisCode, energySum, unit, actualIntervals,
+#     qualityCounts: { Unknown, L1, L2, L3, Manual }, status, errors[] }
+# Gates (both make the ENTRY status "error", never a 4xx/5xx):
+#   - completeness: actualIntervals != expectedIntervals — even ONE missing
+#     15-minute interval is an error ("missing intervals: expected N, found M")
+#   - quality: any interval with DataQuality L3 (estimate) is an error
+#     ("L3 quality present (N intervals)"); Manual (key 4) is a corrected
+#     value and NOT an error
+# Input guards (each returns HTTP 200 { status: "error", message }): missing /
+# empty meteringPointNumbers, missing from/to, from >= to or a range that is
+# not a whole multiple of 900 s. A metering point number that resolves to no
+# entity yields an error ENTRY for that number, not a whole-request failure.
+#
+# Ships DeploymentState 2 (Deployed) on the default Mesh Adapter
+# 670000000000000000000002 — external report consumers call it live.
+- rtId: ec0000000000000000000a33
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: aggregated-energy-report
+  - id: System/Description-1
+    value: Aggregated measured energy per metering point with completeness and quality gates (AB#4710)
+
+- rtId: ec0000000000000000000a34
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a33
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@1
+          path: /aggregatedEnergyReport
+          method: POST
+      transformations:
+        - type: Logger@1
+          message: "Aggregated energy report (AB#4710): request received on /aggregatedEnergyReport"
+
+        # Audit trail: the full request payload (from, to, meteringPointNumbers)
+        # is dumped to the adapter log; the log line carries the timestamp.
+        - type: PrintDebug@1
+          severity: Information
+
+        # Default response — refined as the guards pass and finally overwritten
+        # by the computed report. Bad input returns HTTP 200 with a clear error
+        # body instead of a raw 500 (manual-metering-entry pattern).
+        - type: SetPrimitiveValue@1
+          targetPath: $.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.message
+          value: "Invalid request: a non-empty 'meteringPointNumbers' array is required."
+          valueType: String
+
+        # Guard 1: at least one metering point number present
+        - type: If@1
+          description: meteringPointNumbers non-empty
+          path: $.body.meteringPointNumbers[0]
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.message
+              value: "Invalid request: 'from' and 'to' (ISO-8601 UTC) are required."
+              valueType: String
+
+            # Guards 2 + 3: from and to present
+            - type: If@1
+              description: from present
+              path: $.body.from
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: If@1
+                  description: to present
+                  path: $.body.to
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.message
+                      value: "Invalid request: 'from'/'to' must be valid ISO-8601 timestamps with from < to and (to - from) a whole multiple of 900 seconds (15-minute grid)."
+                      valueType: String
+
+                    # Guard 4: range valid — parse from/to, require from < to on
+                    # the 900 s grid, and compute expectedIntervals =
+                    # (epoch(to) - epoch(from)) / 900. Returns -1 for any
+                    # invalid input (unparseable, from >= to, not a multiple).
+                    - type: ExecuteCSharp@1
+                      description: Validate time range and compute expectedIntervals
+                      targetPath: $.calc.expectedIntervals
+                      returnType: Int
+                      arguments:
+                        - name: fromText
+                          dataType: String
+                          valuePath: $.body.from
+                        - name: toText
+                          dataType: String
+                          valuePath: $.body.to
+                      code: |
+                        var culture = System.Globalization.CultureInfo.InvariantCulture;
+                        var styles = System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal;
+                        DateTime fromValue;
+                        DateTime toValue;
+                        if (!DateTime.TryParse(fromText, culture, styles, out fromValue)) return -1;
+                        if (!DateTime.TryParse(toText, culture, styles, out toValue)) return -1;
+                        var totalSeconds = (long)(toValue - fromValue).TotalSeconds;
+                        if (totalSeconds <= 0 || totalSeconds % 900 != 0) return -1;
+                        return (int)(totalSeconds / 900);
+
+                    - type: If@1
+                      description: time range valid (from < to on the 900 s grid)
+                      # Double, NOT Int: ExecuteCSharp int returns land as JSON
+                      # doubles (4.0) in the data context; the If node's Int
+                      # branch uses the strict STJ Get<int?>() which rejects
+                      # them (AB#4710). Get<double?> accepts 4 and 4.0.
+                      path: $.calc.expectedIntervals
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Double
+                      transformations:
+                        # Canonical ISO-8601 window strings (AB#4710 E2E fix):
+                        # the adapter's HTTP body parser recognises ISO
+                        # timestamps and stores DateTime values; serialising
+                        # those into SD fieldFilters yields a culture-formatted
+                        # string ('01/01/2026 00:00:00') that CrateDB cannot
+                        # cast (the AB#4552 side-finding). Re-emit both bounds
+                        # as strict UTC ISO strings and use THOSE everywhere.
+                        - type: ExecuteCSharp@1
+                          description: Canonical ISO-8601 'from' for SD filters
+                          targetPath: $.calc.fromIso
+                          returnType: String
+                          arguments:
+                            - name: fromText
+                              dataType: String
+                              valuePath: $.body.from
+                          code: |
+                            var culture = System.Globalization.CultureInfo.InvariantCulture;
+                            var styles = System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal;
+                            var value = DateTime.Parse(fromText, culture, styles);
+                            // SPACE separator, not ISO 'T': any T-separated ISO string written into
+                            // the DataContext is re-detected as a DateTime by Newtonsoft on the next
+                            // context roundtrip and ends up culture-formatted at CrateDB again.
+                            // CrateDB casts the SQL-standard 'yyyy-MM-dd HH:mm:ss' (UTC) fine.
+                            return value.ToString("yyyy-MM-dd HH:mm:ss", culture);
+                        - type: ExecuteCSharp@1
+                          description: Canonical ISO-8601 'to' for SD filters
+                          targetPath: $.calc.toIso
+                          returnType: String
+                          arguments:
+                            - name: toText
+                              dataType: String
+                              valuePath: $.body.to
+                          code: |
+                            var culture = System.Globalization.CultureInfo.InvariantCulture;
+                            var styles = System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal;
+                            var value = DateTime.Parse(toText, culture, styles);
+                            // SPACE separator, not ISO 'T': any T-separated ISO string written into
+                            // the DataContext is re-detected as a DateTime by Newtonsoft on the next
+                            // context roundtrip and ends up culture-formatted at CrateDB again.
+                            // CrateDB casts the SQL-standard 'yyyy-MM-dd HH:mm:ss' (UTC) fine.
+                            return value.ToString("yyyy-MM-dd HH:mm:ss", culture);
+
+                        # Echo the request window + expectation into the response.
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.expectedIntervals
+                          valuePath: $.calc.expectedIntervals
+                          valueType: Int
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.from
+                          valuePath: $.calc.fromIso
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.to
+                          valuePath: $.calc.toIso
+                          valueType: String
+
+                        # One entry group per requested number. Unknown numbers
+                        # yield an error ENTRY, not a request failure. NB entry
+                        # order in the final results array is not guaranteed.
+                        - type: ForEach@1
+                          description: Process each requested metering point number
+                          maxDegreeOfParallelism: 1
+                          iterationPath: $.body.meteringPointNumbers
+                          mergePath: $.out
+                          targetPath: $.mpResults
+                          transformations:
+                            - type: GetRtEntitiesByType@1
+                              description: Resolve the metering point by MeteringPointNumber (subtypes included)
+                              ckTypeId: Basic.Energy/MeteringPoint
+                              targetPath: $.mp
+                              take: 1
+                              fieldFilters:
+                                - attributePath: MeteringPointNumber
+                                  operator: Equals
+                                  comparisonValuePath: $.key
+
+                            - type: If@1
+                              description: metering point not found — error entry
+                              path: $.mp.Items[0].RtId
+                              operator: Equals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: WriteJson@1
+                                  description: Error entry skeleton
+                                  targetPath: $.errEntry
+                                  jsonString: '{"meteringPointNumber":null,"obisCode":null,"energySum":null,"unit":null,"actualIntervals":0,"qualityCounts":null,"status":"error","errors":[]}'
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.errEntry.meteringPointNumber
+                                  valuePath: $.key
+                                  valueType: String
+                                - type: FormatString@1
+                                  format: "no metering point found for metering point number {$.key}"
+                                  targetPath: $.errEntry.errors
+                                  targetValueWriteMode: Append
+                                  targetValueKind: Array
+                                - type: Flatten@1
+                                  description: Collect the error entry
+                                  path: $.errEntry
+                                  targetPath: $.out.entries
+
+                            - type: If@1
+                              description: metering point resolved — one entry per EnergyMeasurement anchor
+                              path: $.mp.Items[0].RtId
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                # Anchors are the System/ParentChild CHILDREN of
+                                # the metering point (one per OBIS code; a
+                                # consumer has 2, a producer 1).
+                                - type: GetAssociationTargets@1
+                                  description: EnergyMeasurement anchors of the metering point
+                                  associationRoleId: System/ParentChild
+                                  graphDirection: Inbound
+                                  originCkTypeId: Basic.Energy/MeteringPoint
+                                  targetCkTypeId: Basic.Energy/EnergyMeasurement
+                                  originRtIdPath: $.mp.Items[0].RtId
+                                  targetPath: $.anchors
+
+                                - type: If@1
+                                  description: no anchors — error entry
+                                  path: $.anchors[0].Items[0].RtId
+                                  operator: Equals
+                                  value: null
+                                  valueType: String
+                                  transformations:
+                                    - type: WriteJson@1
+                                      description: Error entry skeleton
+                                      targetPath: $.errEntry
+                                      jsonString: '{"meteringPointNumber":null,"obisCode":null,"energySum":null,"unit":null,"actualIntervals":0,"qualityCounts":null,"status":"error","errors":[]}'
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.errEntry.meteringPointNumber
+                                      valuePath: $.key
+                                      valueType: String
+                                    - type: FormatString@1
+                                      format: "metering point {$.key} has no EnergyMeasurement anchors"
+                                      targetPath: $.errEntry.errors
+                                      targetValueWriteMode: Append
+                                      targetValueKind: Array
+                                    - type: Flatten@1
+                                      description: Collect the error entry
+                                      path: $.errEntry
+                                      targetPath: $.out.entries
+
+                                - type: If@1
+                                  description: anchors present — aggregate per anchor
+                                  path: $.anchors[0].Items[0].RtId
+                                  operator: NotEquals
+                                  value: null
+                                  valueType: String
+                                  transformations:
+                                    - type: ForEach@1
+                                      description: One result entry per anchor (metering point x OBIS code)
+                                      maxDegreeOfParallelism: 1
+                                      iterationPath: $.anchors[0].Items
+                                      mergePath: $.entry
+                                      targetPath: $.out.entries
+                                      transformations:
+                                        - type: WriteJson@1
+                                          description: Result entry skeleton
+                                          targetPath: $.entry
+                                          jsonString: '{"meteringPointNumber":null,"obisCode":null,"energySum":0,"unit":null,"actualIntervals":0,"qualityCounts":{"Unknown":0,"L1":0,"L2":0,"L3":0,"Manual":0},"status":"ok","errors":[]}'
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.entry.meteringPointNumber
+                                          valuePath: $.full.key
+                                          valueType: String
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.entry.obisCode
+                                          valuePath: $.key.Attributes.ObisCode
+                                          valueType: String
+
+                                        # SUM + COUNT of amount.value per
+                                        # (dataQuality, amount.unit) for this
+                                        # anchor over the requested window.
+                                        # Fully-contained-interval scope, same
+                                        # as the Billing settlement (AB#4552):
+                                        # Values = [dataQuality, amount.unit,
+                                        # amountvalue_sum, amountvalue_count],
+                                        # dataQuality/amount.unit as INTEGERS.
+                                        - type: GetQueryById@1
+                                          description: Stream-data aggregation (sum + count per quality)
+                                          queryRtId: "ec0000000000000000000a24"
+                                          targetPath: $.sd
+                                          fieldFilters:
+                                            - attributePath: rtId
+                                              operator: Equals
+                                              comparisonValuePath: $.key.RtId
+                                            - attributePath: window_start
+                                              operator: GreaterEqualThan
+                                              comparisonValuePath: $.full.full.calc.fromIso
+                                            - attributePath: window_end
+                                              operator: LessEqualThan
+                                              comparisonValuePath: $.full.full.calc.toIso
+
+                                        - type: If@1
+                                          description: aggregation rows present (count > 0)
+                                          # Double, NOT Int: this path reads a RAW stream-data
+                                          # aggregation value (CrateDB count arrives as 96.0);
+                                          # the If node's Int branch uses the strict STJ
+                                          # Get<int?>() which rejects doubles (same trap as
+                                          # ConvertDataType@1, AB#4710). Get<double?> accepts
+                                          # both 96 and 96.0.
+                                          path: $.sd.Rows[0].Values[3]
+                                          operator: GreaterThan
+                                          value: 0
+                                          valueType: Double
+                                          transformations:
+                                            # energySum = SUM over ALL quality
+                                            # rows (the gates below decide ok /
+                                            # error; the sum itself is complete).
+                                            - type: SumAggregation@1
+                                              description: total energy over all quality groups
+                                              targetPath: $.agg.energySum
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: null
+                                                  comparisonValue: null
+                                                  aggregationPath: $.Values[2]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: total interval count over all quality groups
+                                              targetPath: $.agg.intervals
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: null
+                                                  comparisonValue: null
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count Unknown (key 0)
+                                              targetPath: $.agg.q0
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 0
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count L1 (key 1)
+                                              targetPath: $.agg.q1
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 1
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count L2 (key 2)
+                                              targetPath: $.agg.q2
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 2
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count L3 (key 3)
+                                              targetPath: $.agg.q3
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 3
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count Manual (key 4)
+                                              targetPath: $.agg.q4
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 4
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+
+                                            # SumAggregation writes doubles —
+                                            # normalize via C#: ConvertDataType Int
+                                            # uses strict STJ Get<int> and rejects
+                                            # double JSON like 96.0 (AB#4710 E2E).
+                                            - type: ExecuteCSharp@1
+                                              description: Round intervals count to int
+                                              targetPath: $.entry.actualIntervals
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.intervals
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q0 count to int
+                                              targetPath: $.entry.qualityCounts.Unknown
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q0
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q1 count to int
+                                              targetPath: $.entry.qualityCounts.L1
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q1
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q2 count to int
+                                              targetPath: $.entry.qualityCounts.L2
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q2
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q3 count to int
+                                              targetPath: $.entry.qualityCounts.L3
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q3
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q4 count to int
+                                              targetPath: $.entry.qualityCounts.Manual
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q4
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.entry.energySum
+                                              valuePath: $.agg.energySum
+                                              valueType: Double
+
+                                            # Unit from the first group row
+                                            # (integer UnitOfMeasure key).
+                                            - type: Switch@1
+                                              description: Map the archive unit key to its UnitOfMeasure name
+                                              path: $.sd.Rows[0].Values[1]
+                                              valueType: Int
+                                              cases:
+                                                - value: 1
+                                                  transformations:
+                                                    - type: SetPrimitiveValue@1
+                                                      targetPath: $.entry.unit
+                                                      value: KWh
+                                                      valueType: String
+                                                - value: 2
+                                                  transformations:
+                                                    - type: SetPrimitiveValue@1
+                                                      targetPath: $.entry.unit
+                                                      value: MWh
+                                                      valueType: String
+                                                - value: 0
+                                                  transformations:
+                                                    - type: SetPrimitiveValue@1
+                                                      targetPath: $.entry.unit
+                                                      value: NonUnit
+                                                      valueType: String
+
+                                        # Completeness gate: even ONE missing
+                                        # 15-minute interval is an error (also
+                                        # fires when the archive returned no
+                                        # rows at all — actualIntervals = 0).
+                                        - type: If@1
+                                          description: completeness gate (actualIntervals != expectedIntervals)
+                                          # Double (strict-Int STJ trap, AB#4710) — covers both sides
+                                          path: $.entry.actualIntervals
+                                          operator: NotEquals
+                                          valuePath: $.full.full.expectedIntervals
+                                          valueType: Double
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.entry.status
+                                              value: error
+                                              valueType: String
+                                            - type: FormatString@1
+                                              format: "missing intervals: expected {$.full.full.expectedIntervals}, found {$.entry.actualIntervals}"
+                                              targetPath: $.entry.errors
+                                              targetValueWriteMode: Append
+                                              targetValueKind: Array
+
+                                        # Quality gate: any L3 (estimate)
+                                        # interval is an error. Manual (key 4)
+                                        # is a corrected value — NOT an error.
+                                        - type: If@1
+                                          description: quality gate (any L3 interval)
+                                          # Double (strict-Int STJ trap, AB#4710)
+                                          path: $.entry.qualityCounts.L3
+                                          operator: GreaterThan
+                                          value: 0
+                                          valueType: Double
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.entry.status
+                                              value: error
+                                              valueType: String
+                                            - type: FormatString@1
+                                              format: "L3 quality present ({$.entry.qualityCounts.L3} intervals)"
+                                              targetPath: $.entry.errors
+                                              targetValueWriteMode: Append
+                                              targetValueKind: Array
+
+                        # Flatten the per-number entry groups into one flat
+                        # results array (one element per metering point x OBIS
+                        # anchor, plus one per unresolved number).
+                        - type: Flatten@1
+                          description: Flatten entry groups into the results array
+                          path: $.mpResults[*].entries[*]
+                          targetPath: $.results
+
+                        # Overall status: ok only if EVERY entry is ok.
+                        - type: ExecuteCSharp@1
+                          description: Count result entries with status=error
+                          targetPath: $.calc.errorEntryCount
+                          returnType: Int
+                          arguments:
+                            - name: resultEntries
+                              dataType: RecordArray
+                              valuePath: $.results
+                          code: |
+                            var entriesElement = (System.Text.Json.JsonElement)resultEntries;
+                            var errorCount = 0;
+                            foreach (var entry in entriesElement.EnumerateArray())
+                            {
+                                if (entry.GetProperty("status").GetString() == "error") errorCount++;
+                            }
+                            return errorCount;
+
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.status
+                          value: ok
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.message
+                          value: "aggregated energy report computed; all entries passed the completeness and quality gates"
+                          valueType: String
+                        - type: If@1
+                          description: any entry failed a gate — overall status error
+                          # Double (strict-Int STJ trap, AB#4710)
+                          path: $.calc.errorEntryCount
+                          operator: GreaterThan
+                          value: 0
+                          valueType: Double
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.status
+                              value: error
+                              valueType: String
+                            - type: FormatString@1
+                              format: "{$.calc.errorEntryCount} result entries failed the completeness or quality gates - see results[*].errors"
+                              targetPath: $.message
+
+        # Shape the HTTP response body: keep only the report fields, drop the
+        # request echo and all intermediate data (the adapter returns the final
+        # data context as the HTTP body). Missing fields (guard failures) are
+        # skipped, so a guard failure returns exactly { status, message }.
+        - type: Project@1
+          description: Shape the HTTP response body
+          path: $
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.from
+              inclusion: true
+            - path: $.to
+              inclusion: true
+            - path: $.expectedIntervals
+              inclusion: true
+            - path: $.results
+              inclusion: true
+
+        # Persist the (shaped) report as OutputData — the per-execution audit
+        # record, retrievable via GetLatestPipelineExecution.
+        - type: SetPipelineExecutionResult@1
+          path: $
