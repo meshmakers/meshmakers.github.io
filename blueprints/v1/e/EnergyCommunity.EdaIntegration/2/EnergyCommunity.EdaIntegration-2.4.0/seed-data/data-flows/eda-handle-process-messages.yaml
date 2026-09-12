@@ -1,0 +1,519 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# The eda-handle-process-messages DataFlow and its seven per-message handler pipelines
+# (cr-req-pt, ec-podlist, ec-req-onl, ec-prtfact-change, cm-rev-cus/-imp/-sp).
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Shared DataFlow for the EDA process-message handlers (AB#4820) ──────
+# Pattern and rtId adopted from voest-app
+# data/_pipelines/_eda/eda-handle-process-messages.yaml. The seven handle-*
+# process handlers attach here via System/ParentChild-1; the speaking name now
+# lives on the Pipeline (System/Name-1) instead of a 1:1 DataFlow per handler.
+# handle-daten-crmsg deliberately keeps its own DataFlow — it ingests stream
+# data on its own poll interval and must stay separately deployable.
+# Deploy unit: octo-cli -c DeployDataFlow --identifier 6a3ba517dd34215646b7a8a4
+- rtId: 6a3ba517dd34215646b7a8a4
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: eda-handle-process-messages
+  - id: System/Description-1
+    value: Handles the messages of the EDA processes (CR_REQ_PT, EC_PODLIST, EC_REQ_ONL, EC_PRTFACT_CHANGE, CM_REV_SP, AUFHEBUNG_CCMC, AUFHEBUNG_CCMI)
+- rtId: 68c2803a234ceec0d029dfdc
+  rtCreationDateTime: 2025-09-11T07:54:34.1360000Z
+  rtChangedDateTime: 2026-03-13T06:32:53.9960000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6a3ba517dd34215646b7a8a4
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: handle-cr-req-pt
+  - id: System/Description-1
+    value: Handle all messages for process CR_REQ_PT (Energiedaten anfordern)
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        # - type: FromExecutePipelineCommand@1
+        - type: FromPolling@1
+          interval: 00:02:05
+      transformations:
+        - type: GetQueryById@1
+          targetPath: $.query
+          queryRtId: 688b17275f17dc195d83ca1e
+
+        - type: If@1
+          description: Messages available
+          path: $.query.Rows[0].RtId
+          operator: NotEqual
+          value: null
+          valueType: string
+          transformations:
+            - type: ForEach@1
+              description: Parse EDA messages
+              iterationPath: $.query.Rows
+              mergePath: $.EdaMessage
+              targetPath: $.EdaMessages
+              transformations:
+                - type: EdaParseMessage@1
+                  messageRtIdPath: $.key.RtId
+                  messageTypePath: $.key.Values[0]
+                  processRtIdPath: $.key.Values[1]
+                  rawMessagePath: $.key.Values[2]
+                  targetPath: $.EdaMessage
+
+            - type: Project@1
+              fields:
+                - path: $.query
+
+            # START general message and process handling
+            - type: ExtractProcesses@1
+              path: $.EdaMessages
+              targetPath: $.EdaProcesses
+
+            - type: ForEach@1
+              description: EDA messages
+              iterationPath: $.EdaMessages
+              mergePath: $.Updates
+              targetPath: $.updates
+              transformations:
+                # Update messags to processed
+                - type: CreateUpdateInfo@1
+                  targetPath: $.Updates.UpdateMessage
+                  updateKind: UPDATE
+                  ckTypeId: Basic.Energy/EdaMessage
+                  rtIdPath: $.key.MessageRtId
+                  attributeUpdates:
+                    - attributeName: Processed
+                      attributeValueType: Boolean
+                      value: true
+
+            - type: ForEach@1
+              description: EDA processes
+              iterationPath: $.EdaProcesses
+              mergePath: $.Updates
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.Updates.UpdateProcess
+                  updateKind: UPDATE
+                  ckTypeId: Basic.Energy/EdaProcess
+                  rtIdPath: $.key.ProcessRtId
+                  attributeUpdates:
+                    - attributeName: Finished
+                      attributeValueType: Boolean
+                      valuePath: $.key.FinishProcess
+                    - attributeName: Success
+                      attributeValueType: Boolean
+                      valuePath: $.key.IsSuccessfulProcess
+                    - attributeName: Info
+                      attributeValueType: String
+                      valuePath: $.key.ResponseInfo
+                    - attributeName: ResponseCode
+                      attributeValueType: String
+                      valuePath: $.key.ResponseCode
+
+            - type: Project@1
+              fields:
+                - path: $.EdaMessages
+                - path: $.EdaProcesses
+
+            - type: Flatten@1
+              description: Update processes
+              path: $.updates[*].UpdateProcess
+              targetPath: $.Result
+            - type: Flatten@1
+              description: Update messages
+              path: $.updates[*].UpdateMessage
+              targetPath: $.Result
+              targetValueWriteMode: Append
+            # END general message and process handling
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.Result
+
+# handle-ec-podlist — pipeline inside DataFlow eda-handle-process-messages (AB#4820)
+- rtId: 68c2805b234ceec0d029dfe2
+  rtCreationDateTime: 2025-09-11T07:55:07.3340000Z
+  rtChangedDateTime: 2026-03-31T12:35:03.6520000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6a3ba517dd34215646b7a8a4
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: handle-ec-podlist
+  - id: System/Description-1
+    value: Handle all messages for process EC_PODLIST (Zählpunktliste)
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: "triggers:\r\n  # - type: FromExecutePipelineCommand@1\r\n  - type: FromPolling@1\r\n    interval: 00:05:00\r\ntransformations:\r\n  - type: GetQueryById@1\r\n    targetPath: $.query\r\n    queryRtId: 688b047f5f17dc195d83ca1d\r\n    take: 1\r\n\r\n  - type: If@1\r\n    description: Messages available\r\n    path: $.query.Rows[0].RtId\r\n    operator: NotEqual\r\n    value: null\r\n    valueType: string\r\n    transformations:\r\n      - type: ForEach@1\r\n        description: Parse EDA messages\r\n        iterationPath: $.query.Rows\r\n        mergePath: $.EdaMessage\r\n        targetPath: $.EdaMessages\r\n        transformations:\r\n          - type: EdaParseMessage@1\r\n            messageRtIdPath: $.key.RtId\r\n            messageTypePath: $.key.Values[0]\r\n            processRtIdPath: $.key.Values[1]\r\n            rawMessagePath: $.key.Values[2]\r\n            targetPath: $.EdaMessage\r\n\r\n      - type: Flatten@1\r\n        description: Metering points\r\n        path: $.EdaMessages[*].MeteringPoints[*]\r\n        targetPath: $.MeteringPoints\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.query\r\n\r\n      # START general message and process handling\r\n      - type: ExtractProcesses@1\r\n        path: $.EdaMessages\r\n        targetPath: $.EdaProcesses\r\n\r\n      - type: ForEach@1\r\n        description: EDA messages\r\n        iterationPath: $.EdaMessages\r\n        mergePath: $.Updates\r\n        targetPath: $.updates\r\n        transformations:\r\n          # Update messags to processed\r\n          - type: CreateUpdateInfo@1\r\n            targetPath: $.Updates.UpdateMessage\r\n            updateKind: UPDATE\r\n            ckTypeId: Basic.Energy/EdaMessage\r\n            rtIdPath: $.key.MessageRtId\r\n            attributeUpdates:\r\n              - attributeName: Processed\r\n                attributeValueType: Boolean\r\n                value: true\r\n\r\n      - type: ForEach@1\r\n        description: EDA processes\r\n        iterationPath: $.EdaProcesses\r\n        mergePath: $.Updates\r\n        targetPath: $.updates\r\n        targetValueWriteMode: Append\r\n        transformations:\r\n          - type: CreateUpdateInfo@1\r\n            targetPath: $.Updates.UpdateProcess\r\n            updateKind: UPDATE\r\n            ckTypeId: Basic.Energy/EdaProcess\r\n            rtIdPath: $.key.ProcessRtId\r\n            attributeUpdates:\r\n              - attributeName: Finished\r\n                attributeValueType: Boolean\r\n                valuePath: $.key.FinishProcess\r\n              - attributeName: Success\r\n                attributeValueType: Boolean\r\n                valuePath: $.key.IsSuccessfulProcess\r\n              - attributeName: Info\r\n                attributeValueType: String\r\n                valuePath: $.key.ResponseInfo\r\n              - attributeName: ResponseCode\r\n                attributeValueType: String\r\n                valuePath: $.key.ResponseCode\r\n\r\n      - type: Project@1\r\n        description: processes and messages\r\n        fields:\r\n          - path: $.EdaMessages\r\n          - path: $.EdaProcesses\r\n\r\n      - type: Flatten@1\r\n        description: process updates to result\r\n        path: $.updates[*].UpdateProcess\r\n        targetPath: $.Result\r\n      - type: Flatten@1\r\n        description: message updates to result\r\n        path: $.updates[*].UpdateMessage\r\n        targetPath: $.Result\r\n        targetValueWriteMode: Append\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.updates\r\n      # END general message and process handling\r\n\r\n      # START metering point handling\r\n      - type: TransformString@1\r\n        description: get operator number\r\n        path: $.MeteringPoints[*]\r\n        sourcePath: $.MeteringPointNumber\r\n        targetPath: $.Operator\r\n        operation: SubstringFromStart\r\n        length: 8\r\n\r\n      - type: GetQueryById@1\r\n        description: load metering points from operator\r\n        targetPath: $.MeteringPointsFromOperator\r\n        queryRtId: 69ca90f55556c12b9382f221\r\n        fieldFilters:\r\n          - attributePath: meteringPointNumber\r\n            operator: LIKE\r\n            comparisonValuePath: $.MeteringPoints[0].Operator\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.MeteringPointsFromOperator.Columns\r\n\r\n      - type: Join@1\r\n        path: $.MeteringPointsFromOperator.Rows[*]\r\n        keyPath: $.Values[0]\r\n        joinPath: $.MeteringPoints[*]\r\n        joinKeyPath: $.MeteringPointNumber\r\n        itemPath: $.MeteringPoint\r\n\r\n      - type: ForEach@1\r\n        description: not in SENDEN_ECP\r\n        iterationPath: $.MeteringPointsFromOperator.Rows\r\n        mergePath: $.update\r\n        targetPath: $.updates\r\n        transformations:\r\n          - type: If@1\r\n            description: not in SENDEN_ECP\r\n            path: $.key.MeteringPoint[0].MeteringPointNumber\r\n            operator: Equals\r\n            value: NULL\r\n            valueType: String\r\n            transformations:\r\n              - type: If@1\r\n                description: metering point is active\r\n                path: $.key.Values[1]\r\n                operator: Equals\r\n                value: 1\r\n                valueType: Enum\r\n                transformations:\r\n                  - type: CreateUpdateInfo@1\r\n                    description: set metering point to inactive\r\n                    targetPath: $.update\r\n                    updateKind: UPDATE\r\n                    ckTypeIdPath: $.key.CkTypeId\r\n                    rtIdPath: $.key.RtId\r\n                    attributeUpdates:\r\n                      - attributeName: State\r\n                        attributeValueType: Enum\r\n                        value: 2\r\n\r\n      - type: Flatten@1\r\n        description: update metering points to result\r\n        path: $.updates[*]\r\n        targetPath: $.Result\r\n        targetValueWriteMode: Append\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.updates\r\n          - path: $.MeteringPointsFromOperator\r\n\r\n      - type: Flatten@1\r\n        description: metering point numbers\r\n        path: $.MeteringPoints[*].MeteringPointNumber\r\n        targetPath: $.MeteringPointNumbers\r\n\r\n      - type: GetQueryById@1\r\n        description: Load producer metering points\r\n        targetPath: $.Producer\r\n        queryRtId: 69ca81475556c12b9382f21f\r\n        fieldFilters:\r\n          - attributePath: meteringPointNumber\r\n            operator: IN\r\n            comparisonValuePath: $.MeteringPointNumbers\r\n\r\n      - type: If@1\r\n        description: Producers\r\n        path: $.Producer.Rows[0].RtId\r\n        operator: NotEquals\r\n        value: NULL\r\n        valueType: String\r\n        transformations:\r\n          # Join metering data from DB with metering data from message\r\n          - type: Join@1\r\n            path: $.MeteringPoints[*]\r\n            keyPath: $.MeteringPointNumber\r\n            joinPath: $.Producer.Rows[*]\r\n            joinKeyPath: $.Values[0]\r\n            itemPath: $.Producer\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.Producer\r\n\r\n      - type: GetQueryById@1\r\n        description: Load consumer metering points\r\n        targetPath: $.Consumer\r\n        queryRtId: 69ca80d85556c12b9382f21e\r\n        fieldFilters:\r\n          - attributePath: meteringPointNumber\r\n            operator: IN\r\n            comparisonValuePath: $.MeteringPointNumbers\r\n\r\n      - type: If@1\r\n        description: Consumers\r\n        path: $.Consumer.Rows[0].RtId\r\n        operator: NotEquals\r\n        value: NULL\r\n        valueType: String\r\n        transformations:\r\n          # Join metering data from DB with metering data from message\r\n          - type: Join@1\r\n            path: $.MeteringPoints[*]\r\n            keyPath: $.MeteringPointNumber\r\n            joinPath: $.Consumer.Rows[*]\r\n            joinKeyPath: $.Values[0]\r\n            itemPath: $.Consumer\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.Consumer\r\n\r\n      - type: GetQueryById@1\r\n        description: Load eda metering points\r\n        targetPath: $.EdaMeteringPoint\r\n        queryRtId: 69ca88fb5556c12b9382f220\r\n        fieldFilters:\r\n          - attributePath: meteringPointNumber\r\n            operator: IN\r\n            comparisonValuePath: $.MeteringPointNumbers\r\n\r\n      - type: If@1\r\n        description: Eda metering points\r\n        path: $.Consumer.Rows[0].RtId\r\n        operator: NotEquals\r\n        value: NULL\r\n        valueType: String\r\n        transformations:\r\n          # Join metering data from DB with metering data from message\r\n          - type: Join@1\r\n            path: $.MeteringPoints[*]\r\n            keyPath: $.MeteringPointNumber\r\n            joinPath: $.EdaMeteringPoint.Rows[*]\r\n            joinKeyPath: $.Values[0]\r\n            itemPath: $.EdaMeteringPoint\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.MeteringPointNumbers\r\n          - path: $.EdaMeteringPoint\r\n\r\n      - type: ForEach@1\r\n        description: Create metering point update infos\r\n        iterationPath: $.MeteringPoints\r\n        mergePath: $.MeteringPoints\r\n        targetPath: $.MeteringPointUpdates\r\n        transformations:\r\n          - type: CreateMeteringPointUpdate@1\r\n            path: $.key\r\n            consumerPath: $.key.Consumer[0]\r\n            producerPath: $.key.Producer[0]\r\n            edaMeteringPointPath: $.key.EdaMeteringPoint[0]\r\n            targetPath: $.MeteringPoints\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.MeteringPoints\r\n          - path: $.Consumer\r\n\r\n      - type: Flatten@1\r\n        description: update infos\r\n        path: $.MeteringPointUpdates[*][*]\r\n        targetPath: $.MeteringPointUpdates\r\n\r\n      - type: ForEach@1\r\n        description: Create metering point updates\r\n        iterationPath: $.MeteringPointUpdates\r\n        mergePath: $.Updates\r\n        targetPath: $.updates\r\n        transformations:\r\n          - type: DataMapping@1\r\n            path: $.key.Direction\r\n            targetPath: $.key.ckType\r\n            sourceValueType: Int\r\n            targetValueType: String\r\n            mappings:\r\n              - sourceValue: 1\r\n                targetValue: EnergyCommunity/Consumer\r\n              - sourceValue: 2\r\n                targetValue: EnergyCommunity/Producer\r\n          - type: DataMapping@1\r\n            path: $.key.IsActive\r\n            targetPath: $.key.State\r\n            sourceValueType: Boolean\r\n            targetValueType: Int\r\n            mappings:\r\n              - sourceValue: true\r\n                targetValue: 1\r\n              - sourceValue: false\r\n                targetValue: 2\r\n          - type: DataMapping@1\r\n            path: $.key.Direction\r\n            targetPath: $.key.IsProducer\r\n            sourceValueType: Int\r\n            targetValueType: Boolean\r\n            mappings:\r\n              - sourceValue: 1\r\n                targetValue: false\r\n              - sourceValue: 2\r\n                targetValue: true\r\n          # Update metering points\r\n          - type: If@1\r\n            description: Existing metering point\r\n            path: $.key.RtId\r\n            operator: NotEquals\r\n            value: null\r\n            valueType: String\r\n            transformations:\r\n              - type: If@1\r\n                description: Update metering point\r\n                path: $.key.HasWrongType\r\n                operator: Equals\r\n                value: false\r\n                valueType: Boolean\r\n                transformations:\r\n                  - type: If@1\r\n                    description: Consumer\r\n                    path: $.key.Direction\r\n                    operator: Equals\r\n                    value: 1\r\n                    valueType: Int\r\n                    transformations:\r\n                      - type: CreateUpdateInfo@1\r\n                        targetPath: $.Updates.UpdateMeteringPoint\r\n                        updateKind: UPDATE\r\n                        ckTypeIdPath: $.key.ckType\r\n                        rtIdPath: $.key.RtId\r\n                        attributeUpdates:\r\n                          - attributeName: PartitionFactor\r\n                            attributeValueType: Int\r\n                            valuePath: $.key.ParticipationFactor\r\n                          - attributeName: ConsentId\r\n                            attributeValueType: String\r\n                            valuePath: $.key.ConsentId\r\n                          - attributeName: State\r\n                            attributeValueType: Enum\r\n                            valuePath: $.key.State\r\n                  - type: If@1\r\n                    description: Producer\r\n                    path: $.key.Direction\r\n                    operator: Equals\r\n                    value: 2\r\n                    valueType: Int\r\n                    transformations:\r\n                      - type: CreateUpdateInfo@1\r\n                        targetPath: $.Updates.UpdateMeteringPoint\r\n                        updateKind: UPDATE\r\n                        ckTypeIdPath: $.key.ckType\r\n                        rtIdPath: $.key.RtId\r\n                        attributeUpdates:\r\n                          - attributeName: PartitionFactor\r\n                            attributeValueType: Int\r\n                            valuePath: $.key.ParticipationFactor\r\n                          - attributeName: ProductionType\r\n                            attributeValueType: Enum\r\n                            valuePath: $.key.ProductionType\r\n                          - attributeName: ConsentId\r\n                            attributeValueType: String\r\n                            valuePath: $.key.ConsentId\r\n                          - attributeName: State\r\n                            attributeValueType: Enum\r\n                            valuePath: $.key.State\r\n\r\n                  - type: ForEach@1\r\n                    description: participation periods\r\n                    iterationPath: $.key.TimePeriods\r\n                    mergePath: $.timePeriods\r\n                    targetPath: $.Updates.TimePeriods\r\n                    transformations:\r\n                      - type: CreateUpdateInfo@1\r\n                        description: time periods\r\n                        targetPath: $.timePeriods.TimePeriods\r\n                        updateKind: INSERT\r\n                        ckTypeId: EnergyCommunity/ParticipationPeriod\r\n                        rtIdPath: $.RtId\r\n                        generateRtId: true\r\n                        attributeUpdates:\r\n                          - attributeName: TimeRange.From\r\n                            attributeValueType: DateTime\r\n                            valuePath: $.key.ActivatedSince\r\n                          - attributeName: TimeRange.To\r\n                            attributeValueType: DateTime\r\n                            valuePath: $.key.DeactivatedSince\r\n\r\n                      - type: CreateAssociationUpdate@1\r\n                        description: time period assocs\r\n                        targetPath: $.timePeriods.Assocs\r\n                        updateKind: CREATE\r\n                        originRtIdPath: $.timePeriods.TimePeriods.RtId\r\n                        originCkTypeId: EnergyCommunity/ParticipationPeriod\r\n                        targetRtIdPath: $.full.key.RtId\r\n                        targetCkTypeIdPath: $.full.key.ckType\r\n                        associationRoleId: EnergyCommunity/ParticipationPeriod\r\n\r\n              # Wrong meteringpoint type\r\n              - type: If@1\r\n                description: Wrong metering point type\r\n                path: $.key.HasWrongType\r\n                operator: Equals\r\n                value: true\r\n                valueType: Boolean\r\n                transformations:\r\n                  # TODO: How to deal with wrong metering point types?\r\n                  - type: DataMapping@1\r\n                    path: $.key.Direction\r\n                    targetPath: $.key.ckType\r\n                    sourceValueType: Int\r\n                    targetValueType: String\r\n                    mappings:\r\n                      - sourceValue: 2\r\n                        targetValue: EnergyCommunity/Consumer\r\n                      - sourceValue: 1\r\n                        targetValue: EnergyCommunity/Producer\r\n                  - type: CreateUpdateInfo@1\r\n                    targetPath: $.Updates.WrongMeteringPointType\r\n                    updateKind: UPDATE\r\n                    ckTypeIdPath: $.key.ckType\r\n                    rtIdPath: $.key.RtId\r\n                    attributeUpdates:\r\n                      - attributeName: Description\r\n                        attributeValueType: String\r\n                        value: Wrong metering point type!\r\n                      - attributeName: ConsentId\r\n                        attributeValueType: String\r\n                        valuePath: $.key.ConsentId\r\n                      - attributeName: State\r\n                        attributeValueType: Enum\r\n                        valuePath: $.key.State\r\n\r\n          # Create new metering points\r\n          - type: If@1\r\n            description: New metering point\r\n            path: $.key.RtId\r\n            operator: Equals\r\n            value: null\r\n            valueType: String\r\n            transformations:\r\n              - type: If@1\r\n                description: Producer\r\n                path: $.key.IsProducer\r\n                operator: Equals\r\n                value: true\r\n                valueType: Boolean\r\n                transformations:\r\n                  - type: CreateUpdateInfo@1\r\n                    targetPath: $.Updates.NewMeteringPoint\r\n                    updateKind: INSERT\r\n                    ckTypeId: Basic.Energy/EdaMeteringPoint\r\n                    attributeUpdates:\r\n                      - attributeName: MeteringPointNumber\r\n                        attributeValueType: String\r\n                        valuePath: $.key.MeteringPointNumber\r\n                      - attributeName: PartitionFactor\r\n                        attributeValueType: Int\r\n                        valuePath: $.key.ParticipationFactor\r\n                      - attributeName: ProductionType\r\n                        attributeValueType: Enum\r\n                        valuePath: $.key.ProductionType\r\n                      - attributeName: IsProducer\r\n                        attributeValueType: Enum\r\n                        valuePath: $.key.IsProducer\r\n                      - attributeName: ConsentId\r\n                        attributeValueType: String\r\n                        valuePath: $.key.ConsentId\r\n              - type: If@1\r\n                description: Consumer\r\n                path: $.key.IsProducer\r\n                operator: Equals\r\n                value: false\r\n                valueType: Boolean\r\n                transformations:\r\n                  - type: CreateUpdateInfo@1\r\n                    targetPath: $.Updates.NewMeteringPoint\r\n                    updateKind: INSERT\r\n                    ckTypeId: Basic.Energy/EdaMeteringPoint\r\n                    attributeUpdates:\r\n                      - attributeName: MeteringPointNumber\r\n                        attributeValueType: String\r\n                        valuePath: $.key.MeteringPointNumber\r\n                      - attributeName: PartitionFactor\r\n                        attributeValueType: Int\r\n                        valuePath: $.key.ParticipationFactor\r\n                      - attributeName: IsProducer\r\n                        attributeValueType: Enum\r\n                        valuePath: $.key.IsProducer\r\n                      - attributeName: ConsentId\r\n                        attributeValueType: String\r\n                        valuePath: $.key.ConsentId\r\n\r\n      - type: Flatten@1\r\n        description: Update meteringpoints\r\n        path: $.updates[*].UpdateMeteringPoint\r\n        targetPath: $.Result\r\n        targetValueWriteMode: Append\r\n\r\n      - type: Flatten@1\r\n        description: Update time periods\r\n        path: $.updates[*].TimePeriods[*].TimePeriods\r\n        targetPath: $.TimePeriods.updates\r\n        #targetValueWriteMode: Append\r\n\r\n      - type: Flatten@1\r\n        description: Update time periods\r\n        path: $.updates[*].TimePeriods[*].Assocs\r\n        targetPath: $.TimePeriods.assocs\r\n        #targetValueWriteMode: Append\r\n\r\n      - type: Flatten@1\r\n        description: Errors\r\n        path: $.updates[*].NewMeteringPoint\r\n        targetPath: $.NewMeteringPoints\r\n\r\n      - type: Flatten@1\r\n        description: Errors\r\n        path: $.updates[*].WrongMeteringPointType\r\n        targetPath: $.Errors\r\n\r\n      - type: Flatten@1\r\n        description: metering point numbers\r\n        path: $.MeteringPointUpdates[*].MeteringPointNumber\r\n        targetPath: $.MeteringPointNumbers\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.MeteringPoints\r\n          - path: $.updates\r\n          - path: $.MeteringPointUpdates\r\n\r\n      - type: GetQueryById@1\r\n        description: Load existing quantities in period\r\n        targetPath: $.query\r\n        queryRtId: 69c132600f64325a0cc89586\r\n        fieldFilters:\r\n          - attributePath: meteringPoint.basicEnergyMeteringPoint->meteringPointNumber\r\n            operator: IN\r\n            comparisonValuePath: $.MeteringPointNumbers\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.query.Columns\r\n          - path: $.MeteringPointNumbers\r\n\r\n      - type: ForEach@1\r\n        description: Participation periods\r\n        iterationPath: $.query.Rows\r\n        mergePath: $.delete\r\n        targetPath: $.delete\r\n        transformations:\r\n          - type: CreateUpdateInfo@1\r\n            targetPath: $.delete\r\n            updateKind: DELETE\r\n            ckTypeId: EnergyCommunity/ParticipationPeriod\r\n            rtIdPath: $.key.RtId\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.query\r\n      # END metering point handling\r\n\r\n      - type: ApplyChanges@2\r\n        entityUpdatesPath: $.delete\r\n\r\n      - type: ApplyChanges@2\r\n        entityUpdatesPath: $.TimePeriods.updates\r\n        associationUpdatesPath: $.TimePeriods.assocs\r\n\r\n      - type: ApplyChanges@2\r\n        entityUpdatesPath: $.NewMeteringPoints\r\n\r\n      - type: ApplyChanges@2\r\n        entityUpdatesPath: $.Result\r\n\r\n      - type: ApplyChanges@2\r\n        entityUpdatesPath: $.Errors"
+
+# handle-ec-req-onl — pipeline inside DataFlow eda-handle-process-messages (AB#4820)
+- rtId: 68c28067234ceec0d029dfe5
+  rtCreationDateTime: 2025-09-11T07:55:19.4690000Z
+  rtChangedDateTime: 2026-03-13T06:32:54.0580000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6a3ba517dd34215646b7a8a4
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: handle-ec-req-onl
+  - id: System/Description-1
+    value: Handle all messages for process EC_REQ_ONL (Teilnahme an EEG)
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: "triggers:\n  # - type: FromExecutePipelineCommand@1\n  - type: FromPolling@1\n    interval: 00:03:10\ntransformations:\n  - type: GetQueryById@1\n    targetPath: $.query\n    queryRtId: 6888fae9893700047f54cc3b\n\n  - type: If@1\n    description: Messages\n    path: $.query.Rows[0].RtId\n    operator: NotEqual\n    value: null\n    valueType: string\n    transformations:\n      - type: ForEach@1\n        description: Parse all all EDA messages\n        iterationPath: $.query.Rows\n        mergePath: $.EdaMessage\n        targetPath: $.EdaMessages\n        transformations:\n          - type: EdaParseMessage@1\n            messageRtIdPath: $.key.RtId\n            messageTypePath: $.key.Values[0]\n            processRtIdPath: $.key.Values[1]\n            rawMessagePath: $.key.Values[2]\n            targetPath: $.EdaMessage\n\n      - type: Flatten@1\n        path: $.EdaMessages[*].MeteringPoints[*]\n        targetPath: $.MeteringPoints\n\n      - type: Project@1\n        fields:\n          - path: $.query\n\n      - type: Flatten@1\n        path: $.MeteringPoints[*].MeteringPointNumber\n        targetPath: $.MeteringPointNumbers\n\n      - type: GetRtEntitiesByType@1\n        description: Load metering points\n        ckTypeId: EnergyCommunity/Producer\n        targetPath: $.Producer\n        fieldFilters:\n          - attributePath: MeteringPointNumber\n            operator: IN\n            comparisonValuePath: $.MeteringPointNumbers\n      - type: GetRtEntitiesByType@1\n        description: Load metering points\n        ckTypeId: EnergyCommunity/Consumer\n        targetPath: $.Consumer\n        fieldFilters:\n          - attributePath: MeteringPointNumber\n            operator: IN\n            comparisonValuePath: $.MeteringPointNumbers\n\n      - type: If@1\n        description: Producers\n        path: $.Producer.TotalCount\n        operator: GreaterThan\n        value: 0\n        valueType: Int\n        transformations:\n          # Join metering data from DB with metering data from message\n          - type: Join@1\n            path: $.MeteringPoints[*]\n            keyPath: $.MeteringPointNumber\n            joinPath: $.Producer.Items[*]\n            joinKeyPath: $.Attributes.MeteringPointNumber\n            itemPath: $.Producer\n      - type: If@1\n        description: Consumers\n        path: $.Consumer.TotalCount\n        operator: GreaterThan\n        value: 0\n        valueType: Int\n        transformations:\n          # Join metering data from DB with metering data from message\n          - type: Join@1\n            path: $.MeteringPoints[*]\n            keyPath: $.MeteringPointNumber\n            joinPath: $.Consumer.Items[*]\n            joinKeyPath: $.Attributes.MeteringPointNumber\n            itemPath: $.Consumer\n\n      - type: Project@1\n        fields:\n          - path: $.MeteringPointNumbers\n          - path: $.Consumer\n          - path: $.Producer\n\n      - type: ForEach@1\n        description: Do all metering points\n        iterationPath: $.MeteringPoints\n        mergePath: $.Updates\n        targetPath: $.updates\n        transformations:\n          - type: CreateMeteringPointUpdate@1\n            path: $.key\n            consumerPath: $.key.Consumer[0]\n            producerPath: $.key.Producer[0]\n            targetPath: $.Updates.UpdateMeteringPoints\n\n      - type: Flatten@1\n        path: $.updates[*].UpdateMeteringPoints[*]\n        targetPath: $.UpdateMeteringPoints\n\n      - type: Project@1\n        fields:\n          - path: $.updates\n          - path: $.MeteringPoints\n\n      # New metering points\n      - type: ForEach@1\n        description: Meteringpoint updates\n        iterationPath: $.UpdateMeteringPoints\n        mergePath: $.Updates\n        targetPath: $.updates\n        transformations:\n          - type: DataMapping@1\n            path: $.key.Direction\n            targetPath: $.key.ckType\n            sourceValueType: Int\n            targetValueType: String\n            mappings:\n              - sourceValue: 1\n                targetValue: EnergyCommunity/Consumer\n              - sourceValue: 2\n                targetValue: EnergyCommunity/Producer\n          - type: DataMapping@1\n            path: $.key.IsActive\n            targetPath: $.key.State\n            sourceValueType: Boolean\n            targetValueType: Int\n            mappings:\n              - sourceValue: true\n                targetValue: 1\n              - sourceValue: false\n                targetValue: 2\n          - type: DataMapping@1\n            path: $.key.Direction\n            targetPath: $.key.IsProducer\n            sourceValueType: Int\n            targetValueType: Boolean\n            mappings:\n              - sourceValue: 1\n                targetValue: false\n              - sourceValue: 2\n                targetValue: true\n\n          # Update metering points\n          - type: If@1\n            description: Existing metering point\n            path: $.key.RtId\n            operator: NotEquals\n            value: null\n            valueType: String\n            transformations:\n              - type: If@1\n                description: Consumer\n                path: $.key.Direction\n                operator: Equals\n                value: 1\n                valueType: Int\n                transformations:\n                  - type: CreateUpdateInfo@1\n                    targetPath: $.Updates.UpdateMeteringPoint\n                    updateKind: UPDATE\n                    ckTypeIdPath: $.key.ckType\n                    rtIdPath: $.key.RtId\n                    attributeUpdates:\n                      - attributeName: PartitionFactor\n                        attributeValueType: Int\n                        valuePath: $.key.ParticipationFactor\n                      - attributeName: ConsentId\n                        attributeValueType: String\n                        valuePath: $.key.ConsentId\n                      - attributeName: State\n                        attributeValueType: Enum\n                        valuePath: $.key.State\n              - type: If@1\n                description: Producer\n                path: $.key.Direction\n                operator: Equals\n                value: 2\n                valueType: Int\n                transformations:\n                  - type: CreateUpdateInfo@1\n                    targetPath: $.Updates.UpdateMeteringPoint\n                    updateKind: UPDATE\n                    ckTypeIdPath: $.key.ckType\n                    rtIdPath: $.key.RtId\n                    attributeUpdates:\n                      - attributeName: PartitionFactor\n                        attributeValueType: Int\n                        valuePath: $.key.ParticipationFactor\n                      - attributeName: ProductionType\n                        attributeValueType: Enum\n                        valuePath: $.key.ProductionType\n                      - attributeName: ConsentId\n                        attributeValueType: String\n                        valuePath: $.key.ConsentId\n                      - attributeName: State\n                        attributeValueType: Enum\n                        valuePath: $.key.State\n\n          # New metering points\n          - type: If@1\n            description: New metering point\n            path: $.key.RtId\n            operator: Equals\n            value: null\n            valueType: String\n            transformations:\n              - type: CreateUpdateInfo@1\n                targetPath: $.Updates.NewMeteringPoint\n                updateKind: INSERT\n                ckTypeId: Basic.Energy/EdaMeteringPoint\n                attributeUpdates:\n                  - attributeName: MeteringPointNumber\n                    attributeValueType: String\n                    valuePath: $.key.MeteringPointNumber\n                  - attributeName: PartitionFactor\n                    attributeValueType: Int\n                    valuePath: $.key.ParticipationFactor\n                  - attributeName: ProductionType\n                    attributeValueType: Enum\n                    value: Unknown\n                  - attributeName: IsProducer\n                    attributeValueType: Boolean\n                    valuePath: $.key.IsProducer\n                  - attributeName: ConsentId\n                    attributeValueType: String\n                    valuePath: $.key.ConsentId\n\n      - type: Project@1\n        fields:\n          - path: $.UpdateMeteringPoints\n\n      - type: ExtractProcesses@1\n        path: $.EdaMessages\n        targetPath: $.EdaProcesses\n\n      - type: ForEach@1\n        description: Do all EDA messages\n        iterationPath: $.EdaMessages\n        mergePath: $.Updates\n        targetPath: $.updates\n        targetValueWriteMode: Append\n        transformations:\n          # Update messags to processed\n          - type: CreateUpdateInfo@1\n            targetPath: $.Updates.UpdateMessage\n            updateKind: UPDATE\n            ckTypeId: Basic.Energy/EdaMessage\n            rtIdPath: $.key.MessageRtId\n            attributeUpdates:\n              - attributeName: Processed\n                attributeValueType: Boolean\n                value: true\n\n      - type: ForEach@1\n        description: Do all EDA processes\n        iterationPath: $.EdaProcesses\n        mergePath: $.Updates\n        targetPath: $.updates\n        targetValueWriteMode: Append\n        transformations:\n          - type: CreateUpdateInfo@1\n            targetPath: $.Updates.UpdateProcess\n            updateKind: UPDATE\n            ckTypeId: Basic.Energy/EdaProcess\n            rtIdPath: $.key.ProcessRtId\n            attributeUpdates:\n              - attributeName: Finished\n                attributeValueType: Boolean\n                valuePath: $.key.FinishProcess\n              - attributeName: Success\n                attributeValueType: Boolean\n                valuePath: $.key.IsSuccessfulProcess\n              - attributeName: Info\n                attributeValueType: String\n                valuePath: $.key.ResponseInfo\n              - attributeName: ResponseCode\n                attributeValueType: String\n                valuePath: $.key.ResponseCode\n\n      - type: Project@1\n        fields:\n          - path: $.EdaMessages\n          - path: $.EdaProcesses\n\n      - type: Flatten@1\n        path: $.updates[*].UpdateProcess\n        targetPath: $.Result\n      - type: Flatten@1\n        path: $.updates[*].UpdateMessage\n        targetPath: $.Result\n        targetValueWriteMode: Append\n      - type: Flatten@1\n        path: $.updates[*].NewMeteringPoint\n        targetPath: $.NewMeteringPoints\n      - type: Flatten@1\n        path: $.updates[*].UpdateMeteringPoint\n        targetPath: $.UpdateMeteringPoints\n\n      - type: Project@1\n        fields:\n          - path: $.updates\n\n      - type: ApplyChanges@2\n        entityUpdatesPath: $.NewMeteringPoints\n      \n      - type: ApplyChanges@2\n        entityUpdatesPath: $.UpdateMeteringPoints\n\n      - type: ApplyChanges@2\n        entityUpdatesPath: $.Result"
+
+# handle-ec-prtfact-change — pipeline inside DataFlow eda-handle-process-messages (AB#4820)
+- rtId: 68b01a0d8f03da854927fd97
+  rtCreationDateTime: 2025-08-28T08:57:49.7630000Z
+  rtChangedDateTime: 2026-03-13T06:32:54.0320000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6a3ba517dd34215646b7a8a4
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: handle-ec-prtfact-change
+  - id: System/Description-1
+    value: Handle all messages for process EC_PRTFACT_CHANGE (Teilnahmefaktor ändern)
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        # - type: FromExecutePipelineCommand@1
+        - type: FromPolling@1
+          interval: 00:02:55
+      transformations:
+        - type: GetQueryById@1
+          targetPath: $.query
+          queryRtId: 68aeac72421a60114aa59cbd
+
+        - type: If@1
+          description: Messages available
+          path: $.query.Rows[0].RtId
+          operator: NotEqual
+          value: null
+          valueType: string
+          transformations:
+            - type: ForEach@1
+              description: Parse EDA messages
+              iterationPath: $.query.Rows
+              mergePath: $.EdaMessage
+              targetPath: $.EdaMessages
+              transformations:
+                - type: EdaParseMessage@1
+                  messageRtIdPath: $.key.RtId
+                  messageTypePath: $.key.Values[0]
+                  processRtIdPath: $.key.Values[1]
+                  rawMessagePath: $.key.Values[2]
+                  targetPath: $.EdaMessage
+
+            - type: Project@1
+              fields:
+                - path: $.query
+
+            # START general message and process handling
+
+            - type: ExtractProcesses@1
+              path: $.EdaMessages
+              targetPath: $.EdaProcesses
+
+            - type: ForEach@1
+              description: EDA messages
+              iterationPath: $.EdaMessages
+              mergePath: $.Updates
+              targetPath: $.updates
+              transformations:
+                # Update messags to processed
+                - type: CreateUpdateInfo@1
+                  targetPath: $.Updates.UpdateMessage
+                  updateKind: UPDATE
+                  ckTypeId: Basic.Energy/EdaMessage
+                  rtIdPath: $.key.MessageRtId
+                  attributeUpdates:
+                    - attributeName: Processed
+                      attributeValueType: Boolean
+                      value: true
+
+            - type: ForEach@1
+              description: EDA processes
+              iterationPath: $.EdaProcesses
+              mergePath: $.Updates
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.Updates.UpdateProcess
+                  updateKind: UPDATE
+                  ckTypeId: Basic.Energy/EdaProcess
+                  rtIdPath: $.key.ProcessRtId
+                  attributeUpdates:
+                    - attributeName: Finished
+                      attributeValueType: Boolean
+                      valuePath: $.key.FinishProcess
+                    - attributeName: Success
+                      attributeValueType: Boolean
+                      valuePath: $.key.IsSuccessfulProcess
+                    - attributeName: Info
+                      attributeValueType: String
+                      valuePath: $.key.ResponseInfo
+                    - attributeName: ResponseCode
+                      attributeValueType: String
+                      valuePath: $.key.ResponseCode
+
+            - type: Flatten@1
+              description: Update processes
+              path: $.updates[*].UpdateProcess
+              targetPath: $.Result
+            - type: Flatten@1
+              description: Update messages
+              path: $.updates[*].UpdateMessage
+              targetPath: $.Result
+              targetValueWriteMode: Append
+
+            # END general message and process handling
+
+            - type: Project@1
+              fields:
+                - path: $.updates
+                - path: $.EdaMessages
+                - path: $.EdaProcesses
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.Result
+
+# handle-cm-rev-cus — pipeline inside DataFlow eda-handle-process-messages (AB#4820)
+- rtId: 691afef60a44e3fea8b1545d
+  rtCreationDateTime: 2025-11-17T10:54:46.6260000Z
+  rtChangedDateTime: 2026-03-13T06:32:54.1080000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6a3ba517dd34215646b7a8a4
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: handle-cm-rev-cus
+  - id: System/Description-1
+    value: Handle all messages for process CM_REV_CUS
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: "triggers:\r\n  # - type: FromExecutePipelineCommand@1\r\n  - type: FromPolling@1\r\n    interval: 00:04:20\r\ntransformations:\r\n  - type: GetRtEntitiesByType@1\r\n    description: Load all not processed EDA messages\r\n    ckTypeId: Basic.Energy/EdaMessage\r\n    targetPath: $.InputMessages\r\n    fieldFilters:\r\n      - attributePath: Processed\r\n        operator: Equals\r\n        comparisonValue: false\r\n      - attributePath: MessageType\r\n        operator: Equals\r\n        comparisonValue: AUFHEBUNG_CCMC\r\n\r\n  - type: If@1\r\n    description: Messages available\r\n    path: $.InputMessages.TotalCount\r\n    operator: GreaterThan\r\n    value: 0\r\n    valueType: Int\r\n    transformations:\r\n      - type: ForEach@1\r\n        description: Parse EDA messages\r\n        iterationPath: $.InputMessages.Items\r\n        mergePath: $.EdaMessage\r\n        targetPath: $.EdaMessages\r\n        transformations:\r\n          - type: EdaParseMessage@1\r\n            messageRtIdPath: $.key.RtId\r\n            messageTypePath: $.key.Attributes.MessageType\r\n            rawMessagePath: $.key.Attributes.RawMessage\r\n            targetPath: $.EdaMessage\r\n\r\n      # Load metering points to EdaMessages\r\n      - type: Flatten@1\r\n        description: Metering points\r\n        path: $.EdaMessages[*].MeteringPointNumber\r\n        targetPath: $.MeteringPointNumbers\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.InputMessages\r\n\r\n      - type: GetRtEntitiesByType@1\r\n        description: Load metering points\r\n        ckTypeId: Basic.Energy/MeteringPoint\r\n        targetPath: $.MeteringPoints\r\n        fieldFilters:\r\n          - attributePath: MeteringPointNumber\r\n            operator: IN\r\n            comparisonValuePath: $.MeteringPointNumbers\r\n\r\n      - type: If@1\r\n        description: Metering points\r\n        path: $.MeteringPoints.TotalCount\r\n        operator: GreaterThan\r\n        value: 0\r\n        valueType: Int\r\n        transformations:\r\n          - type: Join@1\r\n            description: Metering points\r\n            path: $.EdaMessages[*]\r\n            keyPath: $.MeteringPointNumber\r\n            joinPath: $.MeteringPoints.Items[*]\r\n            joinKeyPath: $.Attributes.MeteringPointNumber\r\n            itemPath: $.MeteringPoint\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.MeteringPoints\r\n          - path: $.MeteringPointNumbers\r\n\r\n      # Process messages\r\n      - type: ForEach@1\r\n        description: EDA messages\r\n        iterationPath: $.EdaMessages\r\n        mergePath: $.Updates\r\n        targetPath: $.updates\r\n        transformations:\r\n          - type: If@1\r\n            description: Metering point\r\n            path: $.key.MeteringPoint[0].RtId\r\n            operator: NotEqual\r\n            value: null\r\n            valueType: String\r\n            transformations:\r\n              # Update messags to processed\r\n              - type: CreateUpdateInfo@1\r\n                targetPath: $.Updates.UpdateMessage\r\n                updateKind: UPDATE\r\n                ckTypeId: Basic.Energy/EdaMessage\r\n                rtIdPath: $.key.MessageRtId\r\n                attributeUpdates:\r\n                  - attributeName: Processed\r\n                    attributeValueType: Boolean\r\n                    value: true\r\n              # Update metering point\r\n              - type: CreateUpdateInfo@1\r\n                targetPath: $.Updates.MeteringPoint\r\n                updateKind: UPDATE\r\n                ckTypeIdPath: $.key.MeteringPoint[0].CkTypeId.SemanticVersionedFullName\r\n                rtIdPath: $.key.MeteringPoint[0].RtId\r\n                attributeUpdates:\r\n                  - attributeName: State\r\n                    attributeValueType: Enum\r\n                    value: Inactive\r\n\r\n      - type: Flatten@1\r\n        description: Update messages\r\n        path: $.updates[*].UpdateMessage\r\n        targetPath: $.Result\r\n\r\n      - type: Flatten@1\r\n        description: Update metering points\r\n        path: $.updates[*].MeteringPoint\r\n        targetPath: $.MeteringPoints\r\n\r\n      - type: Project@1\r\n        fields:\r\n          - path: $.updates\r\n          - path: $.EdaMessages\r\n      \r\n      \r\n      # Apply Changes\r\n      - type: ApplyChanges@2\r\n        description: Update meteringpoints\r\n        entityUpdatesPath: $.MeteringPoints\r\n\r\n      - type: ApplyChanges@2\r\n        description: Update messages\r\n        entityUpdatesPath: $.Result"
+
+# handle-cm-rev-imp — pipeline inside DataFlow eda-handle-process-messages (AB#4820)
+- rtId: 691ad6d194765d90aca320c5
+  rtCreationDateTime: 2025-11-17T08:03:29.1990000Z
+  rtChangedDateTime: 2026-03-13T06:32:54.1230000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6a3ba517dd34215646b7a8a4
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: handle-cm-rev-imp
+  - id: System/Description-1
+    value: Handle all messages for process CM_REV_IMP
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: "triggers:\n  # - type: FromExecutePipelineCommand@1\n  - type: FromPolling@1\n    interval: 00:05:40\ntransformations:\n  - type: GetRtEntitiesByType@1\n    description: Load all not processed EDA messages\n    ckTypeId: Basic.Energy/EdaMessage\n    targetPath: $.InputMessages\n    fieldFilters:\n      - attributePath: Processed\n        operator: Equals\n        comparisonValue: false\n      - attributePath: MessageType\n        operator: Equals\n        comparisonValue: AUFHEBUNG_CCMI\n\n  - type: If@1\n    description: Messages available\n    path: $.InputMessages.TotalCount\n    operator: GreaterThan\n    value: 0\n    valueType: Int\n    transformations:\n      - type: ForEach@1\n        description: Parse EDA messages\n        iterationPath: $.InputMessages.Items\n        mergePath: $.EdaMessage\n        targetPath: $.EdaMessages\n        transformations:\n          - type: EdaParseMessage@1\n            messageRtIdPath: $.key.RtId\n            messageTypePath: $.key.Attributes.MessageType\n            rawMessagePath: $.key.Attributes.RawMessage\n            targetPath: $.EdaMessage\n\n      # Load metering points to EdaMessages\n      - type: Flatten@1\n        description: Metering points\n        path: $.EdaMessages[*].MeteringPointNumber\n        targetPath: $.MeteringPointNumbers\n\n      - type: Project@1\n        fields:\n          - path: $.InputMessages\n\n      - type: GetRtEntitiesByType@1\n        description: Load metering points\n        ckTypeId: Basic.Energy/MeteringPoint\n        targetPath: $.MeteringPoints\n        fieldFilters:\n          - attributePath: MeteringPointNumber\n            operator: IN\n            comparisonValuePath: $.MeteringPointNumbers\n\n      - type: If@1\n        description: Metering points\n        path: $.MeteringPoints.TotalCount\n        operator: GreaterThan\n        value: 0\n        valueType: Int\n        transformations:\n          - type: Join@1\n            description: Metering points\n            path: $.EdaMessages[*]\n            keyPath: $.MeteringPointNumber\n            joinPath: $.MeteringPoints.Items[*]\n            joinKeyPath: $.Attributes.MeteringPointNumber\n            itemPath: $.MeteringPoint\n\n      - type: Project@1\n        fields:\n          - path: $.MeteringPoints\n          - path: $.MeteringPointNumbers\n\n      # Process messages\n      - type: ForEach@1\n        description: EDA messages\n        iterationPath: $.EdaMessages\n        mergePath: $.Updates\n        targetPath: $.updates\n        transformations:\n          - type: If@1\n            description: Metering point\n            path: $.key.MeteringPoint[0].RtId\n            operator: NotEqual\n            value: null\n            valueType: String\n            transformations:\n              # Update messags to processed\n              - type: CreateUpdateInfo@1\n                targetPath: $.Updates.UpdateMessage\n                updateKind: UPDATE\n                ckTypeId: Basic.Energy/EdaMessage\n                rtIdPath: $.key.MessageRtId\n                attributeUpdates:\n                  - attributeName: Processed\n                    attributeValueType: Boolean\n                    value: true\n              # Update metering point\n              - type: CreateUpdateInfo@1\n                targetPath: $.Updates.MeteringPoint\n                updateKind: UPDATE\n                ckTypeIdPath: $.key.MeteringPoint[0].CkTypeId.SemanticVersionedFullName\n                rtIdPath: $.key.MeteringPoint[0].RtId\n                attributeUpdates:\n                  - attributeName: State\n                    attributeValueType: Enum\n                    value: Inactive\n\n      - type: Flatten@1\n        description: Update messages\n        path: $.updates[*].UpdateMessage\n        targetPath: $.Result\n      \n      - type: Flatten@1\n        description: Update metering points\n        path: $.updates[*].MeteringPoint\n        targetPath: $.MeteringPoints\n      \n      - type: Project@1\n        fields:\n          - path: $.updates\n          - path: $.EdaMessages\n      \n\n      # Apply Changes\n      - type: ApplyChanges@2\n        description: Updte meteringpoints\n        entityUpdatesPath: $.MeteringPoints\n\n      - type: ApplyChanges@2\n        description: Update messages\n        entityUpdatesPath: $.Result"
+
+# handle-cm-rev-sp — pipeline inside DataFlow eda-handle-process-messages (AB#4820)
+- rtId: 691b2c5e0a44e3fea8b15462
+  rtCreationDateTime: 2025-11-17T14:08:30.3780000Z
+  rtChangedDateTime: 2026-03-13T06:32:54.1360000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6a3ba517dd34215646b7a8a4
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: handle-cm-rev-sp
+  - id: System/Description-1
+    value: Handle all messages for process CM_REV_SP
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        # - type: FromExecutePipelineCommand@1
+        - type: FromPolling@1
+          interval: 00:03:35
+      transformations:
+        - type: GetQueryById@1
+          targetPath: $.query
+          queryRtId: 691b2b2a0a44e3fea8b15460
+
+        - type: If@1
+          description: Messages available
+          path: $.query.Rows[0].RtId
+          operator: NotEqual
+          value: null
+          valueType: string
+          transformations:
+            - type: ForEach@1
+              description: Parse EDA messages
+              iterationPath: $.query.Rows
+              mergePath: $.EdaMessage
+              targetPath: $.EdaMessages
+              transformations:
+                - type: EdaParseMessage@1
+                  messageRtIdPath: $.key.RtId
+                  messageTypePath: $.key.Values[0]
+                  processRtIdPath: $.key.Values[1]
+                  rawMessagePath: $.key.Values[2]
+                  targetPath: $.EdaMessage
+
+            - type: Project@1
+              fields:
+                - path: $.query
+
+            # START general message and process handling
+
+            - type: ExtractProcesses@1
+              path: $.EdaMessages
+              targetPath: $.EdaProcesses
+
+            - type: ForEach@1
+              description: EDA messages
+              iterationPath: $.EdaMessages
+              mergePath: $.Updates
+              targetPath: $.updates
+              transformations:
+                # Update messags to processed
+                - type: CreateUpdateInfo@1
+                  targetPath: $.Updates.UpdateMessage
+                  updateKind: UPDATE
+                  ckTypeId: Basic.Energy/EdaMessage
+                  rtIdPath: $.key.MessageRtId
+                  attributeUpdates:
+                    - attributeName: Processed
+                      attributeValueType: Boolean
+                      value: true
+
+            - type: ForEach@1
+              description: EDA processes
+              iterationPath: $.EdaProcesses
+              mergePath: $.Updates
+              targetPath: $.updates
+              targetValueWriteMode: Append
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.Updates.UpdateProcess
+                  updateKind: UPDATE
+                  ckTypeId: Basic.Energy/EdaProcess
+                  rtIdPath: $.key.ProcessRtId
+                  attributeUpdates:
+                    - attributeName: Finished
+                      attributeValueType: Boolean
+                      valuePath: $.key.FinishProcess
+                    - attributeName: Success
+                      attributeValueType: Boolean
+                      valuePath: $.key.IsSuccessfulProcess
+                    - attributeName: Info
+                      attributeValueType: String
+                      valuePath: $.key.ResponseInfo
+                    - attributeName: ResponseCode
+                      attributeValueType: String
+                      valuePath: $.key.ResponseCode
+
+            - type: Flatten@1
+              description: Update processes
+              path: $.updates[*].UpdateProcess
+              targetPath: $.Result
+            - type: Flatten@1
+              description: Update messages
+              path: $.updates[*].UpdateMessage
+              targetPath: $.Result
+              targetValueWriteMode: Append
+
+            # END general message and process handling
+
+            - type: Project@1
+              fields:
+                - path: $.updates
+                - path: $.EdaMessages
+                - path: $.EdaProcesses
+
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.Result
