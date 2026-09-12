@@ -1,0 +1,249 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Basic-[2.0.3,3.0)
+  - OctoSdkDemo-[2.1.0,3.0)
+  - System.Communication-[3.22.0,4.0)
+
+# Generates synthetic customers, operating facilities and metering points with
+# the Simulation@1 node - the quickest way to fill an empty tenant with
+# plausible OctoSdkDemo data. Trigger it manually:
+#   octo-cli -c ExecutePipeline --identifier 66e309cd5b53add9b5cd386a
+#
+# Runs on the Mesh Adapter seeded by System.Communication.
+entities:
+- rtId: 66e309cd5b53add9b5cd3869
+  ckTypeId: System.Communication/DataFlow
+  associations: []
+  attributes:
+  - id: System/Name
+    value: Create customers
+  - id: System/Description
+- rtId: 66e309cd5b53add9b5cd386a
+  ckTypeId: System.Communication/Pipeline
+  associations:
+  - roleId: System/ParentChild
+    targetRtId: 66e309cd5b53add9b5cd3869
+    targetCkTypeId: System.Communication/DataFlow
+  - roleId: System.Communication/Executes
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter
+  attributes:
+  - id: System.Communication/DeploymentState
+    value: 0
+  - id: System/Name
+    value: Mesh Pipeline
+  - id: System/Enabled
+    value: true
+  - id: System.Communication/PipelineDefinition
+    value: >-
+      triggers:
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: For@1
+          description: create customers
+          count: 1
+          targetPath: $.customers
+          transformations:
+            # customer
+            - type: Simulation@1
+              locale: de
+              simulations:
+                - targetPath: $.customer.firstName
+                  simulatorKey: Person.FirstName
+                - targetPath: $.customer.lastName
+                  simulatorKey: Person.LastName
+                - targetPath: $.customer.street
+                  simulatorKey: Address.StreetName
+                - targetPath: $.customer.city
+                  simulatorKey: Address.City
+                - targetPath: $.customer.zipCode
+                  simulatorKey: Address.ZipCode
+                - targetPath: $.customer.countryCode
+                  simulatorKey: Address.CountryCode
+                - targetPath: $.customer.status
+                  simulatorKey: Math.IntRandom
+                  configuration: "{\"min\":0, \"max\":2}"      
+                - targetPath: $.customer.legalEntityType
+                  simulatorKey: Math.IntRandom
+                  configuration: "{\"min\":0, \"max\":3}"        
+            # operating facility
+            - type: For@1
+              description: create operating facilities
+              count: 2
+              targetPath: $.operatingFacilities
+              transformations:
+                - type: Project@1
+                  fields:
+                    - path: "$.customer"
+                - type: Simulation@1
+                  locale: de
+                  simulations:
+                    - targetPath: $.name
+                      simulatorKey: Address.StreetAddress
+                # metering points
+                - type: For@1
+                  description: create metering points
+                  count: 2
+                  targetPath: $.meteringPoints
+                  transformations:
+                    - type: Project@1
+                      fields:
+                        - path: "$.name"
+                    - type: Simulation@1
+                      locale: de
+                      simulations:
+                        - targetPath: $.meteringPointNumber
+                          simulatorKey: Energy.MeteringPointNumber
+                        - targetPath: $.operatingStatus
+                          simulatorKey: Math.IntRandom
+                          configuration: "{\"min\":0, \"max\":2}"
+                        - targetPath: $.meterReading
+                          simulatorKey: Math.IntRandom
+                          configuration: "{\"min\":0, \"max\":99999}"
+                        - targetPath: $.name
+                          simulatorKey: Text.Lorem.Word
+                          configuration: "{\"count\":2}"
+          # create update items for database
+        - type: ForEach@1
+          description: create update infos customer
+          iterationPath: $.customers
+          targetPath: $.result
+          documentMode: REPLACE
+          mergePath: $.updates
+          transformations:
+            # Create update items for the entities 
+            - type: CreateUpdateInfo@1
+              targetPath: $.updates._customerUpdate
+              updateKind: INSERT
+              ckTypeId: OctoSdkDemo/Customer
+              rtIdPath: $.rtId
+              generateRtId: true
+              attributeUpdates:
+                - attributeName: Contact.LegalEntityType
+                  attributeValueType: Int
+                  valuePath: $.customer.legalEntityType
+                - attributeName: Contact.FirstName
+                  attributeValueType: String
+                  valuePath: $.key.customer.firstName
+                - attributeName: Contact.LastName
+                  attributeValueType: String
+                  valuePath: $.key.customer.lastName
+                - attributeName: Contact.Address.Street
+                  attributeValueType: String
+                  valuePath: $.key.customer.street
+                - attributeName: Contact.Address.CityTown
+                  attributeValueType: String
+                  valuePath: $.key.customer.city
+                - attributeName: Contact.Address.Zipcode
+                  attributeValueType: String
+                  valuePath: $.key.customer.zipCode
+                - attributeName: Contact.Address.NationalCode
+                  attributeValueType: String
+                  valuePath: $.key.customer.countryCode
+                - attributeName: CustomerStatus
+                  attributeValueType: Int
+                  valuePath: $.key.customer.status
+            - type: Project@1
+              fields:
+                - path: "$.key.customer"
+              
+              # Iterate operating facilities
+            - type: ForEach@1
+              description: create update infos operating facilities
+              path: $.updates
+              iterationPath: $.key.operatingFacilities
+              keyPath: $.operatingFacility
+              mergePath: $.updates
+              targetPath: $.updates._operatingFacilities
+              #targetValueWriteMode: Merge
+              transformations:
+                # Create operating facility
+                - type: CreateUpdateInfo@1
+                  targetPath: $.updates._operatingFacilityUpdate
+                  updateKind: INSERT
+                  ckTypeId: OctoSdkDemo/OperatingFacility
+                  rtIdPath: $.rtId
+                  generateRtId: true
+                  attributeUpdates:
+                    - attributeName: Name
+                      attributeValueType: String
+                      valuePath: $.operatingFacility.name
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.updates._assocUpdateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.updates._operatingFacilityUpdate.RtId
+                  originCkTypeIdPath: $.updates._operatingFacilityUpdate.CkTypeId
+                  targetRtIdPath: $.full._customerUpdate.RtId
+                  targetCkTypeIdPath: $.full._customerUpdate.CkTypeId
+                  associationRoleId: OctoSdkDemo/Ownership
+                  # Iterate metering points
+                - type: ForEach@1
+                  description: create update infos metering points
+                  path: $.updates
+                  fullDocumentPath: $.full
+                  targetPath: $.updates._meteringPointUpdates
+                  mergePath: $.updates
+                  iterationPath: $.operatingFacility.meteringPoints
+                  keyPath: $.meteringPoint
+                  #   documentMode: REPLACE
+                  transformations:
+                    # Create metering points
+                    - type: CreateUpdateInfo@1
+                      targetPath: $.updates._meterUpdate
+                      updateKind: INSERT
+                      ckTypeId: OctoSdkDemo/MeteringPoint
+                      rtIdPath: $.rtId
+                      generateRtId: true
+                      attributeUpdates:
+                        - attributeName: MeteringPointNumber
+                          attributeValueType: String
+                          valuePath: $.meteringPoint.meteringPointNumber
+                        - attributeName: OperatingStatus
+                          attributeValueType: Int
+                          valuePath: $.meteringPoint.operatingStatus
+                        - attributeName: MeterReading
+                          attributeValueType: Int
+                          valuePath: $.meteringPoint.meterReading
+                        - attributeName: Name
+                          attributeValueType: String
+                          valuePath: $.meteringPoint.name
+                    - type: CreateAssociationUpdate@1
+                      targetPath: $.updates._assocUpdateItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: CREATE
+                      originRtIdPath: $.updates._meterUpdate.RtId
+                      originCkTypeIdPath: $.updates._meterUpdate.CkTypeId
+                      targetRtIdPath: $.full._operatingFacilityUpdate.RtId
+                      targetCkTypeIdPath: $.full._operatingFacilityUpdate.CkTypeId
+                      associationRoleId: System/ParentChild
+        - type: Flatten@1
+          path: $.result[*]._customerUpdate
+          targetPath: $._updateItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Flatten@1
+          path: $.result[*]._operatingFacilities[*]._operatingFacilityUpdate
+          targetPath: $._updateItems
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          path: $.result[*]._operatingFacilities[*]._meteringPointUpdates[*]._meterUpdate
+          targetPath: $._updateItems
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          path: $.result[*]._operatingFacilities[*]._assocUpdateItems[*]
+          targetPath: $._assocUpdateItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Flatten@1
+          path: $.result[*]._operatingFacilities[*]._meteringPointUpdates[*]._assocUpdateItems[*]
+          targetPath: $._assocUpdateItems
+          targetValueWriteMode: Append
+        - type: Project@1
+          fields:
+            - path: "$.result"
+        - type: ApplyChanges@2
+          entityUpdatesPath: $._updateItems 
+          associationUpdatesPath: $._assocUpdateItems 
