@@ -1,0 +1,33 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: Office.ExcelImport-1.0.0
+description: |
+  Server-side counterpart of the OctoMesh Office Add-In's Excel import.
+
+  The add-in posts the selected worksheet range to
+  "{meshAdapterUrl}/{tenantId}/import/tree" (buildTreeImportUri, used by the
+  Tree-Path and Tree-Column import panes). That route only exists while a
+  Pipeline with a FromHttpRequest trigger on /import/tree is deployed on the
+  tenant's Mesh Adapter - without it every import in Excel fails with 404.
+
+  This blueprint seeds exactly that DataFlow and Pipeline, so provisioning a
+  tenant for the Office Add-In is one InstallBlueprint instead of a manual
+  ImportRt of a sample file.
+
+  The pipeline runs on the Mesh Adapter seeded by System.Communication
+  (rtId 670000000000000000000002, rtWellKnownName MeshAdapter), which the
+  Communication Controller applies automatically when Communication is enabled
+  on the tenant - so there is no adapter entity to seed here.
+
+  The route is secured with FromHttpRequest@2 (token required, no role gate) -
+  the add-in's side of AB#4185 has landed, so it signs the request and maps the
+  401/403 to its own messages.
+
+  Deploy the DataFlow after installing; a seeded Pipeline is not registered on
+  the adapter until its DataFlow is deployed.
+ckModelDependencies:
+  # Satisfiability floor only, NOT the install target: System.Communication is
+  # service-managed, and MongoRuntimeRepositoryProvider.EnsureCkModelInstalledAsync
+  # redirects the install to the IServiceManagedCkModelDescriptor version (AB#4294).
+  # Same floor the System.Communication.* blueprints declare.
+  - System.Communication-[3.22.0,4.0)
+seedDataPath: seed-data/data-flows/tree-import.yaml
