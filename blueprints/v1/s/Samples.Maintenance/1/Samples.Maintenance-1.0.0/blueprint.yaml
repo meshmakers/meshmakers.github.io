@@ -1,0 +1,20 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: Samples.Maintenance-1.0.0
+description: |
+  Maintenance demo master data: a Basic/Tree "Maintenance" with one location
+  and one production line, carrying three Industry.Basic/Machine entities that
+  each fill a Basic/NamePlate record (manufacturer, product designation, serial
+  number).
+
+  Data-only - no pipelines, no adapter. Useful as the asset side of a
+  maintenance or shop-floor demo; connect live signals by adding your own
+  DataFlow that writes to these machines.
+
+  Demo and training tenants only.
+ckModelDependencies:
+  # Floors are pinned to the published versions and listed in dependency order:
+  # the blueprint engine installs each floor EXACTLY and does NOT resolve a CK
+  # model's own dependencies, so Basic has to be named before Industry.Basic.
+  - Basic-[2.0.3,3.0)
+  - Industry.Basic-[2.2.0,3.0)
+seedDataPath: seed-data/master-data/machines.yaml
