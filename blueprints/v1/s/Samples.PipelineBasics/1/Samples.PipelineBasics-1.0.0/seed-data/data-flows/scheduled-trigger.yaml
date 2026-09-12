@@ -1,0 +1,81 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Communication-[3.22.0,4.0)
+
+# Scheduled execution: a PipelineTrigger fires its pipeline on a cron
+# expression, no external caller involved.
+#
+# Runs on the Mesh Adapter seeded by System.Communication
+# (rtId 670000000000000000000002, rtWellKnownName MeshAdapter).
+entities:
+  # ==========================================================================
+  # DataFlow: Scheduled Trigger Demo
+  #
+  # Demonstrates a PipelineTrigger that executes a pipeline every minute.
+  # The pipeline generates random data and logs it.
+  # ==========================================================================
+
+  # --- DataFlow ---
+  - rtId: dd0000000000000000000001
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Scheduled Trigger Demo
+      - id: System/Description
+        value: Pipeline triggered every minute by a PipelineTrigger with cron expression.
+
+  # --- Pipeline ---
+  - rtId: dd0000000000000000000002
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: dd0000000000000000000001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Scheduled Data Generator
+      - id: System/Description
+        value: Generates random sensor data every minute when triggered.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromPipelineTriggerEvent@1
+          transformations:
+            - type: Simulation@1
+              description: Generate random sensor values
+              locale: en
+              simulations:
+                - targetPath: $.sensor.temperature
+                  simulatorKey: Math.DoubleRandom
+                  configuration: "{\"min\":18, \"max\":32}"
+                - targetPath: $.sensor.humidity
+                  simulatorKey: Math.DoubleRandom
+                  configuration: "{\"min\":30, \"max\":90}"
+            - type: Logger@1
+              description: Log generated data
+              message: Scheduled trigger executed - sensor data generated
+
+  # --- PipelineTrigger (cron: every minute) ---
+  - rtId: dd0000000000000000000003
+    ckTypeId: System.Communication/PipelineTrigger
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: dd0000000000000000000001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Triggers
+        targetRtId: dd0000000000000000000002
+        targetCkTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: Every Minute Trigger
+      - id: System/Description
+        value: Triggers the Scheduled Data Generator pipeline every minute.
+      - id: System/Enabled
+        value: true
+      - id: System.Bot/CronExpression
+        value: "0 * * * * ?"
