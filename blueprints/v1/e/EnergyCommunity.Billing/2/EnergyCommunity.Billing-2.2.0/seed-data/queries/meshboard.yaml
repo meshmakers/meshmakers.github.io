@@ -1,0 +1,211 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.1,5.0)
+- Basic.Energy-[1.3,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# The six grouping-aggregation RT queries backing the billing-overview MeshBoard below.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Billing MeshBoard queries (EC v2, AB#4578 — Board 1) ────────────────
+# Grouping-aggregation RT queries over the EC v2 billing types that back the
+# BillingOverview dashboard (energy-community-accounting) below. Ported from the
+# retired 1.x meshboard queries (misc/energy-community-deployment/data/boards/
+# BillingOverview.yaml) and re-verified against the EC 4.0 model on energytest.
+# Physical output-column naming (VERIFIED on energytest via the runtime
+# transient grouping-aggregation resolver — the same engine the meshboard widget
+# uses, cross-checked against the committed EDA board's 'state'/'state_count'
+# widget). The 1.x source board's field names are STALE and were NOT copied
+# verbatim — the widget Config category/value fields below use the CURRENT names:
+#   - Group-by columns keep the attribute path EXACTLY (case + '.' + '->'
+#     preserved): contact.legalEntityType, billingDocumentState,
+#     taxProcedureCreditNote, billingType, and the two-hop nav
+#     parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote.
+#   - Aggregation columns are '<attributePath, dots removed, lower-cased>_<agg>':
+#     COUNT rtId -> rtid_count, SUM grossTotal -> grosstotal_sum,
+#     SUM quantity -> quantity_sum.
+# AggregationType: 0 = Count, 4 = Sum.
+# rtId scheme: billing meshboard queries use the ec00…0e0X block (the
+# EnergyCommunity.EdaIntegration board owns the ec00…0dXX block; the settlement
+# SD query above is ec000000000000000000e001).
+
+# Customers grouped by legal entity type (contact.legalEntityType), COUNT.
+- rtId: ec0000000000000000000e01
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - contact.legalEntityType
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: rtId
+      - id: System/AggregationType-1
+        value: 0    # Count
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_customer_by_legal_type
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Customer
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Customers grouped by tax procedure (taxProcedureCreditNote), COUNT.
+- rtId: ec0000000000000000000e02
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - taxProcedureCreditNote
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: rtId
+      - id: System/AggregationType-1
+        value: 0    # Count
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_customer_by_tax_procedure
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Customer
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Billing documents grouped by state, SUM grossTotal (widget adds the
+# timeRange.from/to window filter). Value column: grossTotal.
+- rtId: ec0000000000000000000e03
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - billingDocumentState
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: grossTotal
+      - id: System/AggregationType-1
+        value: 4    # Sum
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_billing_document_by_state_sum_gross_total
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocument
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Billing documents grouped by state, COUNT (KPIs pick the Sent / Paid row).
+- rtId: ec0000000000000000000e04
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - billingDocumentState
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: rtId
+      - id: System/AggregationType-1
+        value: 0    # Count
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_billing_documents_paid_unpaid
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocument
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Line items grouped by the customer's tax procedure (via parent BillingDocument
+# -> AssignedBilling customer nav) and billing type (series), SUM quantity.
+# v2 nav path verified on energytest:
+#   parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote
+# (LineItem -Parent-> BillingDocument -AssignedTo-> Customer). Physical output
+# column keeps the path exactly (widget categoryField):
+#   parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote
+# NavigationFilterMode 1 (nav-path group-by / filter), mirroring the EC
+# pipeline_aggregated_energy_quantities RT query.
+- rtId: ec0000000000000000000e05
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote
+    - billingType
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: quantity
+      - id: System/AggregationType-1
+        value: 4    # Sum
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_billing_item_by_tax_procedure_note
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocumentLineItem
+  - id: System/Query.NavigationFilterMode-1
+    value: 1
+
+# Line items grouped by billing type, SUM quantity (billed energy amounts).
+- rtId: ec0000000000000000000e06
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.GroupByColumns-1
+    value:
+    - billingType
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: quantity
+      - id: System/AggregationType-1
+        value: 4    # Sum
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_billing_items
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/BillingDocumentLineItem
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
