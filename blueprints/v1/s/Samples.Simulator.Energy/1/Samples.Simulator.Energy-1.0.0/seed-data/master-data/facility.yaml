@@ -1,0 +1,126 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# Base entities for the time-range-archive simulation pipeline:
+#   1 OperatingFacility, 3 Consumer + 2 Producer MeteringPoints.
+#   The fixed rtIds are referenced from ../data-flows/energy-simulation.yaml.
+#
+dependencies:
+  - Basic-[2.0.3,3.0)
+  - Basic.Energy-[1.4.0,2.0)
+entities:
+
+  # ---- OperatingFacility ---------------------------------------------------
+  - rtId: aa00000000000000000000f1
+    ckTypeId: Basic.Energy/OperatingFacility
+    rtWellKnownName: SimEnergyFacility
+    attributes:
+      - id: System/Name
+        value: Sim Energy Community
+      - id: System/Description
+        value: Synthetic operating facility for the time-range-archive validation pipeline.
+      - id: Basic.Energy/FacilityType
+        value: 1                                  # Household
+      - id: Basic.Energy/State
+        value: 1                                  # Active
+      - id: Basic/Address
+        value:
+          ckRecordId: Basic/Address
+          attributes:
+            - id: Basic/AddressStreet
+              value: Sim-Strasse 1
+            - id: Basic/AddressZipcode
+              value: "5020"
+            - id: Basic/AddressCityTown
+              value: Salzburg
+            - id: Basic/AddressNationalCode
+              value: AT
+
+  # ---- Consumer MeteringPoints --------------------------------------------
+  - rtId: aa00000000000000000000c1
+    ckTypeId: Basic.Energy/Consumer
+    rtWellKnownName: SimMeterConsumer1
+    attributes:
+      - id: System/Name
+        value: Sim Consumer 1 (Household H0)
+      - id: Basic.Energy/MeteringPointNumber
+        value: AT0010000000000000000000000001
+      - id: Basic.Energy/State
+        value: 1
+      - id: Basic.Energy/CarrierType
+        value: 1                                  # Electricity
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa00000000000000000000f1
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: aa00000000000000000000c2
+    ckTypeId: Basic.Energy/Consumer
+    rtWellKnownName: SimMeterConsumer2
+    attributes:
+      - id: System/Name
+        value: Sim Consumer 2 (Household H0)
+      - id: Basic.Energy/MeteringPointNumber
+        value: AT0010000000000000000000000002
+      - id: Basic.Energy/State
+        value: 1
+      - id: Basic.Energy/CarrierType
+        value: 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa00000000000000000000f1
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: aa00000000000000000000c3
+    ckTypeId: Basic.Energy/Consumer
+    rtWellKnownName: SimMeterConsumer3
+    attributes:
+      - id: System/Name
+        value: Sim Consumer 3 (Commercial G0)
+      - id: Basic.Energy/MeteringPointNumber
+        value: AT0010000000000000000000000003
+      - id: Basic.Energy/State
+        value: 1
+      - id: Basic.Energy/CarrierType
+        value: 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa00000000000000000000f1
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ---- Producer MeteringPoints --------------------------------------------
+  - rtId: aa00000000000000000000d1
+    ckTypeId: Basic.Energy/Producer
+    rtWellKnownName: SimMeterProducer1
+    attributes:
+      - id: System/Name
+        value: Sim Producer 1 (PV 5 kWp)
+      - id: Basic.Energy/MeteringPointNumber
+        value: AT0020000000000000000000000001
+      - id: Basic.Energy/State
+        value: 1
+      - id: Basic.Energy/CarrierType
+        value: 1
+      - id: Basic.Energy/ProductionType
+        value: 1                                  # Solar (key 1 in ProductionType enum)
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa00000000000000000000f1
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: aa00000000000000000000d2
+    ckTypeId: Basic.Energy/Producer
+    rtWellKnownName: SimMeterProducer2
+    attributes:
+      - id: System/Name
+        value: Sim Producer 2 (PV 10 kWp)
+      - id: Basic.Energy/MeteringPointNumber
+        value: AT0020000000000000000000000002
+      - id: Basic.Energy/State
+        value: 1
+      - id: Basic.Energy/CarrierType
+        value: 1
+      - id: Basic.Energy/ProductionType
+        value: 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa00000000000000000000f1
+        targetCkTypeId: Basic.Energy/OperatingFacility
