@@ -1,0 +1,307 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# handle-daten-crmsg — writes 15-minute stream data (ParseConsumptionRecord@1).
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _eda/handle-daten-crmsg-pipeline.yaml
+- rtId: 68c28050234ceec0d029dfdf
+  rtCreationDateTime: 2025-09-11T07:54:56.8180000Z
+  rtChangedDateTime: 2026-03-26T10:43:39.7550000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68b019048f03da854927fd8e
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromExecutePipelineCommand@1
+        # - type: FromPolling@1
+        #   interval: 00:00:35
+      transformations:
+        - type: GetRtEntitiesByType@1
+          description: Load all not processed EDA messages
+          ckTypeId: Basic.Energy/EdaMessage
+          targetPath: $.InputMessages
+          take: 30
+          fieldFilters:
+            - attributePath: Processed
+              operator: Equals
+              comparisonValue: false
+            - attributePath: MessageType
+              operator: Equals
+              comparisonValue: DATEN_CRMSG
+
+        - type: If@1
+          description: Messages available
+          path: $.InputMessages.TotalCount
+          operator: GreaterThan
+          value: 0
+          valueType: Int
+          transformations:
+            - type: Flatten@1
+              description: Metering point numbers
+              path: $.InputMessages.Items[*].Attributes.MeteringPoint
+              targetPath: $.MeteringPointNumbers
+
+            - type: GetRtEntitiesByType@1
+              description: Load metering points
+              ckTypeId: Basic.Energy/MeteringPoint
+              targetPath: $.MeteringPoints
+              fieldFilters:
+                - attributePath: MeteringPointNumber
+                  operator: IN
+                  comparisonValuePath: $.MeteringPointNumbers
+
+            - type: If@1
+              description: Metering points
+              path: $.MeteringPoints.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                - type: Join@1
+                  description: Metering points
+                  path: $.InputMessages.Items[*]
+                  keyPath: $.Attributes.MeteringPoint
+                  joinPath: $.MeteringPoints.Items[*]
+                  joinKeyPath: $.Attributes.MeteringPointNumber
+                  itemPath: $.MeteringPoint
+
+            - type: Project@1
+              fields:
+                - path: $.MeteringPoints
+
+            # Send ABLEHNUNG_CRMSG for unknown metering points
+            - type: ForEach@1
+              description: Check if there are unknown metering points
+              iterationPath: $.InputMessages.Items
+              mergePath: $.notification
+              targetPath: $.notifications
+              transformations:
+                - type: If@1
+                  description: No metering point
+                  path: $.key.MeteringPoint[0].RtId
+                  operator: Equals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: Logger@1
+                      message: Send ABLEHNUNG_CRMSG
+                    - type: SendNotification@1
+                      description: Send ABLEHNUNG_CRMSG
+                      senderAddressPath: $.key.Attributes.Receiver
+                      receiverAddressPath: $.key.Attributes.Sender
+                      originalMessageIdPath: $.key.Attributes.MessageId
+                      conversationIdPath: $.key.Attributes.ConversationId
+                      messageCode: "ABLEHNUNG_CRMSG"
+                      responseCode: 57
+                      targetPath: $.notification
+
+            - type: Flatten@1
+              description: Notifications
+              path: $.notifications[*]
+              targetPath: $.Result.Notifications
+
+            - type: Project@1
+              fields:
+                - path: $.notifications
+
+            # Parse all messages into 15-minute consumption records
+            # (EC v2, ADR 0001 / AB#4550: ParseConsumptionRecord@1 replaces
+            # AggregateConsumptionRecord@1 — no daily aggregation, raw slots go to
+            # the stream-data archive)
+            - type: ForEach@1
+              description: Parse all EDA messages
+              maxDegreeOfParallelism: 1
+              iterationPath: $.InputMessages.Items
+              mergePath: $.consumptionRecord
+              targetPath: $.data
+              transformations:
+                - type: If@1
+                  description: Metering point exists
+                  path: $.key.MeteringPoint[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: ParseConsumptionRecord@1
+                      path: $.key.Attributes.RawMessage
+                      meteringPointRtIdPath: $.key.MeteringPoint[0].RtId
+                      targetPath: $.consumptionRecord
+
+            - type: Flatten@1
+              description: Consumption records
+              path: $.data[*][*]
+              targetPath: $.consumptionRecords
+
+            - type: Flatten@1
+              description: Message ids
+              path: $.InputMessages.Items[*].RtId
+              targetPath: $.MessageIds
+
+            - type: Project@1
+              fields:
+                - path: $.InputMessages
+                - path: $.data
+
+            # Mark ALL loaded messages processed — unknown metering points were
+            # answered with ABLEHNUNG_CRMSG above and must not be re-processed.
+            - type: ForEach@1
+              description: Update messages
+              iterationPath: $.MessageIds
+              mergePath: $.update
+              targetPath: $.Result.UpdateMessages
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.update
+                  updateKind: UPDATE
+                  ckTypeId: Basic.Energy/EdaMessage
+                  rtIdPath: $.key
+                  attributeUpdates:
+                    - attributeName: Processed
+                      attributeValueType: Boolean
+                      value: true
+
+            - type: ApplyChanges@2
+              description: Set messages to processed
+              entityUpdatesPath: $.Result.UpdateMessages
+
+            - type: Project@1
+              fields:
+                - path: $.MessageIds
+                - path: $.Result.UpdateMessages
+
+            # Create the EnergyMeasurement anchor candidates: one per metering
+            # point x OBIS code (well-known name <meteringPointRtId>_<obisCode>),
+            # carrying the latest slot values (voest-app reference pattern).
+            - type: ForEach@1
+              description: Create measurements
+              maxDegreeOfParallelism: 1
+              iterationPath: $.consumptionRecords
+              mergePath: $.updates
+              targetPath: $.updates.quantity
+              transformations:
+                - type: FormatString@1
+                  description: Anchor well-known name
+                  format: "{$.key.MeteringPointRtId}_{$.key.MeterCode}"
+                  targetPath: $.updates.wellKnownName
+
+                - type: ForEach@1
+                  description: Energy quantities
+                  maxDegreeOfParallelism: 1
+                  iterationPath: $.key.EnergyQuantities
+                  mergePath: $.updates
+                  targetPath: $.updates.quantity
+                  transformations:
+                    - type: CreateUpdateInfo@1
+                      description: Energy measurements
+                      targetPath: $.updates.quantities
+                      updateKind: INSERT
+                      ckTypeId: Basic.Energy/EnergyMeasurement
+                      rtIdPath: $.rtId
+                      generateRtId: true
+                      rtWellKnownNamePath: $.full.updates.wellKnownName
+                      attributeUpdates:
+                        - attributeName: Amount.Value
+                          attributeValueType: Double
+                          valuePath: $.key.Quantity
+                        - attributeName: Amount.Unit
+                          attributeValueType: Enum
+                          valuePath: $.full.key.QuantityUnit
+                        - attributeName: DataQuality
+                          attributeValueType: Enum
+                          valuePath: $.key.Quality
+                        - attributeName: TimeRange.From
+                          attributeValueType: DateTime
+                          valuePath: $.key.From
+                        - attributeName: TimeRange.To
+                          attributeValueType: DateTime
+                          valuePath: $.key.To
+                        - attributeName: ObisCode
+                          attributeValueType: String
+                          valuePath: $.full.key.MeterCode
+                    - type: CreateAssociationUpdate@1
+                      description: Association to metering point
+                      targetPath: $.updates.assocs
+                      updateKind: CREATE
+                      originRtIdPath: $.updates.quantities.RtId
+                      originCkTypeId: Basic.Energy/EnergyMeasurement
+                      targetRtIdPath: $.key.MeteringPointRtId
+                      targetCkTypeId: Basic.Energy/MeteringPoint
+                      associationRoleId: System/ParentChild
+
+            - type: Project@1
+              fields:
+                - path: $.consumptionRecords
+
+            - type: Flatten@1
+              description: Energy measurements
+              path: $.updates.quantity[*].quantity[*].quantities
+              targetPath: $.update.UpdateItems
+            - type: Flatten@1
+              description: Associations
+              path: $.updates.quantity[*].quantity[*].assocs
+              targetPath: $.update.AssocUpdateItems
+
+            - type: Project@1
+              fields:
+                - path: $.updates
+
+            # Anchor dedupe: only the newest slot per RtWellKnownName survives as
+            # the RT anchor entity; ALL slots go to the archive below.
+            - type: UpdateRtEntityIfNewer@1
+              description: Compare candidates with existing EMs by RtWellKnownName + TimeRange.From
+              inputPath: $.update.UpdateItems
+              candidateAssociationsInputPath: $.update.AssocUpdateItems
+              comparisonAttributePath: TimeRange.To
+              outputPathAll: $.update.AllItems
+              filteredOutputPath: $.update.FilteredItems
+              filteredAssociationsOutputPath: $.update.FilteredAssocs
+
+            - type: Project@1
+              fields:
+                - path: $.update.UpdateItems
+                - path: $.update.AssocUpdateItems
+
+            - type: ApplyChanges@2
+              description: Persist RT EnergyMeasurement anchors and their parent associations
+              entityUpdatesPath: $.update.FilteredItems
+              associationUpdatesPath: $.update.FilteredAssocs
+
+            - type: SaveTimeRangeStreamDataInArchive@1
+              description: Persist all slots to the energy-measurements time-range archive
+              path: $.update.AllItems
+              archiveRtId: ec0000000000000000000a01
+              fromAttributePath: TimeRange.From
+              toAttributePath: TimeRange.To
+- rtId: 68b019048f03da854927fd8e
+  rtCreationDateTime: 2025-08-28T08:53:24.8200000Z
+  rtChangedDateTime: 2026-02-11T12:07:31.3160000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: handle-daten-crmsg
+  - id: System/Description-1
+    value: Handle all consumption record messages
