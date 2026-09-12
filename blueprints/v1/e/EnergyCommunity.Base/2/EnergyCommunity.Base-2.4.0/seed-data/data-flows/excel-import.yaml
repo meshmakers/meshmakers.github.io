@@ -1,0 +1,49 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.2,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.7.0,2.0)
+- System.UI-[2.4,3.0)
+
+# Excel import DataFlow + pipeline — master-data import via the OctoMesh Office Add-In.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Excel import pipeline ───────────────────────────────────────────────
+# Used by the OctoMesh Office Add-In for tree / customer / facility /
+# metering-point master-data import. (EC v2: energy quantities are stream
+# data — no longer part of the Excel master-data import.)
+- rtId: 67e10c68fe3e19891bbfd262
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Excel Pipeline
+  - id: System/Description-1
+    value: ''
+
+- rtId: 67e10c68fe3e19891bbfd263
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 67e10c68fe3e19891bbfd262
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@1
+          path: /import/tree
+          method: POST
+      transformations:
+        - type: ImportFromExcel@1
