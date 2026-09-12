@@ -1,0 +1,173 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.2,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.7.0,2.0)
+- System.UI-[2.4,3.0)
+
+# Persisted stream-data queries over the raw archive: the row-level list query and
+# the three grouping aggregations (by OBIS code, by data quality, by quality+count).
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Persisted stream-data queries over the raw archive ──────────────────
+# Replacements for the removed EnergyQuantity RT queries (see NOTE above).
+# Mirror the voest-app query shapes (voest-app/data/_queries/*).
+
+# Row-level list query (frontend raw-data views; scope via
+# StreamDataArguments from/to + rtIds of the EnergyMeasurement anchors).
+- rtId: ec0000000000000000000a21
+  ckTypeId: System/SimpleSdQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy_measurements
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/StreamDataQuery.ArchiveRtId-1
+    value: ec0000000000000000000a01
+  - id: System/StreamDataQuery.Columns-1
+    value:
+    - window_start
+    - window_end
+    - amount.unit
+    - amount.value
+    - obisCode
+    - dataQuality
+    - was_updated
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: window_start
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/StreamDataQuery.From-1
+  - id: System/StreamDataQuery.To-1
+  - id: System/StreamDataQuery.Limit-1
+  - id: System/Query.FieldFilter-1
+    value: []
+
+# SUM(amount.value) grouped by obisCode + amount.unit (AggregationType 4 = SUM).
+- rtId: ec0000000000000000000a22
+  ckTypeId: System/GroupingAggregationSdQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-measurements-aggregation-by-obiscode
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/StreamDataQuery.ArchiveRtId-1
+    value: ec0000000000000000000a01
+  - id: System/Query.GroupByColumns-1
+    value:
+    - obisCode
+    - amount.unit
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 4
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/StreamDataQuery.From-1
+  - id: System/StreamDataQuery.To-1
+  - id: System/StreamDataQuery.Limit-1
+  - id: System/Query.FieldFilter-1
+    value: []
+
+# SUM(amount.value) grouped by dataQuality + amount.unit (gap/quality views).
+- rtId: ec0000000000000000000a23
+  ckTypeId: System/GroupingAggregationSdQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-measurements-aggregation-by-data-quality
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/StreamDataQuery.ArchiveRtId-1
+    value: ec0000000000000000000a01
+  - id: System/Query.GroupByColumns-1
+    value:
+    - dataQuality
+    - amount.unit
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 4
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/StreamDataQuery.From-1
+  - id: System/StreamDataQuery.To-1
+  - id: System/StreamDataQuery.Limit-1
+  - id: System/Query.FieldFilter-1
+    value: []
+
+# SUM + COUNT of amount.value grouped by dataQuality + amount.unit (AB#4710).
+# The aggregated-energy-report pipeline (a33/a34 below) needs COUNT per quality
+# for its completeness gate; a23 above only delivers SUM and its Values layout
+# must stay stable for the MeshBoard by-quality donut, so this is a separate
+# query. Same shape as Billing's settlement query billing-energy-by-quality
+# (ec000000000000000000e001) but Base-owned — Base pipelines must not depend
+# on Billing-owned queries (cross-blueprint rule, see CLAUDE.md).
+# The pipeline invokes it via GetQueryById@1 with node fieldFilters (rtId of
+# the anchor + window_start/window_end bounds); the persisted From/To/rtIds
+# stay blank. Output per (dataQuality, amount.unit) group:
+#   Values = [dataQuality, amount.unit, amountvalue_sum, amountvalue_count].
+# NOTE: dataQuality and amount.unit are INTEGER enum columns in CrateDB —
+# bucketing uses the keys (Unknown 0, L1 1, L2 2, L3 3, Manual 4; KWh 1, MWh 2).
+- rtId: ec0000000000000000000a24
+  ckTypeId: System/GroupingAggregationSdQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-measurements-sum-count-by-data-quality
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/StreamDataQuery.ArchiveRtId-1
+    value: ec0000000000000000000a01
+  - id: System/Query.GroupByColumns-1
+    value:
+    - dataQuality
+    - amount.unit
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 4    # Sum
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: amount.value
+      - id: System/AggregationType-1
+        value: 0    # Count
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/StreamDataQuery.From-1
+  - id: System/StreamDataQuery.To-1
+  - id: System/StreamDataQuery.Limit-1
+  - id: System/Query.FieldFilter-1
+    value: []
