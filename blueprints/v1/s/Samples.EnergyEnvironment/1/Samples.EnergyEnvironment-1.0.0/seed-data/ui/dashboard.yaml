@@ -1,0 +1,476 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.UI-[2.4.0,3.0)
+
+# Meshboard dashboard "energy-environment" and its widgets. The rtWellKnownName
+# is deliberately NOT "cockpit" - that name is taken by the service-managed
+# System.UI.SystemCockpit / .TenantCockpit dashboards.
+entities:
+  # ============================================================
+  # DASHBOARD
+  # ============================================================
+  - rtId: ee00000000000000000d0001
+    ckTypeId: System.UI/Dashboard-1
+    rtWellKnownName: energy-environment
+    associations: []
+    attributes:
+    - id: System/Name-1
+      value: Energy & Environment
+    - id: System/Description-1
+      value: |-
+        Werk Donaustein - Energy Overview
+        ---MESHBOARD_VARIABLES---
+        {}
+    - id: System.UI/Dashboard.Columns-1
+      value: 6
+    - id: System.UI/Dashboard.RowHeight-1
+      value: 160
+    - id: System.UI/Dashboard.Gap-1
+      value: 12
+
+  # ============================================================
+  # ROW 1: ALERT BANNER
+  # ============================================================
+
+  - rtId: ee00000000000000000d0010
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: Active Alerts
+    - id: System.UI/DashboardWidget.Type-1
+      value: alertBanner
+    - id: System.UI/DashboardWidget.Col-1
+      value: 1
+    - id: System.UI/DashboardWidget.Row-1
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 6
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 1
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: System.Notification/StatefulEvent
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: ''
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"ckTypeId":"System.Notification/StatefulEvent","rotationInterval":5000,"showIcon":true,"maxAlerts":20,"chromeless":true}'
+
+  # ============================================================
+  # ROW 2: KPI CARDS
+  # ============================================================
+
+  # Momentanleistung - Hauptzaehler Power
+  - rtId: ee00000000000000000d0101
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: Total Power
+    - id: System.UI/DashboardWidget.Type-1
+      value: kpi
+    - id: System.UI/DashboardWidget.Col-1
+      value: 1
+    - id: System.UI/DashboardWidget.Row-1
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: Industry.Energy/EnergyMeter
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: e0500001000000000000ac06
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"valueAttribute":"power","suffix":" kW","icon":"flash","trend":"up","comparisonText":"+3.1% vs. last week"}'
+
+  # PV-Leistung - Inverter Power
+  - rtId: ee00000000000000000d0102
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: Self-Consumption
+    - id: System.UI/DashboardWidget.Type-1
+      value: kpi
+    - id: System.UI/DashboardWidget.Col-1
+      value: 2
+    - id: System.UI/DashboardWidget.Row-1
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: static
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: ''
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"staticValue":"34","suffix":" %","icon":"flash","trend":"up","comparisonText":"+8% vs. last month"}'
+
+  # Energiekosten Heute
+  - rtId: ee00000000000000000d0103
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: Energy Cost Today
+    - id: System.UI/DashboardWidget.Type-1
+      value: kpi
+    - id: System.UI/DashboardWidget.Col-1
+      value: 3
+    - id: System.UI/DashboardWidget.Row-1
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: Industry.Energy/EnergyCost
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: e0500001000000000000ae01
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"valueAttribute":"costAmount","suffix":" EUR","icon":"chart","trend":"neutral","comparisonText":"Forecast: 4,320 EUR"}'
+
+  # EnPI
+  - rtId: ee00000000000000000d0104
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: EnPI (kWh/Unit)
+    - id: System.UI/DashboardWidget.Type-1
+      value: kpi
+    - id: System.UI/DashboardWidget.Col-1
+      value: 4
+    - id: System.UI/DashboardWidget.Row-1
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: Industry.Energy/EnergyPerformanceIndicator
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: e0500001000000000000b001
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"valueAttribute":"indicatorValue","suffix":" kWh/Stk","icon":"chart","trend":"down","comparisonText":"-5.2% Efficiency"}'
+
+  # Speicher SOC - Gauge
+  - rtId: ee00000000000000000d0105
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: Storage SOC
+    - id: System.UI/DashboardWidget.Type-1
+      value: gauge
+    - id: System.UI/DashboardWidget.Col-1
+      value: 5
+    - id: System.UI/DashboardWidget.Row-1
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: Industry.Energy/EnergyStorage
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: e0500001000000000000ac05
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"gaugeType":"arc","valueAttribute":"soC","min":0,"max":100,"suffix":" %","showLabel":true,"ranges":[{"from":0,"to":20,"color":"#ef4444"},{"from":20,"to":50,"color":"#f59e0b"},{"from":50,"to":100,"color":"#10b981"}]}'
+
+  # CO2 Budget - Gauge
+  - rtId: ee00000000000000000d0106
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: CO2-Budget 2026
+    - id: System.UI/DashboardWidget.Type-1
+      value: gauge
+    - id: System.UI/DashboardWidget.Col-1
+      value: 6
+    - id: System.UI/DashboardWidget.Row-1
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: Environment/CarbonBudget
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: e0500001000000000000b201
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"gaugeType":"arc","valueAttribute":"budgetConsumed","min":0,"max":680,"suffix":" t","showLabel":true,"ranges":[{"from":0,"to":480,"color":"#10b981"},{"from":480,"to":580,"color":"#f59e0b"},{"from":580,"to":680,"color":"#ef4444"}]}'
+
+  # ============================================================
+  # ROW 2-3: DEMAND RESPONSE + ANLAGEN STATS
+  # ============================================================
+
+  # Demand Response Event - Entity Card
+  - rtId: ee00000000000000000d0201
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: Flexibility & Demand Response
+    - id: System.UI/DashboardWidget.Type-1
+      value: summaryCard
+    - id: System.UI/DashboardWidget.Col-1
+      value: 5
+    - id: System.UI/DashboardWidget.Row-1
+      value: 8
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: Industry.Energy/DemandResponseEvent
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: ''
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"columns":2,"tiles":[{"id":"dr-reduction","label":"DR Reduction · bis 15:30 Uhr","prefix":"-","suffix":" kW","color":"primary","size":"full","entitySource":{"rtId":"e0500001000000000000ad01","ckTypeId":"Industry.Energy/DemandResponseEvent","attributePath":"reductionKw"}},{"id":"dr-revenue","label":"Revenue Today","prefix":"+","suffix":" EUR","color":"success","size":"full","entitySource":{"rtId":"e0500001000000000000ad01","ckTypeId":"Industry.Energy/DemandResponseEvent","attributePath":"revenue"}},{"id":"pv-power","label":"PV Power","suffix":" kW","entitySource":{"rtId":"e0500001000000000000ac02","ckTypeId":"Industry.Energy/Inverter","attributePath":"power"}},{"id":"storage-soc","label":"Storage SOC","suffix":" %","entitySource":{"rtId":"e0500001000000000000ac05","ckTypeId":"Industry.Energy/EnergyStorage","attributePath":"soC"}}]}'
+
+  # CO2 & ESG - Summary Card
+  - rtId: ee00000000000000000d0203
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: CO2 & ESG
+    - id: System.UI/DashboardWidget.Type-1
+      value: summaryCard
+    - id: System.UI/DashboardWidget.Col-1
+      value: 5
+    - id: System.UI/DashboardWidget.Row-1
+      value: 6
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: Environment/CarbonBudget
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: ''
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"columns":3,"tiles":[{"id":"co2-today","label":"CO2 Today","suffix":" t","color":"warning","entitySource":{"rtId":"e0500001000000000000b201","ckTypeId":"Environment/CarbonBudget","attributePath":"dailyEmissions"}},{"id":"co2-month","label":"CO2 This Month","suffix":" t","entitySource":{"rtId":"e0500001000000000000b201","ckTypeId":"Environment/CarbonBudget","attributePath":"monthlyEmissions"}},{"id":"target-pct","label":"Savings Target","suffix":" %","color":"success","entitySource":{"rtId":"e0500001000000000000b201","ckTypeId":"Environment/CarbonBudget","attributePath":"targetFulfillment"}}]}'
+
+  # ============================================================
+  # ROW 4-5: DETAIL WIDGETS
+  # ============================================================
+
+  # Compliance Widget Group
+  - rtId: ee00000000000000000d0304
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: Regulatory & Compliance
+    - id: System.UI/DashboardWidget.Type-1
+      value: statusList
+    - id: System.UI/DashboardWidget.Col-1
+      value: 5
+    - id: System.UI/DashboardWidget.Row-1
+      value: 10
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: Environment/ComplianceRecord
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: ''
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"ckTypeId":"Environment/ComplianceRecord","labelField":"name","statusField":"complianceStatus","statusColors":{"Compliant":{"color":"#10b981","label":"Compliant"},"Submitted":{"color":"#06b6d4","label":"Submitted"},"InProgress":{"color":"#f59e0b","label":"In Progress"},"Passed":{"color":"#10b981","label":"Passed"},"Open":{"color":"#6b7280","label":"Open"}}}'
+
+  # ============================================================
+  # ROW 8-10: ANLAGEN TABLE
+  # ============================================================
+
+  - rtId: ee00000000000000000d0401
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: Equipment & Consumers
+    - id: System.UI/DashboardWidget.Type-1
+      value: table
+    - id: System.UI/DashboardWidget.Col-1
+      value: 1
+    - id: System.UI/DashboardWidget.Row-1
+      value: 8
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 4
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 3
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: ee00000000000000000a0001
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"columns":[{"field":"name","title":"Equipment"},{"field":"machineState","title":"Status","dataType":"statusIcons","statusMapping":{"On":{"icon":"check-circle","tooltip":"Active","color":"#10b981"},"Off":{"icon":"x-circle","tooltip":"Off","color":"#ef4444"},"Unknown":{"icon":"question-circle","tooltip":"Unknown","color":"#6b7280"},"Error":{"icon":"exclamation-circle","tooltip":"Error","color":"#ef4444"},"Idle":{"icon":"minus-circle","tooltip":"Idle","color":"#f59e0b"}}},{"field":"power","title":"Power (kW)","dataType":"numeric"},{"field":"loadPercent","title":"Load","dataType":"progressBar","width":200},{"field":"importedEnergy","title":"kWh Today","dataType":"numeric"}],"sorting":[],"filters":[],"pageSize":20,"sortable":true,"queryName":"meshboard_energyenvironment_anlagen","queryRtId":"ee00000000000000000a0001"}'
+
+  # ============================================================
+  # ROW 11-13: LASTGANG LINE CHART
+  # ============================================================
+
+  - rtId: ee00000000000000000d0501
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: Load Profile - Today
+    - id: System.UI/DashboardWidget.Type-1
+      value: lineChart
+    - id: System.UI/DashboardWidget.Col-1
+      value: 1
+    - id: System.UI/DashboardWidget.Row-1
+      value: 3
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 4
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 3
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: ee00000000000000000a0002
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"chartType":"area","categoryField":"timeRange_from","seriesGroupField":"obisCode","valueField":"amount_value","showLegend":true,"legendPosition":"right","valueAxisTitle":"kW","showMarkers":false,"referenceLines":[{"value":3000,"label":"Limit 3.000 kW","color":"#ef4444","opacity":0.8}],"queryName":"meshboard_energyenvironment_lastgang","queryRtId":"ee00000000000000000a0002"}'
+
+  # ============================================================
+  # ROW 14-15: AI FORECAST BAR CHART
+  # ============================================================
+
+  - rtId: ee00000000000000000d0601
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: AI Load Forecast - Next 6h
+    - id: System.UI/DashboardWidget.Type-1
+      value: barChart
+    - id: System.UI/DashboardWidget.Col-1
+      value: 1
+    - id: System.UI/DashboardWidget.Row-1
+      value: 6
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 4
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: ee00000000000000000a0003
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"chartType":"column","categoryField":"timeRange_from","series":[{"field":"predictedLoad","name":"Predicted Load"}],"showLegend":false,"showDataLabels":true,"dataLabelSuffix":" kW","colorThresholds":[{"value":2300,"color":"#10b981"},{"value":2600,"color":"#f59e0b"}],"defaultBarColor":"#ef4444","queryName":"meshboard_energyenvironment_forecast","queryRtId":"ee00000000000000000a0003"}'
+
+  # ============================================================
+  # ROW 8-9: AI INSIGHTS
+  # ============================================================
+
+  - rtId: ee00000000000000000d0701
+    ckTypeId: System.UI/DashboardWidget-1
+    associations:
+    - roleId: System/ParentChild-1
+      targetRtId: ee00000000000000000d0001
+      targetCkTypeId: System.UI/Dashboard-1
+      attributes: []
+    attributes:
+    - id: System/Name-1
+      value: AI Insights
+    - id: System.UI/DashboardWidget.Type-1
+      value: aiInsights
+    - id: System.UI/DashboardWidget.Col-1
+      value: 5
+    - id: System.UI/DashboardWidget.Row-1
+      value: 3
+    - id: System.UI/DashboardWidget.ColSpan-1
+      value: 2
+    - id: System.UI/DashboardWidget.RowSpan-1
+      value: 3
+    - id: System.UI/DashboardWidget.DataSourceType-1
+      value: static
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId-1
+      value: ''
+    - id: System.UI/DashboardWidget.Config-1
+      value: '{"domainContext":"energy management","maxInsights":4,"refreshInterval":0}'
