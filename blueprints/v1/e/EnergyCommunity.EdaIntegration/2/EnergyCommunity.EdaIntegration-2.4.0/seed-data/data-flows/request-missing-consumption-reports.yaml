@@ -1,0 +1,277 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _eda/request-missing-consumption-reports-pipeline.yaml
+- rtId: 69c249a14f1e21ff43bfb1c2
+  rtCreationDateTime: 2026-03-24T08:21:54.0310000Z
+  rtChangedDateTime: 2026-03-26T13:55:37.0760000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 69c249764f1e21ff43bfb1c1
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: request_missing_consumption_reports - Mesh
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        # - type: FromExecutePipelineCommand@1
+        - type: FromHttpRequest@1
+          path: /requestMissingConsumptionReports
+          method: POST
+      transformations:
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.conf
+
+        - type: SetPrimitiveValue@1
+          description: set start date
+          targetPath: $.config.from
+          #value: "2026-01-01T00:00:00+01:00"
+          valuePath: $.body.date
+          valueType: DateTime
+        - type: SetPrimitiveValue@1
+          description: partner id
+          targetPath: $.config.partnerId
+          valuePath: $.conf.partnerId
+          valueType: String
+
+        - type: Project@1
+          fields:
+            - path: $.conf
+            - path: $.body
+            - path: $.path
+            - path: $.method
+
+
+        - type: For@1
+          description: create time range
+          count: 1
+          indexTargetPath: $.start
+          targetPath: $.it
+          transformations:
+            - type: Math@1
+              description: end index
+              path: $
+              itemPath: $.start
+              itemTargetPath: $.end
+              operation: Add
+              value: 1
+            - type: DateTime@1
+              description: set start date
+              operation: AddDays
+              path: $.config.from
+              targetPath: $.timeRange.from
+              valuePath: $.start
+            - type: DateTime@1
+              description: set end date
+              operation: AddDays
+              path: $.config.from
+              targetPath: $.timeRange.to
+              valuePath: $.end
+
+        - type: Flatten@1
+          description: time range
+          path: $.it[*].timeRange
+          targetPath: $.timeRange
+
+        - type: Project@1
+          fields: # optional
+            - path: $.it
+            #- path: $.config
+
+        - type: ForEach@1
+          description: time ranges
+          #maxDegreeOfParallelism: 1
+          iterationPath: $.timeRange
+          mergePath: $.key
+          targetPath: $.days
+          transformations:
+            - type: GetQueryById@1
+              description: participation for day
+              queryRtId: 69c230e44f1e21ff43bfb1be
+              targetPath: $.query
+              fieldFilters:
+                - attributePath: timeRange.from
+                  operator: LessEqualThan
+                  comparisonValuePath: $.key.from
+                - attributePath: timeRange.to
+                  operator: GreaterEqualThan
+                  comparisonValuePath: $.key.to
+            - type: Flatten@1
+              description: metering points
+              path: $.query.Rows[*]
+              targetPath: $.key.meteringPoints
+
+        - type: Project@1
+          fields:
+            - path: $.timeRange
+
+
+        # TODO(AB#4551): gap detection disabled. The former RT query
+        # 6832d3a3082c592078703dda (pipeline_energyQuantities) targeted
+        # EnergyCommunity/EnergyQuantity, which no longer exists in
+        # EnergyCommunity 4.x and was removed from the Base 2.x seed. Re-point
+        # this step to a stream-data query over the energy-measurements archive
+        # (ec0000000000000000000a01) to find days without data. Until then no
+        # $.quantities are resolved and the guarded If below is forced to never
+        # fire, so this pipeline sends no CR_REQ_PT requests (safe no-op).
+
+        - type: ForEach@1
+          description: days
+          maxDegreeOfParallelism: 1
+          iterationPath: $.days
+          mergePath: $.body
+          targetPath: $.body
+          transformations:
+            - type: ForEach@1
+              description: metering points
+              #maxDegreeOfParallelism: 1
+              iterationPath: $.key.meteringPoints
+              mergePath: $.body
+              targetPath: $.body
+              transformations:
+                - type: If@1
+                  # TODO(AB#4551): forced to never fire until the SD gap query
+                  # exists -- without it every day would look like a gap and
+                  # this pipeline would flood the grid operators with CR_REQ_PT.
+                  description: no quantities (disabled, see TODO above)
+                  operator: Equal
+                  path: $.key.quantities[0].RtId
+                  value: __AB4551_DISABLED__
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.body.requestData.processName
+                      value: "CR_REQ_PT"
+                      valueType: String
+                    - type: TransformString@1
+                      description: Get operator number
+                      path: $.key
+                      sourcePath: $.Values[0]
+                      targetPath: $.Operator
+                      operation: SubstringFromStart
+                      length: 8
+                    - type: FormatString@1
+                      targetPath: $.body.requestData.comment
+                      format: "Get energy quantities for {$.key.Values[0]} {$.full.key.from}-{$.full.key.to}"
+                    # - type: FormatString@1
+                    #   targetPath: $.body.requestData.processData.receiver
+                    #   format: "{$.key.Operator}TEST2"
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.body.requestData.processData.receiver
+                      valuePath: $.key.Operator
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.body.requestData.processData.sender
+                      valuePath: $.full.full.config.partnerId
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.body.requestData.processData.meteringPoint
+                      valuePath: $.key.Values[0]
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.body.requestData.processData.from
+                      valuePath: $.full.key.from
+                      valueType: DateTime
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.body.requestData.processData.to
+                      valuePath: $.full.key.to
+                      valueType: DateTime
+
+
+        - type: Flatten@1
+          path: $.body[*][*]
+          targetPath: $.RequestData
+
+        - type: Project@1
+          fields:
+            - path: $.config
+            - path: $.days
+            - path: $.body
+
+        - type: ForEach@1
+          description: "Send all requests"
+          maxDegreeOfParallelism: 1
+          iterationPath: $.RequestData
+          #mergePath: $.request
+          #targetPath: $.Requests
+          transformations:
+            - type: EdaStartProcess@1
+              path: $.key.requestData
+              targetPath: $.request
+            - type: SetPrimitiveValue@1
+              targetPath: $.request.comment
+              valuePath: $.key.requestData.comment
+              valueType: String
+            - type: If@1
+              description: If successfull sent create a new process in DB
+              path: $.request.IsSuccess
+              operator: Equals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.update
+                  targetValueKind: Array
+                  updateKind: INSERT
+                  ckTypeId: Basic.Energy/EdaProcess
+                  attributeUpdates:
+                    - attributeName: Name
+                      attributeValueType: String
+                      value: "CR_REQ_PT"
+                    - attributeName: Description
+                      attributeValueType: String
+                      valuePath: $.request.comment
+                    - attributeName: ConversationId
+                      attributeValueType: String
+                      valuePath: $.request.Message.ProcessDirectory.ConversationId
+                    - attributeName: Finished
+                      attributeValueType: Boolean
+                      value: false
+                    - attributeName: StartTime
+                      attributeValueType: DateTime
+                      valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.DocumentCreationDateTime
+                    - attributeName: Sender
+                      attributeValueType: String
+                      valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.Sender.MessageAddress
+                    - attributeName: Receiver
+                      attributeValueType: String
+                      valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.Receiver.MessageAddress
+                    - attributeName: MeteringPointNumber
+                      attributeValueType: String
+                      valuePath: $.request.Message.ProcessDirectory.MeteringPoint
+                    - attributeName: RawMessage
+                      attributeValueType: String
+                      valuePath: $.request.Message
+
+                - type: ApplyChanges@1
+                  path: $.update
+- rtId: 69c249764f1e21ff43bfb1c1
+  rtCreationDateTime: 2026-03-24T08:21:10.4100000Z
+  rtChangedDateTime: 2026-03-25T06:13:59.4980000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: request-missing-consumption-reports
+  - id: System/Description-1
+    value: Reqeuest consumption reports for days without any data
