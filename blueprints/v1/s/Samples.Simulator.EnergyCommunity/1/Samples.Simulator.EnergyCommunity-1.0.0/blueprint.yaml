@@ -1,0 +1,30 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: Samples.Simulator.EnergyCommunity-1.0.0
+description: |
+  Energy-community demo on the OctoSdkDemo model: a Basic/Tree of Salzburg
+  regions carrying operating facilities and their metering points, plus two
+  DataFlows that bring the tenant to life:
+
+    Signal Simulation - polls every 10s, generates synthetic signals and writes
+                        the scaled values onto two metering points.
+    Create Customers  - generates synthetic customers, facilities and metering
+                        points on demand
+                        (octo-cli -c ExecutePipeline --identifier 66e309cd5b53add9b5cd386a).
+
+  Both run on the Mesh Adapter that System.Communication seeds
+  (rtId 670000000000000000000002): Simulation@1 ships with the Mesh Adapter SDK,
+  so no simulation plug adapter is needed. Enable Communication on the tenant
+  first, then deploy both DataFlows after installing.
+
+  Demo and training tenants only.
+ckModelDependencies:
+  # Floors pinned to published versions, in dependency order: the engine
+  # installs each floor EXACTLY and resolves no transitive CK dependencies.
+  - Basic-[2.0.3,3.0)
+  - OctoSdkDemo-[2.1.0,3.0)
+  # Satisfiability floor only - service-managed, see Samples.PipelineBasics.
+  - System.Communication-[3.22.0,4.0)
+seedDataPaths:
+  - seed-data/master-data/energy-community.yaml
+  - seed-data/data-flows/signal-simulation.yaml
+  - seed-data/data-flows/create-customers.yaml
