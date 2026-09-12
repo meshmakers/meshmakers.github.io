@@ -1,0 +1,94 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# The EDA adapter (System.Communication/Adapter) deployed via the Communication Operator.
+# Fill its AdapterConfiguration JSON (EdaHttpAdapter.Host, User, Password, IsSimulationMode)
+# before deploying.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── EDA Adapter ─────────────────────────────────────────────────────────
+# Communication Operator deploys this adapter via Helm chart "octo-eda-adapter".
+# AdapterConfiguration is a JSON skeleton — fill EdaHttpAdapter Host / User /
+# Password / IsSimulationMode per tenant via Refinery Studio BEFORE DeployWorkload.
+- rtId: 686e0f17196fcd3c42ed8c77
+  ckTypeId: System.Communication/Adapter-1
+  associations:
+  - roleId: System.Communication/Manages-1
+    targetRtId: '670000000000000000000001'
+    targetCkTypeId: System.Communication/Pool-1
+    attributes: []
+  # 670…004 (meshmakers/charts), NOT 670…003 (helm-chart-build): the octo-eda-adapter chart
+  # is published to /charts, and 003 is the dev-channel build repo that only the MainLatest
+  # variant of System.Communication seeds. On a cluster running the Release variant
+  # (serviceDefaults.environment = production) 003 does not exist, so the deploy failed with
+  # "no Helm repository is linked" — the entity was there, its association pointed at nothing.
+  - roleId: System.Communication/HelmRepository-1
+    targetRtId: '670000000000000000000004'
+    targetCkTypeId: System.Communication/HelmRepositoryConfiguration-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: EDA Adapter
+  - id: System/Description-1
+    value: ''
+  - id: System.Communication/CommunicationState-1
+    value: 0
+  - id: System.Communication/ConfigurationState-1
+    value: 0
+  - id: System.Communication/CommunicationStateTimestamp-1
+  - id: System.Communication/LastConfigurationError-1
+  - id: System.Communication/LastConfigurationErrorTimestamp-1
+  - id: System.Communication/LastSyncedSequenceNumber-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/LastDeploymentError-1
+  - id: System.Communication/LastDeploymentErrorTimestamp-1
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/ChartName-1
+    value: octo-eda-adapter
+  - id: System.Communication/ChartVersion-1
+    value: ''
+  - id: System.Communication/ValuesYaml-1
+    value: ''
+  - id: System.Communication/ReceivesClusterSecrets-1
+    value: true
+  - id: System.Communication/IngressEnabled-1
+    value: true
+  # Shared host, tenant in the PATH — not a host per tenant (AB#3683).
+  #
+  # The adapter chart's ingress builds its rule as `host: publicUri` +
+  # `path: /{tenantId}` with pathType Prefix, and the adapter itself prefixes every
+  # route it registers with its own tenant
+  # (`HttpRequestService.GetUri`: `/{adapterOptions.TenantId}{uri}`). So N adapters,
+  # one per sub-tenant, share one host and the ingress routes between them on the
+  # first path segment.
+  #
+  # That is what makes a SINGLE app deployment work for N tenants: the app has one
+  # `edaAdapterUri` in its config and appends the tenant to the path
+  # (`pipeline-execution.service.ts`: `${adapterUrl}${tenantId}/${pipelineName}`).
+  # With a host per tenant that one value can only ever reach one of them.
+  #
+  # EXISTING TENANTS ARE NOT MIGRATED BY THIS. Hostname is isRuntimeState since
+  # System.Communication 3.28 (AB#4706), so a re-apply preserves whatever the tenant
+  # already has — deliberately, so an operator's choice survives. A tenant already
+  # carrying `adapter-eda-<tenant>.…` keeps it and must be repointed in Refinery Studio,
+  # then redeployed.
+  - id: System.Communication/Hostname-1
+    value: 'adapter-eda.{{domain.DEFAULT}}'
+  - id: System.Communication/AdapterConfiguration-1
+    value: |-
+      {
+        "EdaHttpAdapter": {
+          "Host": "",
+          "User": "",
+          "Password": "",
+          "IsSimulationMode": true
+        }
+      }
