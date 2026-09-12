@@ -1,0 +1,89 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: EnergyCommunity.Simulation-2.4.0
+description: |
+  Energy simulation for Energy Community v2 DEMO/TEST tenants (AB#4571 value
+  simulator, AB#4579 demo-community generator, AB#4703 presentable community
+  extension; used e.g. by the energydemo tenant, AB#4569). Ported / extended
+  from the voest-app energy simulator.
+
+  NOT for productive tenants — install only where synthetic metering data is
+  wanted. The blueprint is a separate, optional sibling of EnergyCommunity.Base
+  precisely so productive installs never carry it.
+
+  Installs two DataFlows / three pipelines:
+
+  create-demo-community (ec0000000000000000000b04, DataFlow …b05, AB#4579 + AB#4703)
+    CREATES a fixed, PRESENTABLE, self-contained demo energy community so
+    demo/test tenants need no hand-seeded data and no EDA:
+    - 14 EnergyCommunity/Customer with obviously fictional Contact records
+      (CustomerNumber auto-assigned via the Base-seeded AutoIncrement)
+    - 14 Basic.Energy/OperatingFacility (the "EC Demo Community" shared
+      facility owned by the community-operator customer + 13 member
+      facilities; each facility is wired to exactly one customer via
+      EnergyCommunity/AssociatedFacilities — inbound multiplicity One)
+    - 14 EnergyCommunity/Consumer (…0801-0814) + 3 EnergyCommunity/Producer
+      (…0901-0903) metering points (ParentChild to their facility, varied
+      PartitionFactor 50-100)
+    - 31 Basic.Energy/EnergyMeasurement anchors (consumers 2 OBIS codes,
+      producers 1; well-known name <meteringPointRtId>_<obisCode>,
+      ParentChild to the metering point)
+    - 17 EnergyCommunity/ParticipationPeriod (one per metering point,
+      2025-08-04 to a far-future end — Basic/TimeRange has no optional To)
+    - 2 EnergyCommunity/EnergyPrice (consumption 0.18 / feed-in 0.10 EUR;
+      the type has only Price + Currency, roles encoded in well-known names)
+    Idempotent — every entity is upserted via GetOrCreateRtEntitiesByType@1
+    keyed on a stable natural key (facility Name, metering-point
+    MeteringPointNumber, customer/anchor/period/price RtWellKnownName), so
+    re-running never duplicates. The Producer subtype is
+    EnergyCommunity/Producer (exact type the value simulator classifies as
+    PV), NOT Basic.Energy/Producer.
+
+  energy-simulator / energy-simulator-range (…b02 / …b03, AB#4571)
+    Generate deterministic synthetic 15-minute metering values for the
+    Basic.Energy/EnergyMeasurement ANCHOR entities that already exist in the
+    tenant (they do not create any entities): PV curve for anchors whose
+    parent metering point is an EnergyCommunity/Producer (default 50 kWp
+    peak), BDEW H0 load profile for all others (default 500 kWh/day), one
+    datapoint per 15-minute slot, written into the Base 2.x raw archive
+    energy-measurements (ec0000000000000000000a01).
+    - energy-simulator (…b02): fixed backfill window (startDate 2025-01-01,
+      numDays 365 — edit the pipeline definition to reshape the dataset)
+    - energy-simulator-range (…b03): on-demand variant; startDate + numDays
+      come from the ExecutePipelineCommand input
+      (e.g. an input file: { "startDate": "2026-07-20T00:00:00Z", "numDays": 3 }, passed via ExecutePipeline -f)
+
+  Self-contained flow for a fresh demo/test tenant:
+    ExecutePipeline create-demo-community  (creates master data + anchors)
+    ExecutePipeline energy-simulator-range (fills the raw archive)
+    ./backfill-rollups.ps1                 (populates the rollup ladder)
+
+  DISABLED BY DEFAULT: all three pipelines are seeded with System/Enabled =
+  false and are triggered exclusively via FromExecutePipelineCommand@1
+  (nothing time- or event-triggered), so a fresh install can never create or
+  write data on its own. To run: enable the pipeline, DeployDataFlow /
+  DeployPipeline (Mesh Adapter 670…002 must be online), ExecutePipeline, then
+  re-apply the blueprint (InstallBlueprint -f) to restore the disabled seed
+  state. See src/blueprints/README.md ("Simulation") for the full runbook.
+
+  Prerequisites:
+  - EnergyCommunity.Base 2.x installed and the energy-measurements archives
+    activated (install-tenant.ps1 ActivateArchive phase)
+  - For the value simulators only: EnergyMeasurement anchor entities exist
+    (well-known name <meteringPointRtId>_<obisCode>, System/ParentChild to
+    the metering point) — created by create-demo-community, by EDA ingest
+    (EnergyCommunity.EdaIntegration), or seeded as test master data
+
+  2.4.0 splits the seed across one file per topic (AB#4758 `seedDataPaths`) —
+  identical entities, no data change. It therefore requires an engine that knows
+  `seedDataPaths`: an older engine drops the unknown property, finds no
+  `seedDataPath` and installs an EMPTY seed while still reporting success.
+  Install 2.3.0 on such tenants.
+blueprintDependencies:
+  # The 2.x simulation pairs with Base 2.x (EnergyCommunity 4.x / stream data,
+  # ADR 0001). It must never install on top of Base 1.x.
+  - EnergyCommunity.Base-[2.0,3.0)
+# All files below are merged into ONE runtime model before the import runs, so the
+# order is presentation only and associations may cross files.
+seedDataPaths:
+  - seed-data/data-flows/simulate-energy-measurements.yaml
+  - seed-data/data-flows/create-demo-community.yaml
