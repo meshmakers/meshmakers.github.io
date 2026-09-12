@@ -1,0 +1,659 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.2,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.7.0,2.0)
+- System.UI-[2.4,3.0)
+
+# aggregated-energy-report (AB#4710) — deployed HTTP endpoint returning aggregated
+# measured energy per metering point with completeness and quality gates.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Aggregated energy report pipeline (AB#4710) ─────────────────────────
+# Deployed HTTP endpoint that returns the aggregated measured energy per
+# metering point over a caller-supplied time range, with hard completeness and
+# quality gates. Base owns it because Base owns the raw archive
+# (ec0000000000000000000a01) and the SUM+COUNT query (ec0000000000000000000a24).
+#
+# Contract:
+#   POST /aggregatedEnergyReport
+#   { "from": "<iso-utc>", "to": "<iso-utc>",
+#     "meteringPointNumbers": [ "AT0000000000000000000000000000801", ... ] }
+#
+# Always answers HTTP 200; the outcome is in the JSON body (same pattern as
+# /manualMeteringEntry). Body top level: from, to, expectedIntervals
+# ((to - from) / 900 s), status ("ok" only if EVERY entry is ok), message,
+# results. One result entry per metering point x OBIS anchor
+# (Basic.Energy/EnergyMeasurement child of the metering point):
+#   { meteringPointNumber, obisCode, energySum, unit, actualIntervals,
+#     qualityCounts: { Unknown, L1, L2, L3, Manual }, status, errors[] }
+# Gates (both make the ENTRY status "error", never a 4xx/5xx):
+#   - completeness: actualIntervals != expectedIntervals — even ONE missing
+#     15-minute interval is an error ("missing intervals: expected N, found M")
+#   - quality: any interval with DataQuality L3 (estimate) is an error
+#     ("L3 quality present (N intervals)"); Manual (key 4) is a corrected
+#     value and NOT an error
+# Input guards (each returns HTTP 200 { status: "error", message }): missing /
+# empty meteringPointNumbers, missing from/to, from >= to or a range that is
+# not a whole multiple of 900 s. A metering point number that resolves to no
+# entity yields an error ENTRY for that number, not a whole-request failure.
+#
+# Ships DeploymentState 2 (Deployed) on the default Mesh Adapter
+# 670000000000000000000002 — external report consumers call it live.
+- rtId: ec0000000000000000000a33
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: aggregated-energy-report
+  - id: System/Description-1
+    value: Aggregated measured energy per metering point with completeness and quality gates (AB#4710)
+
+- rtId: ec0000000000000000000a34
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a33
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@1
+          path: /aggregatedEnergyReport
+          method: POST
+      transformations:
+        - type: Logger@1
+          message: "Aggregated energy report (AB#4710): request received on /aggregatedEnergyReport"
+
+        # Audit trail: the full request payload (from, to, meteringPointNumbers)
+        # is dumped to the adapter log; the log line carries the timestamp.
+        - type: PrintDebug@1
+          severity: Information
+
+        # Default response — refined as the guards pass and finally overwritten
+        # by the computed report. Bad input returns HTTP 200 with a clear error
+        # body instead of a raw 500 (manual-metering-entry pattern).
+        - type: SetPrimitiveValue@1
+          targetPath: $.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.message
+          value: "Invalid request: a non-empty 'meteringPointNumbers' array is required."
+          valueType: String
+
+        # Guard 1: at least one metering point number present
+        - type: If@1
+          description: meteringPointNumbers non-empty
+          path: $.body.meteringPointNumbers[0]
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.message
+              value: "Invalid request: 'from' and 'to' (ISO-8601 UTC) are required."
+              valueType: String
+
+            # Guards 2 + 3: from and to present
+            - type: If@1
+              description: from present
+              path: $.body.from
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: If@1
+                  description: to present
+                  path: $.body.to
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.message
+                      value: "Invalid request: 'from'/'to' must be valid ISO-8601 timestamps with from < to and (to - from) a whole multiple of 900 seconds (15-minute grid)."
+                      valueType: String
+
+                    # Guard 4: range valid — parse from/to, require from < to on
+                    # the 900 s grid, and compute expectedIntervals =
+                    # (epoch(to) - epoch(from)) / 900. Returns -1 for any
+                    # invalid input (unparseable, from >= to, not a multiple).
+                    - type: ExecuteCSharp@1
+                      description: Validate time range and compute expectedIntervals
+                      targetPath: $.calc.expectedIntervals
+                      returnType: Int
+                      arguments:
+                        - name: fromText
+                          dataType: String
+                          valuePath: $.body.from
+                        - name: toText
+                          dataType: String
+                          valuePath: $.body.to
+                      code: |
+                        var culture = System.Globalization.CultureInfo.InvariantCulture;
+                        var styles = System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal;
+                        DateTime fromValue;
+                        DateTime toValue;
+                        if (!DateTime.TryParse(fromText, culture, styles, out fromValue)) return -1;
+                        if (!DateTime.TryParse(toText, culture, styles, out toValue)) return -1;
+                        var totalSeconds = (long)(toValue - fromValue).TotalSeconds;
+                        if (totalSeconds <= 0 || totalSeconds % 900 != 0) return -1;
+                        return (int)(totalSeconds / 900);
+
+                    - type: If@1
+                      description: time range valid (from < to on the 900 s grid)
+                      # Double, NOT Int: ExecuteCSharp int returns land as JSON
+                      # doubles (4.0) in the data context; the If node's Int
+                      # branch uses the strict STJ Get<int?>() which rejects
+                      # them (AB#4710). Get<double?> accepts 4 and 4.0.
+                      path: $.calc.expectedIntervals
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Double
+                      transformations:
+                        # Canonical ISO-8601 window strings (AB#4710 E2E fix):
+                        # the adapter's HTTP body parser recognises ISO
+                        # timestamps and stores DateTime values; serialising
+                        # those into SD fieldFilters yields a culture-formatted
+                        # string ('01/01/2026 00:00:00') that CrateDB cannot
+                        # cast (the AB#4552 side-finding). Re-emit both bounds
+                        # as strict UTC ISO strings and use THOSE everywhere.
+                        - type: ExecuteCSharp@1
+                          description: Canonical ISO-8601 'from' for SD filters
+                          targetPath: $.calc.fromIso
+                          returnType: String
+                          arguments:
+                            - name: fromText
+                              dataType: String
+                              valuePath: $.body.from
+                          code: |
+                            var culture = System.Globalization.CultureInfo.InvariantCulture;
+                            var styles = System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal;
+                            var value = DateTime.Parse(fromText, culture, styles);
+                            // SPACE separator, not ISO 'T': any T-separated ISO string written into
+                            // the DataContext is re-detected as a DateTime by Newtonsoft on the next
+                            // context roundtrip and ends up culture-formatted at CrateDB again.
+                            // CrateDB casts the SQL-standard 'yyyy-MM-dd HH:mm:ss' (UTC) fine.
+                            return value.ToString("yyyy-MM-dd HH:mm:ss", culture);
+                        - type: ExecuteCSharp@1
+                          description: Canonical ISO-8601 'to' for SD filters
+                          targetPath: $.calc.toIso
+                          returnType: String
+                          arguments:
+                            - name: toText
+                              dataType: String
+                              valuePath: $.body.to
+                          code: |
+                            var culture = System.Globalization.CultureInfo.InvariantCulture;
+                            var styles = System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal;
+                            var value = DateTime.Parse(toText, culture, styles);
+                            // SPACE separator, not ISO 'T': any T-separated ISO string written into
+                            // the DataContext is re-detected as a DateTime by Newtonsoft on the next
+                            // context roundtrip and ends up culture-formatted at CrateDB again.
+                            // CrateDB casts the SQL-standard 'yyyy-MM-dd HH:mm:ss' (UTC) fine.
+                            return value.ToString("yyyy-MM-dd HH:mm:ss", culture);
+
+                        # Echo the request window + expectation into the response.
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.expectedIntervals
+                          valuePath: $.calc.expectedIntervals
+                          valueType: Int
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.from
+                          valuePath: $.calc.fromIso
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.to
+                          valuePath: $.calc.toIso
+                          valueType: String
+
+                        # One entry group per requested number. Unknown numbers
+                        # yield an error ENTRY, not a request failure. NB entry
+                        # order in the final results array is not guaranteed.
+                        - type: ForEach@1
+                          description: Process each requested metering point number
+                          maxDegreeOfParallelism: 1
+                          iterationPath: $.body.meteringPointNumbers
+                          mergePath: $.out
+                          targetPath: $.mpResults
+                          transformations:
+                            - type: GetRtEntitiesByType@1
+                              description: Resolve the metering point by MeteringPointNumber (subtypes included)
+                              ckTypeId: Basic.Energy/MeteringPoint
+                              targetPath: $.mp
+                              take: 1
+                              fieldFilters:
+                                - attributePath: MeteringPointNumber
+                                  operator: Equals
+                                  comparisonValuePath: $.key
+
+                            - type: If@1
+                              description: metering point not found — error entry
+                              path: $.mp.Items[0].RtId
+                              operator: Equals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: WriteJson@1
+                                  description: Error entry skeleton
+                                  targetPath: $.errEntry
+                                  jsonString: '{"meteringPointNumber":null,"obisCode":null,"energySum":null,"unit":null,"actualIntervals":0,"qualityCounts":null,"status":"error","errors":[]}'
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.errEntry.meteringPointNumber
+                                  valuePath: $.key
+                                  valueType: String
+                                - type: FormatString@1
+                                  format: "no metering point found for metering point number {$.key}"
+                                  targetPath: $.errEntry.errors
+                                  targetValueWriteMode: Append
+                                  targetValueKind: Array
+                                - type: Flatten@1
+                                  description: Collect the error entry
+                                  path: $.errEntry
+                                  targetPath: $.out.entries
+
+                            - type: If@1
+                              description: metering point resolved — one entry per EnergyMeasurement anchor
+                              path: $.mp.Items[0].RtId
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                # Anchors are the System/ParentChild CHILDREN of
+                                # the metering point (one per OBIS code; a
+                                # consumer has 2, a producer 1).
+                                - type: GetAssociationTargets@1
+                                  description: EnergyMeasurement anchors of the metering point
+                                  associationRoleId: System/ParentChild
+                                  graphDirection: Inbound
+                                  originCkTypeId: Basic.Energy/MeteringPoint
+                                  targetCkTypeId: Basic.Energy/EnergyMeasurement
+                                  originRtIdPath: $.mp.Items[0].RtId
+                                  targetPath: $.anchors
+
+                                - type: If@1
+                                  description: no anchors — error entry
+                                  path: $.anchors[0].Items[0].RtId
+                                  operator: Equals
+                                  value: null
+                                  valueType: String
+                                  transformations:
+                                    - type: WriteJson@1
+                                      description: Error entry skeleton
+                                      targetPath: $.errEntry
+                                      jsonString: '{"meteringPointNumber":null,"obisCode":null,"energySum":null,"unit":null,"actualIntervals":0,"qualityCounts":null,"status":"error","errors":[]}'
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.errEntry.meteringPointNumber
+                                      valuePath: $.key
+                                      valueType: String
+                                    - type: FormatString@1
+                                      format: "metering point {$.key} has no EnergyMeasurement anchors"
+                                      targetPath: $.errEntry.errors
+                                      targetValueWriteMode: Append
+                                      targetValueKind: Array
+                                    - type: Flatten@1
+                                      description: Collect the error entry
+                                      path: $.errEntry
+                                      targetPath: $.out.entries
+
+                                - type: If@1
+                                  description: anchors present — aggregate per anchor
+                                  path: $.anchors[0].Items[0].RtId
+                                  operator: NotEquals
+                                  value: null
+                                  valueType: String
+                                  transformations:
+                                    - type: ForEach@1
+                                      description: One result entry per anchor (metering point x OBIS code)
+                                      maxDegreeOfParallelism: 1
+                                      iterationPath: $.anchors[0].Items
+                                      mergePath: $.entry
+                                      targetPath: $.out.entries
+                                      transformations:
+                                        - type: WriteJson@1
+                                          description: Result entry skeleton
+                                          targetPath: $.entry
+                                          jsonString: '{"meteringPointNumber":null,"obisCode":null,"energySum":0,"unit":null,"actualIntervals":0,"qualityCounts":{"Unknown":0,"L1":0,"L2":0,"L3":0,"Manual":0},"status":"ok","errors":[]}'
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.entry.meteringPointNumber
+                                          valuePath: $.full.key
+                                          valueType: String
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.entry.obisCode
+                                          valuePath: $.key.Attributes.ObisCode
+                                          valueType: String
+
+                                        # SUM + COUNT of amount.value per
+                                        # (dataQuality, amount.unit) for this
+                                        # anchor over the requested window.
+                                        # Fully-contained-interval scope, same
+                                        # as the Billing settlement (AB#4552):
+                                        # Values = [dataQuality, amount.unit,
+                                        # amountvalue_sum, amountvalue_count],
+                                        # dataQuality/amount.unit as INTEGERS.
+                                        - type: GetQueryById@1
+                                          description: Stream-data aggregation (sum + count per quality)
+                                          queryRtId: "ec0000000000000000000a24"
+                                          targetPath: $.sd
+                                          fieldFilters:
+                                            - attributePath: rtId
+                                              operator: Equals
+                                              comparisonValuePath: $.key.RtId
+                                            - attributePath: window_start
+                                              operator: GreaterEqualThan
+                                              comparisonValuePath: $.full.full.calc.fromIso
+                                            - attributePath: window_end
+                                              operator: LessEqualThan
+                                              comparisonValuePath: $.full.full.calc.toIso
+
+                                        - type: If@1
+                                          description: aggregation rows present (count > 0)
+                                          # Double, NOT Int: this path reads a RAW stream-data
+                                          # aggregation value (CrateDB count arrives as 96.0);
+                                          # the If node's Int branch uses the strict STJ
+                                          # Get<int?>() which rejects doubles (same trap as
+                                          # ConvertDataType@1, AB#4710). Get<double?> accepts
+                                          # both 96 and 96.0.
+                                          path: $.sd.Rows[0].Values[3]
+                                          operator: GreaterThan
+                                          value: 0
+                                          valueType: Double
+                                          transformations:
+                                            # energySum = SUM over ALL quality
+                                            # rows (the gates below decide ok /
+                                            # error; the sum itself is complete).
+                                            - type: SumAggregation@1
+                                              description: total energy over all quality groups
+                                              targetPath: $.agg.energySum
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: null
+                                                  comparisonValue: null
+                                                  aggregationPath: $.Values[2]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: total interval count over all quality groups
+                                              targetPath: $.agg.intervals
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: null
+                                                  comparisonValue: null
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count Unknown (key 0)
+                                              targetPath: $.agg.q0
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 0
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count L1 (key 1)
+                                              targetPath: $.agg.q1
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 1
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count L2 (key 2)
+                                              targetPath: $.agg.q2
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 2
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count L3 (key 3)
+                                              targetPath: $.agg.q3
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 3
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+                                            - type: SumAggregation@1
+                                              description: interval count Manual (key 4)
+                                              targetPath: $.agg.q4
+                                              aggregations:
+                                                - path: $.sd.Rows[*]
+                                                  filterPath: $.Values[0]
+                                                  comparisonValue: 4
+                                                  aggregationPath: $.Values[3]
+                                                  value: 1
+
+                                            # SumAggregation writes doubles —
+                                            # normalize via C#: ConvertDataType Int
+                                            # uses strict STJ Get<int> and rejects
+                                            # double JSON like 96.0 (AB#4710 E2E).
+                                            - type: ExecuteCSharp@1
+                                              description: Round intervals count to int
+                                              targetPath: $.entry.actualIntervals
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.intervals
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q0 count to int
+                                              targetPath: $.entry.qualityCounts.Unknown
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q0
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q1 count to int
+                                              targetPath: $.entry.qualityCounts.L1
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q1
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q2 count to int
+                                              targetPath: $.entry.qualityCounts.L2
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q2
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q3 count to int
+                                              targetPath: $.entry.qualityCounts.L3
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q3
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: ExecuteCSharp@1
+                                              description: Round q4 count to int
+                                              targetPath: $.entry.qualityCounts.Manual
+                                              returnType: Int
+                                              arguments:
+                                                - name: v
+                                                  dataType: Double
+                                                  valuePath: $.agg.q4
+                                              code: |
+                                                return (int)Math.Round(v);
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.entry.energySum
+                                              valuePath: $.agg.energySum
+                                              valueType: Double
+
+                                            # Unit from the first group row
+                                            # (integer UnitOfMeasure key).
+                                            - type: Switch@1
+                                              description: Map the archive unit key to its UnitOfMeasure name
+                                              path: $.sd.Rows[0].Values[1]
+                                              valueType: Int
+                                              cases:
+                                                - value: 1
+                                                  transformations:
+                                                    - type: SetPrimitiveValue@1
+                                                      targetPath: $.entry.unit
+                                                      value: KWh
+                                                      valueType: String
+                                                - value: 2
+                                                  transformations:
+                                                    - type: SetPrimitiveValue@1
+                                                      targetPath: $.entry.unit
+                                                      value: MWh
+                                                      valueType: String
+                                                - value: 0
+                                                  transformations:
+                                                    - type: SetPrimitiveValue@1
+                                                      targetPath: $.entry.unit
+                                                      value: NonUnit
+                                                      valueType: String
+
+                                        # Completeness gate: even ONE missing
+                                        # 15-minute interval is an error (also
+                                        # fires when the archive returned no
+                                        # rows at all — actualIntervals = 0).
+                                        - type: If@1
+                                          description: completeness gate (actualIntervals != expectedIntervals)
+                                          # Double (strict-Int STJ trap, AB#4710) — covers both sides
+                                          path: $.entry.actualIntervals
+                                          operator: NotEquals
+                                          valuePath: $.full.full.expectedIntervals
+                                          valueType: Double
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.entry.status
+                                              value: error
+                                              valueType: String
+                                            - type: FormatString@1
+                                              format: "missing intervals: expected {$.full.full.expectedIntervals}, found {$.entry.actualIntervals}"
+                                              targetPath: $.entry.errors
+                                              targetValueWriteMode: Append
+                                              targetValueKind: Array
+
+                                        # Quality gate: any L3 (estimate)
+                                        # interval is an error. Manual (key 4)
+                                        # is a corrected value — NOT an error.
+                                        - type: If@1
+                                          description: quality gate (any L3 interval)
+                                          # Double (strict-Int STJ trap, AB#4710)
+                                          path: $.entry.qualityCounts.L3
+                                          operator: GreaterThan
+                                          value: 0
+                                          valueType: Double
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.entry.status
+                                              value: error
+                                              valueType: String
+                                            - type: FormatString@1
+                                              format: "L3 quality present ({$.entry.qualityCounts.L3} intervals)"
+                                              targetPath: $.entry.errors
+                                              targetValueWriteMode: Append
+                                              targetValueKind: Array
+
+                        # Flatten the per-number entry groups into one flat
+                        # results array (one element per metering point x OBIS
+                        # anchor, plus one per unresolved number).
+                        - type: Flatten@1
+                          description: Flatten entry groups into the results array
+                          path: $.mpResults[*].entries[*]
+                          targetPath: $.results
+
+                        # Overall status: ok only if EVERY entry is ok.
+                        - type: ExecuteCSharp@1
+                          description: Count result entries with status=error
+                          targetPath: $.calc.errorEntryCount
+                          returnType: Int
+                          arguments:
+                            - name: resultEntries
+                              dataType: RecordArray
+                              valuePath: $.results
+                          code: |
+                            var entriesElement = (System.Text.Json.JsonElement)resultEntries;
+                            var errorCount = 0;
+                            foreach (var entry in entriesElement.EnumerateArray())
+                            {
+                                if (entry.GetProperty("status").GetString() == "error") errorCount++;
+                            }
+                            return errorCount;
+
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.status
+                          value: ok
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.message
+                          value: "aggregated energy report computed; all entries passed the completeness and quality gates"
+                          valueType: String
+                        - type: If@1
+                          description: any entry failed a gate — overall status error
+                          # Double (strict-Int STJ trap, AB#4710)
+                          path: $.calc.errorEntryCount
+                          operator: GreaterThan
+                          value: 0
+                          valueType: Double
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.status
+                              value: error
+                              valueType: String
+                            - type: FormatString@1
+                              format: "{$.calc.errorEntryCount} result entries failed the completeness or quality gates - see results[*].errors"
+                              targetPath: $.message
+
+        # Shape the HTTP response body: keep only the report fields, drop the
+        # request echo and all intermediate data (the adapter returns the final
+        # data context as the HTTP body). Missing fields (guard failures) are
+        # skipped, so a guard failure returns exactly { status, message }.
+        - type: Project@1
+          description: Shape the HTTP response body
+          path: $
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.from
+              inclusion: true
+            - path: $.to
+              inclusion: true
+            - path: $.expectedIntervals
+              inclusion: true
+            - path: $.results
+              inclusion: true
+
+        # Persist the (shaped) report as OutputData — the per-execution audit
+        # record, retrievable via GetLatestPipelineExecution.
+        - type: SetPipelineExecutionResult@1
+          path: $
