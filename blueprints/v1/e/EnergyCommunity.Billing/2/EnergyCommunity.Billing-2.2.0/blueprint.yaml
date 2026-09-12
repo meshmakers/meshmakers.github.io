@@ -1,0 +1,124 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: EnergyCommunity.Billing-2.2.0
+description: |
+  Billing & dunning (Abrechnung) for Energy Community tenants — EC v2 line
+  (ADR 0001, AB#4552). Settlements are computed from STREAM DATA
+  (Basic.Energy/EnergyMeasurement over the raw archive energy-measurements
+  ec0000000000000000000a01), not from the retired EnergyCommunity/EnergyQuantity
+  runtime entities.
+
+  Installs:
+  - 10 billing pipelines: create/release/send/unrelease/cancel for billing documents
+    and items (single + all variants)
+  - 1 messaging pipeline: sendMessage (ad-hoc member messaging — AB#4292; sends a
+    notification template to an explicit list of recipient email addresses)
+  - 6 billing/reporting queries (_energy_billing_documents, _energy_billing_items,
+    reporting_energy_billing_items, pipeline_energy_billings,
+    pipeline_customer_meteringpoints, and the stream-data settlement query
+    billing-energy-by-quality ec000000000000000000e001)
+  - billing-overview MeshBoard (AB#4578): System.UI/Dashboard
+    energy-community-accounting + 10 widgets, backed by 6 new
+    GroupingAggregationRtQuery board queries (ec00…0e01–0e06) over the EC v2
+    Customer / BillingDocument / BillingDocumentLineItem types; the 2
+    metering-value widgets bind to the Base stream-data queries (…a22/…a23)
+  - 5 notification templates with neutral default text:
+    - mail-notification-template (quarterly billing email)
+    - mail-notification-template-q2 (quarterly billing variant)
+    - offene-abrechnung (open invoice reminder)
+    - offene-gutschrift (open credit note reminder)
+    - prae-zahlungserinnerung (pre-payment-reminder)
+
+  Notification templates are seeded with neutral placeholders — customize per tenant
+  (replace organisation name, IBAN, signature etc.) in Refinery Studio.
+
+  Settlement (create-billing-items) sums amount.value per metering point over the
+  billing period, only for L1/L2 quality intervals, by scoping a persisted
+  GroupingAggregationSdQuery (billing-energy-by-quality) to the metering point's
+  EnergyMeasurement anchor rtIds via GetQueryById@1 node fieldFilters
+  (rtId IN anchors, window_start/window_end within the period). Each
+  BillingDocumentLineItem persists the summed quantity, the billed TimeRange, the
+  total intervalCount and the L1/L2/L3/Unknown quality distribution (ADR 0001
+  decision 3), replacing the removed AssignedBilling -> EnergyQuantity associations.
+
+  Prerequisites:
+  - EnergyCommunity.Base 2.x installed (stream-data archives + rollup ladder,
+    ActivateArchive done; provides the raw archive ec0000000000000000000a01)
+
+  2.1.2 (AB#4633): fresh-tenant billing fixes surfaced by the EC v2 demo cycle:
+  (1) the two create-items pipelines (createAllBillingItemsForPeriod,
+  createBillingItems) now carry a System.Communication/Uses association to the
+  Base-seeded EnergyCommunityConfiguration (69775cca…) — without it
+  GetPipelineConfigByWellKnownName@1 fails with HTTP 500
+  ("'EnergyCommunityConfiguration' not found in GlobalConfiguration") on a fresh
+  install; (2) the two create-documents pipelines
+  (createAllBillingDocumentsForPeriod, createBillingDocuments) now ship
+  DeploymentState DEPLOYED (2) to match the create-items pipelines, so the whole
+  create chain is live after install (previously the documents endpoint 404'd
+  until a manual DeployDataFlow). The lifecycle pipelines
+  (release/send/cancel/unrelease/sendMessage) still ship undeployed (0) — deploy
+  them on demand.
+
+  2.1.3 (AB#4554 — de-SBEG-ing): the report / SMTP / BCC / notification-template
+  values are no longer hardcoded SBEG strings. The report/release/send/message
+  pipelines now carry a System.Communication/Uses association to the Base-seeded
+  EnergyCommunityConfiguration (69775cca…) and load it via
+  GetPipelineConfigByWellKnownName@1, resolving:
+    - report URI     ← billingReportName        (MakeHttpRequest@1 valuePath)
+    - report prefix  ← billingReportFilePrefix   (MakeHttpRequest@1 valuePath)
+    - BCC address    ← notificationEmailContact  (SendEMail@1 bccPath)
+  Two node fields have no *Path variant in their schema and stay tenant-neutral
+  literals instead: SendEMail@1.serverConfiguration (= 'billing-smtp'; each tenant
+  provides an EMailSenderConfiguration with that well-known name — mirrors
+  EnergyCommunityConfiguration.billingMailServerConfiguration) and
+  GenerateAndStoreReport@1.reportDefinitionUri/reportFileNamePrefix (the single-
+  document /releaseBillingDocument pipeline is the config-driven path). Attachment
+  filename and the notification-template name are neutralized (Abrechnung.pdf /
+  billing-quarterly-q2). Requires System.Communication 3.31.0 for BankAccountIban,
+  BankAccountHolder and EmailFooterImage — the first two read as a runtime entity
+  rather than through GetPipelineConfigByWellKnownName@1, because the typed config
+  DTO only carries what the controller binary's own CK model declares. Installing
+  this blueprint against an older System.Communication leaves the two attributes absent,
+  and ResolveNotificationPlaceholders@1 treats a present entity with a missing value as
+  empty by data: it substitutes nothing and warns, so offene-abrechnung goes out asking a
+  member to pay into a blank account. The same happens on a current model whenever nobody
+  fills the two fields in Settings — the node refuses only when a whole source entity was
+  never supplied, never on an unset attribute.
+  Also requires an adapter that registers SendEMail@2 and ResolveNotificationPlaceholders@1.
+
+  Post-install:
+  - Customize notification templates in Refinery Studio
+  - Provide an EMailSenderConfiguration named 'billing-smtp' (or edit the pipelines)
+    and fill EnergyCommunityConfiguration billing fields in Refinery Studio
+  - The billing create chain (create documents + items) ships DEPLOYED (2); the
+    release/send/cancel/unrelease/sendMessage lifecycle pipelines ship undeployed —
+    DeployDataFlow those on demand. All are pre-assigned to the Mesh Adapter
+    (670…002) via Executes-1, no manual assignment needed.
+  - Configure the SMTP notification target for outbound mail
+
+  2.2.0 splits the seed across one file per topic (AB#4758 `seedDataPaths`) —
+  identical entities, no data change. It therefore requires an engine that knows
+  `seedDataPaths`: an older engine drops the unknown property, finds no
+  `seedDataPath` and installs an EMPTY seed while still reporting success.
+  Install 2.1.7 on such tenants.
+blueprintDependencies:
+  # 2.x billing pins EnergyCommunity 4.x (stream data, ADR 0001) and requires
+  # Base 2.x (raw archive + SD query infrastructure). Never pairs with Base 1.x.
+  - EnergyCommunity.Base-[2.0,3.0)
+# All files below are merged into ONE runtime model before the import runs, so the
+# order is presentation only and associations may cross files.
+seedDataPaths:
+  - seed-data/notifications/templates.yaml
+  - seed-data/queries/billing.yaml
+  - seed-data/data-flows/create-all-billing-documents.yaml
+  - seed-data/data-flows/create-all-billing-items.yaml
+  - seed-data/data-flows/create-billing-items.yaml
+  - seed-data/data-flows/create-billing-documents.yaml
+  - seed-data/data-flows/release-all-billing-document.yaml
+  - seed-data/data-flows/release-billing-document.yaml
+  - seed-data/data-flows/send-released-bills.yaml
+  - seed-data/data-flows/send-all-released-bills.yaml
+  - seed-data/data-flows/cancel-billing-document.yaml
+  - seed-data/data-flows/unrelease-billing-documents.yaml
+  - seed-data/data-flows/send-message.yaml
+  - seed-data/queries/meshboard.yaml
+  - seed-data/ui/billing-overview.yaml
