@@ -1,0 +1,361 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.1,5.0)
+- Basic.Energy-[1.3,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# The billing-overview MeshBoard (AB#4578): Dashboard `energy-community-accounting`
+# and its ten widgets.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Billing MeshBoard: BillingOverview dashboard (EC v2, AB#4578 — Board 1) ──
+# System.UI/Dashboard `energy-community-accounting` ("Übersicht") + 10 widgets.
+# Adopts and converts the retired 1.x board
+# (misc/energy-community-deployment/data/boards/BillingOverview.yaml): the 8
+# billing widgets stay on the EC v2 runtime types (bound to the six
+# meshboard_* GroupingAggregationRtQuery entities above by rtId, e01..e06), and
+# the 2 metering-value widgets convert to STREAM DATA exactly like Board 2 —
+# they bind to the persisted SD queries in EnergyCommunity.Base by rtId
+# (a22 by-OBIS, a23 by-data-quality) with queryFamily "streamData" so the widget
+# skips the runtime-query lookup. Requires the service-managed System.UI CK model
+# (octo-platform-services). Time window is supplied by the dashboard time filter
+# as ${timeRangeFrom}/${timeRangeTo} (billing widgets) and as
+# StreamDataArguments.from/to (the two SD widgets).
+#
+# Time filter: the source board defaulted to a 2025-Q4 quarter selection; here it
+# defaults to the custom window 2026-07-01..2026-08-01 (matching the EC 4.0 demo
+# billing document period on the test tenants, as Board 2 does) so the
+# time-filtered billing/SD widgets resolve against seeded data out of the box.
+# rtId scheme: dashboard = ec00…0f01, widgets = ec00…0f02..0f0b.
+
+# Dashboard
+- rtId: ec0000000000000000000f01
+  ckTypeId: System.UI/Dashboard-1
+  rtWellKnownName: energy-community-accounting
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Übersicht
+  - id: System/Description-1
+    value: |-
+      Energiegemeinschaft
+      ---MESHBOARD_VARIABLES---
+      {"timeFilter":{"enabled":true,"defaultSelection":{"type":"custom","customFrom":"2026-07-01T00:00:00.000Z","customTo":"2026-08-01T00:00:00.000Z"},"selection":{"type":"custom","customFrom":"2026-07-01T00:00:00.000Z","customTo":"2026-08-01T00:00:00.000Z"}}}
+  - id: System.UI/Dashboard.Columns-1
+    value: 6
+  - id: System.UI/Dashboard.RowHeight-1
+    value: 200
+  - id: System.UI/Dashboard.Gap-1
+    value: 16
+
+# Widget 1: Customer types (pie) — e01, COUNT customers by legal entity type.
+- rtId: ec0000000000000000000f02
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Customer types
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e01
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"contact.legalEntityType","valueField":"rtid_count","showLabels":false,"showLegend":true,"legendPosition":"right","queryName":"meshboard_customer_by_legal_type","queryRtId":"ec0000000000000000000e01"}'
+
+# Widget 2: Billing status (in €) (pie) — e03, SUM grossTotal by state.
+- rtId: ec0000000000000000000f03
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Billing status (in €)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e03
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"billingDocumentState","valueField":"grosstotal_sum","showLabels":false,"showLegend":true,"legendPosition":"right","queryName":"meshboard_billing_document_by_state_sum_gross_total","queryRtId":"ec0000000000000000000e03","filters":[{"attributePath":"timeRange.from","operator":"GREATER_EQUAL_THAN","comparisonValue":"${timeRangeFrom}"},{"attributePath":"timeRange.to","operator":"LESS_EQUAL_THAN","comparisonValue":"${timeRangeTo}"}]}'
+
+# Widget 3: Bills Unpaid (kpi) — e04, COUNT of documents in state Sent.
+- rtId: ec0000000000000000000f04
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Bills Unpaid
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 6
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e04
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","icon":"chart","queryMode":"groupedAggregation","queryValueField":"rtid_count","queryCategoryField":"billingDocumentState","queryCategoryValue":"Sent","filters":[{"attributePath":"timeRange.from","operator":"GREATER_EQUAL_THAN","comparisonValue":"${timeRangeFrom}"},{"attributePath":"timeRange.to","operator":"LESS_EQUAL_THAN","comparisonValue":"${timeRangeTo}"}],"queryName":"meshboard_billing_documents_paid_unpaid","queryRtId":"ec0000000000000000000e04"}'
+
+# Widget 4: Bills Paid (kpi) — e04, COUNT of documents in state Paid.
+- rtId: ec0000000000000000000f05
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Bills Paid
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 5
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e04
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","icon":"chart","queryMode":"groupedAggregation","queryValueField":"rtid_count","queryCategoryField":"billingDocumentState","queryCategoryValue":"Paid","filters":[{"attributePath":"timeRange.from","operator":"GREATER_EQUAL_THAN","comparisonValue":"${timeRangeFrom}"},{"attributePath":"timeRange.to","operator":"LESS_EQUAL_THAN","comparisonValue":"${timeRangeTo}"}],"queryName":"meshboard_billing_documents_paid_unpaid","queryRtId":"ec0000000000000000000e04"}'
+
+# Widget 5: Billed energy amounts by tax procedure (in kWh) (barChart) — e05,
+# SUM quantity grouped by customer tax procedure, series = billingType.
+- rtId: ec0000000000000000000f06
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Billed energy amounts by tax procedure (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: barChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 5
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e05
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"bar","categoryField":"parent.energyCommunityBillingDocument->assignedTo.energyCommunityCustomer->taxProcedureCreditNote","series":[],"seriesGroupField":"billingType","valueField":"quantity_sum","showLegend":true,"legendPosition":"right","showDataLabels":false,"queryName":"meshboard_billing_item_by_tax_procedure_note","queryRtId":"ec0000000000000000000e05","filters":[{"attributePath":"parent.energyCommunityBillingDocument->timeRange.from","operator":"EQUALS","comparisonValue":"${timeRangeFrom}"},{"attributePath":"parent.energyCommunityBillingDocument->timeRange.to","operator":"EQUALS","comparisonValue":"${timeRangeTo}"}]}'
+
+# Widget 6: Billed energy amounts by tax procedure (in kWh) (table) — e05.
+- rtId: ec0000000000000000000f07
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Billed energy amounts by tax procedure (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: table
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 3
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 4
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 3
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e05
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"columns":[],"sorting":[],"filters":[{"attributePath":"parent.energyCommunityBillingDocument->timeRange.from","operator":"EQUALS","comparisonValue":"${timeRangeFrom}"},{"attributePath":"parent.energyCommunityBillingDocument->timeRange.to","operator":"EQUALS","comparisonValue":"${timeRangeTo}"}],"pageSize":10,"sortable":true,"queryName":"meshboard_billing_item_by_tax_procedure_note","queryRtId":"ec0000000000000000000e05"}'
+
+# Widget 7: Amount of customers by tax procedure (pie) — e02, COUNT by taxProcedure.
+- rtId: ec0000000000000000000f08
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Amount of customers by tax procedure
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 5
+  - id: System.UI/DashboardWidget.Row-1
+    value: 4
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e02
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"taxProcedureCreditNote","valueField":"rtid_count","showLabels":false,"showLegend":true,"legendPosition":"right","queryName":"meshboard_customer_by_tax_procedure","queryRtId":"ec0000000000000000000e02"}'
+
+# Widget 8: Energy Amounts produced vs. consumed (in kWh) (pie) — CONVERTED to
+# STREAM DATA (Board 2 counterpart a22 by-OBIS). queryFamily streamData.
+- rtId: ec0000000000000000000f09
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy Amounts produced vs. consumed (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 6
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"obiscode","valueField":"amountvalue_sum","showLabels":false,"showLegend":true,"legendPosition":"right","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22"}'
+
+# Widget 10: Energy amounts by data quality (in kWh) (donut) — CONVERTED to
+# STREAM DATA (Board 2 counterpart a23 by-data-quality). queryFamily streamData.
+- rtId: ec0000000000000000000f0a
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy amounts by data quality (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 6
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a23
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"donut","categoryField":"dataquality","valueField":"amountvalue_sum","showLabels":true,"showLegend":false,"legendPosition":"right","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-data-quality","queryRtId":"ec0000000000000000000a23"}'
+
+# Widget 9: Billed Energy Amounts (pie) — e06, SUM quantity by billing type.
+- rtId: ec0000000000000000000f0b
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000f01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Billed Energy Amounts
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 5
+  - id: System.UI/DashboardWidget.Row-1
+    value: 6
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000e06
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"billingType","valueField":"quantity_sum","showLabels":false,"showLegend":true,"legendPosition":"right","queryName":"meshboard_billing_items","queryRtId":"ec0000000000000000000e06","filters":[{"attributePath":"parent.energyCommunityBillingDocument->timeRange.from","operator":"EQUALS","comparisonValue":"${timeRangeFrom}"},{"attributePath":"parent.energyCommunityBillingDocument->timeRange.to","operator":"EQUALS","comparisonValue":"${timeRangeTo}"}]}'
