@@ -1,0 +1,198 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _eda/request-consumption-reports-pipeline.yaml
+- rtId: 692448a1911382c3502c6b96
+  rtCreationDateTime: 2025-11-24T11:59:29.1940000Z
+  rtChangedDateTime: 2026-03-20T10:55:46.2050000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 692448a0911382c3502c6b95
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromExecutePipelineCommand@1
+        #- type: FromPipelineTriggerEvent@1
+      transformations:
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.Configuration
+
+        - type: ExecuteCSharp@1
+          targetPath: $.until
+          code: "(DateTime.Today - TimeSpan.FromDays(delayDays)).ToUniversalTime()"
+          returnType: DATETIME
+          timeoutMs: 1000
+          arguments:
+            - name: delayDays
+              valuePath: $.Configuration.consumptionRecordRequestDelay
+              dataType: INT
+
+        - type: SetPrimitiveValue@1
+          description: partner id
+          targetPath: $.partnerId
+          valuePath: $.Configuration.partnerId
+          valueType: String
+
+        - type: Project@1
+          fields:
+            - path: $.Configuration
+
+        # TODO(AB#4551): re-point this step to a stream-data query over the
+        # energy-measurements archive (ec0000000000000000000a01). The former RT
+        # query 682f14a8ce5a9c50f9242c6c (_energy_energyQuantity) targeted
+        # EnergyCommunity/EnergyQuantity, which no longer exists in
+        # EnergyCommunity 4.x and was removed from the Base 2.x seed. Until the
+        # SD gap/quality query exists, $.query stays empty and this pipeline
+        # sends no CR_REQ_PT requests (safe no-op).
+
+        - type: Project@1
+          fields:
+            - path: $.query.Columns
+
+        - type: TransformString@1
+          description: receiver from metering point number
+          path: $.query.Rows[*]
+          sourcePath: $.Values[0]
+          targetPath: $.receiver
+          operation: SubstringFromStart
+          length: 8
+
+        - type: ForEach@1
+          description: All quantities
+          #maxDegreeOfParallelism: 1
+          iterationPath: $.query.Rows
+          mergePath: $.request
+          targetPath: $.RequestData
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.request.requestData.processName
+              value: "CR_REQ_PT"
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.request.requestData.comment
+              value: "Automated consumption request"
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.request.requestData.processData.meteringPoint
+              valuePath: $.key.Values[0]
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.request.requestData.processData.from
+              valuePath: $.key.Values[1]
+              valueType: DATETIME
+            - type: SetPrimitiveValue@1
+              targetPath: $.request.requestData.processData.to
+              valuePath: $.key.Values[2]
+              valueType: DATETIME
+            - type: SetPrimitiveValue@1
+              targetPath: $.request.requestData.processData.sender
+              valuePath: $.full.partnerId
+              valueType: String
+            # - type: FormatString@1
+            #   description: Add test environment
+            #   format: "{$.key.receiver}TEST2"
+            #   nullValue: "NULL"
+            #   targetPath: $.key.receiver
+            - type: SetPrimitiveValue@1
+              targetPath: $.request.requestData.processData.receiver
+              valuePath: $.key.receiver
+              valueType: String
+
+        - type: Project@1
+          fields:
+            - path: $.until
+            - path: $.partnerId
+            - path: $.query
+
+        - type: ForEach@1
+          description: "Send all requests"
+          maxDegreeOfParallelism: 1
+          iterationPath: $.RequestData
+          #mergePath: $.request
+          #targetPath: $.Requests
+          transformations:
+            - type: EdaStartProcess@1
+              path: $.key.requestData
+              targetPath: $.request
+            - type: SetPrimitiveValue@1
+              targetPath: $.request.comment
+              valuePath: $.key.requestData.comment
+              valueType: String
+            - type: If@1
+              description: If successfull sent create a new process in DB
+              path: $.request.IsSuccess
+              operator: Equals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.update
+                  targetValueKind: Array
+                  updateKind: INSERT
+                  ckTypeId: Basic.Energy/EdaProcess
+                  attributeUpdates:
+                    - attributeName: Name
+                      attributeValueType: String
+                      value: "CR_REQ_PT"
+                    - attributeName: Description
+                      attributeValueType: String
+                      valuePath: $.request.comment
+                    - attributeName: ConversationId
+                      attributeValueType: String
+                      valuePath: $.request.Message.ProcessDirectory.ConversationId
+                    - attributeName: Finished
+                      attributeValueType: Boolean
+                      value: false
+                    - attributeName: StartTime
+                      attributeValueType: DateTime
+                      valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.DocumentCreationDateTime
+                    - attributeName: Sender
+                      attributeValueType: String
+                      valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.Sender.MessageAddress
+                    - attributeName: Receiver
+                      attributeValueType: String
+                      valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.Receiver.MessageAddress
+                    - attributeName: MeteringPointNumber
+                      attributeValueType: String
+                      valuePath: $.request.Message.ProcessDirectory.MeteringPoint
+                    - attributeName: RawMessage
+                      attributeValueType: String
+                      valuePath: $.request.Message
+
+                - type: ApplyChanges@1
+                  path: $.update
+- rtId: 692448a0911382c3502c6b95
+  rtCreationDateTime: 2025-11-24T11:59:28.9590000Z
+  rtChangedDateTime: 2026-02-10T14:41:06.5500000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: request-consumption-reports
+  - id: System/Description-1
+    value: Request new consumption reports for low quality items
