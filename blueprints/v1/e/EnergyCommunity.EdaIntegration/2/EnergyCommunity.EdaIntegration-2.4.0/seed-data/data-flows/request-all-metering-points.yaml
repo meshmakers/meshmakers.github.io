@@ -1,0 +1,71 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# request-all-metering-points with its pipeline and the cron PipelineTrigger
+# (activated by DeployTriggers).
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _eda/request-all-metering-points-pipeline.yaml
+- rtId: 6989ff2d4773b14ddd85ddce
+  rtCreationDateTime: 2026-02-09T15:37:17.7210000Z
+  rtChangedDateTime: 2026-02-09T15:46:22.3260000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: request-all-metering-points
+  - id: System/Description-1
+    value: Start process EC_PODLIST for all network operators
+- rtId: 6989ff2d4773b14ddd85ddcf
+  rtCreationDateTime: 2026-02-09T15:37:17.8180000Z
+  rtChangedDateTime: 2026-02-10T13:10:48.0400000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6989ff2d4773b14ddd85ddce
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: "triggers:\r\n  - type: FromPipelineTriggerEvent@1\r\n  # - type: FromExecutePipelineCommand@1\r\ntransformations:\r\n  - type: GetRtEntitiesByType@1\r\n    description: Load all metering points\r\n    ckTypeId: Basic.Energy/MeteringPoint\r\n    targetPath: $.meteringpoints\r\n  \r\n\r\n  - type: TransformString@1\r\n    path: $.meteringpoints.Items[*]\r\n    sourcePath: $.Attributes.MeteringPointNumber\r\n    targetPath: $.Operator\r\n    operation: SubstringFromStart\r\n    length: 8\r\n\r\n  - type: Distinct@1\r\n    path: $.meteringpoints.Items\r\n    distinctValuePath: $.Operator\r\n    targetPath: $.Operators\r\n  \r\n  - type: Flatten@1\r\n    description: Metering points\r\n    path: $.Operators[*].Operator\r\n    targetPath: $.Operators\r\n\r\n  - type: Project@1\r\n    fields:\r\n      - path: $.meteringpoints\r\n\r\n  - type: GetPipelineConfigByWellKnownName@1\r\n    wellKnownName: \"EnergyCommunityConfiguration\"\r\n    targetPath: $.config\r\n\r\n  - type: DateTime@1\r\n    description: now\r\n    operation: Now\r\n    targetPath: $.config.now\r\n  - type: DateTime@1\r\n    operation: Format\r\n    path: $.config.now\r\n    value: \"yyyy-MM-ddTHH:mm\"\r\n    targetPath: $.config.now\r\n\r\n  - type: ForEach@1\r\n    description: Parse EDA messages\r\n    iterationPath: $.Operators\r\n    mergePath: $.sender\r\n    targetPath: $.Sender\r\n    transformations:\r\n      - type: SetPrimitiveValue@1\r\n        targetPath: $.body.requestData.processName\r\n        value: \"EC_PODLIST\"\r\n        valueType: String\r\n      - type: FormatString@1\r\n        targetPath: $.body.requestData.comment\r\n        format: \"Get all metering points from {$.key}\"\r\n      - type: SetPrimitiveValue@1\r\n        targetPath: $.body.requestData.processData.energyCommunityId\r\n        valuePath: $.full.config.energyCommunityId\r\n        valueType: String\r\n      - type: SetPrimitiveValue@1\r\n        targetPath: $.body.requestData.processData.receiver\r\n        valuePath: $.key\r\n        valueType: String\r\n      # - type: FormatString@1\r\n      #   targetPath: $.body.requestData.processData.receiver\r\n      #   format: \"{$.key}TEST2\"\r\n      - type: SetPrimitiveValue@1\r\n        targetPath: $.body.requestData.processData.sender\r\n        valuePath: $.full.config.partnerId\r\n      - type: SetPrimitiveValue@1\r\n        targetPath: $.body.requestData.processData.from\r\n        value: \"2025-01-01T00:00:00+01:00\"\r\n        valueType: DateTime\r\n      - type: SetPrimitiveValue@1\r\n        targetPath: $.body.requestData.processData.to\r\n        valuePath: $.full.config.now\r\n        valueType: String\r\n      \r\n      - type: EdaStartProcess@1\r\n        targetPath: $.request\r\n        path: $.body.requestData\r\n      - type: If@1\r\n        description: If successfull sent create a new process in DB\r\n        path: $.request.IsSuccess\r\n        operator: Equals\r\n        value: true\r\n        valueType: Boolean\r\n        transformations:\r\n          - type: CreateUpdateInfo@1\r\n            targetPath: $.update\r\n            targetValueKind: Array\r\n            updateKind: INSERT\r\n            ckTypeId: Basic.Energy/EdaProcess\r\n            attributeUpdates:\r\n              - attributeName: Name\r\n                attributeValueType: String\r\n                valuePath: $.body.requestData.processName\r\n              - attributeName: Description\r\n                attributeValueType: String\r\n                valuePath: $.body.requestData.comment\r\n              - attributeName: ConversationId\r\n                attributeValueType: String\r\n                valuePath: $.request.Message.ProcessDirectory.ConversationId\r\n              - attributeName: Finished\r\n                attributeValueType: Boolean\r\n                value: false\r\n              - attributeName: StartTime\r\n                attributeValueType: DateTime\r\n                valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.DocumentCreationDateTime\r\n              - attributeName: Sender\r\n                attributeValueType: String\r\n                valuePath: $.body.requestData.processData.sender\r\n              - attributeName: Receiver\r\n                attributeValueType: String\r\n                valuePath: $.body.requestData.processData.receiver\r\n              - attributeName: MeteringPointNumber\r\n                attributeValueType: String\r\n                valuePath: $.body.requestData.processData.meteringPoint\r\n              - attributeName: RawMessage\r\n                attributeValueType: String\r\n                valuePath: $.request.Message\r\n          - type: ApplyChanges@1\r\n            path: $.update"
+# Cron trigger for request-all-metering-points (AB#4820 follow-up): the pipeline
+# is started by this System.Communication/PipelineTrigger (FromPipelineTriggerEvent@1),
+# no longer by an explicit ExecutePipelineCommand. Ships DeploymentState 0 like every
+# other EDA entity - it goes live with DeployDataFlow.
+- rtId: 69e1b8a1870f4f0d6e91e630
+  ckTypeId: System.Communication/PipelineTrigger-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 6989ff2d4773b14ddd85ddce
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Triggers-1
+    targetRtId: 6989ff2d4773b14ddd85ddcf
+    targetCkTypeId: System.Communication/Pipeline-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: request-all-metering-points
+  - id: System/Enabled-1
+    value: true
+  - id: System.Bot/CronExpression-1
+    value: 0 0 4 * * *
