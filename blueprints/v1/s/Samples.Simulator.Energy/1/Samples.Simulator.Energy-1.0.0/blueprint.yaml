@@ -1,0 +1,40 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: Samples.Simulator.Energy-1.0.0
+description: |
+  Time-range-archive simulation: one Basic.Energy/OperatingFacility with three
+  Consumer and two Producer metering points, a quarter-hour TimeRangeArchive
+  with three chained RollupArchives on top (hourly -> daily -> calendar month),
+  and the pipeline that generates a synthetic load profile across all of them.
+
+  The reference workload for validating time-range archives, chained rollups
+  and resolution-aware series queries without real meter data.
+
+  Prerequisites on the tenant: Communication enabled (supplies the Mesh Adapter
+  this blueprint targets) and Stream Data enabled.
+
+  TWO STEPS ARE NOT PART OF THE BLUEPRINT - a blueprint seeds entities, it does
+  not drive lifecycle:
+
+    1) Activate the four archives IN ORDER - a chained rollup needs its source
+       activated first, and activation is what provisions the per-archive
+       CrateDB table:
+         octo-cli -c ActivateArchive -id ab0000000000000000000015   # PT15M source
+         octo-cli -c ActivateArchive -id ab00000000000000000001a0   # hourly
+         octo-cli -c ActivateArchive -id ab00000000000000000001b0   # daily
+         octo-cli -c ActivateArchive -id ab00000000000000000001c0   # monthly
+    2) Deploy the DataFlow, then run the simulation:
+         octo-cli -c ExecutePipeline --identifier cc00000000000000000000e2
+
+  Demo and training tenants only.
+ckModelDependencies:
+  # Floors pinned to published versions, in dependency order: the engine
+  # installs each floor EXACTLY and resolves no transitive CK dependencies.
+  - Basic-[2.0.3,3.0)
+  - Basic.Energy-[1.4.0,2.0)
+  # Satisfiability floors only - service-managed, see Samples.PipelineBasics.
+  - System.StreamData-[1.4,2.0)
+  - System.Communication-[3.22.0,4.0)
+seedDataPaths:
+  - seed-data/master-data/facility.yaml
+  - seed-data/archives/time-range-and-rollups.yaml
+  - seed-data/data-flows/energy-simulation.yaml
