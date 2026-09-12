@@ -1,0 +1,46 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: Locations.Austria-1.1.0
+description: |
+  Seeds the complete Austrian location tree as Basic model runtime entities:
+
+    Tree "Locations" -> Country (AT) -> 9 States -> 116 Districts
+    -> 2237 Cities with postal codes (Basic/AddressZipcode)
+
+  Data-only blueprint - no pipelines, no workloads, no configuration. Use it
+  wherever an application needs Austrian cities searchable by name or postal
+  code (e.g. the energy-community app parents every operating facility to a
+  Basic/City and copies its name/zipcode into the facility address).
+
+  The tree root is seeded with rtWellKnownName "Locations" so other blueprints
+  or applications can reference it. All rtIds are stable synthetic ids with
+  prefix 10ca; re-applying the blueprint is an idempotent upsert.
+
+  1.1.0 splits the seed across one file per level and one file per state
+  (AB#4758 seedDataPaths) - identical entities, no data change. It therefore
+  requires an engine that knows seedDataPaths: an older engine drops the
+  unknown property, finds no seedDataPath and installs an EMPTY seed while
+  still reporting success. Install 1.0.0 on such tenants.
+
+  Do NOT install on tenants that already carry a manually imported city tree
+  (e.g. via the legacy plz.xlsx Office Add-In import) - the seed would create a
+  second, parallel tree because the existing entities have different rtIds.
+ckModelDependencies:
+  # 2.0.3 floor: matches the floor the published downstream model artifacts pin
+  # (e.g. Basic.Energy 1.4.0 / EnergyCommunity 4.2.0 pin Basic-2.0.3 exactly);
+  # a tenant holds one version per model, so a lower floor would conflict.
+  - Basic-[2.0.3,3.0)
+# All files are merged into ONE runtime model before the import runs, so the
+# order below is presentation only and associations may cross files (every city
+# references a district in districts.yaml, every district a state in tree.yaml).
+seedDataPaths:
+  - seed-data/tree.yaml
+  - seed-data/districts.yaml
+  - seed-data/cities/burgenland.yaml
+  - seed-data/cities/kaernten.yaml
+  - seed-data/cities/niederoesterreich.yaml
+  - seed-data/cities/oberoesterreich.yaml
+  - seed-data/cities/salzburg.yaml
+  - seed-data/cities/steiermark.yaml
+  - seed-data/cities/tirol.yaml
+  - seed-data/cities/vorarlberg.yaml
+  - seed-data/cities/wien.yaml
