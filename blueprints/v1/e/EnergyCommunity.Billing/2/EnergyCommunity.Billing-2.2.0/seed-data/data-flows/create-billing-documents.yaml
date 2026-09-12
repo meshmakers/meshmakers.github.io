@@ -1,0 +1,175 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.1,5.0)
+- Basic.Energy-[1.3,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _calculation/energy-create-billing-documents.yaml
+- rtId: 68332a6f8c1ba1f712e75667
+  rtCreationDateTime: 2025-05-25T14:34:23.5480000Z
+  rtChangedDateTime: 2025-07-15T15:20:57.0170000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68332a6f8c1ba1f712e75666
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  # AB#4633: ship DEPLOYED (2) to match createBillingItems (create chain live after install).
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >
+      triggers:
+        - type: FromHttpRequest@1
+          path: /createBillingDocuments
+          method: POST
+      transformations:
+        - type: GetRtEntitiesById@1
+          description: Get specific customers by ID
+          rtIdsPath: $.body.customerRtIds
+          ckTypeId: EnergyCommunity/Customer
+          targetPath: $.customers
+          fieldFilters:
+            - attributePath: State
+              operator: Equals
+              comparisonValue: 1 # Active
+        - type: GetAssociationTargets@1
+          description: get existing documents
+          associationRoleId: EnergyCommunity/AssignedBilling
+          graphDirection: Inbound
+          originCkTypeId: EnergyCommunity/Customer
+          targetCkTypeId: EnergyCommunity/BillingDocument
+          originRtIdPath: $.customers.Items[*].RtId
+          targetPath: $.billingDocuments
+          fieldFilters:
+            - attributePath: timeRange.from
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.from
+            - attributePath: timeRange.to
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.to
+        - type: Join@1
+          description: Join customers and billings
+          path: $.customers.Items[*]
+          keyPath: $.RtId
+          joinPath: $.billingDocuments[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.billingDocument
+        - type: Project@1
+          fields:
+            - path: "$.billingDocuments"
+        - type: ForEach@1
+          description: iterate customers
+          iterationPath: $.customers.Items
+          mergePath: $.updates
+          targetPath: $.updates
+          #targetValueWriteMode: Merge
+          transformations:
+            - type: If@1
+              description: if no billing document
+              path: $.key.billingDocument[0].Items[0].RtId
+              operator: Equals
+              value: null
+              valueType: String
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.updates._items
+                  updateKind: INSERT
+                  ckTypeId: EnergyCommunity/BillingDocument
+                  rtIdPath: $.rtId
+                  generateRtId: true
+                  attributeUpdates:
+                    - attributeName: CustomerNumber
+                      attributeValueType: String
+                      valuePath: $.key.Attributes.CustomerNumber
+                    - attributeName: TaxProcedureCreditNote
+                      attributeValueType: Enum
+                      valuePath: $.key.Attributes.TaxProcedureCreditNote
+                    - attributeName: Contact
+                      attributeValueType: Record
+                      valuePath: $.key.Attributes.Contact
+                    - attributeName: BankAccount
+                      attributeValueType: Record
+                      valuePath: $.key.Attributes.BankAccount
+                    - attributeName: TimeRange.From
+                      attributeValueType: DateTime
+                      valuePath: $.full.body.timeRange.from
+                    - attributeName: TimeRange.To
+                      attributeValueType: DateTime
+                      valuePath: $.full.body.timeRange.to
+                    - attributeName: BillingType
+                      attributeValueType: Enum
+                      value: "Debit"
+                    - attributeName: GrossTotal
+                      attributeValueType: Double
+                      value: 0.0
+                    - attributeName: BillingDocumentState
+                      attributeValueType: Enum
+                      value: "Draft"
+                    - attributeName: DocumentDate
+                      attributeValueType: DateTime
+                      valuePath: $.full.body.documentDate
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.updates._assocUpdateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.updates._items.RtEntity.RtId
+                  originCkTypeIdPath: $.updates._items.RtEntity.CkTypeId
+                  targetRtIdPath: $.key.RtId
+                  targetCkTypeIdPath: $.key.CkTypeId.SemanticVersionedFullName
+                  associationRoleId: EnergyCommunity/AssignedBilling
+        - type: Flatten@1
+          path: $.updates[*]._items
+          targetPath: $.result.items
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Flatten@1
+          path: $.updates[*]._assocUpdateItems[*]
+          targetPath: $.result.assocUpdateItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Project@1
+          fields:
+            - path: "$.customers"
+            - path: "$.updates"
+            - path: "$.method"
+            - path: "$.path"
+            - path: "$.body"
+        - type: ApplyChanges@2
+          entityUpdatesPath: $.result.items # Path to the array of update info objects
+          associationUpdatesPath: $.result.assocUpdateItems # Path to the array of association update info objects
+        - type: Project@1
+          fields:
+            - path: "$.result.assocUpdateItems"
+  - id: System.Communication/StatusMessage-1
+- rtId: 68332a6f8c1ba1f712e75666
+  rtCreationDateTime: 2025-05-25T14:34:23.4640000Z
+  rtChangedDateTime: 2025-07-06T18:48:57.1490000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-create-billing-documents
+  - id: System/Description-1
