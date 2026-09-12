@@ -1,0 +1,1726 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.3,3.0)
+
+# Cities of Salzburg (132) with their postal code (Basic/AddressZipcode),
+# each parented to its district in districts.yaml.
+# Part of the Locations.Austria blueprint - see blueprint.yaml for the full file list.
+# rtId scheme: 10ca00000000000000<T><SSSSS> - T: 1=Tree 2=Country 3=State
+# 4=District 5=City; SSSSS: hex sequence within the type.
+entities:
+
+- rtId: 10ca000000000000005003ff
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040003f
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Salzburg"
+  - id: Basic/AddressZipcode-1
+    value: 5020
+
+- rtId: 10ca00000000000000500400
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040003f
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Salzburg-Gnigl"
+  - id: Basic/AddressZipcode-1
+    value: 5023
+
+- rtId: 10ca00000000000000500401
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040003f
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Salzburg-Aigen"
+  - id: Basic/AddressZipcode-1
+    value: 5026
+
+- rtId: 10ca00000000000000500402
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040003f
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Elsbethen-Glasenbach"
+  - id: Basic/AddressZipcode-1
+    value: 5061
+
+- rtId: 10ca00000000000000500403
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wals"
+  - id: Basic/AddressZipcode-1
+    value: 5071
+
+- rtId: 10ca00000000000000500404
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Anif"
+  - id: Basic/AddressZipcode-1
+    value: 5081
+
+- rtId: 10ca00000000000000500405
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Grödig"
+  - id: Basic/AddressZipcode-1
+    value: 5082
+
+- rtId: 10ca00000000000000500406
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Gartenau-St. Leonhard"
+  - id: Basic/AddressZipcode-1
+    value: 5083
+
+- rtId: 10ca00000000000000500407
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Großgmain"
+  - id: Basic/AddressZipcode-1
+    value: 5084
+
+- rtId: 10ca00000000000000500408
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Lofer"
+  - id: Basic/AddressZipcode-1
+    value: 5090
+
+- rtId: 10ca00000000000000500409
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Unken"
+  - id: Basic/AddressZipcode-1
+    value: 5091
+
+- rtId: 10ca0000000000000050040a
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Martin bei Lofer"
+  - id: Basic/AddressZipcode-1
+    value: 5092
+
+- rtId: 10ca0000000000000050040b
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Weißbach bei Lofer"
+  - id: Basic/AddressZipcode-1
+    value: 5093
+
+- rtId: 10ca0000000000000050040c
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bergheim"
+  - id: Basic/AddressZipcode-1
+    value: 5101
+
+- rtId: 10ca0000000000000050040d
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Anthering"
+  - id: Basic/AddressZipcode-1
+    value: 5102
+
+- rtId: 10ca0000000000000050040e
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Oberndorf bei Salzburg"
+  - id: Basic/AddressZipcode-1
+    value: 5110
+
+- rtId: 10ca0000000000000050040f
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bürmoos"
+  - id: Basic/AddressZipcode-1
+    value: 5111
+
+- rtId: 10ca00000000000000500410
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Lamprechtshausen"
+  - id: Basic/AddressZipcode-1
+    value: 5112
+
+- rtId: 10ca00000000000000500411
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Georgen bei Salzburg"
+  - id: Basic/AddressZipcode-1
+    value: 5113
+
+- rtId: 10ca00000000000000500412
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Göming"
+  - id: Basic/AddressZipcode-1
+    value: 5114
+
+- rtId: 10ca00000000000000500421
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Nußdorf am Haunsberg"
+  - id: Basic/AddressZipcode-1
+    value: 5151
+
+- rtId: 10ca00000000000000500422
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Michaelbeuern"
+  - id: Basic/AddressZipcode-1
+    value: 5152
+
+- rtId: 10ca00000000000000500423
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Elixhausen"
+  - id: Basic/AddressZipcode-1
+    value: 5161
+
+- rtId: 10ca00000000000000500424
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Obertrum am See"
+  - id: Basic/AddressZipcode-1
+    value: 5162
+
+- rtId: 10ca00000000000000500425
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Mattsee"
+  - id: Basic/AddressZipcode-1
+    value: 5163
+
+- rtId: 10ca00000000000000500426
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Seeham"
+  - id: Basic/AddressZipcode-1
+    value: 5164
+
+- rtId: 10ca00000000000000500427
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Berndorf bei Salzburg"
+  - id: Basic/AddressZipcode-1
+    value: 5165
+
+- rtId: 10ca00000000000000500429
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Seekirchen"
+  - id: Basic/AddressZipcode-1
+    value: 5201
+
+- rtId: 10ca0000000000000050042a
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Neumarkt am Wallersee"
+  - id: Basic/AddressZipcode-1
+    value: 5202
+
+- rtId: 10ca0000000000000050042b
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Köstendorf"
+  - id: Basic/AddressZipcode-1
+    value: 5203
+
+- rtId: 10ca0000000000000050042c
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Straßwalchen"
+  - id: Basic/AddressZipcode-1
+    value: 5204
+
+- rtId: 10ca0000000000000050042d
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Schleedorf"
+  - id: Basic/AddressZipcode-1
+    value: 5205
+
+- rtId: 10ca00000000000000500445
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hallwang"
+  - id: Basic/AddressZipcode-1
+    value: 5300
+
+- rtId: 10ca00000000000000500446
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Eugendorf"
+  - id: Basic/AddressZipcode-1
+    value: 5301
+
+- rtId: 10ca00000000000000500447
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Henndorf am Wallersee"
+  - id: Basic/AddressZipcode-1
+    value: 5302
+
+- rtId: 10ca00000000000000500448
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Thalgau"
+  - id: Basic/AddressZipcode-1
+    value: 5303
+
+- rtId: 10ca0000000000000050044b
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Koppl"
+  - id: Basic/AddressZipcode-1
+    value: 5321
+
+- rtId: 10ca0000000000000050044c
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hof bei Salzburg"
+  - id: Basic/AddressZipcode-1
+    value: 5322
+
+- rtId: 10ca0000000000000050044d
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Ebenau"
+  - id: Basic/AddressZipcode-1
+    value: 5323
+
+- rtId: 10ca0000000000000050044e
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Faistenau"
+  - id: Basic/AddressZipcode-1
+    value: 5324
+
+- rtId: 10ca0000000000000050044f
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Plainfeld"
+  - id: Basic/AddressZipcode-1
+    value: 5325
+
+- rtId: 10ca00000000000000500450
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Fuschl am See"
+  - id: Basic/AddressZipcode-1
+    value: 5330
+
+- rtId: 10ca00000000000000500451
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Gilgen"
+  - id: Basic/AddressZipcode-1
+    value: 5340
+
+- rtId: 10ca00000000000000500452
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Abersee"
+  - id: Basic/AddressZipcode-1
+    value: 5342
+
+- rtId: 10ca00000000000000500453
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400040
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Strobl"
+  - id: Basic/AddressZipcode-1
+    value: 5350
+
+- rtId: 10ca00000000000000500455
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hallein"
+  - id: Basic/AddressZipcode-1
+    value: 5400
+
+- rtId: 10ca00000000000000500456
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Oberalm"
+  - id: Basic/AddressZipcode-1
+    value: 5411
+
+- rtId: 10ca00000000000000500457
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Puch bei Hallein"
+  - id: Basic/AddressZipcode-1
+    value: 5412
+
+- rtId: 10ca00000000000000500458
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Adnet"
+  - id: Basic/AddressZipcode-1
+    value: 5421
+
+- rtId: 10ca00000000000000500459
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Heilbad Dürrnberg"
+  - id: Basic/AddressZipcode-1
+    value: 5422
+
+- rtId: 10ca0000000000000050045a
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Koloman"
+  - id: Basic/AddressZipcode-1
+    value: 5423
+
+- rtId: 10ca0000000000000050045b
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bad Vigaun"
+  - id: Basic/AddressZipcode-1
+    value: 5424
+
+- rtId: 10ca0000000000000050045c
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Krispl"
+  - id: Basic/AddressZipcode-1
+    value: 5425
+
+- rtId: 10ca0000000000000050045d
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Kuchl"
+  - id: Basic/AddressZipcode-1
+    value: 5431
+
+- rtId: 10ca0000000000000050045e
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Golling an der Salzach"
+  - id: Basic/AddressZipcode-1
+    value: 5440
+
+- rtId: 10ca0000000000000050045f
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Scheffau am Tennengebirge"
+  - id: Basic/AddressZipcode-1
+    value: 5440
+
+- rtId: 10ca00000000000000500460
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Abtenau"
+  - id: Basic/AddressZipcode-1
+    value: 5441
+
+- rtId: 10ca00000000000000500461
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Scheffau am Tennengebirge"
+  - id: Basic/AddressZipcode-1
+    value: 5441
+
+- rtId: 10ca00000000000000500462
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Rußbach am Paß Gschütt"
+  - id: Basic/AddressZipcode-1
+    value: 5442
+
+- rtId: 10ca00000000000000500463
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Werfen"
+  - id: Basic/AddressZipcode-1
+    value: 5450
+
+- rtId: 10ca00000000000000500464
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Tenneck"
+  - id: Basic/AddressZipcode-1
+    value: 5451
+
+- rtId: 10ca00000000000000500465
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Pfarrwerfen"
+  - id: Basic/AddressZipcode-1
+    value: 5452
+
+- rtId: 10ca00000000000000500466
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Werfenweng"
+  - id: Basic/AddressZipcode-1
+    value: 5453
+
+- rtId: 10ca00000000000000500467
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bischofshofen"
+  - id: Basic/AddressZipcode-1
+    value: 5500
+
+- rtId: 10ca00000000000000500468
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Mühlbach am Hochkönig"
+  - id: Basic/AddressZipcode-1
+    value: 5505
+
+- rtId: 10ca00000000000000500469
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hüttau"
+  - id: Basic/AddressZipcode-1
+    value: 5511
+
+- rtId: 10ca0000000000000050046a
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Niedernfritz"
+  - id: Basic/AddressZipcode-1
+    value: 5521
+
+- rtId: 10ca0000000000000050046b
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Martin am Tennengebirge"
+  - id: Basic/AddressZipcode-1
+    value: 5522
+
+- rtId: 10ca0000000000000050046c
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Lungötz"
+  - id: Basic/AddressZipcode-1
+    value: 5523
+
+- rtId: 10ca0000000000000050046d
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400017
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Annaberg"
+  - id: Basic/AddressZipcode-1
+    value: 5524
+
+- rtId: 10ca0000000000000050046e
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Eben im Pongau"
+  - id: Basic/AddressZipcode-1
+    value: 5531
+
+- rtId: 10ca0000000000000050046f
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Filzmoos"
+  - id: Basic/AddressZipcode-1
+    value: 5532
+
+- rtId: 10ca00000000000000500470
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Altenmarkt im Pongau"
+  - id: Basic/AddressZipcode-1
+    value: 5541
+
+- rtId: 10ca00000000000000500471
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Flachau"
+  - id: Basic/AddressZipcode-1
+    value: 5542
+
+- rtId: 10ca00000000000000500472
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Radstadt"
+  - id: Basic/AddressZipcode-1
+    value: 5550
+
+- rtId: 10ca00000000000000500473
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Forstau"
+  - id: Basic/AddressZipcode-1
+    value: 5552
+
+- rtId: 10ca00000000000000500474
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Untertauern"
+  - id: Basic/AddressZipcode-1
+    value: 5561
+
+- rtId: 10ca00000000000000500475
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Obertauern"
+  - id: Basic/AddressZipcode-1
+    value: 5562
+
+- rtId: 10ca00000000000000500476
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Tweng"
+  - id: Basic/AddressZipcode-1
+    value: 5563
+
+- rtId: 10ca00000000000000500477
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Mauterndorf"
+  - id: Basic/AddressZipcode-1
+    value: 5570
+
+- rtId: 10ca00000000000000500478
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Mariapfarr"
+  - id: Basic/AddressZipcode-1
+    value: 5571
+
+- rtId: 10ca00000000000000500479
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Andrä im Lungau"
+  - id: Basic/AddressZipcode-1
+    value: 5572
+
+- rtId: 10ca0000000000000050047a
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Weißpriach"
+  - id: Basic/AddressZipcode-1
+    value: 5573
+
+- rtId: 10ca0000000000000050047b
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Göriach"
+  - id: Basic/AddressZipcode-1
+    value: 5574
+
+- rtId: 10ca0000000000000050047c
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Lessach"
+  - id: Basic/AddressZipcode-1
+    value: 5575
+
+- rtId: 10ca0000000000000050047d
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Tamsweg"
+  - id: Basic/AddressZipcode-1
+    value: 5580
+
+- rtId: 10ca0000000000000050047e
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Margarethen im Lungau"
+  - id: Basic/AddressZipcode-1
+    value: 5581
+
+- rtId: 10ca0000000000000050047f
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Michael im Lungau"
+  - id: Basic/AddressZipcode-1
+    value: 5582
+
+- rtId: 10ca00000000000000500480
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Muhr"
+  - id: Basic/AddressZipcode-1
+    value: 5583
+
+- rtId: 10ca00000000000000500481
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Zederhaus"
+  - id: Basic/AddressZipcode-1
+    value: 5584
+
+- rtId: 10ca00000000000000500482
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Unternberg"
+  - id: Basic/AddressZipcode-1
+    value: 5585
+
+- rtId: 10ca00000000000000500483
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Ramingstein"
+  - id: Basic/AddressZipcode-1
+    value: 5591
+
+- rtId: 10ca00000000000000500484
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca0000000000000040004d
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Thomatal"
+  - id: Basic/AddressZipcode-1
+    value: 5592
+
+- rtId: 10ca00000000000000500485
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Johann im Pongau"
+  - id: Basic/AddressZipcode-1
+    value: 5600
+
+- rtId: 10ca00000000000000500486
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wagrain"
+  - id: Basic/AddressZipcode-1
+    value: 5602
+
+- rtId: 10ca00000000000000500487
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Kleinarl"
+  - id: Basic/AddressZipcode-1
+    value: 5603
+
+- rtId: 10ca00000000000000500488
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Großarl"
+  - id: Basic/AddressZipcode-1
+    value: 5611
+
+- rtId: 10ca00000000000000500489
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hüttschlag"
+  - id: Basic/AddressZipcode-1
+    value: 5612
+
+- rtId: 10ca0000000000000050048a
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Schwarzach im Pongau"
+  - id: Basic/AddressZipcode-1
+    value: 5620
+
+- rtId: 10ca0000000000000050048b
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Veit im Pongau"
+  - id: Basic/AddressZipcode-1
+    value: 5621
+
+- rtId: 10ca0000000000000050048c
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Goldegg"
+  - id: Basic/AddressZipcode-1
+    value: 5622
+
+- rtId: 10ca0000000000000050048d
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bad Hofgastein"
+  - id: Basic/AddressZipcode-1
+    value: 5630
+
+- rtId: 10ca0000000000000050048e
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Dorfgastein"
+  - id: Basic/AddressZipcode-1
+    value: 5632
+
+- rtId: 10ca0000000000000050048f
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bad Gastein"
+  - id: Basic/AddressZipcode-1
+    value: 5640
+
+- rtId: 10ca00000000000000500490
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Böckstein"
+  - id: Basic/AddressZipcode-1
+    value: 5645
+
+- rtId: 10ca00000000000000500491
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400041
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Lend"
+  - id: Basic/AddressZipcode-1
+    value: 5651
+
+- rtId: 10ca00000000000000500492
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Dienten am Hochkönig"
+  - id: Basic/AddressZipcode-1
+    value: 5652
+
+- rtId: 10ca00000000000000500493
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Taxenbach"
+  - id: Basic/AddressZipcode-1
+    value: 5660
+
+- rtId: 10ca00000000000000500494
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Rauris"
+  - id: Basic/AddressZipcode-1
+    value: 5661
+
+- rtId: 10ca00000000000000500495
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Gries"
+  - id: Basic/AddressZipcode-1
+    value: 5662
+
+- rtId: 10ca00000000000000500496
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bruck an der Großglocknerstraße"
+  - id: Basic/AddressZipcode-1
+    value: 5671
+
+- rtId: 10ca00000000000000500497
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Fusch an der Glocknerstraße"
+  - id: Basic/AddressZipcode-1
+    value: 5672
+
+- rtId: 10ca00000000000000500498
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Zell am See"
+  - id: Basic/AddressZipcode-1
+    value: 5700
+
+- rtId: 10ca00000000000000500499
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Kaprun"
+  - id: Basic/AddressZipcode-1
+    value: 5710
+
+- rtId: 10ca0000000000000050049a
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Piesendorf"
+  - id: Basic/AddressZipcode-1
+    value: 5721
+
+- rtId: 10ca0000000000000050049b
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Niedernsill"
+  - id: Basic/AddressZipcode-1
+    value: 5722
+
+- rtId: 10ca0000000000000050049c
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Uttendorf"
+  - id: Basic/AddressZipcode-1
+    value: 5723
+
+- rtId: 10ca0000000000000050049d
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Stuhlfelden"
+  - id: Basic/AddressZipcode-1
+    value: 5724
+
+- rtId: 10ca0000000000000050049e
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Mittersill"
+  - id: Basic/AddressZipcode-1
+    value: 5730
+
+- rtId: 10ca0000000000000050049f
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hollersbach im Pinzgau"
+  - id: Basic/AddressZipcode-1
+    value: 5731
+
+- rtId: 10ca000000000000005004a0
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Mühlbach"
+  - id: Basic/AddressZipcode-1
+    value: 5732
+
+- rtId: 10ca000000000000005004a1
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bramberg am Wildkogel"
+  - id: Basic/AddressZipcode-1
+    value: 5733
+
+- rtId: 10ca000000000000005004a2
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Neukirchen am Großvenediger"
+  - id: Basic/AddressZipcode-1
+    value: 5741
+
+- rtId: 10ca000000000000005004a3
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wald im Pinzgau"
+  - id: Basic/AddressZipcode-1
+    value: 5742
+
+- rtId: 10ca000000000000005004a4
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Krimml"
+  - id: Basic/AddressZipcode-1
+    value: 5743
+
+- rtId: 10ca000000000000005004a5
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Maishofen"
+  - id: Basic/AddressZipcode-1
+    value: 5751
+
+- rtId: 10ca000000000000005004a6
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Viehhofen"
+  - id: Basic/AddressZipcode-1
+    value: 5752
+
+- rtId: 10ca000000000000005004a7
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Saalbach"
+  - id: Basic/AddressZipcode-1
+    value: 5753
+
+- rtId: 10ca000000000000005004a8
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hinterglemm"
+  - id: Basic/AddressZipcode-1
+    value: 5754
+
+- rtId: 10ca000000000000005004a9
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Saalfelden am Steinernen Meer"
+  - id: Basic/AddressZipcode-1
+    value: 5760
+
+- rtId: 10ca000000000000005004aa
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Maria Alm am Steinernen Meer"
+  - id: Basic/AddressZipcode-1
+    value: 5761
+
+- rtId: 10ca000000000000005004ab
+  ckTypeId: Basic/City-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000400073
+    targetCkTypeId: Basic/District-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Leogang"
+  - id: Basic/AddressZipcode-1
+    value: 5771
