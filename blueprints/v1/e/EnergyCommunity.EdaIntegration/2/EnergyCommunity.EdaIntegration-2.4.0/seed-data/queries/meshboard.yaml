@@ -1,0 +1,82 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# The two queries backing the EDA cockpit MeshBoard below.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── EDA cockpit MeshBoard (AB#4578, Board 3) ────────────────────────────
+# System.UI/Dashboard `energy-community-eda` + widgets. Mirrors the voest-app
+# EDA cockpit (voest-app/data/_meshboards/voest-cockpit.yaml). Requires the
+# service-managed System.UI CK model (octo-platform-services). Widgets bind to
+# the two queries below by rtId — the queries MUST exist before the board
+# (they are seeded in this same file, above the board, so blueprint import
+# resolves them). The EDA-process tables render empty until EDA ingest creates
+# Basic.Energy/EdaProcess entities — that is expected on a fresh tenant.
+
+# List query over Basic.Energy/EdaProcess (mirrors voest meshboard-processes).
+- rtId: ec0000000000000000000d01
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: eda-processes
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaProcess
+  - id: System/Query.Columns-1
+    value:
+    - name
+    - description
+    - info
+    - startTime
+    - finished
+    - success
+    - meteringPointNumber
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: startTime
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Grouping query for the metering-point state donut (mirrors voest
+# meshboard-meteringpoint-state): COUNT of state grouped by carrierType+state.
+- rtId: ec0000000000000000000d06
+  ckTypeId: System/GroupingAggregationRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: eda-meteringpoint-state
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/MeteringPoint
+  - id: System/Query.GroupByColumns-1
+    value:
+    - carrierType
+    - state
+  - id: System/AggregationQueryColumns-1
+    value:
+    - ckRecordId: System/AggregationQueryColumn-1
+      attributes:
+      - id: System/AttributePath-1
+        value: state
+      - id: System/AggregationType-1
+        value: 0
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
