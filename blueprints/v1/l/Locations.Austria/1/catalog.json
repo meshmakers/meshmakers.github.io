@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "Locations.Austria",
+  "majorVersion": 1,
+  "latestVersion": "1.1.0",
+  "description": "Seeds the complete Austrian location tree as Basic model runtime entities:\n\n  Tree \u0022Locations\u0022 -\u003E Country (AT) -\u003E 9 States -\u003E 116 Districts\n  -\u003E 2237 Cities with postal codes (Basic/AddressZipcode)\n\nData-only blueprint - no pipelines, no workloads, no configuration. Use it\nwherever an application needs Austrian cities searchable by name or postal\ncode (e.g. the energy-community app parents every operating facility to a\nBasic/City and copies its name/zipcode into the facility address).\n\nThe tree root is seeded with rtWellKnownName \u0022Locations\u0022 so other blueprints\nor applications can reference it. All rtIds are stable synthetic ids with\nprefix 10ca; re-applying the blueprint is an idempotent upsert.\n\n1.1.0 splits the seed across one file per level and one file per state\n(AB#4758 seedDataPaths) - identical entities, no data change. It therefore\nrequires an engine that knows seedDataPaths: an older engine drops the\nunknown property, finds no seedDataPath and installs an EMPTY seed while\nstill reporting success. Install 1.0.0 on such tenants.\n\nDo NOT install on tenants that already carry a manually imported city tree\n(e.g. via the legacy plz.xlsx Office Add-In import) - the seed would create a\nsecond, parallel tree because the existing entities have different rtIds.\n",
+  "versions": [
+    {
+      "version": "1.1.0",
+      "directoryPath": "blueprints/v1/l/Locations.Austria/1/Locations.Austria-1.1.0",
+      "publishedAt": "2026-09-12T18:21:31.0712404Z"
+    }
+  ],
+  "updatedAt": "2026-09-12T18:21:31.073005Z"
+}
