@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "Office.ExcelImport",
+  "majorVersion": 1,
+  "latestVersion": "1.0.0",
+  "description": "Server-side counterpart of the OctoMesh Office Add-In\u0027s Excel import.\n\nThe add-in posts the selected worksheet range to\n\u0022{meshAdapterUrl}/{tenantId}/import/tree\u0022 (buildTreeImportUri, used by the\nTree-Path and Tree-Column import panes). That route only exists while a\nPipeline with a FromHttpRequest trigger on /import/tree is deployed on the\ntenant\u0027s Mesh Adapter - without it every import in Excel fails with 404.\n\nThis blueprint seeds exactly that DataFlow and Pipeline, so provisioning a\ntenant for the Office Add-In is one InstallBlueprint instead of a manual\nImportRt of a sample file.\n\nThe pipeline runs on the Mesh Adapter seeded by System.Communication\n(rtId 670000000000000000000002, rtWellKnownName MeshAdapter), which the\nCommunication Controller applies automatically when Communication is enabled\non the tenant - so there is no adapter entity to seed here.\n\nThe route is secured with FromHttpRequest@2 (token required, no role gate) -\nthe add-in\u0027s side of AB#4185 has landed, so it signs the request and maps the\n401/403 to its own messages.\n\nDeploy the DataFlow after installing; a seeded Pipeline is not registered on\nthe adapter until its DataFlow is deployed.\n",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "directoryPath": "blueprints/v1/o/Office.ExcelImport/1/Office.ExcelImport-1.0.0",
+      "publishedAt": "2026-09-12T18:13:31.6700449Z"
+    }
+  ],
+  "updatedAt": "2026-09-12T18:13:31.6722652Z"
+}
