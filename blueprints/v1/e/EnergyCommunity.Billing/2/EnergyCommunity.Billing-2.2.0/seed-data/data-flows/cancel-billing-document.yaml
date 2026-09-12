@@ -1,0 +1,95 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.1,5.0)
+- Basic.Energy-[1.3,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _calculation/energy-cancel-billing-document.yaml
+- rtId: 68a83612de6bd740110e2068
+  rtCreationDateTime: 2025-08-22T09:19:14.3610000Z
+  rtChangedDateTime: 2025-08-22T12:23:36.4890000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68a83612de6bd740110e2067
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >
+      triggers:
+        - type: FromHttpRequest@1
+          path: /cancelBillingDocument
+          method: POST
+
+      transformations:
+        # Get the billing documents and filter by cancellable states (DRAFT, RELEASED, SENT)
+        - type: GetRtEntitiesById@1
+          description: Get billing documents in cancellable states
+          targetPath: $.billingDocuments
+          rtIdsPath: $.body.billingDocumentRtIds  # Billing document RT IDs from payload
+          ckTypeId: EnergyCommunity/BillingDocument
+          fieldFilters:
+            - attributePath: billingDocumentState
+              operator: In
+              comparisonValue: [0, 1, 2]  # DRAFT, RELEASED, SENT states
+
+        # Create update info for each billing document
+        - type: ForEach@1
+          description: Iterate billing documents to cancel them
+          iterationPath: $.billingDocuments.Items
+          mergePath: $.updates
+          targetPath: $.updates
+          transformations:
+            - type: CreateUpdateInfo@1
+              targetPath: $.updates._items
+              updateKind: UPDATE
+              ckTypeId: EnergyCommunity/BillingDocument
+              rtIdPath: $.key.RtId
+              attributeUpdates:
+                - attributeName: BillingDocumentState
+                  attributeValueType: Enum
+                  value: 4 # Set to canceled state (4)
+
+        # Flatten the updates array
+        - type: Flatten@1
+          path: $.updates[*]._items
+          targetPath: $._result._items
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+
+        # Apply the changes to cancel the billing documents
+        - type: ApplyChanges@2
+          entityUpdatesPath: $._result._items  # Path to the array of update info objects
+  - id: System.Communication/StatusMessage-1
+- rtId: 68a83612de6bd740110e2067
+  rtCreationDateTime: 2025-08-22T09:19:14.3060000Z
+  rtChangedDateTime: 2025-08-22T09:19:14.3060000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-cancel-billing-document.yaml
+  - id: System/Description-1
