@@ -1,0 +1,168 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _eda/receive-eda-messages-pipeline.yaml
+- rtId: 68b01ae68f03da854927fd9e
+  rtCreationDateTime: 2025-08-28T09:01:26.3020000Z
+  rtChangedDateTime: 2026-02-11T12:47:15.2580000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: receive-eda-messages
+  - id: System/Description-1
+    value: Pipeline to receive EDA messages from the EDA HttpAdapter
+- rtId: 68b01ae68f03da854927fd9f
+  rtCreationDateTime: 2025-08-28T09:01:26.3900000Z
+  rtChangedDateTime: 2026-03-13T06:32:54.0760000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68b01ae68f03da854927fd9e
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromExecutePipelineCommand@1
+        # - type: FromPolling@1
+        #   interval: 00:01:00
+      transformations:
+        - type: EdaReceiver@1
+          getAllMessages: true
+          targetPath: $.messages
+          take: 25
+        - type: SplitConsumptionRecord@1
+          path: $.messages
+          targetPath: $.messages
+          maxHours: 24
+        - type: If@1
+          description: Check if there are new messages
+          path: $.messages[0].Headers.Id
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: Flatten@1
+              path: $.messages[*].Headers.ConversationId
+              targetPath: $.conversations
+            - type: GetRtEntitiesByType@1
+              ckTypeId: Basic.Energy/EdaProcess
+              targetPath: $.process
+              fieldFilters:
+                - attributePath: Finished
+                  operator: Equals
+                  comparisonValue: false
+                - attributePath: ConversationId
+                  operator: IN
+                  comparisonValuePath: $.conversations
+            - type: If@1
+              description: Check if there are open processes
+              path: $.process.TotalCount
+              operator: NotEquals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: Join@1
+                  description: Join messages with processes
+                  path: $.messages[*]
+                  keyPath: $.Headers.ConversationId
+                  joinPath: $.process.Items[*]
+                  joinKeyPath: $.Attributes.ConversationId
+                  itemPath: $.process
+            - type: Project@1
+              fields:
+                - path: $.conversations
+                - path: $.process
+            - type: ForEach@1
+              iterationPath: $.messages
+              mergePath: $.updates
+              targetPath: $.updates
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.updates.items
+                  updateKind: INSERT
+                  ckTypeId: Basic.Energy/EdaMessage
+                  rtIdPath: $.rtId
+                  generateRtId: true
+                  attributeUpdates:
+                    - attributeName: MessageType
+                      attributeValueType: String
+                      valuePath: $.key.Headers.MessageType
+                    - attributeName: Processed
+                      attributeValueType: Boolean
+                      value: false
+                    - attributeName: Sender
+                      attributeValueType: String
+                      valuePath: $.key.Message.MarketParticipantDirectory.RoutingHeader.Sender.MessageAddress
+                    - attributeName: Receiver
+                      attributeValueType: String
+                      valuePath: $.key.Message.MarketParticipantDirectory.RoutingHeader.Receiver.MessageAddress
+                    - attributeName: CreationDate
+                      attributeValueType: String
+                      valuePath: $.key.Message.MarketParticipantDirectory.RoutingHeader.DocumentCreationDateTime
+                    - attributeName: MessageId
+                      attributeValueType: String
+                      valuePath: $.key.Message.ProcessDirectory.MessageId
+                    - attributeName: ConversationId
+                      attributeValueType: String
+                      valuePath: $.key.Message.ProcessDirectory.ConversationId
+                    - attributeName: MeteringPoint
+                      attributeValueType: String
+                      valuePath: $.key.Message.ProcessDirectory.MeteringPoint
+                    - attributeName: RawMessage
+                      attributeValueType: String
+                      valuePath: $.key.RawContent
+                - type: If@1
+                  description: Is there a process for the message
+                  path: $.key.process[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: CreateAssociationUpdate@1
+                      targetPath: $.updates.assocs
+                      updateKind: CREATE
+                      originRtIdPath: $.updates.items.RtEntity.RtId
+                      originCkTypeId: Basic.Energy/EdaMessage
+                      targetRtIdPath: $.key.process[0].RtId
+                      targetCkTypeId: Basic.Energy/EdaProcess
+                      associationRoleId: Basic.Energy/MessageToProcess
+            - type: Flatten@1
+              path: $.updates[*].items
+              targetPath: $.result.updateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Flatten@1
+              path: $.updates[*].assocs
+              targetPath: $.result.assocUpdateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Project@1
+              fields:
+                - path: $.messages
+                - path: $.updates
+            - type: ApplyChanges@2
+              entityUpdatesPath: $.result.updateItems
+              associationUpdatesPath: $.result.assocUpdateItems
