@@ -1,0 +1,118 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# Energy-measurement simulation pipeline that drives both the EnergyMeasurement RT entities
+# (Lesart D - one EM per (MeteringPoint, ObisCode), holding the most-recent slot) and the
+# TimeRangeArchive (back-fillable full time series; chained rollups derive from it).
+#
+# Edit `startDate`, `numDays`, the MeteringPoint set and the ObisCodes below to change the
+# simulation scope. After installing the blueprint:
+#   1) Activate the four archives in source-to-rollup order (see the blueprint README) -
+#      Activate provisions the per-archive CrateDB table, and a chained rollup needs its
+#      source activated first.
+#   2) Deploy this DataFlow so the adapter registers the pipeline.
+#   3) Trigger it: octo-cli -c ExecutePipeline --identifier cc00000000000000000000e2
+#
+# Runs on the Mesh Adapter seeded by System.Communication.
+dependencies:
+  - Basic.Energy-[1.4.0,2.0)
+  - System.StreamData-[1.4,2.0)
+  - System.Communication-[3.22.0,4.0)
+entities:
+
+  # ---- DataFlow ------------------------------------------------------------
+  - rtId: cc00000000000000000000e1
+    ckTypeId: System.Communication/DataFlow
+    rtWellKnownName: SimEnergyDataFlow
+    attributes:
+      - id: System/Name
+        value: Energy Simulation DataFlow
+      - id: System/Description
+        value: TimeRangeArchive validation simulation — drives EnergyMeasurement RT + Archive in lockstep.
+
+  # ---- Pipeline ------------------------------------------------------------
+  - rtId: cc00000000000000000000e2
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: SimEnergyPipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: cc00000000000000000000e1
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'   # MeshAdapter, seeded by System.Communication
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Simulate Energy Measurements
+      - id: System/Description
+        value: Generates 15-min EnergyMeasurement slots over N days, dedups against existing RT entities, and writes to TimeRangeArchive.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |
+          triggers:
+            - type: FromExecutePipelineCommand@1
+
+          transformations:
+            # --- 1) Generate slot candidates -----------------------------------------------
+            #     Edit startDate / numDays / meteringPoints below to widen or move the window.
+            - type: SimulateEnergyMeasurements@1
+              description: Generate EnergyMeasurement Insert candidates for every (MP, ObisCode, 15-min slot)
+              startDate: 2026-01-01T00:00:00Z
+              numDays: 3
+              energyMeasurementCkTypeId: Basic.Energy/EnergyMeasurement
+              timeRangeCkRecordId: Basic/TimeRange
+              amountCkRecordId: Basic/Amount
+              amountUnit: 1                                # KWh
+              parentAssociationRoleId: System/ParentChild
+              dataQuality: 1
+              entityUpdatesOutputPath: $._candidates
+              associationUpdatesOutputPath: $._candidateAssocs
+              meteringPoints:
+                - meteringPointRtId: aa00000000000000000000c1
+                  meteringPointCkTypeId: Basic.Energy/Consumer
+                  profileKind: Load:H0
+                  profileParameter: 15.0
+                  obisCodes: [ "1-1:1.8.0", "1-1:1.8.1", "1-1:1.8.2" ]
+                - meteringPointRtId: aa00000000000000000000c2
+                  meteringPointCkTypeId: Basic.Energy/Consumer
+                  profileKind: Load:H0
+                  profileParameter: 8.0
+                  obisCodes: [ "1-1:1.8.0", "1-1:1.8.1", "1-1:1.8.2" ]
+                - meteringPointRtId: aa00000000000000000000c3
+                  meteringPointCkTypeId: Basic.Energy/Consumer
+                  profileKind: Load:G0
+                  profileParameter: 50.0
+                  obisCodes: [ "1-1:1.8.0", "1-1:1.8.1", "1-1:1.8.2" ]
+                - meteringPointRtId: aa00000000000000000000d1
+                  meteringPointCkTypeId: Basic.Energy/Producer
+                  profileKind: PV
+                  profileParameter: 5.0
+                  obisCodes: [ "1-1:2.8.0" ]
+                - meteringPointRtId: aa00000000000000000000d2
+                  meteringPointCkTypeId: Basic.Energy/Producer
+                  profileKind: PV
+                  profileParameter: 10.0
+                  obisCodes: [ "1-1:2.8.0" ]
+
+            # --- 2) Dedup against existing EM entities --------------------------------------
+            - type: UpdateRtEntityIfNewer@1
+              description: Compare candidates with existing EMs by RtWellKnownName + TimeRange.From
+              inputPath: $._candidates
+              filteredOutputPath: $._filteredEms
+              outputPathAll: $._allEms
+              comparisonAttributePath: TimeRange.From
+              candidateAssociationsInputPath: $._candidateAssocs
+              filteredAssociationsOutputPath: $._filteredAssocs
+
+            # --- 3) Apply RT changes (only newer slots win + parent assocs for fresh inserts) ---
+            - type: ApplyChanges@2
+              description: Persist RT EnergyMeasurement entities and their parent associations
+              entityUpdatesPath: $._filteredEms
+              associationUpdatesPath: $._filteredAssocs
+
+            # --- 4) Write every slot (incl. back-fills) to the TimeRangeArchive --------------
+            - type: SaveTimeRangeStreamDataInArchive@1
+              description: Persist all slots to the time-range archive — TimeRange.From/.To define the window
+              path: $._allEms
+              archiveRtId: ab0000000000000000000015
+              fromAttributePath: TimeRange.From
+              toAttributePath: TimeRange.To
