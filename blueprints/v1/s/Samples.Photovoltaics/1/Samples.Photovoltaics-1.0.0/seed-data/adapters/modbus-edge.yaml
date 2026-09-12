@@ -1,0 +1,229 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Communication-[3.22.0,4.0)
+
+# Edge side of the photovoltaic demo: an Edge pool, the Modbus adapter that
+# polls the inverter, and the two pipelines of the "PV Firmianstrasse" flow.
+#
+# Split by adapter, as the node prerequisites demand:
+#   Edge Pipeline -> the Modbus adapter (ReadModbusRegister@1 needs the plug
+#                    and network access to the device)
+#   Mesh Pipeline -> the Mesh Adapter seeded by System.Communication
+#                    (SaveStreamDataInArchive@1 / ApplyChanges@1 are
+#                    mesh-adapter nodes)
+# Both pipelines previously carried no Executes association at all, which left
+# them unassigned and silently ran the mesh half on the Modbus adapter.
+#
+# The adapter's pipeline service account is provisioned automatically by the
+# Communication Controller after the blueprint is applied (AB#5111), so none is
+# seeded here.
+entities:
+  - rtId: 5fc8fc3d8b2fc75f925e21af
+    ckTypeId: System.Communication/Pool
+    attributes:
+      - id: System/Name
+        value: k8sfirmianstrasse
+      - id: System/Description
+        value: >-
+          Edge pool for the photovoltaic demo. Edge pools are NOT rolled out by
+          the central Communication Operator - the pool operator runs next to
+          the hardware and registers itself.
+      # Mandatory since the workload model; without it the pool defaults to
+      # Edge silently instead of saying so.
+      - id: System.Communication/Environment
+        value: 0   # Edge
+    associations: []
+  - rtId: 5fc8fc3d8b2fc75f925e21ba
+    ckTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Modbus PV
+      - id: System.Communication/AdapterConfiguration
+        value: ""
+    associations:
+      - roleId: System.Communication/Manages
+        targetRtId: 5fc8fc3d8b2fc75f925e21af
+        targetCkTypeId: System.Communication/Pool
+        
+  # Data pipelines including mesh and edge pipelines
+  - rtId: 5fc8fc3d8b2fc75f925e21bb
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: PV Firmianstraße
+      - id: System/Description
+        value: >-
+          Reads the inverter over Modbus on the edge and persists the readings
+          through the mesh.
+  - rtId: 66b07d2995797e1617fd3164
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 5fc8fc3d8b2fc75f925e21bb
+        targetCkTypeId: System.Communication/DataFlow
+        attributes: []
+      # ReadModbusRegister@1 runs where the device is reachable.
+      - roleId: System.Communication/Executes
+        targetRtId: 5fc8fc3d8b2fc75f925e21ba
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Edge Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromPolling@1
+              interval: 00:00:10
+          transformations:
+            - type: ReadModbusRegister@1
+              serverConfigurations:
+                - server: 192.168.14.31
+                  mappings:
+                    - register: 69
+                      valueType: INT16
+                      registerType: ReadHoldingRegister
+                      targetPath: $.batteryPower
+                    - register: 67
+                      valueType: UINT16
+                      registerType: ReadHoldingRegister
+                      targetPath: $.productionPower
+                    - register: 75
+                      valueType: INT32
+                      registerType: ReadHoldingRegister
+                      targetPath: $.additionalProductionPower
+                    - register: 82
+                      valueType: UINT16
+                      registerType: ReadHoldingRegister
+                      targetPath: $.batteryStateOfCharge
+                    - register: 71
+                      valueType: INT32
+                      registerType: ReadHoldingRegister
+                      targetPath: $.consumption
+                    - register: 73
+                      valueType: INT32
+                      registerType: ReadHoldingRegister
+                      targetPath: $.net
+            - type: LinearScaler@1
+              path: $.additionalProductionPower
+              targetPath: $.additionalProductionPower
+              scaleInputMin: 0
+              scaleInputMax: -10000
+              scaleOutputMin: 0
+              scaleOutputMax: 10000
+            - type: BufferData@1
+              bufferTime: 00:01:00
+              transformations:
+                - type: ToPipelineDataEvent@1
+                  description: Load to event hub
+                  targetPath: "$.data"
+                  targetPipelineRtId: 66b07d2995797e1617fd3167
+  - rtId: 66b07d2995797e1617fd3167
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 5fc8fc3d8b2fc75f925e21bb
+        targetCkTypeId: System.Communication/DataFlow
+      # SaveStreamDataInArchive@1 / ApplyChanges@1 are Mesh-Adapter nodes.
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Mesh Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromPipelineDataEvent@1
+              description: Retrieve from distributed event hub message
+          transformations:
+            - type: ForEach@1
+              iterationPath: $.data
+              targetPath: $.x
+              documentMode: REPLACE
+              mergePath: $._updateItems
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: update main building
+                  targetPath: $._updateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: UPDATE
+                  rtId: 5fc8fda18b2fc75f925e21af
+                  ckTypeId: Industry.Energy/PhotovoltaicSystem.Module
+                  timestampPath: $.key.timestamp
+                  attributeUpdates:
+                    - attributeName: PeakPower
+                      attributeValueType: Double
+                      valuePath: $.key.productionPower
+                - type: CreateUpdateInfo@1
+                  description: update outer building
+                  targetPath: $._updateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: UPDATE
+                  rtId: 5fc8fda18b2fc75f925e21c0
+                  ckTypeId: Industry.Energy/PhotovoltaicSystem.Module
+                  timestampPath: $.key.timestamp
+                  attributeUpdates:
+                    - attributeName: PeakPower
+                      attributeValueType: Double
+                      valuePath: $.key.additionalProductionPower
+                - type: CreateUpdateInfo@1
+                  description: update battery
+                  targetPath: $._updateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: UPDATE
+                  rtId: 5fc8fda18b2fc75f925e21ae
+                  ckTypeId: Industry.Energy/EnergyStorage
+                  timestampPath: $.key.timestamp
+                  attributeUpdates:
+                    - attributeName: Power
+                      attributeValueType: Double
+                      valuePath: $.key.batteryPower
+                    - attributeName: SoC
+                      attributeValueType: Int
+                      valuePath: $.key.batteryStateOfCharge
+                - type: CreateUpdateInfo@1
+                  description: update net
+                  targetPath: $._updateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: UPDATE
+                  rtId: 5fc8fda18b2fc75f925e21c1
+                  ckTypeId: Industry.Energy/EnergyMeter
+                  timestampPath: $.key.timestamp
+                  attributeUpdates:
+                    - attributeName: Power
+                      attributeValueType: Double
+                      valuePath: $.key.net
+                - type: CreateUpdateInfo@1
+                  description: update consumption
+                  targetPath: $._updateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: UPDATE
+                  rtId: 5fc8fda18b2fc75f925e21c2
+                  ckTypeId: Industry.Energy/EnergyMeter
+                  timestampPath: $.key.timestamp
+                  attributeUpdates:
+                    - attributeName: Power
+                      attributeValueType: Double
+                      valuePath: $.key.consumption
+            - type: Flatten@1
+              path: $.x[*].[*]
+              targetPath: $._updateItems
+            - type: Project@1
+              fields:
+                - path: $.x
+            - type: SaveStreamDataInArchive@1
+              path: $._updateItems
+            - type: FilterLatestUpdateInfo@1
+              path: $._updateItems
+              targetPath: $._updateItems
+            - type: ApplyChanges@1
+              path: $._updateItems
