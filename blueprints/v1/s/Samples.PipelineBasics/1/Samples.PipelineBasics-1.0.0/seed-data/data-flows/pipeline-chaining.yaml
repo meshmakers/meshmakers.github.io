@@ -1,0 +1,84 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Communication-[3.22.0,4.0)
+
+# Pipeline chaining: a producer pipeline hands its payload to a consumer
+# pipeline through the distributed event hub (ToPipelineDataEvent@1 ->
+# FromPipelineDataEvent@1), so a flow can be split across pipelines - and, in
+# the general case, across adapters.
+#
+# Runs on the Mesh Adapter seeded by System.Communication
+# (rtId 670000000000000000000002, rtWellKnownName MeshAdapter).
+entities:
+  # DataFlow: Pipeline Chaining Demo
+  - rtId: aa0000000000000000000001
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Pipeline Chaining Demo
+      - id: System/Description
+        value: Demonstrates data flow between two pipelines using ToPipelineDataEvent and FromPipelineDataEvent nodes.
+
+  # Pipeline A: Producer - generates data and sends to Pipeline B
+  - rtId: aa0000000000000000000002
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Producer Pipeline
+      - id: System/Description
+        value: Produces sample data and sends it to the Consumer Pipeline.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromExecutePipelineCommand@1
+          transformations:
+            - type: Simulation@1
+              description: Generate sample sensor data
+              locale: en
+              simulations:
+                - targetPath: $.sensor.temperature
+                  simulatorKey: Math.DoubleRandom
+                  configuration: "{\"min\":15, \"max\":35}"
+                - targetPath: $.sensor.humidity
+                  simulatorKey: Math.DoubleRandom
+                  configuration: "{\"min\":30, \"max\":90}"
+            - type: ToPipelineDataEvent@1
+              description: Send data to Consumer Pipeline
+              path: $.sensor
+              targetPath: $.input
+              targetPipelineRtId: aa0000000000000000000003
+
+  # Pipeline B: Consumer - receives data from Pipeline A
+  - rtId: aa0000000000000000000003
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Consumer Pipeline
+      - id: System/Description
+        value: Receives data from the Producer Pipeline and processes it.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromPipelineDataEvent@1
+          transformations:
+            - type: Logger@1
+              description: Log received data
+              message: Received sensor data from Producer Pipeline
