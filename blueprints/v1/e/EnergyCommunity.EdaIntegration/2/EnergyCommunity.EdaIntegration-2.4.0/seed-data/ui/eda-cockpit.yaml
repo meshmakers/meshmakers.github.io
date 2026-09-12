@@ -1,0 +1,148 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# The EDA cockpit MeshBoard: Dashboard `energy-community-eda` and its four widgets.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Dashboard
+- rtId: ec0000000000000000000d02
+  ckTypeId: System.UI/Dashboard-1
+  rtWellKnownName: energy-community-eda
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: EDA Cockpit
+  - id: System/Description-1
+    value: ''
+  - id: System.UI/Dashboard.Columns-1
+    value: 6
+  - id: System.UI/Dashboard.RowHeight-1
+    value: 200
+  - id: System.UI/Dashboard.Gap-1
+    value: 16
+
+# Widget: metering-point count KPI (runtimeEntity count over MeteringPoint).
+- rtId: ec0000000000000000000d03
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000d02
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Zählpunkte
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: runtimeEntity
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: Basic.Energy/MeteringPoint
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ''
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"_count","icon":"chart"}'
+
+# Widget: metering-point state donut (systemQuery grouping, runtime family).
+- rtId: ec0000000000000000000d04
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000d02
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Zählpunkte nach Status
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 2
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000d06
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"donut","categoryField":"state","valueField":"state_count","showLabels":false,"showLegend":true,"legendPosition":"right","queryName":"eda-meteringpoint-state","queryRtId":"ec0000000000000000000d06","queryFamily":"runtime"}'
+
+# Widget: table "Prozesse mit Fehler" (success == false).
+- rtId: ec0000000000000000000d05
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000d02
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Prozesse mit Fehler
+  - id: System.UI/DashboardWidget.Type-1
+    value: table
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 3
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 6
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000d01
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"columns":[],"sorting":[],"filters":[{"attributePath":"success","operator":"EQUALS","comparisonValue":"false"}],"pageSize":10,"sortable":true,"queryName":"eda-processes","queryRtId":"ec0000000000000000000d01","queryFamily":"runtime"}'
+
+# Widget: table "Offene Prozesse" (finished == false).
+- rtId: ec0000000000000000000d07
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000d02
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Offene Prozesse
+  - id: System.UI/DashboardWidget.Type-1
+    value: table
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 5
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 6
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 3
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000d01
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"columns":[],"sorting":[],"filters":[{"attributePath":"finished","operator":"EQUALS","comparisonValue":"false"}],"pageSize":10,"sortable":true,"queryName":"eda-processes","queryRtId":"ec0000000000000000000d01","queryFamily":"runtime"}'
