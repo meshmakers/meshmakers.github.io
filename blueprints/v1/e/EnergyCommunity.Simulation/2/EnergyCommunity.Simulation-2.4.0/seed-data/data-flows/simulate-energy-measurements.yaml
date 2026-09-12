@@ -1,0 +1,508 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+
+# simulate-energy-measurements — the DataFlow and its three pipelines: single point
+# in time (energy-simulator), over a range (energy-simulator-range) and the scheduled
+# daily run (daily-simulation).
+# Part of the EnergyCommunity.Simulation blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Energy simulation (AB#4571, ported from voest-app) ──────────────────
+#
+# rtId scheme (documented in ../../README.md): ec0000000000000000000bXX
+#   …b01  DataFlow  simulate-energy-measurements
+#   …b02  Pipeline  energy-simulator        (fixed backfill window)
+#   …b03  Pipeline  energy-simulator-range  (window from command input)
+#   …b04  Pipeline  create-demo-community   (AB#4579 — creates demo master
+#                                            data + measurement anchors)
+#   …b05  DataFlow  create-demo-community
+#
+# Both pipelines run SimulateEnergyMeasurements@1: they load ALL existing
+# Basic.Energy/EnergyMeasurement anchor entities (no query entity involved),
+# resolve each anchor's parent metering point via System/ParentChild, pick the
+# PV profile when the parent is an EnergyCommunity/Producer (exact type match
+# — the EC subtype, NOT Basic.Energy/Producer) and the BDEW H0 load profile
+# otherwise, and emit one datapoint per 15-minute slot keyed by the anchor's
+# existing rtId, which satisfies the archive-write integrity guard of
+# SaveTimeRangeStreamDataInArchive@1. No RT entities are created.
+#
+# DISABLED-BY-DEFAULT CONTRACT: System/Enabled = false and only
+# FromExecutePipelineCommand@1 triggers — a fresh install can never write
+# simulated data on its own. Re-apply the blueprint (InstallBlueprint -f)
+# after a simulation run to restore this state.
+
+- rtId: ec0000000000000000000b01
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: simulate-energy-measurements
+  - id: System/Description-1
+    value: >-
+      Synthetic 15-min metering values for the existing EnergyMeasurement
+      anchors (EnergyCommunity/Producer parent = PV curve, everything else =
+      BDEW H0 load profile). Simulation-only — NOT for productive tenants.
+
+- rtId: ec0000000000000000000b02
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000b01
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: energy-simulator
+  - id: System/Description-1
+    value: >-
+      Backfills deterministic 15-min archive history for the existing
+      EnergyMeasurement anchors (EnergyCommunity/Producer parent = PV,
+      otherwise BDEW H0 load profile), keyed by each anchor's stable rtId.
+      Fixed window (edit startDate/numDays in the definition). Stream-only
+      write into archive ec0000000000000000000a01. Disabled by default;
+      trigger via ExecutePipelineCommand only.
+  - id: System/Enabled-1
+    value: false
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: SimulateEnergyMeasurements@1
+          description: >-
+            15-min history for every existing EnergyMeasurement anchor — PV
+            for EnergyCommunity/Producer parents, BDEW H0 load profile for
+            all other parents, keyed by the existing anchor rtId. One-year
+            backfill, stream-only.
+          startDate: 2025-01-01T00:00:00Z
+          numDays: 365
+          energyMeasurementCkTypeId: Basic.Energy/EnergyMeasurement
+          timeRangeCkRecordId: Basic/TimeRange
+          amountCkRecordId: Basic/Amount
+          amountUnit: 1
+          dataQuality: 1
+          parentAssociationRoleId: System/ParentChild
+          meteringPointCkTypeId: Basic.Energy/MeteringPoint
+          producerCkTypeId: EnergyCommunity/Producer
+          loadProfileSubKey: H0
+          consumerDailyKWh: 500
+          producerPeakKWp: 50
+          entityUpdatesOutputPath: $.entityUpdates
+        - type: SaveTimeRangeStreamDataInArchive@1
+          description: Stream-only write into the 15-min energy-measurements archive.
+          path: $.entityUpdates
+          archiveRtId: "ec0000000000000000000a01"
+          fromAttributePath: TimeRange.From
+          toAttributePath: TimeRange.To
+
+- rtId: ec0000000000000000000b03
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000b01
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: energy-simulator-range
+  - id: System/Description-1
+    value: >-
+      Parameterised deterministic 15-min simulator: startDate + numDays come
+      from the ExecutePipelineCommand input, passed as a JSON file via
+      ExecutePipeline -f (the file holds { "startDate": "2026-07-20T00:00:00Z",
+      "numDays": 3 }). Upserts by
+      rtId + time range into archive ec0000000000000000000a01 — use it to
+      append current days on demand. Disabled by default; trigger via
+      ExecutePipelineCommand only.
+  - id: System/Enabled-1
+    value: false
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: SimulateEnergyMeasurements@1
+          description: >-
+            15-min data for every existing EnergyMeasurement anchor over the
+            window [startDate, startDate + numDays), read from the command
+            input.
+          startDateAttributePath: $.startDate
+          numDaysAttributePath: $.numDays
+          energyMeasurementCkTypeId: Basic.Energy/EnergyMeasurement
+          timeRangeCkRecordId: Basic/TimeRange
+          amountCkRecordId: Basic/Amount
+          amountUnit: 1
+          dataQuality: 1
+          parentAssociationRoleId: System/ParentChild
+          meteringPointCkTypeId: Basic.Energy/MeteringPoint
+          producerCkTypeId: EnergyCommunity/Producer
+          loadProfileSubKey: H0
+          consumerDailyKWh: 500
+          producerPeakKWp: 50
+          entityUpdatesOutputPath: $.entityUpdates
+        - type: SaveTimeRangeStreamDataInArchive@1
+          description: Stream-only write into the 15-min energy-measurements archive.
+          path: $.entityUpdates
+          archiveRtId: "ec0000000000000000000a01"
+          fromAttributePath: TimeRange.From
+          toAttributePath: TimeRange.To
+
+# ─── Daily simulator + anchor sync (AB#4701) ─────────────────────────────
+#
+#   …b06  Pipeline  daily-simulation (child of DataFlow b01)
+#
+# Runs once per day (FromPolling, 24 h interval; also manually triggerable
+# via ExecutePipelineCommand). Two phases:
+#   A) ANCHOR SYNC: for EVERY EnergyCommunity/Consumer (2 anchors,
+#      1-1:1.9.0 P.01 + G.01) and EnergyCommunity/Producer (1 anchor,
+#      1-1:2.9.0 G.01) the EnergyMeasurement anchors are created if missing
+#      (GetOrCreate by wkn <mpRtId>_<obisCode>, ParentChild on first create) —
+#      metering points added later via the API automatically join the
+#      simulation without any manual anchor step (mirrors the EDA-ingest
+#      auto-anchor behaviour for tenants without EDA).
+#   B) SIMULATE YESTERDAY: SimulateEnergyMeasurements over the previous UTC
+#      CALENDAR day (whole-day window, aligned with the rollup buckets; the
+#      window is computed at run time, so the firing hour does not matter).
+#      Deterministic values + archive upsert make re-runs and overlaps
+#      harmless.
+- rtId: ec0000000000000000000b06
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000b01
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: daily-simulation
+  - id: System/Description-1
+    value: >-
+      Daily demo-data continuation (AB#4701): creates missing
+      EnergyMeasurement anchors for ALL Consumer/Producer metering points
+      (idempotent GetOrCreate by well-known name), then simulates the
+      previous UTC calendar day into archive ec0000000000000000000a01.
+      Fires every 24 h via FromPolling once deployed; also triggerable via
+      ExecutePipelineCommand. Disabled by default; simulation-only — NOT
+      for productive tenants.
+  - id: System/Enabled-1
+    value: false
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromPolling@1
+          interval: "1.00:00:00"
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: Logger@1
+          message: "Daily simulation (AB#4701): anchor sync + previous-day window starting"
+
+        # ===== Init shared update collections (Flatten-Append pattern) =====
+        - type: WriteJson@1
+          description: Init entity-update collection
+          targetPath: $.updates.items
+          jsonString: "[]"
+        - type: WriteJson@1
+          description: Init association-update collection
+          targetPath: $.updates.assocs
+          jsonString: "[]"
+
+        # ===== Shared mandatory anchor records (placeholder values) =====
+        - type: SetPrimitiveValue@1
+          description: Amount.CkRecordId
+          targetPath: $.rec.amount.CkRecordId
+          value: Basic/Amount
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.amount.Attributes.Value
+          value: 0.0
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.amount.Attributes.Unit
+          value: 1
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: TimeRange.CkRecordId
+          targetPath: $.rec.timeRange.CkRecordId
+          value: Basic/TimeRange
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.timeRange.Attributes.From
+          value: 2025-01-01T00:00:00Z
+          valueType: DateTime
+        - type: SetPrimitiveValue@1
+          targetPath: $.rec.timeRange.Attributes.To
+          value: 2025-01-01T00:15:00Z
+          valueType: DateTime
+
+        # ===== A1. Anchor sync for ALL consumers (2 OBIS codes) =====
+        - type: GetRtEntitiesByType@1
+          description: Load all consumer metering points
+          ckTypeId: EnergyCommunity/Consumer
+          targetPath: $.cons
+          take: 10000
+        - type: ForEach@1
+          description: Ensure the two consumer anchors exist per metering point
+          iterationPath: $.cons.Items
+          mergePath: $.key.u
+          targetPath: $.consAnchorUpdates
+          maxDegreeOfParallelism: 1
+          transformations:
+            # anchor 1-1:1.9.0 G.01 (total grid consumption)
+            - type: FormatString@1
+              description: Build wkn for the consumption anchor
+              format: "{$.key.RtId}_1-1:1.9.0 G.01"
+              targetPath: $.key.ag.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the consumption anchor by well-known name
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              rtIdTargetPath: $.key.ag.rtId
+              ckTypeIdTargetPath: $.key.ag.ckTypeId
+              modOperationPath: $.key.ag.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.ag.wkn
+            - type: If@1
+              description: Create the consumption anchor only if missing
+              path: $.key.ag.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Insert the consumption anchor
+                  targetPath: $.key.u.items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKindPath: $.key.ag.modOp
+                  ckTypeIdPath: $.key.ag.ckTypeId
+                  rtIdPath: $.key.ag.rtId
+                  rtWellKnownNamePath: $.key.ag.wkn
+                  attributeUpdates:
+                    - attributeName: ObisCode
+                      attributeValueType: String
+                      value: "1-1:1.9.0 G.01"
+                    - attributeName: DataQuality
+                      attributeValueType: Enum
+                      value: 1
+                    - attributeName: Amount
+                      attributeValueType: Record
+                      valuePath: $.full.rec.amount
+                    - attributeName: TimeRange
+                      attributeValueType: Record
+                      valuePath: $.full.rec.timeRange
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.ag.rtId
+                  originCkTypeIdPath: $.key.ag.ckTypeId
+                  targetRtIdPath: $.key.RtId
+                  targetCkTypeIdPath: $.key.CkTypeId
+                  associationRoleId: System/ParentChild
+            # anchor 1-1:1.9.0 P.01 (community partition)
+            - type: FormatString@1
+              description: Build wkn for the partition anchor
+              format: "{$.key.RtId}_1-1:1.9.0 P.01"
+              targetPath: $.key.ap.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the partition anchor by well-known name
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              rtIdTargetPath: $.key.ap.rtId
+              ckTypeIdTargetPath: $.key.ap.ckTypeId
+              modOperationPath: $.key.ap.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.ap.wkn
+            - type: If@1
+              description: Create the partition anchor only if missing
+              path: $.key.ap.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Insert the partition anchor
+                  targetPath: $.key.u.items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKindPath: $.key.ap.modOp
+                  ckTypeIdPath: $.key.ap.ckTypeId
+                  rtIdPath: $.key.ap.rtId
+                  rtWellKnownNamePath: $.key.ap.wkn
+                  attributeUpdates:
+                    - attributeName: ObisCode
+                      attributeValueType: String
+                      value: "1-1:1.9.0 P.01"
+                    - attributeName: DataQuality
+                      attributeValueType: Enum
+                      value: 1
+                    - attributeName: Amount
+                      attributeValueType: Record
+                      valuePath: $.full.rec.amount
+                    - attributeName: TimeRange
+                      attributeValueType: Record
+                      valuePath: $.full.rec.timeRange
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.ap.rtId
+                  originCkTypeIdPath: $.key.ap.ckTypeId
+                  targetRtIdPath: $.key.RtId
+                  targetCkTypeIdPath: $.key.CkTypeId
+                  associationRoleId: System/ParentChild
+
+        # ===== A2. Anchor sync for ALL producers (1 OBIS code) =====
+        - type: GetRtEntitiesByType@1
+          description: Load all producer metering points
+          ckTypeId: EnergyCommunity/Producer
+          targetPath: $.prods
+          take: 10000
+        - type: ForEach@1
+          description: Ensure the feed-in anchor exists per producer
+          iterationPath: $.prods.Items
+          mergePath: $.key.u
+          targetPath: $.prodAnchorUpdates
+          maxDegreeOfParallelism: 1
+          transformations:
+            - type: FormatString@1
+              description: Build wkn for the feed-in anchor
+              format: "{$.key.RtId}_1-1:2.9.0 G.01"
+              targetPath: $.key.af.wkn
+            - type: GetOrCreateRtEntitiesByType@1
+              description: Get or create the feed-in anchor by well-known name
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              rtIdTargetPath: $.key.af.rtId
+              ckTypeIdTargetPath: $.key.af.ckTypeId
+              modOperationPath: $.key.af.modOp
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.key.af.wkn
+            - type: If@1
+              description: Create the feed-in anchor only if missing
+              path: $.key.af.modOp
+              operator: Equals
+              value: 0
+              valueType: Int
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Insert the feed-in anchor
+                  targetPath: $.key.u.items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKindPath: $.key.af.modOp
+                  ckTypeIdPath: $.key.af.ckTypeId
+                  rtIdPath: $.key.af.rtId
+                  rtWellKnownNamePath: $.key.af.wkn
+                  attributeUpdates:
+                    - attributeName: ObisCode
+                      attributeValueType: String
+                      value: "1-1:2.9.0 G.01"
+                    - attributeName: DataQuality
+                      attributeValueType: Enum
+                      value: 1
+                    - attributeName: Amount
+                      attributeValueType: Record
+                      valuePath: $.full.rec.amount
+                    - attributeName: TimeRange
+                      attributeValueType: Record
+                      valuePath: $.full.rec.timeRange
+                - type: CreateAssociationUpdate@1
+                  targetPath: $.key.u.assocs
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: CREATE
+                  originRtIdPath: $.key.af.rtId
+                  originCkTypeIdPath: $.key.af.ckTypeId
+                  targetRtIdPath: $.key.RtId
+                  targetCkTypeIdPath: $.key.CkTypeId
+                  associationRoleId: System/ParentChild
+
+        # ===== Collect + persist anchor inserts in one transaction =====
+        - type: Flatten@1
+          description: Collect consumer anchor entity updates
+          path: $.consAnchorUpdates[*].items[*]
+          targetPath: $.updates.items
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect consumer anchor association updates
+          path: $.consAnchorUpdates[*].assocs[*]
+          targetPath: $.updates.assocs
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect producer anchor entity updates
+          path: $.prodAnchorUpdates[*].items[*]
+          targetPath: $.updates.items
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect producer anchor association updates
+          path: $.prodAnchorUpdates[*].assocs[*]
+          targetPath: $.updates.assocs
+          targetValueWriteMode: Append
+        - type: ApplyChanges@2
+          description: Persist missing anchors + their parent associations
+          entityUpdatesPath: $.updates.items
+          associationUpdatesPath: $.updates.assocs
+
+        # ===== B. Simulate the previous UTC calendar day =====
+        - type: ExecuteCSharp@1
+          description: Compute yesterday 00:00 UTC (whole-day window, rollup-bucket aligned)
+          targetPath: $.calc.yesterday
+          returnType: DateTime
+          arguments: []
+          code: |
+            return DateTime.UtcNow.Date.AddDays(-1);
+        - type: SimulateEnergyMeasurements@1
+          description: >-
+            15-min data for every existing EnergyMeasurement anchor (including
+            the ones just created) over the previous calendar day.
+          startDateAttributePath: $.calc.yesterday
+          numDays: 1
+          energyMeasurementCkTypeId: Basic.Energy/EnergyMeasurement
+          timeRangeCkRecordId: Basic/TimeRange
+          amountCkRecordId: Basic/Amount
+          amountUnit: 1
+          dataQuality: 1
+          parentAssociationRoleId: System/ParentChild
+          meteringPointCkTypeId: Basic.Energy/MeteringPoint
+          producerCkTypeId: EnergyCommunity/Producer
+          loadProfileSubKey: H0
+          consumerDailyKWh: 500
+          producerPeakKWp: 50
+          entityUpdatesOutputPath: $.entityUpdates
+        - type: SaveTimeRangeStreamDataInArchive@1
+          description: Stream-only write into the 15-min energy-measurements archive.
+          path: $.entityUpdates
+          archiveRtId: "ec0000000000000000000a01"
+          fromAttributePath: TimeRange.From
+          toAttributePath: TimeRange.To
