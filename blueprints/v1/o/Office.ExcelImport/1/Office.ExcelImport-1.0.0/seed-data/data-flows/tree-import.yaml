@@ -1,0 +1,80 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Communication-[3.22.0,4.0)
+
+# DataFlow + Pipeline behind the Office Add-In's "/import/tree" route.
+#
+# The rtIds are carried over unchanged from the former sample
+# (octo-construction-kit/src/Samples/_general/rt-pipeline-excel.yaml) so tenants
+# that imported that file get an idempotent upsert instead of a second,
+# parallel DataFlow on the same route.
+entities:
+
+  - rtId: 672c67b00e12cd897b01f2d4
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Office Excel Import
+      - id: System/Description
+        value: >-
+          HTTP routes the OctoMesh Office Add-In calls on the Mesh Adapter.
+
+  - rtId: 672c69000e12cd897b01f2e1
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 672c67b00e12cd897b01f2d4
+        targetCkTypeId: System.Communication/DataFlow
+      # The Mesh Adapter seeded by System.Communication.MainLatest/.Release.
+      # Both variants share this rtId, so the association resolves on every
+      # environment class.
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Import Tree
+      - id: System/Description
+        value: >-
+          Imports a worksheet range posted by the Office Add-In into the
+          selected tree model. Payload shape is owned by the add-in
+          (TreeColumnDto / TreePathDto) and consumed by ImportFromExcel@1.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            # @2, not @1: the add-in's client side of AB#4185 has landed -
+            # office/import/import-failure.ts classifies 401 and 403 from
+            # HttpRequestService.IsCallerAuthorizedAsync into its own messages,
+            # and authorizeInterceptor already signs the adapter URL because
+            # config/wellKnownServiceUris.ts puts meshAdapterUrl on the
+            # allow-list. @1 would leave the route anonymous.
+            - type: FromHttpRequest@2
+              path: /import/tree
+              method: POST
+              # No requiredRoles: any caller holding a valid token for THIS
+              # tenant may import; what they are allowed to write is decided by
+              # data permissions, not by a role on the route. Add roles here if
+              # a deployment wants the import gated further.
+              allowAnonymous: false
+          transformations:
+            - type: ImportFromExcel@1
+            # An HTTP-triggered pipeline answers with its ENTIRE final
+            # DataContext - including $.headers with the caller's Authorization
+            # header and $.body with the whole posted worksheet. The add-in
+            # ignores the response body (it only checks for 2xx), so the
+            # terminal Project@1 clear:true rebuilds the root and returns just
+            # the acknowledgement.
+            - type: SetPrimitiveValue@1
+              description: Success marker
+              targetPath: $.done
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              description: Clear the context down to the success flag
+              path: $
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
