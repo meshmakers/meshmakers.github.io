@@ -1,0 +1,522 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.1,5.0)
+- System.Communication-[3.22,4.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# The sixteen EDA-internal RT queries: process tracking, metering-point and
+# operating-facility lookups, participation periods, consumer/producer resolution.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── EDA-internal queries ────────────────────────────────────────────────
+- rtId: 6888fae9893700047f54cc3b
+  rtCreationDateTime: 2025-07-29T16:46:33.6100000Z
+  rtChangedDateTime: 2025-07-30T14:15:39.9400000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaMessage
+  - id: System/Query.Columns-1
+    value:
+    - messageType
+    - process.basicEnergyEdaProcess->rtId
+    - rawMessage
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: conversationId
+      - id: System/SortOrder-1
+        value: 1
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: creationDate
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.FieldFilter-1
+    value:
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: messageType
+      - id: System/FieldFilter.Operator-1
+        value: 6
+      - id: System/ComparisonValue-1
+        value: '[ANTWORT_ECON, ABLEHNUNG_ECON, ZUSTIMMUNG_ECON, ABBRUCH_ECON, ABSCHLUSS_ECON]'
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: processed
+      - id: System/FieldFilter.Operator-1
+        value: 0
+      - id: System/ComparisonValue-1
+        value: false
+  - id: System/Name-1
+    value: pipeline_cr_req_onl
+
+- rtId: 688b047f5f17dc195d83ca1d
+  rtCreationDateTime: 2025-07-31T05:51:59.2650000Z
+  rtChangedDateTime: 2025-08-27T16:06:44.5640000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaMessage
+  - id: System/Query.Columns-1
+    value:
+    - messageType
+    - process.basicEnergyEdaProcess->rtId
+    - rawMessage
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: conversationId
+      - id: System/SortOrder-1
+        value: 1
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: creationDate
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.FieldFilter-1
+    value:
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: messageType
+      - id: System/FieldFilter.Operator-1
+        value: 6
+      - id: System/ComparisonValue-1
+        value: '[ABLEHNUNG_ECP, SENDEN_ECP]'
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: processed
+      - id: System/FieldFilter.Operator-1
+        value: 0
+      - id: System/ComparisonValue-1
+        value: false
+  - id: System/Name-1
+    value: pipeline_ec_podlist
+
+- rtId: 688b17275f17dc195d83ca1e
+  rtCreationDateTime: 2025-07-31T07:11:35.6920000Z
+  rtChangedDateTime: 2025-08-27T16:07:09.1910000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaMessage
+  - id: System/Query.Columns-1
+    value:
+    - messageType
+    - process.basicEnergyEdaProcess->rtId
+    - rawMessage
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: conversationId
+      - id: System/SortOrder-1
+        value: 1
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: creationDate
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.FieldFilter-1
+    value:
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: messageType
+      - id: System/FieldFilter.Operator-1
+        value: 6
+      - id: System/ComparisonValue-1
+        value: '[ABLEHNUNG_PT, ANTWORT_PT]'
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: processed
+      - id: System/FieldFilter.Operator-1
+        value: 0
+      - id: System/ComparisonValue-1
+        value: false
+  - id: System/Name-1
+    value: pipeline_cr_req_pt
+
+- rtId: 68a6b3bdfe29b1f7d63da873
+  rtCreationDateTime: 2025-08-21T05:50:53.6420000Z
+  rtChangedDateTime: 2025-08-21T12:41:11.2600000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/Query.Columns-1
+    value:
+    - parent.basicEnergyMeteringPoint->meteringPointNumber
+    - timeRange.from
+    - timeRange.to
+    - dataQuality
+    - parent.basicEnergyMeteringPoint->ckTypeId
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_consumption_record
+
+- rtId: 68aeac72421a60114aa59cbd
+  rtCreationDateTime: 2025-08-27T06:57:54.3370000Z
+  rtChangedDateTime: 2025-08-27T06:58:12.1800000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaMessage
+  - id: System/Query.Columns-1
+    value:
+    - messageType
+    - process.basicEnergyEdaProcess->rtId
+    - rawMessage
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: conversationId
+      - id: System/SortOrder-1
+        value: 1
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: creationDate
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.FieldFilter-1
+    value:
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: messageType
+      - id: System/FieldFilter.Operator-1
+        value: 6
+      - id: System/ComparisonValue-1
+        value: '[ABLEHNUNG_CPF, ANTWORT_CPF]'
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: processed
+      - id: System/FieldFilter.Operator-1
+        value: 0
+      - id: System/ComparisonValue-1
+        value: false
+  - id: System/Name-1
+    value: pipeline_ec_prtfact_change
+
+- rtId: 691b2b2a0a44e3fea8b15460
+  rtCreationDateTime: 2025-11-17T14:03:22.5540000Z
+  rtChangedDateTime: 2025-11-17T14:05:26.2660000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaMessage
+  - id: System/Query.Columns-1
+    value:
+    - messageType
+    - process.basicEnergyEdaProcess->rtId
+    - rawMessage
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: conversationId
+      - id: System/SortOrder-1
+        value: 1
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: creationDate
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.FieldFilter-1
+    value:
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: messageType
+      - id: System/FieldFilter.Operator-1
+        value: 6
+      - id: System/ComparisonValue-1
+        value: '[ABLEHNUNG_CCMS, ANTWORT_CCMS]'
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: processed
+      - id: System/FieldFilter.Operator-1
+        value: 0
+      - id: System/ComparisonValue-1
+        value: false
+  - id: System/Name-1
+    value: pipeline_cm_rev_sp
+
+- rtId: 692ec1577b16a091baf944fb
+  rtCreationDateTime: 2025-12-02T10:37:11.2380000Z
+  rtChangedDateTime: 2025-12-02T10:56:35.3470000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/MeteringPoint
+  - id: System/Query.Columns-1
+    value:
+    - state
+    - parent.basicEnergyOperatingFacility->rtId
+    - parent.basicEnergyOperatingFacility->state
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_meteringpoint_states
+
+- rtId: 69314ccc231a1b734996238d
+  rtCreationDateTime: 2025-12-04T08:56:44.9200000Z
+  rtChangedDateTime: 2025-12-04T08:57:22.3040000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/OperatingFacility
+  - id: System/Query.Columns-1
+    value:
+    - state
+    - customer.energyCommunityCustomer->rtId
+    - customer.energyCommunityCustomer->state
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_operating_facility_states
+
+- rtId: 698da8e368279a6857543b99
+  rtCreationDateTime: 2026-02-12T10:18:11.9460000Z
+  rtChangedDateTime: 2026-02-23T14:44:01.5410000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.Columns-1
+    value:
+    - rtId
+    - meteringPointNumber
+    - state
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: meteringPointNumber
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.FieldFilter-1
+    value:
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: state
+      - id: System/FieldFilter.Operator-1
+        value: 0
+      - id: System/ComparisonValue-1
+        value: Active
+  - id: System/Name-1
+    value: pipeline_active_metering_points
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/MeteringPoint
+
+- rtId: 69c132600f64325a0cc89586
+  rtCreationDateTime: 2026-03-23T12:30:24.6230000Z
+  rtChangedDateTime: 2026-03-26T09:40:03.7960000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.Columns-1
+    value:
+    - rtId
+    - meteringPoint.basicEnergyMeteringPoint->meteringPointNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_existing_participation_periods
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/ParticipationPeriod
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+- rtId: 69c230e44f1e21ff43bfb1be
+  rtCreationDateTime: 2026-03-24T06:36:20.6990000Z
+  rtChangedDateTime: 2026-03-25T06:11:23.5270000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.Columns-1
+    value:
+    - meteringPoint.basicEnergyMeteringPoint->meteringPointNumber
+    - timeRange.from
+    - timeRange.to
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_participation_periods
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/ParticipationPeriod
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+- rtId: 69ca80d85556c12b9382f21e
+  rtCreationDateTime: 2026-03-30T13:55:36.3550000Z
+  rtChangedDateTime: 2026-03-30T14:07:41.0900000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_consumer
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Consumer
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+- rtId: 69ca81475556c12b9382f21f
+  rtCreationDateTime: 2026-03-30T13:57:27.7520000Z
+  rtChangedDateTime: 2026-03-30T14:20:32.5220000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+    - productionType
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_producer
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Producer
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+- rtId: 69ca88fb5556c12b9382f220
+  rtCreationDateTime: 2026-03-30T14:30:19.2440000Z
+  rtChangedDateTime: 2026-03-30T14:31:16.9160000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_eda_metering_point
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaMeteringPoint
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+- rtId: 69ca90f55556c12b9382f221
+  rtCreationDateTime: 2026-03-30T15:04:21.5190000Z
+  rtChangedDateTime: 2026-03-30T15:30:39.0760000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+    - state
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: pipeline_metering_point
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/MeteringPoint
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+
+# Planned EDA processes: EdaProcess entities flagged Planned with a future
+# StartTime, picked up by the "Start planned EDA processes" pipeline below.
+- rtId: 6a2bbc146830b2865f042891
+  rtCreationDateTime: 2026-06-12T07:58:12.1630000Z
+  rtChangedDateTime: 2026-06-12T11:52:49.6680000Z
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaProcess
+  - id: System/Query.Columns-1
+    value:
+    - name
+    - startTime
+    - processData
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value:
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: planned
+      - id: System/FieldFilter.Operator-1
+        value: 0
+      - id: System/ComparisonValue-1
+        value: true
+  - id: System/Name-1
+    value: pipeline_planned_processes
+  - id: System/Description-1
+    value: ''
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
