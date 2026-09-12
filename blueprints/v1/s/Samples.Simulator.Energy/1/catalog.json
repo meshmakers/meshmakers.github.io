@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "Samples.Simulator.Energy",
+  "majorVersion": 1,
+  "latestVersion": "1.0.0",
+  "description": "Time-range-archive simulation: one Basic.Energy/OperatingFacility with three\nConsumer and two Producer metering points, a quarter-hour TimeRangeArchive\nwith three chained RollupArchives on top (hourly -\u003E daily -\u003E calendar month),\nand the pipeline that generates a synthetic load profile across all of them.\n\nThe reference workload for validating time-range archives, chained rollups\nand resolution-aware series queries without real meter data.\n\nPrerequisites on the tenant: Communication enabled (supplies the Mesh Adapter\nthis blueprint targets) and Stream Data enabled.\n\nTWO STEPS ARE NOT PART OF THE BLUEPRINT - a blueprint seeds entities, it does\nnot drive lifecycle:\n\n  1) Activate the four archives IN ORDER - a chained rollup needs its source\n     activated first, and activation is what provisions the per-archive\n     CrateDB table:\n       octo-cli -c ActivateArchive -id ab0000000000000000000015   # PT15M source\n       octo-cli -c ActivateArchive -id ab00000000000000000001a0   # hourly\n       octo-cli -c ActivateArchive -id ab00000000000000000001b0   # daily\n       octo-cli -c ActivateArchive -id ab00000000000000000001c0   # monthly\n  2) Deploy the DataFlow, then run the simulation:\n       octo-cli -c ExecutePipeline --identifier cc00000000000000000000e2\n\nDemo and training tenants only.\n",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "directoryPath": "blueprints/v1/s/Samples.Simulator.Energy/1/Samples.Simulator.Energy-1.0.0",
+      "publishedAt": "2026-09-12T18:24:04.8278267Z"
+    }
+  ],
+  "updatedAt": "2026-09-12T18:24:04.8294776Z"
+}
