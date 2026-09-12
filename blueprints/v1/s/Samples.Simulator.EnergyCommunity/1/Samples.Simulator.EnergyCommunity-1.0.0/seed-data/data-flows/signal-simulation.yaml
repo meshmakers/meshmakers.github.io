@@ -1,0 +1,132 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - OctoSdkDemo-[2.1.0,3.0)
+  - System.Communication-[3.22.0,4.0)
+
+# Signal simulation for the energy-community demo, split across two pipelines:
+#
+#   Simulate Signals         - polls every 10s, generates sinus/constant/triangle
+#                              signals and hands them to the second pipeline over
+#                              the event hub.
+#   Store Simulated Readings - writes the scaled values onto the two metering
+#                              points of "Firmianstrasse 31A".
+#
+# Both run on the Mesh Adapter seeded by System.Communication: Simulation@1 is
+# part of the Mesh Adapter SDK (AddSimulationNodes()), so the dedicated
+# simulation plug adapter the sample used to seed is unnecessary - it also
+# collided rtId-for-rtId with the zenon sample.
+#
+# The second pipeline ended with BackfillFromRtEntity@1 whose archiveRtId named
+# a MeteringPoint instead of an archive; the node throws when the archive
+# cannot be resolved, so every run failed. There is no archive in this sample
+# and no SaveStreamDataInArchive@1 after it - the node is dropped, not fixed.
+entities:
+  - rtId: 65d5c447b420da3fb12381bd
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Simulation Pipeline
+  - rtId: 65d5c447b420da3fb12381be
+    ckTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: Simulate Signals
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromPolling@1
+              interval: 00:00:10
+          transformations:
+            - type: Simulation@1
+              description: Simulates data
+              locale: en
+              simulations:
+                - targetPath: $.Sinus
+                  simulatorKey: Math.Sinus
+                - targetPath: $.Constant_6
+                  simulatorKey: Math.Constant
+                  configuration: "{ \"amplitude\": 6}"
+                - targetPath: $.Triangle
+                  simulatorKey: Math.Triangle
+            - type: SelectByPath@1
+              description: Transform object node
+              selectPath:
+                - path: "$.Sinus"
+                  targetPath: $.Sinus5
+                  transformations:
+                    - type: LinearScaler@1
+                      scaleInputMin: 0
+                      scaleInputMax: 1
+                      scaleOutputMin: 0
+                      scaleOutputMax: 1000
+                - path: "$.Constant_6"
+                  targetPath: $.Constant
+                  transformations:
+                    - type: LinearScaler@1
+                      scaleInputMin: 0
+                      scaleInputMax: 10
+                      scaleOutputMin: 0
+                      scaleOutputMax: 1000
+            - type: Project@1
+              fields:
+                - path: "$.Sinus"
+                - path: "$.Constant_6"
+            - type: ToPipelineDataEvent@1
+              description: Load to event hub
+              targetPipelineRtId: 65d5c447b420da3fb12381bf
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65d5c447b420da3fb12381bd
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+  - rtId: 65d5c447b420da3fb12381bf
+    ckTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: Store Simulated Readings
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromPipelineDataEvent@1
+              description: Retrieve from distributed event hub message
+          transformations: 
+            - type: CreateUpdateInfo@1
+              description: Update consumption firmianstraße
+              targetPath: $._updateItems
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: UPDATE
+              rtId: 65dc6d24cc529cdc46c84fd4
+              ckTypeId: OctoSdkDemo/MeteringPoint
+              attributeUpdates: 
+                - attributeName: MeterReading
+                  attributeValueType: Double
+                  valuePath: $.Sinus5
+            - type: CreateUpdateInfo@1
+              description: Update production firmianstraße
+              targetPath: $._updateItems
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: UPDATE
+              rtId: 65dc6d24cc529cdc46c84fd5
+              ckTypeId: OctoSdkDemo/MeteringPoint
+              attributeUpdates: 
+                - attributeName: MeterReading
+                  attributeValueType: Double
+                  valuePath: $.Constant        
+            - type: ApplyChanges@1
+              path: $._updateItems
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65d5c447b420da3fb12381bd
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+      
