@@ -1,0 +1,41 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: Samples.EnergyEnvironment-1.0.0
+description: |
+  The largest of the sample blueprints - a complete energy-management demo for
+  one industrial site, from assets to dashboard:
+
+    master-data/assets.yaml        PV system, inverter, storage, meters and
+                                   consumers, plus carbon emissions/budget,
+                                   certificates of origin, compliance records,
+                                   environmental goals, KPIs, costs, forecasts
+                                   and a demand-response event
+    master-data/load-profile.yaml  quarter-hour load profile as
+                                   Basic.Energy/EnergyMeasurement entities
+    notifications/alerts.yaml      stateful events surfaced as dashboard alerts
+    queries/*.yaml                 the three saved queries the widgets bind to
+    ui/dashboard.yaml              the Meshboard dashboard and its 14 widgets
+
+  Data-only - no pipelines, no adapter, nothing to deploy. Install and open the
+  "energy-environment" dashboard.
+
+  Demo and training tenants only.
+ckModelDependencies:
+  # Floors pinned to published versions, in dependency order: the engine
+  # installs each floor EXACTLY and resolves no transitive CK dependencies.
+  - Basic-[2.0.3,3.0)
+  - Basic.Energy-[1.4.0,2.0)
+  - Industry.Basic-[2.2.0,3.0)
+  - Industry.Energy-[3.2.0,4.0)
+  - Environment-[3.2.0,4.0)
+  # Satisfiability floors only - service-managed, see Samples.PipelineBasics.
+  - System-[2.2.0,3.0)
+  - System.Notification-[2.1.0,3.0)
+  - System.UI-[2.4.0,3.0)
+seedDataPaths:
+  - seed-data/master-data/assets.yaml
+  - seed-data/master-data/load-profile.yaml
+  - seed-data/notifications/alerts.yaml
+  - seed-data/queries/anlagen.yaml
+  - seed-data/queries/lastgang.yaml
+  - seed-data/queries/forecast.yaml
+  - seed-data/ui/dashboard.yaml
