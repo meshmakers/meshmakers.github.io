@@ -1,0 +1,230 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# CkArchive entities for the time-range-archive simulation pipeline:
+#   1× TimeRangeArchive (PT15M, target = EnergyMeasurement, columns = Amount/ObisCode/DataQuality).
+#   3× RollupArchive chained on top: hourly (PT1H, fixed) → daily (P1D, fixed) → monthly
+#   (BucketAlignment = CalendarMonth, BucketSizeMs is informational).
+#
+# All four are seeded in Status = Created.
+dependencies:
+  - Basic.Energy-[1.4.0,2.0)
+  - System.StreamData-[1.4,2.0)
+
+# ActivateArchive provisions the per-archive CrateDB table and must be run in
+# source-to-rollup order (TimeRange -> hourly -> daily -> monthly); a chained
+# rollup needs its source activated first. See the blueprint README.
+entities:
+
+  # ---- Quarter-hour TimeRangeArchive ---------------------------------------
+  - rtId: ab0000000000000000000015
+    ckTypeId: System.StreamData/TimeRangeArchive
+    rtWellKnownName: SimEnergyMeasurementsQH
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: Basic.Energy/EnergyMeasurement
+      - id: System.StreamData/Archive.Status
+        value: 0                                       # Created
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: Amount.Value                       # nested: Basic/Amount.Value (Double)
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ObisCode
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: DataQuality
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+      - id: System.StreamData/TimeRangeArchive.Period
+        value: "00:15:00"                              # 15 min — .NET TimeSpan format (PT15M ISO-8601 also works after TimeSpanSerializer rollout)
+
+  # ---- Hourly Rollup -------------------------------------------------------
+  - rtId: ab00000000000000000001a0
+    ckTypeId: System.StreamData/RollupArchive
+    rtWellKnownName: SimEnergyMeasurementsHourly
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: Basic.Energy/EnergyMeasurement
+      - id: System.StreamData/Archive.Status
+        value: 0
+      # Columns are normally derived from Aggregations[] by RollupArchiveLifecycleService.CreateAsync
+      # via RollupColumnGenerator. RT-import bypasses that, so we pre-populate the same set here so
+      # the mandatory-attribute validator passes and MapToSnapshot re-derives them on load.
+      - id: System.StreamData/Archive.Columns
+        value:
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_sum},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_min},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_max},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_avg_sum},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_avg_count}, {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_count}, {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+      - id: System.StreamData/RollupArchive.SourceArchiveRtId
+        value: ab0000000000000000000015
+      - id: System.StreamData/RollupArchive.BucketSizeMs
+        value: 3600000                                 # 1 h
+      - id: System.StreamData/RollupArchive.WatermarkLagMs
+        value: 300000                                  # 5 min
+      - id: System.StreamData/RollupArchive.BucketAlignment
+        value: 0                                       # FixedSize
+      - id: System.StreamData/RollupArchive.Aggregations
+        value:
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: Amount.Value
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 3                               # Sum
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: Amount.Value
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 1                               # Min
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: Amount.Value
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 2                               # Max
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: Amount.Value
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 0                               # Avg (stored as sum + count)
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: Amount.Value
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 4                               # Count
+
+  # ---- Daily Rollup (chained on hourly) ------------------------------------
+  - rtId: ab00000000000000000001b0
+    ckTypeId: System.StreamData/RollupArchive
+    rtWellKnownName: SimEnergyMeasurementsDaily
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: Basic.Energy/EnergyMeasurement
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_sum},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_min},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_max},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_count}, {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+      - id: System.StreamData/RollupArchive.SourceArchiveRtId
+        value: ab00000000000000000001a0
+      - id: System.StreamData/RollupArchive.BucketSizeMs
+        value: 86400000                                # 1 d
+      - id: System.StreamData/RollupArchive.WatermarkLagMs
+        value: 600000
+      - id: System.StreamData/RollupArchive.BucketAlignment
+        value: 1                                       # CalendarDay (UTC midnight)
+      - id: System.StreamData/RollupArchive.Aggregations
+        value:
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: amountvalue_sum                      # chain: sum-of-sums
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 3                               # Sum
+              - id: System.StreamData/CkRollupAggregation.TargetColumnName
+                value: amountvalue_sum
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: amountvalue_min
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 1                               # Min
+              - id: System.StreamData/CkRollupAggregation.TargetColumnName
+                value: amountvalue_min
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: amountvalue_max
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 2                               # Max
+              - id: System.StreamData/CkRollupAggregation.TargetColumnName
+                value: amountvalue_max
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: amountvalue_count
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 3                               # Sum-of-counts (correct count chain)
+              - id: System.StreamData/CkRollupAggregation.TargetColumnName
+                value: amountvalue_count
+
+  # ---- Monthly Rollup (chained on daily, calendar-month aligned) -----------
+  - rtId: ab00000000000000000001c0
+    ckTypeId: System.StreamData/RollupArchive
+    rtWellKnownName: SimEnergyMeasurementsMonthly
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: Basic.Energy/EnergyMeasurement
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_sum},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_min},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_max},   {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+          - { ckRecordId: System.StreamData/CkArchiveColumn, attributes: [{id: System.StreamData/CkArchiveColumn.Path, value: amountvalue_count}, {id: System.StreamData/CkArchiveColumn.Required, value: false}, {id: System.StreamData/CkArchiveColumn.Indexed, value: true}] }
+      - id: System.StreamData/RollupArchive.SourceArchiveRtId
+        value: ab00000000000000000001b0
+      - id: System.StreamData/RollupArchive.BucketSizeMs
+        value: 86400000                                # 1d — informational only (BucketAlignment=CalendarMonth drives boundaries); BucketSizeMs is Int32
+      - id: System.StreamData/RollupArchive.WatermarkLagMs
+        value: 3600000                                 # 1 h
+      - id: System.StreamData/RollupArchive.BucketAlignment
+        value: 3                                       # CalendarMonth
+      - id: System.StreamData/RollupArchive.Aggregations
+        value:
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: amountvalue_sum
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 3
+              - id: System.StreamData/CkRollupAggregation.TargetColumnName
+                value: amountvalue_sum
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: amountvalue_min
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 1
+              - id: System.StreamData/CkRollupAggregation.TargetColumnName
+                value: amountvalue_min
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: amountvalue_max
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 2
+              - id: System.StreamData/CkRollupAggregation.TargetColumnName
+                value: amountvalue_max
+          - ckRecordId: System.StreamData/CkRollupAggregation
+            attributes:
+              - id: System.StreamData/CkRollupAggregation.SourcePath
+                value: amountvalue_count
+              - id: System.StreamData/CkRollupAggregation.Function
+                value: 3
+              - id: System.StreamData/CkRollupAggregation.TargetColumnName
+                value: amountvalue_count
