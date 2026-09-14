@@ -32,6 +32,11 @@ entities:
       - roleId: System.Communication/Uses
         targetRtId: 67d4a2f0b2e4d8c3a1f000a0
         targetCkTypeId: System.Communication/MicrosoftGraphConfiguration
+      # Required by GetPipelineConfigByWellKnownName: the node resolves the
+      # configuration through this edge and THROWS when it is missing.
+      - roleId: System.Communication/Uses
+        targetRtId: aa0000000000000000000331
+        targetCkTypeId: Meshmakers.Accounting/SignalImportSettings
     attributes:
       - id: System.Communication/DeploymentState
         value: 0
@@ -58,6 +63,33 @@ entities:
               folderPath: ToDoReplies
               moveToFolderPathOnSuccess: ToDoReplies/Done
           transformations:
+            # Deep-link base URL. AppUrl is the channel-neutral public base URL of
+            # the accounting app INCLUDING the tenant and locale segments (CK 1.30.0,
+            # AB#5155 - renamed from SignalAppUrl because every channel reads it).
+            # Same read as the Signal/Teams ingest in document-ingest.yaml: an empty
+            # default FIRST, because SetPrimitiveValue THROWS on an undefined valuePath
+            # and an unset optional attribute is simply absent from the configuration
+            # JSON - without the default a tenant that never configured a URL would
+            # lose the whole reply iteration.
+            - type: GetPipelineConfigByWellKnownName@1
+              description: Load the app settings (app base URL)
+              wellKnownName: SignalImportSettings
+              targetPath: $.appConfig
+            - type: SetPrimitiveValue@1
+              description: Default the deep-link base to empty (unconfigured tenant)
+              targetPath: $.appUrl
+              value: ""
+              valueType: String
+            - type: If@1
+              description: App base URL configured
+              path: $.appConfig.attributes.AppUrl
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.appUrl
+                  valuePath: $.appConfig.attributes.AppUrl
+                  valueType: String
             - type: ForEach@1
               description: Process each reply mail (the trigger sends one mail per run)
               iterationPath: $.Emails
@@ -331,10 +363,38 @@ entities:
                                   description: Notification subject
                                   format: '[ToDo #{$.key.todoRtId}] {$.key.todo.Items[0].Attributes.Title}'
                                   targetPath: $.key.notifySubject
+                                # Body in TWO renderings, same text, link that works in
+                                # each client: notifyBody = markdown (e-mail),
+                                # notifyBodyPlain = raw URL (Signal does not render
+                                # markdown - it used to deliver a literal "[ToDo
+                                # öffnen](...)"). Both default to the link-less text so
+                                # a tenant without a configured AppUrl still gets the
+                                # notification.
                                 - type: FormatString@1
-                                  description: Notification body (Markdown)
-                                  format: "**{$.key.From}** hat per E-Mail geantwortet:\n\n{$.key.comment}\n\n[ToDo öffnen](${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}/de-AT/todos/{$.key.todoRtId})"
+                                  description: Notification body without a link (fallback)
+                                  format: "**{$.key.From}** hat per E-Mail geantwortet:\n\n{$.key.comment}"
                                   targetPath: $.key.notifyBody
+                                - type: SetPrimitiveValue@1
+                                  description: Plain rendering defaults to the same text
+                                  targetPath: $.key.notifyBodyPlain
+                                  valuePath: $.key.notifyBody
+                                  valueType: String
+                                - type: If@1
+                                  description: The tenant configured an app base URL
+                                  path: $.full.appUrl
+                                  operator: NotEquals
+                                  valueType: String
+                                  transformations:
+                                    # AppUrl already carries tenant + locale, so only the
+                                    # route is appended here.
+                                    - type: FormatString@1
+                                      description: Body + markdown ToDo link (e-mail)
+                                      format: "**{$.key.From}** hat per E-Mail geantwortet:\n\n{$.key.comment}\n\n[ToDo öffnen]({$.full.appUrl}/todos/{$.key.todoRtId})"
+                                      targetPath: $.key.notifyBody
+                                    - type: FormatString@1
+                                      description: Body + raw ToDo URL (Signal)
+                                      format: "**{$.key.From}** hat per E-Mail geantwortet:\n\n{$.key.comment}\n\n{$.full.appUrl}/todos/{$.key.todoRtId}"
+                                      targetPath: $.key.notifyBodyPlain
                                 - type: SetPrimitiveValue@1
                                   description: Default delivery channel = EMAIL
                                   targetPath: $.key.channel
@@ -364,7 +424,7 @@ entities:
                                   transformations:
                                     - type: FormatString@1
                                       description: Signal message text (subject + body)
-                                      format: "{$.key.notifySubject}\n\n{$.key.notifyBody}"
+                                      format: "{$.key.notifySubject}\n\n{$.key.notifyBodyPlain}"
                                       targetPath: $.key.signalMessage
                                     - type: SignalSender@1
                                       description: Send the creator notification via Signal
