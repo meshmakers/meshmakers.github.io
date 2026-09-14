@@ -1,0 +1,242 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # Application workload for the accounting SPA (modeled on voest-app's
+  # rt-voestalpine-app.yaml). The Communication Operator deploys it via the
+  # meshmakers-app Helm chart published by this repo's CI; the empty
+  # ChartVersion resolves to the latest published version at deploy time.
+  # The {{...}} placeholders are blueprint template variables resolved per
+  # installation (domain + public service URIs).
+  - rtId: aa0000000000000000000200
+    ckTypeId: System.Communication/Application
+    associations:
+      # Workload -> default Cloud pool (seeded by the System.Communication blueprint).
+      - roleId: System.Communication/Manages
+        targetRtId: '670000000000000000000001'
+        targetCkTypeId: System.Communication/Pool
+        attributes: []
+      # Chart source: shared meshmakers-apps Helm repo (670...005), pinned to the
+      # SAME rtId on both channels since System.Communication MainLatest-1.5.0 /
+      # Release-1.5.0 seed it with the environment-correct URL (dev channel on
+      # dev/test, /apps on staging/production) — AB#4706. The old 670...003 pin
+      # was the dev-only repo, absent on Release tenants, producing an invisible
+      # zombie association edge and "no Helm repository is linked" deploy
+      # failures (mirrors EnergyCommunity.Base 2.2.6 / commit 6b9c8f6).
+      # REQUIRES the tenant's System.Communication blueprint >= 1.5.0.
+      - roleId: System.Communication/HelmRepository
+        targetRtId: '670000000000000000000005'
+        targetCkTypeId: System.Communication/HelmRepositoryConfiguration
+        attributes: []
+    attributes:
+      - id: System/Name
+        value: meshmakers-accounting
+      - id: System/Description
+        value: Accounting preparation app for meshmakers GmbH
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System.Communication/StatusMessage
+      - id: System.Communication/ChartName
+        value: meshmakers-app
+      - id: System.Communication/ChartVersion
+        value: ''
+      - id: System.Communication/ValuesYaml
+        value: ''
+      - id: System.Communication/Values
+        value:
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: publicUri
+              - id: System.Communication/Value
+                value: ${octo.tenantId}-accounting.{{domain.default}}
+              - id: System.Communication/IsSecret
+                value: false
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: clientId
+              - id: System.Communication/Value
+                value: meshmakers-app
+              - id: System.Communication/IsSecret
+                value: false
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: authorityUrl
+              - id: System.Communication/Value
+                value: '{{service.AUTHORITY}}'
+              - id: System.Communication/IsSecret
+                value: false
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: apiUrl
+              - id: System.Communication/Value
+                value: '{{service.ASSETREPOSITORY}}'
+              - id: System.Communication/IsSecret
+                value: false
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: assetServicesUrl
+              - id: System.Communication/Value
+                value: '{{service.ASSETREPOSITORY}}'
+              - id: System.Communication/IsSecret
+                value: false
+          # Bot services base URL (config.json botServicesUrl) — used for
+          # deep-graph export/import job status + download. Resolves via the
+          # {{service.BOT}} deploy-time token (e.g. https://bots.prod-1.octo-mesh.com).
+          # A cluster without a BOT service token injects empty, so the SPA falls
+          # back to apiUrl (see configuration.service.ts getBotServicesUrl()).
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: botServicesUrl
+              - id: System.Communication/Value
+                value: '{{service.BOT}}'
+              - id: System.Communication/IsSecret
+                value: false
+          # Communication controller base URL (config.json communicationServicesUrl)
+          # — used by Settings → E-Mail Import to deploy/undeploy the e-mail-import
+          # DataFlow. Resolves via the {{service.communication}} deploy-time token
+          # (e.g. https://communication.prod-1.octo-mesh.com). Local dev runs the
+          # controller natively on localhost:5015, so a local install must override
+          # this back (same as the adapter URLs below).
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: communicationServicesUrl
+              - id: System.Communication/Value
+                value: '{{service.communication}}'
+              - id: System.Communication/IsSecret
+                value: false
+          # Mesh + FinAPI adapter public base URLs (config.json meshAdapterUrl /
+          # finApiAdapterUrl). The SPA posts to <url>/{tenantId}/{pipeline}, so the
+          # tenant is in the path — one shared host per adapter type is enough.
+          # There is no {{service.*}} token for adapters, so the host is composed
+          # from {{domain.default}} (like publicUri). On a domain cluster this
+          # resolves e.g. to https://adapter.prod-1.octo-mesh.com. NOTE: this only
+          # works where the adapters are exposed via that ingress host — local dev
+          # runs the adapters natively on localhost:5040/5034, so a local install
+          # must override these back (or the browser adapter flows won't resolve).
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: meshAdapterUrl
+              - id: System.Communication/Value
+                value: 'https://adapter.{{domain.default}}'
+              - id: System.Communication/IsSecret
+                value: false
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: finApiAdapterUrl
+              - id: System.Communication/Value
+                value: 'https://adapter-finapi.{{domain.default}}'
+              - id: System.Communication/IsSecret
+                value: false
+          # Private container registry + image-pull secret. The chart defaults
+          # image.repository to the public docker.io/meshmakers/meshmakers, which
+          # is NOT pullable -> ImagePullBackOff ("pull access denied"). The
+          # Communication Operator's automatic privateRegistry injection does not
+          # cover Application workloads on prod-1, so we pin them explicitly here
+          # (matches the running meshmakers tenant's app).
+          #
+          # >>> INSTANCE-DEPENDENT VALUES — RELEASE DEFAULT ONLY (AB#5154) <<<
+          # salzburgdev.azurecr.io / salzburgdev-pull is the RELEASE lane: the
+          # prod-1 (Exoscale SKS) ACR + its namespace pull secret. Dev/test
+          # instances pull TEST-lane images from docker.mm.cloud instead (e.g.
+          # the test-2 0.2-dev instance, tenant meshdev) — with an EMPTY
+          # imagePullSecretName on test-2, where containerd-level auth covers
+          # the registry. There is NO templating mechanism that can make this
+          # seed instance-dependent today: the workload template resolver only
+          # knows {{domain.*}} / {{service.*}} / {{context.tenantId}}, blueprint
+          # variables (${octo.*}) carry no registry, and octo-cli InstallBlueprint
+          # takes no variables — so the release default is seeded literally and
+          # non-release instances MUST patch it after a FRESH install (tenant
+          # recreate included). NOTE the asymmetry: `Values` is isRuntimeState
+          # (AB#4706), so a blueprint RE-apply preserves a patched value — only a
+          # fresh install seeds this default again.
+          #
+          # How to patch (dev/test instance, after fresh install): `Values` has no
+          # octo-cli command — use the tenant GraphQL API. TRAP (AB#4582 memory):
+          # the update REPLACES the whole array and the write format is FLAT
+          # ({path,value,isSecret} objects, NOT the ckRecordId/attributes read
+          # shape — that shape is accepted silently and nulls every field!).
+          #   1. Query current Values of rtId aa0000000000000000000200.
+          #   2. Rewrite the full flat array with
+          #      {"path":"image.privateRegistry","value":"docker.mm.cloud","isSecret":false}
+          #      and {"path":"imagePullSecretName","value":"","isSecret":false}.
+          #   3. mutation { runtime { runtimeEntities { update(entities: [{
+          #        rtId: "aa0000000000000000000200",
+          #        item: { ckTypeId: "System.Communication/Application",
+          #                attributes: [{ attributeName: "Values",
+          #                               value: <FULL flat array> }] } }]) } } }
+          #   4. octo-cli -c DeployWorkload to roll the change out.
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: image.privateRegistry
+              - id: System.Communication/Value
+                value: salzburgdev.azurecr.io
+              - id: System.Communication/IsSecret
+                value: false
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: imagePullSecretName
+              - id: System.Communication/Value
+                value: salzburgdev-pull
+              - id: System.Communication/IsSecret
+                value: false
+      # True so the Communication Operator attaches the cluster image-pull secret
+      # to the workload ServiceAccount on fresh tenant namespaces (the Mesh
+      # Adapter 670...002 sets this true and pulls the private image fine). The
+      # explicit image.privateRegistry / imagePullSecretName ValueOverrides above
+      # supply the registry host + secret name the operator does not inject for
+      # Application workloads.
+      - id: System.Communication/ReceivesClusterSecrets
+        value: true
+      - id: System.Communication/IngressEnabled
+        value: true
+      - id: System.Communication/Hostname
+        value: ${octo.tenantId}-accounting.{{domain.default}}
+  # --- FinAPI adapter (custom adapter, octo-finapi-adapter Helm chart) -------
+  - rtId: 67e10c0bfe3e19891bbfd261
+    ckTypeId: System.Communication/Adapter
+    associations:
+      # Default Cloud pool, seeded by the System.Communication blueprint.
+      - roleId: System.Communication/Manages
+        targetRtId: "670000000000000000000001"
+        targetCkTypeId: System.Communication/Pool
+        attributes: []
+      # Chart source: meshmakers-dev Helm repo (dev channel, 003) — required
+      # for DeployWorkload ("no Helm repository is linked" otherwise).
+      - roleId: System.Communication/HelmRepository
+        targetRtId: "670000000000000000000003"
+        targetCkTypeId: System.Communication/HelmRepositoryConfiguration
+        attributes: []
+    attributes:
+      - id: System/Name
+        value: FinAPI Adapter
+      - id: System/Description
+        value: Adapter for synchronizing bank accounts and transactions via finAPI
+      - id: System.Communication/ChartName
+        value: octo-finapi-adapter
+      - id: System.Communication/ChartVersion
+        value: ''
+      - id: System.Communication/AdapterConfiguration
+        value: >-
+          {
+            "FinApi": {
+              "BaseUrl": "https://sandbox.finapi.io",
+              "ClientId": "<your-client-id>",
+              "ClientSecret": "<your-client-secret>"
+            }
+          }
+      - id: System.Communication/StatusMessage
