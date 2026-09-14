@@ -12,16 +12,24 @@ description: |
   - reporting root folders (Documents storage)
   - the FinAPI adapter (octo-finapi-adapter Helm chart; configure the finAPI
     ClientId/ClientSecret in AdapterConfiguration per tenant)
-  - 13 pipelines: the six finAPI pipelines (account/transaction sync, bank
-    connection import + BIC resolution, web-form create/complete) share ONE
-    "FinAPI" DataFlow so they deploy together and appear as tabs in one
-    execution-history dialog; the rest sit in their own DataFlows: Excel tree
-    import, CSV transaction import, AI prompt, document upload (staging +
-    duplicate check only), asynchronous document analysis (5-minute polling +
-    on-demand via POST /processDocuments: OCR + AI extraction of staged
-    uploads, replaces the former synchronous analysis and the Todo fallback —
-    incomplete extractions stay visible on the UploadedDocument inbox
-    entity), transaction matching
+  - 28 pipelines. The five finAPI pipelines (account/transaction sync, BIC
+    resolution, web-form create/complete) share ONE "FinAPI" DataFlow so they
+    deploy together and appear as tabs in one execution-history dialog. There
+    is no direct bank-connection import any more: PSD2/SCA goes through the
+    web-form pair createWebFormImport -> completeWebFormImport. The rest sit in
+    their own DataFlows, among them: Excel tree import, CSV transaction import,
+    AI prompt, document upload (staging + duplicate check only), asynchronous
+    document analysis (5-minute polling + on-demand via POST /processDocuments:
+    OCR + AI extraction of staged uploads, replaces the former synchronous
+    analysis and the Todo fallback — incomplete extractions stay visible on the
+    UploadedDocument inbox entity), transaction matching, document page editing
+    (/editDocument — it also does the multi-page merge that the removed
+    /mergeDocuments route used to do, AB#4760)
+  - every HTTP route of those pipelines is authenticated and role-gated
+    (FromHttpRequest@2, allowAnonymous:false + requiredRoles, AB#4685):
+    AccountingManagement for the money-moving and bulk/export/import routes,
+    AccountingManagement+AccountingEmployee for the inbox/document/ToDo
+    routes. AccountingShareholder reaches none of them
   - the Microsoft 365 e-mail document import pipeline — ships DISABLED
     (System/Enabled=false); the meshmakers-app activates it from Settings ->
     E-Mail Import (writes the EmailImportSettings configuration, rewrites the
@@ -75,9 +83,53 @@ ckModelDependencies:
 - System-[2.0,)
 - System.Communication-[3.0,4.0)
 - System.Reporting-[2.0,3.0)
-- System.Identity-[2.0,3.0)
+- System.Identity-[2.12.0,3.0)
 - System.UI-[2.2,3.0)
 - Basic-[2.0.3,3.0)
 - Basic.Accounting-[1.6.0,2.0)
-- Meshmakers.Accounting-[1.19.0,2.0)
-seedDataPath: seed-data/entities.yaml
+- Meshmakers.Accounting-[1.31.0,2.0)
+# The seed is split per feature (AB#4758): every listed file is loaded and merged into a
+# single runtime model before the import. Add a new file here when you create one -
+# `octo-bpm validate` warns about YAML under seed-data/ that nothing references.
+seedDataPaths:
+
+  # Adapter, application workload and the external-system configurations
+  - seed-data/configurations/adapter-and-app.yaml
+  - seed-data/configurations/integrations.yaml
+  - seed-data/configurations/reporting.yaml
+
+  # Roles, groups, the OIDC client and the data-permission policies
+  - seed-data/identity/data-permissions.yaml
+  - seed-data/identity/roles-groups-client.yaml
+
+  # Fiscal years, cost categories and categorization rules
+  - seed-data/master-data/categorization-rules.yaml
+  - seed-data/master-data/cost-categories.yaml
+  - seed-data/master-data/fiscal-years.yaml
+
+  # Saved queries backing the list pages and dashboards
+  - seed-data/queries/queries.yaml
+
+  # Dashboards and their widgets
+  - seed-data/ui/dashboards.yaml
+
+  # One file per data flow: the DataFlow plus its pipelines and triggers.
+  # Order is irrelevant - all files are merged into one model before the import,
+  # so a pipeline may reference an entity declared in any other file.
+  - seed-data/data-flows/ai-prompt.yaml
+  - seed-data/data-flows/attach-document-file.yaml
+  - seed-data/data-flows/attach-upload-to-document.yaml
+  - seed-data/data-flows/bmd-handover-export.yaml
+  - seed-data/data-flows/camt-053-import.yaml
+  - seed-data/data-flows/csv-transaction-import.yaml
+  - seed-data/data-flows/document-analysis.yaml
+  - seed-data/data-flows/document-ingest.yaml
+  - seed-data/data-flows/edit-document.yaml
+  - seed-data/data-flows/excel-pipeline.yaml
+  - seed-data/data-flows/finapi.yaml
+  - seed-data/data-flows/match-transactions-to-documents.yaml
+  - seed-data/data-flows/notify-todo-inbound.yaml
+  - seed-data/data-flows/notify-todo.yaml
+  - seed-data/data-flows/sepa-credit-transfer-export.yaml
+  - seed-data/data-flows/transaction-maintenance.yaml
+  - seed-data/data-flows/upload-documents.yaml
