@@ -37,6 +37,10 @@ entities:
       - roleId: System.Communication/Uses
         targetRtId: aa0000000000000000000331
         targetCkTypeId: Meshmakers.Accounting/SignalImportSettings
+      # settingsConfiguration on the trigger resolves through a Uses edge too.
+      - roleId: System.Communication/Uses
+        targetRtId: aa0000000000000000000330
+        targetCkTypeId: Meshmakers.Accounting/EmailImportSettings
     attributes:
       - id: System.Communication/DeploymentState
         value: 0
@@ -44,9 +48,10 @@ entities:
         value: Notify ToDo Inbound Pipeline
       # Ships DISABLED (AB#4934): polls a tenant-specific mailbox — the previous
       # hardcoded meshmakers mailbox made every tenant poll a foreign mailbox
-      # every 2 minutes (Graph token 400 noise). Enable after replacing
-      # TODO_SET_NOTIFICATION_MAILBOX + Graph credentials. Every blueprint
-      # re-apply resets mailbox + Enabled — re-enable manually afterwards.
+      # every 2 minutes (Graph token 400 noise). Enable after filling
+      # EmailImportSettings (Settings -> Import) + the Graph credentials.
+      # Since the mailbox moved into that configuration (isRuntimeState) a
+      # re-apply no longer loses it; only System/Enabled falls back to false.
       # Channel preference (AB#5152): the creator notification at the end of this
       # pipeline resolves the creator's subjectId (Todo.CreatedByUserId) via
       # ResolveNotificationChannel@1 and branches Signal-or-e-mail — same chain
@@ -59,7 +64,14 @@ entities:
             - type: FromMicrosoftGraphEmail@1
               serverConfiguration: MicrosoftGraphDocuments
               pollingIntervalSeconds: 120
-              mailbox: TODO_SET_NOTIFICATION_MAILBOX
+              # The mailbox comes from the EmailImportSettings singleton, NOT from
+              # this definition: its attributes are isRuntimeState, so a blueprint
+              # re-apply preserves what the operator set, while PipelineDefinition
+              # is isRuntimeState:false and would lose an inline value. Same wiring
+              # as the Graph document import in document-ingest.yaml. The ToDo reply
+              # folders stay literal - they are a fixed convention, not tenant data.
+              settingsConfiguration: EmailImportSettings
+              mailboxAttribute: EmailImportMailbox
               folderPath: ToDoReplies
               moveToFolderPathOnSuccess: ToDoReplies/Done
           transformations:
@@ -89,6 +101,28 @@ entities:
                 - type: SetPrimitiveValue@1
                   targetPath: $.appUrl
                   valuePath: $.appConfig.attributes.AppUrl
+                  valueType: String
+            # Same postbox the trigger polls: the creator notification is sent FROM
+            # the mailbox the replies come back to. Read here (not inline) for the
+            # same reason as the trigger — PipelineDefinition is isRuntimeState:false.
+            - type: GetPipelineConfigByWellKnownName@1
+              description: Load the e-mail import settings (notification mailbox)
+              wellKnownName: EmailImportSettings
+              targetPath: $.emailConfig
+            - type: SetPrimitiveValue@1
+              description: Default the notification mailbox to empty (unconfigured tenant)
+              targetPath: $.notifyMailbox
+              value: ""
+              valueType: String
+            - type: If@1
+              description: Notification mailbox configured
+              path: $.emailConfig.attributes.EmailImportMailbox
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.notifyMailbox
+                  valuePath: $.emailConfig.attributes.EmailImportMailbox
                   valueType: String
             - type: ForEach@1
               description: Process each reply mail (the trigger sends one mail per run)
@@ -437,13 +471,22 @@ entities:
                                   value: SIGNAL
                                   valueType: String
                                   transformations:
-                                    - type: SendMicrosoftGraphEmail@1
-                                      description: Send the notification to the Todo creator
-                                      serverConfiguration: MicrosoftGraphDocuments
-                                      mailbox: TODO_SET_NOTIFICATION_MAILBOX
-                                      subjectPath: $.key.notifySubject
-                                      toPath: $.key.todo.Items[0].Attributes.CreatedByEmail
-                                      path: $.key.notifyBody
+                                    # No mailbox configured = no send (the trigger
+                                    # could not have polled either, so this is a
+                                    # belt-and-braces guard).
+                                    - type: If@1
+                                      description: A notification mailbox is configured
+                                      path: $.full.notifyMailbox
+                                      operator: NotEquals
+                                      valueType: String
+                                      transformations:
+                                        - type: SendMicrosoftGraphEmail@1
+                                          description: Send the notification to the Todo creator
+                                          serverConfiguration: MicrosoftGraphDocuments
+                                          mailboxPath: $.full.notifyMailbox
+                                          subjectPath: $.key.notifySubject
+                                          toPath: $.key.todo.Items[0].Attributes.CreatedByEmail
+                                          path: $.key.notifyBody
             # Terminal projection: keep only the success flag (avoid echoing the mail batch).
             - type: SetPrimitiveValue@1
               description: Success marker
