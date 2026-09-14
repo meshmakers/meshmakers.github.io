@@ -27,26 +27,56 @@ description: |
 
   Post-install:
   - Set ClientId/ClientSecret/RefreshToken on the TeslaConfiguration entity —
-    every blueprint re-apply resets them to placeholders
-    (scripts/om_set_secrets.ps1, tesla section)
-  - DeployDataFlow "Tesla Charging Invoices" + DeployTriggers (cron)
+    from the app (Settings -> Add-ons -> Tesla, AB#5035) or via
+    scripts/om_set_secrets.ps1 (tesla section). Since 1.1.0 the config
+    attributes are isRuntimeState, so a blueprint re-apply/update PRESERVES
+    operator values (they are no longer reset to placeholders).
+  - DeployDataFlow "Tesla Charging Invoices" + DeployTriggers (cron) — the
+    app's Tesla add-on card does both on "Activate".
   - NOTE: Tesla rotates refresh tokens; the pipeline persists the newest token
-    back to TeslaConfiguration on every run. Keep secrets.local.json in sync
-    before a blueprint re-apply, or the stored token is lost.
+    back to TeslaConfiguration on every run. isRuntimeState keeps that newest
+    token across a re-apply, so it is no longer lost — but a manual
+    om_set_secrets run still overwrites it with the secrets.local.json value.
 # The blueprint engine installs each dependency's range FLOOR as the exact
 # version, and transitive CK dependencies are NOT resolved on install — list
 # everything explicitly, install order = list order (same rules as the base
-# blueprint). The base app model floor must carry the API enum value on
-# DocumentSource (1.17.0).
+# blueprint).
+#
+# AB#5044: every floor an add-on SHARES with the base blueprint must be >= the
+# base's floor, and `scripts/check_blueprint_floors.ps1` fails the build if it
+# is not. Two reasons, only one of which is about downgrades:
+#   * A stale floor names a version that may no longer be published. The engine
+#     installs the FLOOR AS AN EXACT VERSION (it does not resolve the highest
+#     match in the range), so on a fresh tenant an unpublished floor fails the
+#     install outright with "model not found in one of the registered catalogs".
+#   * A stale floor does NOT roll a newer installed model back — the engine
+#     skips the import when an installed version already satisfies the request
+#     and keeps the installed version in the migration history (AB#5042). That
+#     guard is what makes this a hygiene rule rather than a live hazard, and it
+#     is the engine's promise, not this file's: do not rely on it to excuse a
+#     floor that drifts far enough to leave the range and turn into a hard
+#     seed-import error.
+# The base app model floor must also carry what THIS blueprint's seed data
+# needs: the API enum value on DocumentSource (since 1.17.0).
 ckModelDependencies:
 - System-[2.0,)
 - System.Bot-[3.0,4.0)
 - System.Communication-[3.0,4.0)
 - System.Reporting-[2.0,3.0)
-- Basic-[2.0.2,3.0)
+- Basic-[2.0.3,3.0)
 - Basic.Accounting-[1.6.0,2.0)
-- Meshmakers.Accounting-[1.17.0,2.0)
-- Meshmakers.Accounting.Tesla-[1.0.0,2.0)
+- Meshmakers.Accounting-[1.31.0,2.0)
+- Meshmakers.Accounting.Tesla-[1.1.0,2.0)
 blueprintDependencies:
 - MeshmakersAccounting-[1.0.0,)
-seedDataPath: seed-data/entities.yaml
+# The seed is split per feature (AB#4758), same layout as the base blueprint: every listed
+# file is loaded and merged into a single runtime model before the import. Add a new file
+# here when you create one - `octo-bpm validate` warns about YAML under seed-data/ that
+# nothing references.
+seedDataPaths:
+
+  # The Tesla account configuration (credentials are filled per tenant, never seeded)
+  - seed-data/configurations/tesla.yaml
+
+  # One file per data flow: the DataFlow plus its pipelines and triggers
+  - seed-data/data-flows/tesla-charging-invoices.yaml
