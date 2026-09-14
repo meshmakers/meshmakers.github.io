@@ -1,0 +1,136 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "CkHealthMonitorConfig-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Configuration for the CK health monitoring pipeline (endpoints, credentials, Teams webhook). Keep exactly one entity per monitoring tenant.",
+      "displayNameRule": "${Name}",
+      "attributes": [
+        {
+          "id": "System-2.2.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "Monitoring-1.0.0/TokenUrl-1",
+          "name": "TokenUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-1.0.0/AssetServicesBaseUrl-1",
+          "name": "AssetServicesBaseUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-1.0.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-1.0.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-1.0.0/Scope-1",
+          "name": "Scope",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-1.0.0/TeamsWebhookUrl-1",
+          "name": "TeamsWebhookUrl",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "MonitoredTenant-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A tenant watched by monitoring pipelines (e.g. the CK health check). Create one entity per tenant to monitor.",
+      "displayNameRule": "${Name}",
+      "attributes": [
+        {
+          "id": "System-2.2.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "Monitoring-1.0.0/TenantId-1",
+          "name": "TenantId",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "AssetServicesBaseUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Base URL of the asset repository services WITHOUT a trailing slash (e.g. https://asset.example.com). The CK health check calls {base}/{tenantId}/v1/Models/LibraryStatus."
+    },
+    {
+      "id": "ClientId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Client id of the service client used to authenticate (client_credentials grant)."
+    },
+    {
+      "id": "ClientSecret-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Client secret of the service client. Stored as a plain attribute - restrict access to the monitoring tenant accordingly."
+    },
+    {
+      "id": "Scope-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "OAuth scope requested for the token (typically octo_api)."
+    },
+    {
+      "id": "TeamsWebhookUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Microsoft Teams incoming webhook URL that receives the alerts."
+    },
+    {
+      "id": "TenantId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Id of a tenant that is monitored."
+    },
+    {
+      "id": "TokenUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Absolute URL of the identity service token endpoint (e.g. https://identity.example.com/connect/token)."
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "Monitoring-1.0.0",
+  "description": "Platform monitoring model. Holds configuration entities for operational watchdog pipelines (currently CK model health monitoring with Teams alerting; designed to grow with further monitors)."
+}
