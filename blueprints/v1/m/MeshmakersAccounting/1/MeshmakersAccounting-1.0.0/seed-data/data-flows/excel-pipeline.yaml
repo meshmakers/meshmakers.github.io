@@ -27,9 +27,16 @@ entities:
       - id: System.Communication/PipelineDefinition
         value: >-
           triggers:
-            - type: FromHttpRequest@1
+            - type: FromHttpRequest@2
               path: /import/tree
               method: POST
+              # AB#5216: the last route the AB#4685 sweep missed. @1 does not look
+              # at the Authorization header at all, so /import/tree was writing
+              # tree structures into the tenant for anyone who could reach the
+              # adapter. Same gate as the other import routes.
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
           transformations:
             - type: ImportFromExcel@1
             # Security: the HTTP response body is the whole data context. Reduce
