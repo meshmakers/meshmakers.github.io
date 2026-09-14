@@ -1,0 +1,804 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipeline: BMD handover export (AB#4392) ---
+  # On-demand outbound export triggered via POST /exportHandover?fiscalYearId&scope
+  # [&from&to for a month/quarter]. Renders a cover sheet per document (parsed data
+  # + tax-advisor note + one row per linked payment), merges it with the original
+  # PDF, and returns a ZIP as a FileSystemItem. Post-install: DeployDataFlow for
+  # this DataFlow. Requires documents assigned to the fiscal year.
+  - rtId: aa0000000000000000000600
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: BMD Handover Export
+      - id: System/Description
+        value: Exports a tax-advisor handover package (cover sheet + merged original + ZIP) per fiscal year, month or quarter
+  - rtId: aa0000000000000000000601
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000600
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: BMD Handover Export Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |
+          # =============================================================================
+          # BMD handover export pipeline (AB#4392) — pipeline DEFINITION only
+          # (triggers + transformations). This is the `PipelineDefinition` body; it is
+          # deployed to the managed Mesh Adapter (670000000000000000000002).
+          #
+          # Trigger:  POST /exportHandover?fiscalYearId=<rtId>&scope=AP|AR|all
+          #   scope AP  = INCOMING documents (supplier invoices, Eingangsrechnungen)
+          #   scope AR  = OUTGOING documents (Ausgangsrechnungen)
+          #   scope all = both
+          # Returns (HTTP JSON body = final data context): { "fileSystemItem": "<rtId>" }
+          #   The frontend resolves the download URL via the existing GetFileSystemItem
+          #   query on that rtId and bearer-fetches the ZIP blob (see inbox-detail.ts).
+          #
+          # New nodes used (octo-mesh-adapter): RenderDataSheetPdf@1, MergePdf@1,
+          #   CreateZipArchive@1.
+          #
+          # ---------------------------------------------------------------------------
+          # LIVE-VALIDATED end-to-end on salzburgdev (2026-07-16): 5 docs linked to
+          # FiscalYear 2026 -> HTTP 200, flat {"fileSystemItem":"<rtId>"}, ZIP with cover
+          # sheet prepended (page counts 1 for no-original / 2..6 for merged), unique
+          # AP/-grouped names, stored FileSystemItem downloadable. Confirmed:
+          #  [1] FiscalYear -> Documents via DocumentToFiscalYear is graphDirection
+          #      Inbound (documents link OUT to the fiscal year). Original PDF
+          #      (System/Related) and transactions (TransactionToDocument) are OUTBOUND.
+          #  [2] DocumentType is the INT enum key (0=INCOMING/AP, 1=OUTGOING/AR) — the
+          #      prefix/scope Ifs compare as Int.
+          #  [4] Documents without a stored original get a cover-sheet-only entry.
+          #  Content length: the ZIP node emits its byte length (contentLengthTargetPath)
+          #      for CreateFileSystemUpdate; empty DocumentNumber falls back to RtId so
+          #      ZIP entry names stay unique.
+          #  [OPT] DONE: optional/nested cover fields (Vendor/Customer, Net/Tax/Rate,
+          #      DueDate, payment proof, TaxAdvisorNote) are populated via SelectByPath@1,
+          #      which skips missing/null/nested-under-null sources (leaving the "" default)
+          #      instead of throwing. Verified live: Brutto + payment proof render, empty
+          #      fields stay blank.
+          #  [3] DONE: values are copied as JSON nodes (not string-interpolated), so they
+          #      are auto-escaped — a note/name with a quote or newline can't break the JSON.
+          #  [DATE] DONE: date/time values are trimmed to yyyy-MM-dd via TransformString.
+          #  [PERIOD] DONE (AB#4535): optional query from/to (ISO) narrow the export to a
+          #      month or quarter — a DocumentDate range gate flips $.key.include back to
+          #      "no" outside [from, to]; omitting the params exports the whole fiscal
+          #      year (bounds default to an all-inclusive range because the params are
+          #      absent then, and a missing path would make FormatString throw — seeded
+          #      via SetPrimitiveValue + SelectByPath, same pattern as the AB#4395
+          #      PeriodBasis read). The frontend Handover page computes from/to from the
+          #      period picker. NOTE: out-of-period documents are still rendered (like
+          #      scope-excluded ones) — they are only dropped from the ZIP; rendering is
+          #      cheap (~40ms/doc), a skip-early refactor was deliberately not done.
+          #  [5] DONE: the Zahlungsnachweis section lists ONE row per linked transaction
+          #      (inner ForEach over $.key.txGroups[0].Items -> Flatten -> inject). Verified
+          #      live with a document linked to two transactions.
+          #  [DATA] Assigning documents to a FiscalYear (DocumentToFiscalYear) is a
+          #      precondition; on salzburgdev this was done manually for the test.
+          #  [STRUCT] ZIP layout v2: entries are grouped as
+          #      {fiscal year name}/{month yyyy-MM}/{type} where type is "Verträge" for
+          #      recurring master documents (DocumentState RECURRING=4) and
+          #      "Eingangsrechnungen"/"Ausgangsrechnungen" by DocumentType otherwise.
+          #      File names are {document date}_{vendor or customer}_{NNN}.pdf — the
+          #      running number and per-segment sanitizing come from CreateZipArchive@1
+          #      (appendSequenceNumber; pathSegments entries). A belege.csv index
+          #      (semicolon CSV, UTF-8 BOM) in the ZIP root lists every document's
+          #      parsed data (Datum/Belegnummer/Typ/LieferantKunde/Netto/USt/Brutto/
+          #      Waehrung) plus its final path — usable as a BMD-import starting point
+          #      (no Kontierung/account mapping by design).
+          # =============================================================================
+
+          triggers:
+            - type: FromHttpRequest@2
+              path: /exportHandover
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+
+          transformations:
+            # -- 0) Resolve the fiscal-year name (top-level ZIP folder, AB#4392 v2) -----
+            - type: SetPrimitiveValue@1
+              description: Wrap the fiscal-year id into an array for GetRtEntitiesById
+              targetPath: $.fyIds
+              valuePath: $.query.fiscalYearId
+              valueType: String
+              targetValueKind: Array
+            - type: GetRtEntitiesById@1
+              description: Load the fiscal year (folder name)
+              ckTypeId: Meshmakers.Accounting/FiscalYear
+              rtIdsPath: $.fyIds
+              targetPath: $.fy
+            - type: SetPrimitiveValue@1
+              description: Default top-level folder when the fiscal year has no name
+              targetPath: $.fyName
+              value: Geschaeftsjahr
+              valueType: String
+            - type: SelectByPath@1
+              description: Copy the fiscal-year name when present (skips missing/null)
+              selectPath:
+                - path: $.fy.Items[0].Attributes.Name
+                  targetPath: $.fyName
+
+            # -- 1) Load the fiscal year's documents via DocumentToFiscalYear -----------
+            - type: GetAssociationTargets@1
+              description: Documents assigned to the requested fiscal year
+              originRtIdPath: $.query.fiscalYearId
+              originCkTypeId: Meshmakers.Accounting/FiscalYear
+              targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+              associationRoleId: Meshmakers.Accounting/DocumentToFiscalYear
+              graphDirection: Inbound          # [1] validate
+              targetPath: $.docGroups
+
+            # -- 2) Per document: resolve original, render cover, merge, collect entry --
+            - type: ForEach@1
+              description: Build one merged PDF per document
+              iterationPath: $.docGroups[0].Items
+              targetPath: $.docResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                # scope guard: AP => INCOMING, AR => OUTGOING, all => process everything.
+                # Implemented as "process when scope=all OR DocumentType matches scope".
+                # We normalise scope -> expected DocumentType into $.key.wantType, then
+                # only emit an entry when it matches (or scope=all).
+                - type: FormatString@1
+                  description: Echo requested scope into the item context
+                  format: "{$.full.query.scope}"
+                  nullValue: all
+                  targetPath: $.key.scope
+
+                # AP/AR label + folder prefix derived from DocumentType. Verified on
+                # salzburgdev: DocumentType comes back as the INT enum key (0=INCOMING,
+                # 1=OUTGOING), not the name — compare as Int. Default first so the path
+                # always exists (the scope-match If references it via valuePath).
+                - type: SetPrimitiveValue@1
+                  description: Default prefix
+                  targetPath: $.key.prefix
+                  value: ""
+                  valueType: String
+                - type: If@1
+                  description: Incoming => AP
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.prefix
+                      value: AP
+                      valueType: String
+                - type: If@1
+                  description: Outgoing => AR
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 1
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.prefix
+                      value: AR
+                      valueType: String
+
+                # scope gate: include this document when scope=all OR scope matches the
+                # document's AP/AR prefix. Default excluded; two Ifs flip it to "yes".
+                - type: SetPrimitiveValue@1
+                  description: Default exclude
+                  targetPath: $.key.include
+                  value: "no"
+                  valueType: String
+                - type: If@1
+                  description: scope=all includes everything
+                  path: $.key.scope
+                  operator: Equal
+                  value: all
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "yes"
+                      valueType: String
+                - type: If@1
+                  description: scope matches AP/AR prefix
+                  path: $.key.scope
+                  operator: Equal
+                  valuePath: $.key.prefix
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "yes"
+                      valueType: String
+
+                # cancelled gate (AB#4704): cancelled receipts (DocumentState 3)
+                # are never handed over to the tax advisor. The If does not fire
+                # for documents without a state (missing path), which stay in.
+                - type: If@1
+                  description: Cancelled document — exclude from the handover
+                  path: $.key.Attributes.DocumentState
+                  operator: Equal
+                  value: 3
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "no"
+                      valueType: String
+
+                # period gate (AB#4535): optional query from/to narrow the export
+                # to a month or quarter — a document dated outside [from, to] is
+                # flipped back to include=no. The params are ABSENT for a
+                # full-year export and a missing path makes FormatString throw,
+                # so all-inclusive bounds are seeded first and SelectByPath only
+                # copies the params when present (AB#4395 pattern). Date tests
+                # run as If@1 valueType DateTime — date field filters on dynamic
+                # CK attributes do not coerce (AB#4389).
+                - type: SetPrimitiveValue@1
+                  description: Default period lower bound (open)
+                  targetPath: $.key.periodFrom
+                  value: "0001-01-01T00:00:00Z"
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  description: Default period upper bound (open)
+                  targetPath: $.key.periodTo
+                  value: "9999-12-31T23:59:59Z"
+                  valueType: String
+                - type: SelectByPath@1
+                  description: Copy the optional from/to query params when present
+                  selectPath:
+                    - path: $.full.query.from
+                      targetPath: $.key.periodFrom
+                    - path: $.full.query.to
+                      targetPath: $.key.periodTo
+                - type: If@1
+                  description: Document date before the period start — exclude
+                  path: $.key.Attributes.DocumentDate
+                  operator: LessThan
+                  valuePath: $.key.periodFrom
+                  valueType: DateTime
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "no"
+                      valueType: String
+                - type: If@1
+                  description: Document date after the period end — exclude
+                  path: $.key.Attributes.DocumentDate
+                  operator: GreaterThan
+                  valuePath: $.key.periodTo
+                  valueType: DateTime
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "no"
+                      valueType: String
+
+                # Folder + file-name building blocks (AB#4392 v2): the ZIP is grouped
+                # as {fiscal year}/{month yyyy-MM}/{type} and files are named
+                # {document date}_{vendor or customer}_{sequence}.pdf. The sequence
+                # number is appended by CreateZipArchive@1 (appendSequenceNumber) and
+                # all segments are sanitized there, so vendor names with slashes or
+                # other invalid characters cannot break the archive structure.
+                - type: SetPrimitiveValue@1
+                  description: Default document date (documents without a date)
+                  targetPath: $.key.docDate
+                  value: "0000-00-00"
+                  valueType: String
+                - type: SelectByPath@1
+                  description: Copy the document date when present
+                  selectPath:
+                    - path: $.key.Attributes.DocumentDate
+                      targetPath: $.key.docDate
+                - type: TransformString@1
+                  description: Trim to the date (yyyy-MM-dd)
+                  sourcePath: $.key.docDate
+                  targetPath: $.key.docDate
+                  operation: SubstringFromStart
+                  length: 10
+                - type: TransformString@1
+                  description: Month folder (yyyy-MM)
+                  sourcePath: $.key.docDate
+                  targetPath: $.key.monthFolder
+                  operation: SubstringFromStart
+                  length: 7
+                # Type folder: recurring master documents (Dauerbelege — contracts,
+                # insurance, subscriptions; DocumentState RECURRING=4) go to
+                # "Verträge", the rest split by DocumentType into incoming/outgoing
+                # invoices. Defaults to incoming (DocumentType 0).
+                - type: SetPrimitiveValue@1
+                  description: Default type folder (incoming invoices)
+                  targetPath: $.key.typeFolder
+                  value: Eingangsrechnungen
+                  valueType: String
+                - type: If@1
+                  description: Outgoing invoice folder
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 1
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.typeFolder
+                      value: Ausgangsrechnungen
+                      valueType: String
+                - type: If@1
+                  description: Recurring master document (Dauerbeleg) -> contracts folder
+                  path: $.key.Attributes.DocumentState
+                  operator: Equal
+                  value: 4
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.typeFolder
+                      value: Verträge
+                      valueType: String
+                # Party for the file name: vendor for incoming, customer for outgoing
+                # documents; falls back to "Unbekannt" when no name is present.
+                - type: SetPrimitiveValue@1
+                  description: Default party (no vendor/customer name)
+                  targetPath: $.key.party
+                  value: Unbekannt
+                  valueType: String
+                - type: If@1
+                  description: Incoming -> vendor name
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: SelectByPath@1
+                      selectPath:
+                        - path: $.key.Attributes.Vendor.Attributes.CompanyName
+                          targetPath: $.key.party
+                - type: If@1
+                  description: Outgoing -> customer name
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 1
+                  valueType: Int
+                  transformations:
+                    - type: SelectByPath@1
+                      selectPath:
+                        - path: $.key.Attributes.Customer.Attributes.CompanyName
+                          targetPath: $.key.party
+                - type: If@1
+                  description: Empty party name -> Unbekannt
+                  path: $.key.party
+                  operator: Equal
+                  value: ""
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.party
+                      value: Unbekannt
+                      valueType: String
+
+                # 2a) original stored PDF via System/Related
+                - type: GetAssociationTargets@1
+                  description: Original stored PDF (FileSystemItem)
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  targetCkTypeId: System.Reporting/FileSystemItem
+                  associationRoleId: System/Related
+                  graphDirection: Outbound        # [1] validate
+                  targetPath: $.key.fileGroups
+
+                # 2b) first linked bank transaction (payment proof) via TransactionToDocument
+                - type: GetAssociationTargets@1
+                  description: Linked bank transactions (payment proof)
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                  graphDirection: Outbound        # [1] validate
+                  targetPath: $.key.txGroups
+
+                # 2c) assemble the cover-sheet model — escaping-safe and null-safe.
+                #     We seed a full skeleton (labels set, values ""), then SelectByPath@1
+                #     copies each source attribute into its row VALUE by JSON node (not by
+                #     string interpolation) — so values are auto-escaped ([3] fixed) and
+                #     missing / null / nested-under-null sources are simply skipped, leaving
+                #     the "" default ([OPT] fixed). Payment proof uses the first linked
+                #     transaction only ([5] multi-payment is a follow-up).
+                - type: WriteJson@1
+                  description: Cover-sheet skeleton (labels + empty values)
+                  # Amounts carry format N2 with explicit Austrian separators so the
+                  # cover sheet shows "1.186,96 EUR" — BMD document recognition does
+                  # not accept the raw JSON number ("1186.96") as an amount. The
+                  # separators are explicit (not culture-derived) because containers
+                  # without ICU fall back to invariant globalization. The currency
+                  # suffix defaults to EUR (Currency attribute missing = EUR) and is
+                  # overridden below.
+                  jsonString: '{"title":"Belegübergabe an den Steuerberater","subtitle":"","culture":"de-AT","numberDecimalSeparator":",","numberGroupSeparator":".","sections":[{"heading":"Beleg","rows":[{"label":"Belegnummer","value":""},{"label":"Belegdatum","value":""},{"label":"Fälligkeit","value":""},{"label":"Belegart","value":""},{"label":"Brutto","value":"","format":"N2","suffix":"EUR"},{"label":"Ersatzbeleg","value":"Nein"}]},{"heading":"Kontakt","rows":[{"label":"Lieferant","value":""},{"label":"UID","value":""},{"label":"IBAN","value":""},{"label":"Kunde","value":""}]},{"heading":"Beträge","rows":[{"label":"Netto","value":"","format":"N2","suffix":"EUR"},{"label":"USt","value":"","format":"N2","suffix":"EUR"},{"label":"Steuersatz %","value":"","format":"0.##"},{"label":"Währung","value":"EUR"}]},{"heading":"Zahlungsnachweis","rows":[]}],"footerHeading":"Notiz an den Steuerberater","footerText":""}'
+                  targetPath: $.key.sheet
+                # BMD keys on the Belegnummer, and numbers extracted from scans often
+                # carry (inner) whitespace ("26-7010 / 6554") — strip ALL whitespace for
+                # the handover package (cover sheet + belege.csv). The stored document
+                # keeps its original number. Null-safe: a missing DocumentNumber stays
+                # null and SelectByPath skips it (defaults remain "").
+                - type: ExecuteCSharp@1
+                  description: Document number without whitespace for the tax-advisor package
+                  code: 'docNumber == null ? null : string.Concat(docNumber.Where(ch => !char.IsWhiteSpace(ch)))'
+                  usings:
+                    - System.Linq
+                  returnType: String
+                  arguments:
+                    - name: docNumber
+                      valuePath: $.key.Attributes.DocumentNumber
+                      dataType: String
+                  targetPath: $.key.docNumberClean
+                - type: SelectByPath@1
+                  description: Copy present document values into the skeleton (skips missing/null)
+                  selectPath:
+                    - path: $.key.docNumberClean
+                      targetPath: $.key.sheet.subtitle
+                    - path: $.key.docNumberClean
+                      targetPath: $.key.sheet.sections[0].rows[0].value
+                    - path: $.key.Attributes.DocumentDate
+                      targetPath: $.key.sheet.sections[0].rows[1].value
+                    - path: $.key.Attributes.DueDate
+                      targetPath: $.key.sheet.sections[0].rows[2].value
+                    - path: $.key.prefix
+                      targetPath: $.key.sheet.sections[0].rows[3].value
+                    - path: $.key.Attributes.GrossTotal
+                      targetPath: $.key.sheet.sections[0].rows[4].value
+                    - path: $.key.Attributes.Vendor.Attributes.CompanyName
+                      targetPath: $.key.sheet.sections[1].rows[0].value
+                    - path: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
+                      targetPath: $.key.sheet.sections[1].rows[1].value
+                    - path: $.key.Attributes.Vendor.Attributes.IBAN
+                      targetPath: $.key.sheet.sections[1].rows[2].value
+                    - path: $.key.Attributes.Customer.Attributes.CompanyName
+                      targetPath: $.key.sheet.sections[1].rows[3].value
+                    - path: $.key.Attributes.NetTotal
+                      targetPath: $.key.sheet.sections[2].rows[0].value
+                    - path: $.key.Attributes.TaxTotal
+                      targetPath: $.key.sheet.sections[2].rows[1].value
+                    - path: $.key.Attributes.TaxRate
+                      targetPath: $.key.sheet.sections[2].rows[2].value
+                    # Currency (missing = EUR, then the skeleton defaults stay): explicit
+                    # Währung row + suffix on the amount rows (Brutto/Netto/USt).
+                    - path: $.key.Attributes.Currency
+                      targetPath: $.key.sheet.sections[2].rows[3].value
+                    - path: $.key.Attributes.Currency
+                      targetPath: $.key.sheet.sections[0].rows[4].suffix
+                    - path: $.key.Attributes.Currency
+                      targetPath: $.key.sheet.sections[2].rows[0].suffix
+                    - path: $.key.Attributes.Currency
+                      targetPath: $.key.sheet.sections[2].rows[1].suffix
+                    - path: $.key.txGroups[0].Items[0].Attributes.BookingDate
+                      targetPath: $.key.sheet.sections[3].rows[0].value
+                    - path: $.key.txGroups[0].Items[0].Attributes.Amount
+                      targetPath: $.key.sheet.sections[3].rows[1].value
+                    - path: $.key.txGroups[0].Items[0].Attributes.CounterpartIban
+                      targetPath: $.key.sheet.sections[3].rows[2].value
+                    - path: $.key.Attributes.TaxAdvisorNote
+                      targetPath: $.key.sheet.footerText
+                # Ersatzbeleg (substitute voucher) marker: skeleton defaults the row to
+                # "Nein"; flip to "Ja" only when the document carries IsSubstitute=true.
+                # Missing/absent attribute (pre-migration documents) stays "Nein".
+                - type: If@1
+                  description: Substitute voucher => mark Ersatzbeleg row as Ja
+                  path: $.key.Attributes.IsSubstitute
+                  operator: Equals
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.sheet.sections[0].rows[5].value
+                      value: Ja
+                      valueType: String
+                # Trim ISO date/time values to the date only (yyyy-MM-dd). SubstringFromStart
+                # is null-safe and clamps to the string length, so blank values stay blank.
+                - type: TransformString@1
+                  description: Trim document date
+                  sourcePath: $.key.sheet.sections[0].rows[1].value
+                  targetPath: $.key.sheet.sections[0].rows[1].value
+                  operation: SubstringFromStart
+                  length: 10
+                - type: TransformString@1
+                  description: Trim due date
+                  sourcePath: $.key.sheet.sections[0].rows[2].value
+                  targetPath: $.key.sheet.sections[0].rows[2].value
+                  operation: SubstringFromStart
+                  length: 10
+
+                # Payment proof: one row per linked transaction ([5]). The inner ForEach
+                # iterates the linked transactions (inside it $.key = the transaction),
+                # builds a {label,value} row per payment, and collects each whole iteration
+                # into $.key.payItems; Flatten then lifts just the .row of each into
+                # $.key.payRows, which replaces the (empty) Zahlungsnachweis rows. Zero
+                # transactions -> payRows empty -> the section shows just its heading.
+                - type: ForEach@1
+                  description: Build one payment row per linked transaction
+                  iterationPath: $.key.txGroups[0].Items
+                  targetPath: $.key.payItems
+                  targetValueKind: Simple
+                  targetValueWriteMode: Overwrite
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: WriteJson@1
+                      jsonString: '{"d":"","a":"","i":""}'
+                      targetPath: $.key.f
+                    - type: WriteJson@1
+                      jsonString: '{"label":"","value":""}'
+                      targetPath: $.key.row
+                    - type: SelectByPath@1
+                      selectPath:
+                        - path: $.key.Attributes.BookingDate
+                          targetPath: $.key.f.d
+                        - path: $.key.Attributes.Amount
+                          targetPath: $.key.f.a
+                        - path: $.key.Attributes.CounterpartIban
+                          targetPath: $.key.f.i
+                    - type: TransformString@1
+                      description: Trim booking date
+                      sourcePath: $.key.f.d
+                      targetPath: $.key.f.d
+                      operation: SubstringFromStart
+                      length: 10
+                    # amounts / IBANs contain no JSON-special chars, so FormatString here is
+                    # safe; f.* are always present (defaulted) so no undefined lookups.
+                    - type: FormatString@1
+                      format: "Zahlung {$.key.f.d}"
+                      targetPath: $.key.row.label
+                    - type: FormatString@1
+                      format: "{$.key.f.a} · {$.key.f.i}"
+                      targetPath: $.key.row.value
+                - type: Flatten@1
+                  description: Lift each payment row out of the collected iterations
+                  path: $.key.payItems[*].row
+                  targetPath: $.key.payRows
+                - type: SelectByPath@1
+                  description: Inject payment rows into the cover sheet
+                  selectPath:
+                    - path: $.key.payRows
+                      targetPath: $.key.sheet.sections[3].rows
+
+                - type: RenderDataSheetPdf@1
+                  description: Render the cover sheet PDF
+                  path: $.key.sheet
+                  targetPath: $.key.coverPdf
+
+                # 2d) merge cover + original (when an original exists), else cover only.
+                - type: If@1
+                  description: Has an original PDF
+                  path: $.key.fileGroups[0].TotalCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: GetFileSystemContent@1
+                      description: Load original PDF bytes
+                      rtIdPath: $.key.fileGroups[0].Items[0].RtId   # [4] validate
+                      targetPath: $.key.originalPdf
+                    - type: FormatString@1
+                      description: Merge inputs [cover, original]
+                      format: '["{$.key.coverPdf}","{$.key.originalPdf}"]'
+                      targetPath: $.key.mergeJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.key.mergeJson
+                      targetPath: $.key.mergeInputs
+                    - type: MergePdf@1
+                      description: Prepend cover sheet to the original
+                      path: $.key.mergeInputs
+                      targetPath: $.key.finalPdf
+                      # Write the merged PDF to the per-execution scratch space and emit a
+                      # small reference instead of a base64 string, so a full fiscal-year
+                      # export never accumulates every merged PDF (or the ZIP) on the heap
+                      # (AB#4642). CreateZipArchive streams it from scratch into the archive.
+                      outputAsScratchFile: true
+                - type: If@1
+                  description: No original PDF -> cover sheet only
+                  path: $.key.fileGroups[0].TotalCount
+                  operator: Equal
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    # Route the cover-only case through MergePdf too, so $.key.finalPdf is
+                    # always a scratch reference (uniform entry building below).
+                    - type: FormatString@1
+                      description: Merge inputs [cover] only
+                      format: '["{$.key.coverPdf}"]'
+                      targetPath: $.key.mergeJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.key.mergeJson
+                      targetPath: $.key.mergeInputs
+                    - type: MergePdf@1
+                      description: Cover sheet only, written to the scratch space
+                      path: $.key.mergeInputs
+                      targetPath: $.key.finalPdf
+                      outputAsScratchFile: true
+
+                # 2e) zip entry { pathSegments, scratchFileToken, length, manifest } —
+                #     only in-scope docs. Documents excluded by scope never get
+                #     $.key.entry, so the Flatten over $.docResults[*].entry drops them
+                #     from the ZIP. Values are copied as JSON nodes (SelectByPath), so
+                #     quotes/newlines in vendor names cannot break the entry; the ZIP
+                #     node sanitizes each path segment and appends the running number.
+                - type: If@1
+                  description: Emit entry only when in scope
+                  path: $.key.include
+                  operator: Equal
+                  value: "yes"
+                  valueType: String
+                  transformations:
+                    - type: FormatString@1
+                      description: File name (sequence number appended by the ZIP node)
+                      format: '{$.key.docDate}_{$.key.party}.pdf'
+                      targetPath: $.key.baseFileName
+                    - type: WriteJson@1
+                      description: Entry skeleton (path segments + belege.csv manifest columns)
+                      jsonString: '{"pathSegments":["","","",""],"scratchFileToken":"","length":0,"manifest":{"Datum":"","Belegnummer":"","Typ":"","LieferantKunde":"","UID":"","Netto":"","USt":"","Brutto":"","Waehrung":""}}'
+                      targetPath: $.key.entry
+                    - type: SelectByPath@1
+                      description: Fill path, content reference and manifest (skips missing)
+                      selectPath:
+                        - path: $.full.fyName
+                          targetPath: $.key.entry.pathSegments[0]
+                        - path: $.key.monthFolder
+                          targetPath: $.key.entry.pathSegments[1]
+                        - path: $.key.typeFolder
+                          targetPath: $.key.entry.pathSegments[2]
+                        - path: $.key.baseFileName
+                          targetPath: $.key.entry.pathSegments[3]
+                        - path: $.key.finalPdf.scratchFileToken
+                          targetPath: $.key.entry.scratchFileToken
+                        - path: $.key.finalPdf.length
+                          targetPath: $.key.entry.length
+                        - path: $.key.docDate
+                          targetPath: $.key.entry.manifest.Datum
+                        - path: $.key.docNumberClean
+                          targetPath: $.key.entry.manifest.Belegnummer
+                        - path: $.key.typeFolder
+                          targetPath: $.key.entry.manifest.Typ
+                        - path: $.key.party
+                          targetPath: $.key.entry.manifest.LieferantKunde
+                        - path: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
+                          targetPath: $.key.entry.manifest.UID
+                        - path: $.key.Attributes.NetTotal
+                          targetPath: $.key.entry.manifest.Netto
+                        - path: $.key.Attributes.TaxTotal
+                          targetPath: $.key.entry.manifest.USt
+                        - path: $.key.Attributes.GrossTotal
+                          targetPath: $.key.entry.manifest.Brutto
+                        - path: $.key.Attributes.Currency
+                          targetPath: $.key.entry.manifest.Waehrung
+                    # Vendor row for the lieferanten.csv index — incoming documents only
+                    # (on outgoing invoices the vendor is our own company). Built in C#
+                    # so names with semicolons/quotes are CSV-quoted correctly; returns
+                    # null (no row) when no vendor name is present.
+                    - type: If@1
+                      description: Vendor list row only for incoming documents
+                      path: $.key.Attributes.DocumentType
+                      operator: Equals
+                      value: 0
+                      valueType: Int
+                      transformations:
+                        - type: ExecuteCSharp@1
+                          description: Vendor row as JSON (merged + CSV-encoded later in one pass over all docs)
+                          code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is System.Text.Json.JsonElement e) { if (e.ValueKind == System.Text.Json.JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == System.Text.Json.JsonValueKind.Null || e.ValueKind == System.Text.Json.JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; var nm = S(name).Trim(); if (string.IsNullOrWhiteSpace(nm)) return null; return System.Text.Json.JsonSerializer.Serialize(new string[] { nm, S(uid).Trim(), S(iban).Trim(), S(accountName).Trim(), S(street).Trim(), S(zip).Trim(), S(city).Trim(), S(country).Trim() });'
+                          returnType: String
+                          arguments:
+                            - name: name
+                              valuePath: $.key.Attributes.Vendor.Attributes.CompanyName
+                              dataType: Record
+                            - name: uid
+                              valuePath: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
+                              dataType: Record
+                            - name: iban
+                              valuePath: $.key.Attributes.Vendor.Attributes.IBAN
+                              dataType: Record
+                            - name: accountName
+                              valuePath: $.key.Attributes.Vendor.Attributes.AccountName
+                              dataType: Record
+                            - name: street
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.Street
+                              dataType: Record
+                            - name: zip
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.Zipcode
+                              dataType: Record
+                            - name: city
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.CityTown
+                              dataType: Record
+                            - name: country
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.NationalCode
+                              dataType: Record
+                          targetPath: $.key.vendorLine
+
+            # -- 3) Collect entries, build ZIP, store as FileSystemItem -----------------
+            - type: Flatten@1
+              description: Collect per-document zip entries into one array
+              path: $.docResults[*].entry
+              targetPath: $.zipEntries
+            # -- 3b) lieferanten.csv: distinct vendors of the exported incoming docs ----
+            # BMD users key vendors on the UID; a deduplicated vendor list beside the
+            # belege.csv saves re-typing master data. Shipped as a VERBATIM zip entry
+            # (exact name, no sequence number, no belege.csv row).
+            - type: Flatten@1
+              description: Collect per-document vendor rows
+              path: $.docResults[*].vendorLine
+              targetPath: $.vendorLines
+            - type: ExecuteCSharp@1
+              description: Merge vendor rows by normalized name (one row per vendor), emit base64 CSV (UTF-8 BOM)
+              code: 'var list = new System.Collections.Generic.List<string>(); if (lines is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array) { foreach (var el in je.EnumerateArray()) { if (el.ValueKind == System.Text.Json.JsonValueKind.String) { var s = el.GetString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } } else if (lines is System.Collections.IEnumerable seq) { foreach (var o in seq) { var s = o == null ? null : o.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } var parsed = new System.Collections.Generic.List<string[]>(); foreach (var s in list) { try { var a = System.Text.Json.JsonSerializer.Deserialize<string[]>(s); if (a != null && a.Length == 8 && !string.IsNullOrWhiteSpace(a[0])) parsed.Add(a); } catch { } } if (parsed.Count == 0) return null; Func<string,string> norm = n => { var t = (n ?? "").ToLowerInvariant().Replace("\u00E4", "a").Replace("\u00F6", "o").Replace("\u00FC", "u").Replace("\u00DF", "ss").Normalize(System.Text.NormalizationForm.FormD); var sb = new System.Text.StringBuilder(); foreach (var c in t) { if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark) sb.Append(c); } t = System.Text.RegularExpressions.Regex.Replace(sb.ToString(), @"\b(gmbh|mbh|ag|se|kg|ohg|ug|ltd|limited|inc|llc|plc|pbc|bv|nv|sa|sas|sarl|spa|srl|oy|ab|as|aps|jawna|spolka|gesellschaft|co|kgaa|partg|ek)\b", " "); return System.Text.RegularExpressions.Regex.Replace(t, "[^a-z0-9]", ""); }; Func<System.Collections.Generic.IEnumerable<string>,string> pick = vals => { var vv = vals.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).ToList(); return vv.Count == 0 ? "" : vv.GroupBy(v => v).OrderByDescending(g => g.Count()).ThenByDescending(g => g.Key.Length).ThenByDescending(g => g.Key, StringComparer.Ordinal).First().Key; }; var merged = parsed.GroupBy(r => norm(r[0])).Select(g => { var m = new string[8]; for (var i = 0; i < 8; i++) { m[i] = pick(g.Select(r => r[i])); } var ib = System.Text.RegularExpressions.Regex.Replace(m[2], @"\s+", "").ToUpperInvariant(); m[2] = ib.Contains("*") ? "" : ib; return m; }).OrderBy(m => m[0], StringComparer.OrdinalIgnoreCase).ToList(); Func<string,string> q = v => (v.Contains(";") || v.Contains("\"") || v.Contains("\n") || v.Contains("\r")) ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; var rows = merged.Select(m => string.Join(";", m.Select(q))); var csv = "\uFEFF" + "Lieferant;UID;IBAN;Kontoinhaber;Strasse;PLZ;Ort;Land\r\n" + string.Join("\r\n", rows) + "\r\n"; return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(csv));'
+              usings:
+                - System.Linq
+              returnType: String
+              arguments:
+                - name: lines
+                  valuePath: $.vendorLines
+                  dataType: StringArray
+              targetPath: $.lieferantenB64
+            - type: If@1
+              description: Append the vendor list only when there is at least one row
+              path: $.lieferantenB64
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: FormatString@1
+                  description: Verbatim zip entry for the vendor list (base64 is JSON-safe)
+                  format: '{"fileName":"lieferanten.csv","contentBase64":"{$.lieferantenB64}","verbatim":true}'
+                  targetPath: $.lieferantenEntryJson
+                - type: WriteJson@1
+                  description: Append the entry to the zip entries
+                  jsonStringPath: $.lieferantenEntryJson
+                  targetPath: $.zipEntries
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+            - type: FormatString@1
+              description: ZIP file name
+              nullValue: handover
+              format: 'handover-{$.query.fiscalYearId}.zip'
+              targetPath: $.zip.fileName
+            # Stream each entry's merged PDF from the scratch space into the ZIP (also on the
+            # scratch space) and persist it directly as a FileSystemItem — no whole-ZIP byte[]
+            # or base64 on the heap, and no separate CreateFileSystemUpdate round-trip (AB#4642).
+            - type: CreateZipArchive@1
+              description: Stream merged PDFs into the handover ZIP and persist it as a FileSystemItem
+              path: $.zipEntries
+              persistAsFileSystemItem: true
+              rootFolderWellKnownName: Documents
+              fileNamePath: $.zip.fileName
+              contentType: application/zip
+              generateRtId: true
+              # Unique file names ({date}_{party}_{NNN}.pdf) + belege.csv index in the
+              # ZIP root listing every document's parsed data and its final path.
+              appendSequenceNumber: true
+              manifestFileName: belege.csv
+              manifestFileNameColumn: Dateiname
+              targetPath: $.zip.itemRtId
+
+            # -- 4) Return { fileSystemItem: <rtId> } -----------------------------------
+            # The HTTP response body is the final data context. Put the id at the root so
+            # the body is a flat { "fileSystemItem": "<rtId>" } (the frontend reads
+            # response.fileSystemItem directly).
+            - type: SetPrimitiveValue@1
+              description: Response id at root
+              targetPath: $.fileSystemItem
+              valuePath: $.zip.itemRtId
+              valueType: String
+            - type: SetPipelineExecutionResult@1
+              path: $.fileSystemItem
+            # Project the context down to just the id so the HTTP body is clean.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.fileSystemItem
+                  inclusion: true
