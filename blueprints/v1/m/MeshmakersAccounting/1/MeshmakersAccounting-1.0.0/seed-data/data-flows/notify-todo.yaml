@@ -28,8 +28,10 @@ entities:
   # no language attribute on a user, so composing the text server-side would
   # have to guess the recipient's language. Only the ADDRESSEE moved server-side.
   # E-mail sends via SendMicrosoftGraphEmail@1 (Graph app-only, needs Mail.Send)
-  # from the accounting mailbox. NOTE: the sender mailbox is a per-tenant
-  # literal — edit it per tenant (same as the e-mail-import mailbox).
+  # from the tenant's notification mailbox. That mailbox is NOT a literal here:
+  # it is read from EmailImportSettings.EmailImportMailbox (AB#5216) — the same
+  # postbox the ToDo replies come back to, which is why the inbound pipeline
+  # reads the very same attribute.
   - rtId: 67d4a2f0b2e4d8c3a1f00130
     ckTypeId: System.Communication/DataFlow
     attributes:
@@ -49,6 +51,11 @@ entities:
       - roleId: System.Communication/Uses
         targetRtId: 67d4a2f0b2e4d8c3a1f000a0
         targetCkTypeId: System.Communication/MicrosoftGraphConfiguration
+      # GetPipelineConfigByWellKnownName resolves through this edge and THROWS
+      # when it is missing.
+      - roleId: System.Communication/Uses
+        targetRtId: aa0000000000000000000330
+        targetCkTypeId: Meshmakers.Accounting/EmailImportSettings
     attributes:
       - id: System.Communication/DeploymentState
         value: 0
@@ -56,9 +63,10 @@ entities:
         value: Notify ToDo Pipeline
       # Ships DISABLED: the notification mailbox is tenant-specific (AB#4934 —
       # the previous hardcoded meshmakers mailbox leaked into every tenant).
-      # Enable after replacing TODO_SET_NOTIFICATION_MAILBOX and filling the
-      # MicrosoftGraphDocuments credentials. Every blueprint re-apply resets
-      # mailbox + Enabled to this shipped state — re-enable manually afterwards.
+      # Enable after filling EmailImportSettings (Settings -> Import) and the
+      # MicrosoftGraphDocuments credentials. Since the mailbox lives in that
+      # configuration (isRuntimeState) a re-apply no longer loses it; only
+      # System/Enabled falls back to false.
       #
       # Per-user outbound channel preference (AB#5152, decided in AB#5149): the
       # recipient's identity subjectId is read off the ToDo entity (AB#4685 —
@@ -88,6 +96,32 @@ entities:
                 - AccountingManagement
                 - AccountingEmployee
           transformations:
+            # Sender mailbox from the EmailImportSettings singleton, NOT from this
+            # definition: PipelineDefinition is isRuntimeState:false, so an inline
+            # value is lost on every re-apply. SendMicrosoftGraphEmail@1 has no
+            # settingsConfiguration, so the value is read here and handed over via
+            # mailboxPath. Empty default FIRST - SetPrimitiveValue throws on an
+            # undefined valuePath and an unset optional attribute is absent from
+            # the configuration JSON.
+            - type: GetPipelineConfigByWellKnownName@1
+              description: Load the e-mail import settings (notification mailbox)
+              wellKnownName: EmailImportSettings
+              targetPath: $.emailConfig
+            - type: SetPrimitiveValue@1
+              description: Default the notification mailbox to empty (unconfigured tenant)
+              targetPath: $.notifyMailbox
+              value: ""
+              valueType: String
+            - type: If@1
+              description: Notification mailbox configured
+              path: $.emailConfig.attributes.EmailImportMailbox
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.notifyMailbox
+                  valuePath: $.emailConfig.attributes.EmailImportMailbox
+                  valueType: String
             # Default delivery channel: e-mail (universal - every user has one).
             - type: SetPrimitiveValue@1
               description: Default delivery channel = EMAIL
@@ -241,13 +275,21 @@ entities:
                   operator: NotEquals
                   valueType: String
                   transformations:
-                    - type: SendMicrosoftGraphEmail@1
-                      description: Send the ToDo notification e-mail via Microsoft Graph
-                      serverConfiguration: MicrosoftGraphDocuments
-                      mailbox: TODO_SET_NOTIFICATION_MAILBOX
-                      subjectPath: $.body.subject
-                      toPath: $.toEmail
-                      path: $.body.body
+                    # No mailbox configured = no send. Silently skipping beats
+                    # failing the pipeline on a tenant that never set one up.
+                    - type: If@1
+                      description: A notification mailbox is configured
+                      path: $.notifyMailbox
+                      operator: NotEquals
+                      valueType: String
+                      transformations:
+                        - type: SendMicrosoftGraphEmail@1
+                          description: Send the ToDo notification e-mail via Microsoft Graph
+                          serverConfiguration: MicrosoftGraphDocuments
+                          mailboxPath: $.notifyMailbox
+                          subjectPath: $.body.subject
+                          toPath: $.toEmail
+                          path: $.body.body
             # Terminal echo-leak guard: never echo the request (Authorization/Bearer,
             # body or intermediate state). See feedback_fromhttprequest_response_echo_leak.
             - type: Project@1
