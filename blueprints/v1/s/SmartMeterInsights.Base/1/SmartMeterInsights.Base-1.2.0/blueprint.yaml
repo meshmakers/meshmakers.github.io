@@ -1,0 +1,93 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: SmartMeterInsights.Base-1.2.0
+description: |
+  Base blueprint for Smart Meter Insights tenants (Epic AB#4059,
+  AB#5211/AB#5213/AB#5245/AB#5246).
+
+  Topology: the app-host (management) tenant runs the single shared Application
+  workload; one child tenant per consulting firm (energy-community AB#3683
+  pattern). This blueprint is installed on BOTH: the app host needs the
+  Application + the client mirror source, the consulting-firm tenants need the
+  model, archives, roles and the HTTP API. End customers are runtime entities
+  (SmartMeterInsights/Customer) inside the firm tenant — never tenants.
+
+  Installs:
+  - The SmartMeterInsights CK model (Customer, ImportSession, ShareLink,
+    DetectionResult, Recommendation on top of Basic/Basic.Energy; time series
+    reuse Basic.Energy/EnergyMeasurement).
+  - Identity: roles InsightsConsultant/InsightsAdmin, groups Consultants/Admins,
+    and the PKCE clients smart-meter-insights-app + smart-meter-insights-app-debug
+    (both AutoProvisionInChildTenants, so every consulting-firm child tenant
+    gets a mirror and sign-in against a child never fails with
+    Invalid redirect_uri).
+  - The Basic/Tree root "Anlagen" (510…100) — the parent anchor for every
+    OperatingFacility the app creates (the CK association System/ParentChild on
+    OperatingFacility is mandatory; SMI has no geography seed, unlike
+    energy-community's Basic/City nodes).
+  - Stream-data archives for Basic.Energy/EnergyMeasurement: raw 15-min
+    TimeRangeArchive (energy-measurements, 510…a01) with the cascaded rollup
+    ladder raw -> hourly -> daily -> monthly (calendar-aligned Europe/Vienna;
+    SUM amountvalue_sum + MAX dataquality_max + count chain). All archives ship
+    Disabled (Archive.Status = 2) — activate bottom-up via
+    octo-cli -c ActivateArchive after EnableStreamData (CrateDB reachable).
+  - The smart-meter-insights DataFlow (510…001) with two HTTP pipelines on the
+    default Mesh Adapter 670…002:
+      POST /smi/import (smi-import-readings, role InsightsConsultant) —
+        pre-normalized 15-min readings -> EnergyMeasurement anchor upsert per
+        (MeteringPoint, ObisCode) + archive save + ImportSession entity.
+      POST /smi/share (smi-share-read, anonymous — THE one deliberate
+        exception) — validates a ShareLink token, counts the access and returns
+        the scoped dashboard payload; with ShowDevices/ShowRecommendations set
+        it additionally carries the current DetectionResults / the PUBLISHED
+        Recommendations (AB#5245).
+  - The System.Communication/Application workload (510…200, chart
+    smart-meter-insights from the dev Helm repository 670…003, hostname
+    energy-insights.{{domain.DEFAULT}}). Hostname/Values/ChartVersion/
+    IngressEnabled are isRuntimeState (System.Communication >= 3.28), so seed
+    values apply on fresh installs only.
+
+  DELIBERATELY NOT SEEDED: the Pool (670…001), the Mesh Adapter (670…002) and
+  the Helm repositories (670…003/005) belong to the service-managed
+  System.Communication blueprint and reappear on every EnableCommunication.
+
+  Prerequisites:
+  - Communication enabled on the tenant (default Pool/Adapter/Helm repo exist).
+  - Stream data enabled (octo-cli -c EnableStreamData; CrateDB reachable)
+    BEFORE activating the archives.
+
+  Post-install:
+  1. Activate the archives bottom-up:
+     octo-cli -c ActivateArchive 510000000000000000000a01 (raw), then …a02
+     (hourly), …a03 (daily), …a04 (monthly).
+  2. Deploy the HTTP API:
+     octo-cli -c DeployDataFlow --identifier 510000000000000000000001
+  3. On the app-host tenant only: deploy the workload
+     octo-cli -c DeployWorkload -id 510000000000000000000200
+
+  The seed is split with seedDataPaths (one file per topic); all files are
+  merged into ONE runtime model before the import runs, so the order is
+  presentation only and associations may cross files. Requires an engine that
+  knows seedDataPaths (AB#4758).
+ckModelDependencies:
+  # Install order; the blueprint engine installs the FLOOR of each range as the
+  # exact version (versioningRules.md). System floors follow EnergyCommunity /
+  # MeshmakersAccounting: System.Communication 3.28 for the isRuntimeState
+  # workload attributes (AB#4706), System.Identity 2.12 for
+  # AutoProvisionInChildTenants + role/group seeds, System.StreamData 1.7 for
+  # RollupArchive.ReferenceTimeZone (>= 1.6.4) and the runtime-state
+  # Archive.Status (AB#4582). Basic 2.0.3 shares the System-2.2 baseline
+  # (Basic 2.0.0 pins System-2.0.2 and would conflict).
+  - System-[2.2,3.0)
+  - System.Communication-[3.28,4.0)
+  - System.Identity-[2.12,3.0)
+  - System.StreamData-[1.7,2.0)
+  - Basic-[2.0.3,3.0)
+  - Basic.Energy-[1.4,2.0)
+  - SmartMeterInsights-[1.2.0,2.0)
+# All files below are merged into ONE runtime model before the import runs.
+seedDataPaths:
+  - seed-data/identity/roles-groups-client.yaml
+  - seed-data/configurations/structure.yaml
+  - seed-data/configurations/archives.yaml
+  - seed-data/configurations/application.yaml
+  - seed-data/data-flows/smi.yaml
