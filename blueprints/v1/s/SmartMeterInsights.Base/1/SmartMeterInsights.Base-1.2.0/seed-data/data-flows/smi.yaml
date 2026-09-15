@@ -1,0 +1,1979 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- System-[2.2,3.0)
+- System.Communication-[3.28,4.0)
+- System.Identity-[2.12,3.0)
+- System.StreamData-[1.7,2.0)
+- Basic-[2.0.3,3.0)
+- Basic.Energy-[1.4,2.0)
+- SmartMeterInsights-[1.2.0,2.0)
+
+# The Smart Meter Insights HTTP API (AB#5213): one DataFlow with two pipelines
+# on the default Mesh Adapter (670…002).
+#
+#   POST /smi/import  smi-import-readings  authenticated (role InsightsConsultant)
+#   POST /smi/share   smi-share-read       anonymous (THE one deliberate exception)
+#
+# Both ship DeploymentState 2 (Deployed) — deploy once after install with
+#   octo-cli -c DeployDataFlow --identifier 510000000000000000000001
+# The import pipeline writes into the raw archive 510…a01, which must be
+# ACTIVATED first (see configurations/archives.yaml) or the archive write fails.
+# Part of the SmartMeterInsights.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── DataFlow ──────────────────────────────────────────────────────────────
+- rtId: '510000000000000000000001'
+  ckTypeId: System.Communication/DataFlow-1
+  rtWellKnownName: smart-meter-insights
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: smart-meter-insights
+  - id: System/Description-1
+    value: Smart Meter Insights HTTP API — CSV-import persistence and public share-link reads (AB#5213)
+
+# ─── Pipeline smi-import-readings ──────────────────────────────────────────
+# POST /smi/import — persists a batch of pre-normalized 15-minute readings for
+# one (meteringPointRtId, obisCode) pair. The frontend parses the CSV and sends
+#   { meteringPointRtId, obisCode, fileName, detectedFormat,
+#     readings: [ { from, to, kwh, quality } ],          # quality: L1|L2|L3|Manual
+#     gaps: [ { from, to } ],                            # optional
+#     counts: { l1, l2, l3, missing, duplicates } }      # optional, default 0
+#
+# Persistence follows the simulator's Lesart D: ONE EnergyMeasurement anchor
+# per (MeteringPoint, ObisCode) — natural key em-<mpRtId>-<obisCode> — holding
+# the newest slot, while EVERY slot lands in the raw TimeRangeArchive 510…a01
+# (CrateDB upsert per window, so re-imports correct instead of duplicate).
+# An ImportSession entity records file name, covered period, quality counts
+# and the gap list. Response: { importSessionRtId, valueCount, state, message }.
+- rtId: '510000000000000000000010'
+  ckTypeId: System.Communication/Pipeline-1
+  rtWellKnownName: SmiImportReadings
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: '510000000000000000000001'
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: smi-import-readings
+  - id: System/Description-1
+    value: Persist normalized 15-min readings — EnergyMeasurement anchor upsert + archive save + ImportSession (AB#5213)
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@2
+          path: /smi/import
+          method: POST
+          allowAnonymous: false
+          requiredRoles:
+            - InsightsConsultant
+
+      transformations:
+        - type: Logger@1
+          message: "smi-import-readings: request received on /smi/import"
+
+        # Default response — overwritten with state=Completed on the happy path.
+        # Bad input returns HTTP 200 with a clear error body instead of a raw 500.
+        - type: SetPrimitiveValue@1
+          targetPath: $.state
+          value: Failed
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.message
+          value: "Invalid request: 'meteringPointRtId', 'obisCode' and a non-empty 'readings' array of { from, to, kwh, quality } are required."
+          valueType: String
+
+        # Guard 1: meteringPointRtId present
+        - type: If@1
+          description: meteringPointRtId present
+          path: $.body.meteringPointRtId
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            # Guard 2: obisCode present
+            - type: If@1
+              description: obisCode present
+              path: $.body.obisCode
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                # Guard 3: at least one reading present
+                - type: If@1
+                  description: at least one reading present
+                  path: $.body.readings[0].to
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    # Guard 4: the metering point exists in THIS tenant.
+                    - type: GetRtEntitiesById@1
+                      description: Resolve the metering point
+                      ckTypeId: Basic.Energy/MeteringPoint
+                      rtIdsPath: $.body.meteringPointRtId
+                      take: 1
+                      targetPath: $.mp
+                    - type: If@1
+                      description: metering point not found
+                      path: $.mp.Items[0].RtId
+                      operator: Equal
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.message
+                          value: metering_point_not_found
+                          valueType: String
+                    - type: If@1
+                      description: metering point exists — persist the readings
+                      path: $.mp.Items[0].RtId
+                      operator: NotEquals
+                      value: null
+                      valueType: String
+                      transformations:
+                        # Natural key of the EnergyMeasurement anchor: one RT
+                        # entity per (MeteringPoint, ObisCode) — Lesart D.
+                        - type: FormatString@1
+                          description: Anchor natural key em-<meteringPointRtId>-<obisCode>
+                          format: "em-{$.body.meteringPointRtId}-{$.body.obisCode}"
+                          targetPath: $.anchorWkn
+
+                        # One Insert candidate per reading, all sharing the anchor
+                        # natural key. UpdateRtEntityIfNewer@1 dedups the batch.
+                        - type: ForEach@1
+                          description: Build one EnergyMeasurement candidate per 15-min reading
+                          maxDegreeOfParallelism: 1
+                          iterationPath: $.body.readings
+                          mergePath: $.key.candidate
+                          targetPath: $._candidates
+                          transformations:
+                            - type: CreateUpdateInfo@1
+                              targetPath: $.key.candidate
+                              updateKind: Insert
+                              ckTypeId: Basic.Energy/EnergyMeasurement
+                              rtIdPath: $.key.newRtId
+                              generateRtId: true
+                              rtWellKnownNamePath: $.full.anchorWkn
+                              attributeUpdates:
+                                - attributeName: TimeRange.From
+                                  attributeValueType: DateTime
+                                  valuePath: $.key.from
+                                - attributeName: TimeRange.To
+                                  attributeValueType: DateTime
+                                  valuePath: $.key.to
+                                - attributeName: Amount.Value
+                                  attributeValueType: Double
+                                  valuePath: $.key.kwh
+                                - attributeName: Amount.Unit
+                                  attributeValueType: Enum
+                                  value: KWh
+                                - attributeName: ObisCode
+                                  attributeValueType: String
+                                  valuePath: $.full.body.obisCode
+                                - attributeName: DataQuality
+                                  attributeValueType: Enum
+                                  valuePath: $.key.quality
+
+                        # Parent association candidates (origin = candidate's
+                        # generated RtId). UpdateRtEntityIfNewer keeps only the
+                        # ones whose origin stays an Insert, so existing anchors
+                        # never get a second parent link.
+                        - type: ForEach@1
+                          description: Build parent-child association candidates
+                          maxDegreeOfParallelism: 1
+                          iterationPath: $._candidates
+                          mergePath: $.key.assoc
+                          targetPath: $._candidateAssocs
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              targetPath: $.key.assoc
+                              updateKind: Create
+                              originRtIdPath: $.key.RtId
+                              originCkTypeId: Basic.Energy/EnergyMeasurement
+                              targetRtIdPath: $.full.body.meteringPointRtId
+                              targetCkTypeId: Basic.Energy/MeteringPoint
+                              associationRoleId: System/ParentChild
+
+                        # Lesart D dedup: the RT anchor holds the newest slot per
+                        # natural key; ALL slots (incl. back-fills) go to the archive
+                        # keyed to the canonical anchor RtId.
+                        - type: UpdateRtEntityIfNewer@1
+                          description: Upsert the anchor per (MeteringPoint, ObisCode); keep every slot for the archive
+                          inputPath: $._candidates
+                          filteredOutputPath: $._filtered
+                          outputPathAll: $._all
+                          comparisonAttributePath: TimeRange.From
+                          candidateAssociationsInputPath: $._candidateAssocs
+                          filteredAssociationsOutputPath: $._filteredAssocs
+                        - type: ApplyChanges@2
+                          description: Persist the anchor (+ parent association on first insert)
+                          entityUpdatesPath: $._filtered
+                          associationUpdatesPath: $._filteredAssocs
+                        - type: SaveTimeRangeStreamDataInArchive@1
+                          description: Persist every 15-min slot into the raw archive (CrateDB upsert per window)
+                          path: $._all
+                          archiveRtId: '510000000000000000000a01'
+                          fromAttributePath: TimeRange.From
+                          toAttributePath: TimeRange.To
+
+                        # Covered period + value count for the ImportSession.
+                        - type: ForEach@1
+                          description: Collect reading start timestamps
+                          maxDegreeOfParallelism: 1
+                          iterationPath: $.body.readings
+                          mergePath: $.key.v
+                          targetPath: $._froms
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.v
+                              valuePath: $.key.from
+                              valueType: String
+                        - type: ForEach@1
+                          description: Collect reading end timestamps
+                          maxDegreeOfParallelism: 1
+                          iterationPath: $.body.readings
+                          mergePath: $.key.v
+                          targetPath: $._tos
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.v
+                              valuePath: $.key.to
+                              valueType: String
+                        # NOTE (AB#5232): pre-fix adapters deliver StringArray arguments as a
+                        # boxed System.Text.Json JsonElement array (the node mapped array
+                        # dataTypes to `object`); adapters carrying the SDK fix deliver a
+                        # real string[]. The script is VERSION-TOLERANT via the Items()
+                        # local function so the same seed runs on both adapter generations.
+                        - type: ExecuteCSharp@1
+                          description: Compute covered period and value count
+                          targetPath: $.statsJson
+                          returnType: String
+                          usings:
+                            - System.Linq
+                            - System.Globalization
+                            - System.Text.Json
+                          arguments:
+                            - name: froms
+                              dataType: StringArray
+                              valuePath: $._froms
+                            - name: tos
+                              dataType: StringArray
+                              valuePath: $._tos
+                          code: |
+                            var culture = CultureInfo.InvariantCulture;
+                            var styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+                            // Version-tolerant (AB#5232): JsonElement array (pre-fix adapter) OR typed array (post-fix).
+                            string[] Items(object a) => a == null ? new string[0] : (a is JsonElement je ? je.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString()).ToArray() : ((System.Collections.IEnumerable)a).Cast<object>().Select(o => o == null ? null : o.ToString()).ToArray());
+                            DateTime? min = null; DateTime? max = null; var n = 0;
+                            foreach (var t in Items(froms)) { n++; DateTime d; if (DateTime.TryParse(t, culture, styles, out d) && (min == null || d < min.Value)) min = d; }
+                            foreach (var t in Items(tos)) { DateTime d; if (DateTime.TryParse(t, culture, styles, out d) && (max == null || d > max.Value)) max = d; }
+                            if (min == null || max == null) return "{\"valid\":false}";
+                            // SPACE separator, not ISO 'T' (AB#4552 context-roundtrip finding).
+                            return "{\"valid\":true,\"periodFrom\":\"" + min.Value.ToString("yyyy-MM-dd HH:mm:ss", culture)
+                              + "\",\"periodTo\":\"" + max.Value.ToString("yyyy-MM-dd HH:mm:ss", culture)
+                              + "\",\"valueCount\":" + n + "}";
+                        - type: WriteJson@1
+                          description: Parse the stats JSON into the data context
+                          jsonStringPath: $.statsJson
+                          targetPath: $.stats
+
+                        # Readings whose timestamps cannot be parsed produce no period —
+                        # skip the session and report instead of failing with a missing path.
+                        - type: If@1
+                          description: readings unparseable — no import session
+                          path: $.stats.valid
+                          operator: Equal
+                          value: false
+                          valueType: Boolean
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.message
+                              value: invalid_readings
+                              valueType: String
+                        - type: If@1
+                          description: stats valid — record the ImportSession and respond
+                          path: $.stats.valid
+                          operator: Equal
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            # Normalize the optional request fields (SetPrimitiveValue
+                            # fails on missing paths, so every optional field gets a
+                            # default first and an If-guarded override).
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.norm.fileName
+                              value: ''
+                              valueType: String
+                            - type: If@1
+                              description: fileName present
+                              path: $.body.fileName
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.norm.fileName
+                                  valuePath: $.body.fileName
+                                  valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.norm.detectedFormat
+                              value: ''
+                              valueType: String
+                            - type: If@1
+                              description: detectedFormat present
+                              path: $.body.detectedFormat
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.norm.detectedFormat
+                                  valuePath: $.body.detectedFormat
+                                  valueType: String
+                            # Counts: presence is tested numerically (>= 0, Double —
+                            # a missing path reads null and the comparison is false).
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.norm.l1
+                              value: 0
+                              valueType: Int
+                            - type: If@1
+                              description: counts.l1 present
+                              path: $.body.counts.l1
+                              operator: GreaterEqualsThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.norm.l1
+                                  valuePath: $.body.counts.l1
+                                  valueType: Int
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.norm.l2
+                              value: 0
+                              valueType: Int
+                            - type: If@1
+                              description: counts.l2 present
+                              path: $.body.counts.l2
+                              operator: GreaterEqualsThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.norm.l2
+                                  valuePath: $.body.counts.l2
+                                  valueType: Int
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.norm.l3
+                              value: 0
+                              valueType: Int
+                            - type: If@1
+                              description: counts.l3 present
+                              path: $.body.counts.l3
+                              operator: GreaterEqualsThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.norm.l3
+                                  valuePath: $.body.counts.l3
+                                  valueType: Int
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.norm.missing
+                              value: 0
+                              valueType: Int
+                            - type: If@1
+                              description: counts.missing present
+                              path: $.body.counts.missing
+                              operator: GreaterEqualsThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.norm.missing
+                                  valuePath: $.body.counts.missing
+                                  valueType: Int
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.norm.duplicates
+                              value: 0
+                              valueType: Int
+                            - type: If@1
+                              description: counts.duplicates present
+                              path: $.body.counts.duplicates
+                              operator: GreaterEqualsThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.norm.duplicates
+                                  valuePath: $.body.counts.duplicates
+                                  valueType: Int
+
+                            # Gap list -> JSON string for ImportSession.GapList.
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.gapListJson
+                              value: '[]'
+                              valueType: String
+                            - type: If@1
+                              description: gaps present
+                              path: $.body.gaps[0].to
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: ForEach@1
+                                  description: Collect gap start timestamps
+                                  maxDegreeOfParallelism: 1
+                                  iterationPath: $.body.gaps
+                                  mergePath: $.key.v
+                                  targetPath: $._gapFroms
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.key.v
+                                      valuePath: $.key.from
+                                      valueType: String
+                                - type: ForEach@1
+                                  description: Collect gap end timestamps
+                                  maxDegreeOfParallelism: 1
+                                  iterationPath: $.body.gaps
+                                  mergePath: $.key.v
+                                  targetPath: $._gapTos
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.key.v
+                                      valuePath: $.key.to
+                                      valueType: String
+                                # Version-tolerant StringArray handling (AB#5232) — see the
+                                # covered-period node above for the full explanation.
+                                - type: ExecuteCSharp@1
+                                  description: Serialize the gap ranges as a JSON array string
+                                  targetPath: $.gapListJson
+                                  returnType: String
+                                  usings:
+                                    - System.Linq
+                                    - System.Text.Json
+                                  arguments:
+                                    - name: gapFroms
+                                      dataType: StringArray
+                                      valuePath: $._gapFroms
+                                    - name: gapTos
+                                      dataType: StringArray
+                                      valuePath: $._gapTos
+                                  code: |
+                                    // Version-tolerant (AB#5232): JsonElement array (pre-fix adapter) OR typed array (post-fix).
+                                    string[] Items(object a) => a == null ? new string[0] : (a is JsonElement je ? je.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString()).ToArray() : ((System.Collections.IEnumerable)a).Cast<object>().Select(o => o == null ? null : o.ToString()).ToArray());
+                                    var f = Items(gapFroms);
+                                    var t = Items(gapTos);
+                                    var sb = new System.Text.StringBuilder("[");
+                                    var n = f.Length < t.Length ? f.Length : t.Length;
+                                    for (var i = 0; i < n; i++)
+                                    {
+                                      if (i > 0) sb.Append(',');
+                                      var from = (f[i] ?? "").Replace("\\", "").Replace("\"", "");
+                                      var to = (t[i] ?? "").Replace("\\", "").Replace("\"", "");
+                                      sb.Append("{\"from\":\"").Append(from).Append("\",\"to\":\"").Append(to).Append("\"}");
+                                    }
+                                    sb.Append(']');
+                                    return sb.ToString();
+
+                            # ImportSession audit entity + association to the metering point.
+                            - type: CreateUpdateInfo@1
+                              description: Create the ImportSession entity
+                              updateKind: Insert
+                              ckTypeId: SmartMeterInsights/ImportSession
+                              rtIdPath: $.newSessionRtId
+                              generateRtId: true
+                              targetPath: $.sessionUpdates
+                              targetValueWriteMode: Append
+                              targetValueKind: Array
+                              attributeUpdates:
+                                - attributeName: FileName
+                                  attributeValueType: String
+                                  valuePath: $.norm.fileName
+                                - attributeName: DetectedFormat
+                                  attributeValueType: String
+                                  valuePath: $.norm.detectedFormat
+                                - attributeName: PeriodFrom
+                                  attributeValueType: DateTime
+                                  valuePath: $.stats.periodFrom
+                                - attributeName: PeriodTo
+                                  attributeValueType: DateTime
+                                  valuePath: $.stats.periodTo
+                                - attributeName: ValueCount
+                                  attributeValueType: Int
+                                  valuePath: $.stats.valueCount
+                                - attributeName: DuplicateCount
+                                  attributeValueType: Int
+                                  valuePath: $.norm.duplicates
+                                - attributeName: CountL1
+                                  attributeValueType: Int
+                                  valuePath: $.norm.l1
+                                - attributeName: CountL2
+                                  attributeValueType: Int
+                                  valuePath: $.norm.l2
+                                - attributeName: CountL3
+                                  attributeValueType: Int
+                                  valuePath: $.norm.l3
+                                - attributeName: CountMissing
+                                  attributeValueType: Int
+                                  valuePath: $.norm.missing
+                                - attributeName: GapList
+                                  attributeValueType: String
+                                  valuePath: $.gapListJson
+                                - attributeName: State
+                                  attributeValueType: Enum
+                                  value: Completed
+                            - type: CreateAssociationUpdate@1
+                              description: Link the session to its metering point
+                              updateKind: Create
+                              originRtIdPath: $.sessionUpdates[0].RtId
+                              originCkTypeId: SmartMeterInsights/ImportSession
+                              targetRtIdPath: $.body.meteringPointRtId
+                              targetCkTypeId: Basic.Energy/MeteringPoint
+                              associationRoleId: SmartMeterInsights/ImportedMeteringPoint
+                              targetPath: $.sessionAssocs
+                              targetValueWriteMode: Append
+                              targetValueKind: Array
+                            - type: ApplyChanges@2
+                              description: Persist the ImportSession
+                              entityUpdatesPath: $.sessionUpdates
+                              associationUpdatesPath: $.sessionAssocs
+
+                            # Success response fields.
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.importSessionRtId
+                              valuePath: $.sessionUpdates[0].RtId
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.valueCount
+                              valuePath: $.stats.valueCount
+                              valueType: Int
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.state
+                              value: Completed
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.message
+                              value: ok
+                              valueType: String
+
+        # Shape the HTTP response body (the adapter returns the FINAL data
+        # context): keep only the result fields, drop the request echo and all
+        # intermediate data. Missing fields (guard failures) are skipped, so a
+        # guard failure returns exactly { state, message }.
+        - type: Project@1
+          description: Response = { importSessionRtId?, valueCount?, state, message }
+          path: $
+          clear: true
+          fields:
+            - path: $.importSessionRtId
+              inclusion: true
+            - path: $.valueCount
+              inclusion: true
+            - path: $.state
+              inclusion: true
+            - path: $.message
+              inclusion: true
+
+        # Persist the shaped response as OutputData — the per-execution audit
+        # record, retrievable via GetLatestPipelineExecution.
+        - type: SetPipelineExecutionResult@1
+          path: $
+
+# ─── Pipeline smi-share-read ───────────────────────────────────────────────
+# POST /smi/share — the SINGLE deliberately anonymous route of the app: the
+# public dashboard /v/:token exchanges its token for the scoped view data.
+# Body: { "token": "...", "year": 2026 }  (year optional; default = latest
+# year with data, derived from the newest monthly rollup bucket).
+#
+# Rejections come back as HTTP 200 with { "error": "invalid_request" |
+# "not_found" | "revoked" | "expired" | "link_invalid" }. A valid token
+# increments AccessCount/LastAccessAt and returns the customer display name,
+# section flags, message, the metering point list (via the customer's
+# facilities, State != Deleted) and a per-metering-point data-coverage summary
+# computed from the ImportSessions.
+#
+# AB#5244: when ShowDashboard is set, the response additionally carries the
+# bounded dashboard datasets the public view feeds into the SAME dashboard-core
+# pivots as the consultant Analyse tab (see the "dashboard datasets" block for
+# the exact window semantics): anchors, monthly rollup rows (all-time, capped),
+# hourly rollup rows (selected Vienna year), raw rows (last 84 days of data in
+# the year), the peak slot (server-side sort). When ShowQualityDetails is ALSO
+# set, the DataQuality slot counts (grouped server-side) are included; without
+# the flag no quality split material leaves the pipeline. Every archive read is
+# scoped to the resolved anchor rtIds of THIS customer and carries an explicit
+# row cap. The token itself, ShareLink lists and other customers are never
+# part of the response (final Project@1 clear).
+#
+# AB#5245: when ShowDevices is set, the response carries `devices` — the
+# current DetectionResult entities of the customer's metering points
+# (deviceKind/confidence as CK enum KEYS, ints). When ShowRecommendations is
+# set, `recommendations` carries the PUBLISHED Recommendation entities only
+# (title, text, estimatedYearlySavingEur?, sortOrder) — Draft entries are
+# filtered server-side. A disabled flag leaves NO trace in the response.
+- rtId: '510000000000000000000011'
+  ckTypeId: System.Communication/Pipeline-1
+  rtWellKnownName: SmiShareRead
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: '510000000000000000000001'
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: smi-share-read
+  - id: System/Description-1
+    value: Public share-link read — token validation, access counting, the scoped dashboard payload incl. bounded archive datasets, detected devices, published recommendations and the Netzentgelt-2027 monthly peaks (AB#5213, AB#5244, AB#5245, AB#5246)
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@2
+          path: /smi/share
+          method: POST
+          allowAnonymous: true
+
+      transformations:
+        - type: Logger@1
+          message: "smi-share-read: request received on /smi/share"
+
+        - type: If@1
+          description: token missing
+          path: $.body.token
+          operator: Equal
+          value: null
+          valueType: String
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.error
+              value: invalid_request
+              valueType: String
+
+        - type: If@1
+          description: token present
+          path: $.body.token
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: GetRtEntitiesByType@1
+              description: Look up the share link by its token (UniqueNotDeleted index)
+              ckTypeId: SmartMeterInsights/ShareLink
+              take: 1
+              fieldFilters:
+                - attributePath: Token
+                  operator: Equals
+                  comparisonValuePath: $.body.token
+              targetPath: $.link
+
+            - type: If@1
+              description: unknown token
+              path: $.link.TotalCount
+              operator: Equal
+              value: 0
+              valueType: Int
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.error
+                  value: not_found
+                  valueType: String
+
+            - type: If@1
+              description: link found — validate revocation and expiry
+              path: $.link.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                - type: DateTime@1
+                  operation: Now
+                  targetPath: $.now
+                - type: SetPrimitiveValue@1
+                  targetPath: $.ok
+                  value: true
+                  valueType: Boolean
+
+                - type: If@1
+                  description: revoked
+                  path: $.link.Items[0].Attributes.RevokedAt
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.error
+                      value: revoked
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.ok
+                      value: false
+                      valueType: Boolean
+
+                - type: If@1
+                  description: expiry set
+                  path: $.link.Items[0].Attributes.ExpiresAt
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: If@1
+                      description: expired
+                      path: $.link.Items[0].Attributes.ExpiresAt
+                      operator: LessThan
+                      valuePath: $.now
+                      valueType: DateTime
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.error
+                          value: expired
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.ok
+                          value: false
+                          valueType: Boolean
+
+                - type: If@1
+                  description: link is valid — count the access and build the payload
+                  path: $.ok
+                  operator: Equal
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    # Access counting. AccessCount defaults to 0 in the CK model;
+                    # the null-guard covers pre-default legacy rows.
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.calc.count
+                      value: 0
+                      valueType: Int
+                    - type: If@1
+                      description: AccessCount present
+                      path: $.link.Items[0].Attributes.AccessCount
+                      operator: GreaterEqualsThan
+                      value: 0
+                      valueType: Double
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.calc.count
+                          valuePath: $.link.Items[0].Attributes.AccessCount
+                          valueType: Int
+                    - type: ExecuteCSharp@1
+                      description: Increment the access counter
+                      targetPath: $.calc.newCount
+                      returnType: Int
+                      arguments:
+                        - name: c
+                          dataType: Double
+                          valuePath: $.calc.count
+                      code: |
+                        return (int)System.Math.Round(c) + 1;
+                    - type: CreateUpdateInfo@1
+                      description: Persist AccessCount + LastAccessAt on the link
+                      updateKind: Update
+                      ckTypeId: SmartMeterInsights/ShareLink
+                      rtIdPath: $.link.Items[0].RtId
+                      targetPath: $.linkUpdates
+                      targetValueWriteMode: Append
+                      targetValueKind: Array
+                      attributeUpdates:
+                        - attributeName: AccessCount
+                          attributeValueType: Int
+                          valuePath: $.calc.newCount
+                        - attributeName: LastAccessAt
+                          attributeValueType: DateTime
+                          valuePath: $.now
+                    - type: ApplyChanges@2
+                      entityUpdatesPath: $.linkUpdates
+
+                    # Resolve the shared customer.
+                    - type: GetAssociationTargets@1
+                      description: ShareLink -> Customer
+                      originRtIdPath: $.link.Items[0].RtId
+                      originCkTypeId: SmartMeterInsights/ShareLink
+                      targetCkTypeId: SmartMeterInsights/Customer
+                      associationRoleId: SmartMeterInsights/SharedCustomer
+                      graphDirection: Outbound
+                      targetPath: $.cust
+
+                    - type: If@1
+                      description: link has no customer — data error
+                      path: $.cust[0].Items[0].RtId
+                      operator: Equal
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.error
+                          value: link_invalid
+                          valueType: String
+
+                    - type: If@1
+                      description: customer resolved — build the response payload
+                      path: $.cust[0].Items[0].RtId
+                      operator: NotEquals
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.customerName
+                          valuePath: $.cust[0].Items[0].Attributes.Name
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.message
+                          value: ''
+                          valueType: String
+                        - type: If@1
+                          description: personal message present
+                          path: $.link.Items[0].Attributes.Message
+                          operator: NotEquals
+                          value: null
+                          valueType: String
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.message
+                              valuePath: $.link.Items[0].Attributes.Message
+                              valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.sections.showDashboard
+                          valuePath: $.link.Items[0].Attributes.ShowDashboard
+                          valueType: Boolean
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.sections.showRecommendations
+                          valuePath: $.link.Items[0].Attributes.ShowRecommendations
+                          valueType: Boolean
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.sections.showQualityDetails
+                          valuePath: $.link.Items[0].Attributes.ShowQualityDetails
+                          valueType: Boolean
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.sections.showDevices
+                          valuePath: $.link.Items[0].Attributes.ShowDevices
+                          valueType: Boolean
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.sections.showRawExport
+                          valuePath: $.link.Items[0].Attributes.ShowRawExport
+                          valueType: Boolean
+                        # ShowGridFees2027 is OPTIONAL since CK 1.2.0 (AB#5246) —
+                        # links created earlier have no value; missing reads false.
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.sections.showGridFees2027
+                          value: false
+                          valueType: Boolean
+                        - type: If@1
+                          description: ShowGridFees2027 set on the link (optional attribute)
+                          path: $.link.Items[0].Attributes.ShowGridFees2027
+                          operator: Equal
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.sections.showGridFees2027
+                              value: true
+                              valueType: Boolean
+
+                        # Metering point list: customer -> facilities -> child
+                        # metering points, plus per-metering-point data coverage
+                        # from the ImportSessions.
+                        - type: WriteJson@1
+                          description: Default empty metering point list
+                          jsonString: '[]'
+                          targetPath: $.meteringPoints
+                        - type: GetAssociationTargets@1
+                          description: Customer -> OperatingFacilities
+                          originRtIdPath: $.cust[0].Items[0].RtId
+                          originCkTypeId: SmartMeterInsights/Customer
+                          targetCkTypeId: Basic.Energy/OperatingFacility
+                          associationRoleId: SmartMeterInsights/AssociatedFacilities
+                          graphDirection: Outbound
+                          targetPath: $.fac
+                        - type: If@1
+                          description: customer has facilities
+                          path: $.fac[0].TotalCount
+                          operator: GreaterThan
+                          value: 0
+                          valueType: Int
+                          transformations:
+                            - type: ForEach@1
+                              description: Per facility — resolve the child metering points
+                              maxDegreeOfParallelism: 1
+                              iterationPath: $.fac[0].Items
+                              keyPath: $.key
+                              mergePath: $.key.mps
+                              targetPath: $._mpLists
+                              transformations:
+                                - type: WriteJson@1
+                                  description: Default empty per-facility list
+                                  jsonString: '[]'
+                                  targetPath: $.key.mps
+                                - type: GetAssociationTargets@1
+                                  description: OperatingFacility <- MeteringPoints (inbound ParentChild, soft-deleted excluded)
+                                  originRtIdPath: $.key.RtId
+                                  originCkTypeId: Basic.Energy/OperatingFacility
+                                  targetCkTypeId: Basic.Energy/MeteringPoint
+                                  associationRoleId: System/ParentChild
+                                  graphDirection: Inbound
+                                  fieldFilters:
+                                    - attributePath: State
+                                      operator: NotEquals
+                                      comparisonValue: Deleted
+                                  targetPath: $.mpq
+                                - type: If@1
+                                  description: facility has metering points
+                                  path: $.mpq[0].TotalCount
+                                  operator: GreaterThan
+                                  value: 0
+                                  valueType: Int
+                                  transformations:
+                                    - type: ForEach@1
+                                      description: Per metering point — coverage from the ImportSessions
+                                      maxDegreeOfParallelism: 1
+                                      iterationPath: $.mpq[0].Items
+                                      keyPath: $.m
+                                      mergePath: $.m.out
+                                      targetPath: $.key.mps
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.m.out.rtId
+                                          valuePath: $.m.RtId
+                                          valueType: String
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.m.out.name
+                                          valuePath: $.m.Attributes.Name
+                                          valueType: String
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.m.out.meteringPointNumber
+                                          valuePath: $.m.Attributes.MeteringPointNumber
+                                          valueType: String
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.m.out.facilityName
+                                          valuePath: $.full.key.Attributes.Name
+                                          valueType: String
+                                        # Consumer/Producer are distinct CK types — expose the
+                                        # kind so the public view can label and classify.
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.m.out.kind
+                                          value: consumer
+                                          valueType: String
+                                        - type: If@1
+                                          description: metering point is a producer
+                                          path: $.m.CkTypeId
+                                          operator: Contains
+                                          value: Producer
+                                          valueType: String
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.m.out.kind
+                                              value: producer
+                                              valueType: String
+                                        - type: WriteJson@1
+                                          description: Default coverage (no imports yet)
+                                          jsonString: '{"from":null,"to":null,"valueCount":0,"sessionCount":0}'
+                                          targetPath: $.m.out.coverage
+                                        - type: GetAssociationTargets@1
+                                          description: MeteringPoint <- ImportSessions (inbound)
+                                          originRtIdPath: $.m.RtId
+                                          originCkTypeId: Basic.Energy/MeteringPoint
+                                          targetCkTypeId: SmartMeterInsights/ImportSession
+                                          associationRoleId: SmartMeterInsights/ImportedMeteringPoint
+                                          graphDirection: Inbound
+                                          targetPath: $.sess
+                                        - type: If@1
+                                          description: metering point has import sessions
+                                          path: $.sess[0].TotalCount
+                                          operator: GreaterThan
+                                          value: 0
+                                          valueType: Int
+                                          transformations:
+                                            - type: ForEach@1
+                                              description: Collect session period starts
+                                              maxDegreeOfParallelism: 1
+                                              iterationPath: $.sess[0].Items
+                                              keyPath: $.s
+                                              mergePath: $.s.v
+                                              targetPath: $.sFroms
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.s.v
+                                                  valuePath: $.s.Attributes.PeriodFrom
+                                                  valueType: String
+                                            - type: ForEach@1
+                                              description: Collect session period ends
+                                              maxDegreeOfParallelism: 1
+                                              iterationPath: $.sess[0].Items
+                                              keyPath: $.s
+                                              mergePath: $.s.v
+                                              targetPath: $.sTos
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.s.v
+                                                  valuePath: $.s.Attributes.PeriodTo
+                                                  valueType: String
+                                            - type: ForEach@1
+                                              description: Collect session value counts
+                                              maxDegreeOfParallelism: 1
+                                              iterationPath: $.sess[0].Items
+                                              keyPath: $.s
+                                              mergePath: $.s.v
+                                              targetPath: $.sCounts
+                                              transformations:
+                                                # Int, not String: SetPrimitiveValue's path
+                                                # resolution uses Get<T> directly, and
+                                                # Get<string> on the numeric ValueCount
+                                                # attribute throws (verified E2E 2026-09-14).
+                                                # The coverage script below handles numeric
+                                                # array elements.
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.s.v
+                                                  valuePath: $.s.Attributes.ValueCount
+                                                  valueType: Int
+                                            # Version-tolerant StringArray handling (AB#5232) — see
+                                            # the import pipeline's covered-period node. `counts`
+                                            # holds NUMERIC values (ValueCount is read as Int
+                                            # above), so it is declared IntArray: post-fix
+                                            # adapters materialize int[] (Get<string[]> on a
+                                            # numeric JSON array would throw), pre-fix adapters
+                                            # treat any array dataType as object/JsonElement.
+                                            - type: ExecuteCSharp@1
+                                              description: Summarize the coverage of this metering point
+                                              targetPath: $.covJson
+                                              returnType: String
+                                              usings:
+                                                - System.Linq
+                                                - System.Globalization
+                                                - System.Text.Json
+                                              arguments:
+                                                - name: froms
+                                                  dataType: StringArray
+                                                  valuePath: $.sFroms
+                                                - name: tos
+                                                  dataType: StringArray
+                                                  valuePath: $.sTos
+                                                - name: counts
+                                                  dataType: IntArray
+                                                  valuePath: $.sCounts
+                                              code: |
+                                                var culture = CultureInfo.InvariantCulture;
+                                                var styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+                                                // Version-tolerant (AB#5232): JsonElement array (pre-fix adapter) OR typed array (post-fix).
+                                                string[] Items(object a) => a == null ? new string[0] : (a is JsonElement je ? je.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString()).ToArray() : ((System.Collections.IEnumerable)a).Cast<object>().Select(o => o == null ? null : o.ToString()).ToArray());
+                                                DateTime? min = null; DateTime? max = null;
+                                                foreach (var t in Items(froms)) { DateTime d; if (DateTime.TryParse(t, culture, styles, out d) && (min == null || d < min.Value)) min = d; }
+                                                foreach (var t in Items(tos)) { DateTime d; if (DateTime.TryParse(t, culture, styles, out d) && (max == null || d > max.Value)) max = d; }
+                                                var total = 0; var n = 0;
+                                                foreach (var t in Items(counts)) { n++; double v; if (double.TryParse(t, System.Globalization.NumberStyles.Any, culture, out v)) total += (int)System.Math.Round(v); }
+                                                var f = min == null ? "null" : "\"" + min.Value.ToString("yyyy-MM-dd HH:mm:ss", culture) + "\"";
+                                                var u = max == null ? "null" : "\"" + max.Value.ToString("yyyy-MM-dd HH:mm:ss", culture) + "\"";
+                                                return "{\"from\":" + f + ",\"to\":" + u + ",\"valueCount\":" + total + ",\"sessionCount\":" + n + "}";
+                                            - type: WriteJson@1
+                                              description: Attach the coverage summary
+                                              jsonStringPath: $.covJson
+                                              targetPath: $.m.out.coverage
+                            # Flatten@1 collects every PATH MATCH into one array — the
+                            # path must therefore address the leaf objects ([*][*]),
+                            # not the outer array, or the result nests as [[[…]]]
+                            # (verified E2E 2026-09-14).
+                            - type: Flatten@1
+                              description: Per-facility lists -> one flat metering point list
+                              path: $._mpLists[*][*]
+                              targetPath: $.meteringPoints
+
+                        # ── Dashboard datasets (AB#5244) ───────────────
+                        # Bounded archive reads, gated by the section flags.
+                        # Window semantics mirror the Analyse tab
+                        # (analysis-tab.component.ts + dashboard-core):
+                        # monthly all-time [2015-01-01Z, now+366d), hourly the
+                        # selected Vienna calendar year, raw the last 84 days
+                        # of data within the year, peak = server-side top-1.
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.calc.reqYear
+                          value: 0
+                          valueType: Int
+                        - type: If@1
+                          description: year requested in the body
+                          path: $.body.year
+                          operator: GreaterEqualsThan
+                          value: 2000
+                          valueType: Double
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.calc.reqYear
+                              valuePath: $.body.year
+                              valueType: Int
+
+                        - type: If@1
+                          description: ShowDashboard set — deliver the chart datasets
+                          path: $.sections.showDashboard
+                          operator: Equal
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: WriteJson@1
+                              description: Dashboard container (anchors always present when the section is on)
+                              jsonString: '{"anchors":[]}'
+                              targetPath: $.dashboard
+                            - type: If@1
+                              description: customer has (non-deleted) metering points
+                              path: $.meteringPoints[0].rtId
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: ForEach@1
+                                  description: Per metering point — resolve the EnergyMeasurement anchors
+                                  maxDegreeOfParallelism: 1
+                                  iterationPath: $.meteringPoints
+                                  keyPath: $.key
+                                  mergePath: $.key.list
+                                  targetPath: $._anchorLists
+                                  transformations:
+                                    - type: WriteJson@1
+                                      description: Default empty per-MP anchor list
+                                      jsonString: '[]'
+                                      targetPath: $.key.list
+                                    - type: GetAssociationTargets@1
+                                      description: MeteringPoint <- EnergyMeasurement anchors (inbound ParentChild)
+                                      originRtIdPath: $.key.rtId
+                                      originCkTypeId: Basic.Energy/MeteringPoint
+                                      targetCkTypeId: Basic.Energy/EnergyMeasurement
+                                      associationRoleId: System/ParentChild
+                                      graphDirection: Inbound
+                                      targetPath: $.aq
+                                    - type: If@1
+                                      description: metering point has anchors
+                                      path: $.aq[0].TotalCount
+                                      operator: GreaterThan
+                                      value: 0
+                                      valueType: Int
+                                      transformations:
+                                        - type: ForEach@1
+                                          description: Anchor -> { rtId, obisCode, meteringPointRtId, kind, role }
+                                          maxDegreeOfParallelism: 1
+                                          iterationPath: $.aq[0].Items
+                                          keyPath: $.a
+                                          mergePath: $.a.out
+                                          targetPath: $.key.list
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.a.out.rtId
+                                              valuePath: $.a.RtId
+                                              valueType: String
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.a.out.meteringPointRtId
+                                              valuePath: $.full.key.rtId
+                                              valueType: String
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.a.out.kind
+                                              valuePath: $.full.key.kind
+                                              valueType: String
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.a.out.obisCode
+                                              value: ''
+                                              valueType: String
+                                            - type: If@1
+                                              description: anchor carries an OBIS code
+                                              path: $.a.Attributes.ObisCode
+                                              operator: NotEquals
+                                              value: null
+                                              valueType: String
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.a.out.obisCode
+                                                  valuePath: $.a.Attributes.ObisCode
+                                                  valueType: String
+                                            # Series role — dashboard-core splitAnchors semantics:
+                                            # OBIS x:1.8.x -> consumption, x:2.8.x -> production,
+                                            # otherwise the metering point kind decides.
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.a.out.role
+                                              value: consumption
+                                              valueType: String
+                                            - type: If@1
+                                              description: producer MP default
+                                              path: $.a.out.kind
+                                              operator: Equal
+                                              value: producer
+                                              valueType: String
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.a.out.role
+                                                  value: production
+                                                  valueType: String
+                                            - type: If@1
+                                              description: consumption OBIS wins
+                                              path: $.a.out.obisCode
+                                              operator: Contains
+                                              value: ':1.8'
+                                              valueType: String
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.a.out.role
+                                                  value: consumption
+                                                  valueType: String
+                                            - type: If@1
+                                              description: production OBIS wins
+                                              path: $.a.out.obisCode
+                                              operator: Contains
+                                              value: ':2.8'
+                                              valueType: String
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.a.out.role
+                                                  value: production
+                                                  valueType: String
+                                # Flatten leaf-addressing — see the metering point list above.
+                                - type: Flatten@1
+                                  description: Per-MP anchor lists -> one flat anchor list
+                                  path: $._anchorLists[*][*]
+                                  targetPath: $.dashboard.anchors
+
+                            - type: If@1
+                              description: anchors resolved — classify and fetch the bounded datasets
+                              path: $.dashboard.anchors[0].rtId
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: ForEach@1
+                                  description: Collect anchor rtIds
+                                  maxDegreeOfParallelism: 1
+                                  iterationPath: $.dashboard.anchors
+                                  mergePath: $.key.v
+                                  targetPath: $._aIds
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.key.v
+                                      valuePath: $.key.rtId
+                                      valueType: String
+                                - type: ForEach@1
+                                  description: Collect anchor roles
+                                  maxDegreeOfParallelism: 1
+                                  iterationPath: $.dashboard.anchors
+                                  mergePath: $.key.v
+                                  targetPath: $._aRoles
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.key.v
+                                      valuePath: $.key.role
+                                      valueType: String
+                                # Version-tolerant StringArray handling (AB#5232) — see
+                                # the import pipeline's covered-period node.
+                                - type: ExecuteCSharp@1
+                                  description: Split anchors into consumption/production and derive the fetch caps
+                                  targetPath: $.splitJson
+                                  returnType: String
+                                  usings:
+                                    - System.Linq
+                                    - System.Collections.Generic
+                                    - System.Text.Json
+                                  arguments:
+                                    - name: ids
+                                      dataType: StringArray
+                                      valuePath: $._aIds
+                                    - name: roles
+                                      dataType: StringArray
+                                      valuePath: $._aRoles
+                                  code: |
+                                    // Version-tolerant (AB#5232): JsonElement array (pre-fix adapter) OR typed array (post-fix).
+                                    string[] Items(object a) => a == null ? new string[0] : (a is JsonElement je ? je.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString()).ToArray() : ((System.Collections.IEnumerable)a).Cast<object>().Select(o => o == null ? null : o.ToString()).ToArray());
+                                    var idArr = Items(ids); var roleArr = Items(roles);
+                                    var all = new List<string>(); var cons = new List<string>(); var prod = new List<string>();
+                                    for (var i = 0; i < idArr.Length; i++)
+                                    {
+                                      var id = (idArr[i] ?? "").Trim();
+                                      if (id.Length == 0) continue;
+                                      all.Add(id);
+                                      var role = i < roleArr.Length ? (roleArr[i] ?? "") : "";
+                                      if (role == "production") prod.Add(id); else cons.Add(id);
+                                    }
+                                    string J(List<string> xs) { var sb = new System.Text.StringBuilder("["); for (var i = 0; i < xs.Count; i++) { if (i > 0) sb.Append(','); sb.Append('"').Append(xs[i]).Append('"'); } sb.Append(']'); return sb.ToString(); }
+                                    // Caps mirror the Analyse tab's per-anchor limits (8800 hourly / 8200 raw / 600 monthly).
+                                    return "{\"all\":" + J(all) + ",\"c\":" + J(cons) + ",\"p\":" + J(prod)
+                                      + ",\"cCount\":" + cons.Count
+                                      + ",\"mLimit\":" + (all.Count * 600) + ",\"hLimit\":" + (cons.Count * 8800) + ",\"rLimit\":" + (cons.Count * 8200) + "}";
+                                - type: WriteJson@1
+                                  description: Parse the split JSON into the data context
+                                  jsonStringPath: $.splitJson
+                                  targetPath: $.split
+
+                                # Newest monthly bucket -> default year probe.
+                                - type: GetStreamData@1
+                                  description: Latest monthly rollup bucket of these anchors
+                                  archiveRtId: '510000000000000000000a04'
+                                  rtIdsPath: $.split.all
+                                  columns:
+                                    - amountvalue_count
+                                  sortOrders:
+                                    - sortOrder: Descending
+                                      attributeName: Timestamp
+                                  take: 1
+                                  targetPath: $.q.latest
+
+                                - type: If@1
+                                  description: data exists — resolve year, windows and datasets
+                                  path: $.q.latest.Rows[0].Values[0]
+                                  operator: NotEquals
+                                  value: null
+                                  valueType: String
+                                  transformations:
+                                    - type: ExecuteCSharp@1
+                                      description: Selected year + Vienna year window (dashboard-core viennaYearRangeUtc parity)
+                                      targetPath: $.winJson
+                                      returnType: String
+                                      usings:
+                                        - System.Globalization
+                                      arguments:
+                                        - name: reqYear
+                                          dataType: Int
+                                          valuePath: $.calc.reqYear
+                                        - name: latestIso
+                                          dataType: String
+                                          valuePath: $.q.latest.Rows[0].Values[0]
+                                        - name: nowIso
+                                          dataType: String
+                                          valuePath: $.now
+                                      code: |
+                                        var culture = CultureInfo.InvariantCulture;
+                                        var styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+                                        var year = 0;
+                                        if (reqYear >= 2000 && reqYear <= 2100) { year = reqYear; }
+                                        else { DateTime latest; if (DateTime.TryParse(latestIso, culture, styles, out latest)) year = latest.AddMilliseconds(-1).Year; }
+                                        if (year == 0) return "{\"hasYear\":false}";
+                                        DateTime now; if (!DateTime.TryParse(nowIso, culture, styles, out now)) now = DateTime.UtcNow;
+                                        // Europe/Vienna is UTC+1 at every Jan 1st — identical to dashboard-core's viennaYearRangeUtc.
+                                        var from = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddHours(-1);
+                                        var to = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddHours(-1);
+                                        string F(DateTime d) => d.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", culture);
+                                        return "{\"hasYear\":true,\"year\":" + year + ",\"fromIso\":\"" + F(from) + "\",\"toIso\":\"" + F(to)
+                                          + "\",\"monthlyFromIso\":\"2015-01-01T00:00:00Z\",\"monthlyToIso\":\"" + F(now.AddDays(366)) + "\"}";
+                                    - type: WriteJson@1
+                                      description: Parse the window JSON into the data context
+                                      jsonStringPath: $.winJson
+                                      targetPath: $.win
+                                    - type: If@1
+                                      description: year resolved — fetch the datasets
+                                      path: $.win.hasYear
+                                      operator: Equal
+                                      value: true
+                                      valueType: Boolean
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.year
+                                          valuePath: $.win.year
+                                          valueType: Int
+                                        - type: GetStreamData@1
+                                          description: Monthly rollup rows, all-time (year list + bars + year totals)
+                                          archiveRtId: '510000000000000000000a04'
+                                          rtIdsPath: $.split.all
+                                          fromPath: $.win.monthlyFromIso
+                                          toPath: $.win.monthlyToIso
+                                          limitPath: $.split.mLimit
+                                          columns:
+                                            - amountvalue_sum
+                                            - amountvalue_count
+                                          targetPath: $.dashboard.monthly
+                                        - type: If@1
+                                          description: consumption anchors exist — hourly/raw/peak/quality
+                                          path: $.split.cCount
+                                          operator: GreaterThan
+                                          value: 0
+                                          valueType: Int
+                                          transformations:
+                                            - type: GetStreamData@1
+                                              description: Hourly rollup rows of the selected year (heatmap, coverage, base load)
+                                              archiveRtId: '510000000000000000000a02'
+                                              rtIdsPath: $.split.c
+                                              fromPath: $.win.fromIso
+                                              toPath: $.win.toIso
+                                              limitPath: $.split.hLimit
+                                              columns:
+                                                - amountvalue_sum
+                                                - amountvalue_count
+                                              targetPath: $.dashboard.hourly
+                                            - type: GetStreamData@1
+                                              description: Newest hourly bucket in the year (raw-window anchor)
+                                              archiveRtId: '510000000000000000000a02'
+                                              rtIdsPath: $.split.c
+                                              fromPath: $.win.fromIso
+                                              toPath: $.win.toIso
+                                              columns:
+                                                - amountvalue_count
+                                              sortOrders:
+                                                - sortOrder: Descending
+                                                  attributeName: Timestamp
+                                              take: 1
+                                              targetPath: $.q.lastHour
+                                            - type: If@1
+                                              description: hourly data exists — raw window, peak and quality
+                                              path: $.q.lastHour.Rows[0].Values[0]
+                                              operator: NotEquals
+                                              value: null
+                                              valueType: String
+                                              transformations:
+                                                - type: ExecuteCSharp@1
+                                                  description: Day-profile window = last 84 days of data within the year
+                                                  targetPath: $.rawWinJson
+                                                  returnType: String
+                                                  usings:
+                                                    - System.Globalization
+                                                  arguments:
+                                                    - name: lastIso
+                                                      dataType: String
+                                                      valuePath: $.q.lastHour.Rows[0].Values[0]
+                                                    - name: yearFromIso
+                                                      dataType: String
+                                                      valuePath: $.win.fromIso
+                                                  code: |
+                                                    var culture = CultureInfo.InvariantCulture;
+                                                    var styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+                                                    DateTime last; DateTime yearFrom;
+                                                    if (!DateTime.TryParse(lastIso, culture, styles, out last) || !DateTime.TryParse(yearFromIso, culture, styles, out yearFrom)) return "{\"fromIso\":null,\"toIso\":null}";
+                                                    var from = last.AddDays(-84);
+                                                    if (from < yearFrom) from = yearFrom;
+                                                    string F(DateTime d) => d.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", culture);
+                                                    return "{\"fromIso\":\"" + F(from) + "\",\"toIso\":\"" + F(last) + "\"}";
+                                                - type: WriteJson@1
+                                                  description: Parse the raw-window JSON into the data context
+                                                  jsonStringPath: $.rawWinJson
+                                                  targetPath: $.rawWin
+                                                - type: GetStreamData@1
+                                                  description: Raw 15-min slots for the day profile
+                                                  archiveRtId: '510000000000000000000a01'
+                                                  rtIdsPath: $.split.c
+                                                  fromPath: $.rawWin.fromIso
+                                                  toPath: $.rawWin.toIso
+                                                  limitPath: $.split.rLimit
+                                                  columns:
+                                                    - Amount.Value
+                                                  targetPath: $.dashboard.raw
+                                                - type: GetStreamData@1
+                                                  description: Peak slot of the year (server-side sort by Amount.Value)
+                                                  archiveRtId: '510000000000000000000a01'
+                                                  rtIdsPath: $.split.c
+                                                  fromPath: $.win.fromIso
+                                                  toPath: $.win.toIso
+                                                  columns:
+                                                    - Amount.Value
+                                                  sortOrders:
+                                                    - sortOrder: Descending
+                                                      attributeName: Amount.Value
+                                                  take: 1
+                                                  targetPath: $.dashboard.peak
+                                                - type: If@1
+                                                  description: ShowQualityDetails set — DataQuality slot counts
+                                                  path: $.sections.showQualityDetails
+                                                  operator: Equal
+                                                  value: true
+                                                  valueType: Boolean
+                                                  transformations:
+                                                    - type: AggregateStreamData@1
+                                                      description: Slot counts grouped by DataQuality (quality split)
+                                                      archiveRtId: '510000000000000000000a01'
+                                                      rtIdsPath: $.split.c
+                                                      fromPath: $.win.fromIso
+                                                      toPath: $.win.toIso
+                                                      groupBy:
+                                                        - DataQuality
+                                                      aggregations:
+                                                        - attributePath: Amount.Value
+                                                          function: Count
+                                                      targetPath: $.quality.counts
+
+                        # ── Detected devices (AB#5245) ─────────────────
+                        # Gated by ShowDevices: the CURRENT DetectionResult
+                        # entities of the customer's (non-deleted) metering
+                        # points. Enum attributes are stored as CK enum KEYS
+                        # (ints) — DeviceKind/Confidence are therefore read
+                        # as Int and mapped to names on the consumer side
+                        # (share-devices adapter), the same key-vs-name split
+                        # as the DataQuality grouping above.
+                        - type: If@1
+                          description: ShowDevices set — deliver the current detection results
+                          path: $.sections.showDevices
+                          operator: Equal
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: WriteJson@1
+                              description: Default empty device list (flag on, nothing detected yet)
+                              jsonString: '[]'
+                              targetPath: $.devices
+                            - type: If@1
+                              description: customer has (non-deleted) metering points
+                              path: $.meteringPoints[0].rtId
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: ForEach@1
+                                  description: Per metering point — resolve the DetectionResults
+                                  maxDegreeOfParallelism: 1
+                                  iterationPath: $.meteringPoints
+                                  keyPath: $.key
+                                  mergePath: $.key.dlist
+                                  targetPath: $._dLists
+                                  transformations:
+                                    - type: WriteJson@1
+                                      description: Default empty per-MP detection list
+                                      jsonString: '[]'
+                                      targetPath: $.key.dlist
+                                    - type: GetAssociationTargets@1
+                                      description: MeteringPoint <- DetectionResults (inbound)
+                                      originRtIdPath: $.key.rtId
+                                      originCkTypeId: Basic.Energy/MeteringPoint
+                                      targetCkTypeId: SmartMeterInsights/DetectionResult
+                                      associationRoleId: SmartMeterInsights/DetectedMeteringPoint
+                                      graphDirection: Inbound
+                                      targetPath: $.dq
+                                    - type: If@1
+                                      description: metering point has detection results
+                                      path: $.dq[0].TotalCount
+                                      operator: GreaterThan
+                                      value: 0
+                                      valueType: Int
+                                      transformations:
+                                        - type: ForEach@1
+                                          description: DetectionResult -> { meteringPointRtId, deviceKind, confidence, evidenceSummary, detectedAt }
+                                          maxDegreeOfParallelism: 1
+                                          iterationPath: $.dq[0].Items
+                                          keyPath: $.d
+                                          mergePath: $.d.out
+                                          targetPath: $.key.dlist
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.d.out.meteringPointRtId
+                                              valuePath: $.full.key.rtId
+                                              valueType: String
+                                            # Enum attributes are CK enum KEYS (ints) in the
+                                            # runtime store — read as Int (Get<string> throws).
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.d.out.deviceKind
+                                              valuePath: $.d.Attributes.DeviceKind
+                                              valueType: Int
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.d.out.confidence
+                                              valuePath: $.d.Attributes.Confidence
+                                              valueType: Int
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.d.out.evidenceSummary
+                                              value: ''
+                                              valueType: String
+                                            - type: If@1
+                                              description: evidence summary present
+                                              path: $.d.Attributes.EvidenceSummary
+                                              operator: NotEquals
+                                              value: null
+                                              valueType: String
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.d.out.evidenceSummary
+                                                  valuePath: $.d.Attributes.EvidenceSummary
+                                                  valueType: String
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.d.out.detectedAt
+                                              valuePath: $.d.Attributes.DetectedAt
+                                              valueType: String
+                                # Flatten leaf-addressing — see the metering point list above.
+                                - type: Flatten@1
+                                  description: Per-MP detection lists -> one flat device list
+                                  path: $._dLists[*][*]
+                                  targetPath: $.devices
+
+                        # ── Recommendations (AB#5245) ──────────────────
+                        # Gated by ShowRecommendations: PUBLISHED recommendations
+                        # of the shared customer only — Draft entries never leave
+                        # the pipeline (server-side enum-name field filter, same
+                        # mechanism as the State != Deleted filter above).
+                        - type: If@1
+                          description: ShowRecommendations set — deliver the published recommendations
+                          path: $.sections.showRecommendations
+                          operator: Equal
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: WriteJson@1
+                              description: Default empty recommendation list (flag on, nothing published yet)
+                              jsonString: '[]'
+                              targetPath: $.recommendations
+                            - type: GetAssociationTargets@1
+                              description: Customer <- Recommendations (inbound, Published only)
+                              originRtIdPath: $.cust[0].Items[0].RtId
+                              originCkTypeId: SmartMeterInsights/Customer
+                              targetCkTypeId: SmartMeterInsights/Recommendation
+                              associationRoleId: SmartMeterInsights/RecommendedCustomer
+                              graphDirection: Inbound
+                              fieldFilters:
+                                - attributePath: RecommendationState
+                                  operator: Equals
+                                  comparisonValue: Published
+                              targetPath: $.rq
+                            - type: If@1
+                              description: customer has published recommendations
+                              path: $.rq[0].TotalCount
+                              operator: GreaterThan
+                              value: 0
+                              valueType: Int
+                              transformations:
+                                - type: ForEach@1
+                                  description: Recommendation -> { title, text, estimatedYearlySavingEur?, sortOrder }
+                                  maxDegreeOfParallelism: 1
+                                  iterationPath: $.rq[0].Items
+                                  keyPath: $.r
+                                  mergePath: $.r.out
+                                  targetPath: $.recommendations
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.r.out.title
+                                      valuePath: $.r.Attributes.Title
+                                      valueType: String
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.r.out.text
+                                      valuePath: $.r.Attributes.Text
+                                      valueType: String
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.r.out.sortOrder
+                                      valuePath: $.r.Attributes.SortOrder
+                                      valueType: Int
+                                    # Optional saving: numeric presence test (missing
+                                    # path reads null, comparison false) — absent field
+                                    # stays absent in the response.
+                                    - type: If@1
+                                      description: estimated saving present
+                                      path: $.r.Attributes.EstimatedYearlySavingEur
+                                      operator: GreaterEqualsThan
+                                      value: 0
+                                      valueType: Double
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.r.out.estimatedYearlySavingEur
+                                          valuePath: $.r.Attributes.EstimatedYearlySavingEur
+                                          valueType: Double
+
+                        # ── Netzentgelt 2027 (AB#5246) ─────────────────
+                        # Gated by ShowGridFees2027: the last 24 Vienna
+                        # calendar months of (a) monthly rollup rows (energy +
+                        # slot counts, completeness) and (b) the highest raw
+                        # 15-min slot per month (server-side sort, take 1 —
+                        # the documented max-per-month raw-query decision, no
+                        # rollup schema extension). The share view feeds both
+                        # through grid-fees-core with the DEFAULT tariff
+                        # assumptions (draft SNE-G-V, non-binding).
+                        - type: If@1
+                          description: ShowGridFees2027 set — monthly peaks + energy for the capacity-fee comparison
+                          path: $.sections.showGridFees2027
+                          operator: Equal
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: WriteJson@1
+                              description: Grid-fees container (flag on, peaks may stay empty)
+                              jsonString: '{"peaks":[]}'
+                              targetPath: $.gridFees2027
+                            - type: If@1
+                              description: customer has (non-deleted) metering points
+                              path: $.meteringPoints[0].rtId
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: ForEach@1
+                                  description: Per metering point — resolve the consumption anchors
+                                  maxDegreeOfParallelism: 1
+                                  iterationPath: $.meteringPoints
+                                  keyPath: $.key
+                                  mergePath: $.key.gfa
+                                  targetPath: $._gfLists
+                                  transformations:
+                                    - type: WriteJson@1
+                                      description: Default empty per-MP anchor list
+                                      jsonString: '[]'
+                                      targetPath: $.key.gfa
+                                    - type: GetAssociationTargets@1
+                                      description: MeteringPoint <- EnergyMeasurement anchors (inbound ParentChild)
+                                      originRtIdPath: $.key.rtId
+                                      originCkTypeId: Basic.Energy/MeteringPoint
+                                      targetCkTypeId: Basic.Energy/EnergyMeasurement
+                                      associationRoleId: System/ParentChild
+                                      graphDirection: Inbound
+                                      targetPath: $.gq
+                                    - type: If@1
+                                      description: metering point has anchors
+                                      path: $.gq[0].TotalCount
+                                      operator: GreaterThan
+                                      value: 0
+                                      valueType: Int
+                                      transformations:
+                                        - type: ForEach@1
+                                          description: Anchor -> { id, role } (splitAnchors semantics)
+                                          maxDegreeOfParallelism: 1
+                                          iterationPath: $.gq[0].Items
+                                          keyPath: $.g
+                                          mergePath: $.g.out
+                                          targetPath: $.key.gfa
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.g.out.id
+                                              valuePath: $.g.RtId
+                                              valueType: String
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.g.out.obis
+                                              value: ''
+                                              valueType: String
+                                            - type: If@1
+                                              description: anchor carries an OBIS code
+                                              path: $.g.Attributes.ObisCode
+                                              operator: NotEquals
+                                              value: null
+                                              valueType: String
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.g.out.obis
+                                                  valuePath: $.g.Attributes.ObisCode
+                                                  valueType: String
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.g.out.role
+                                              value: consumption
+                                              valueType: String
+                                            - type: If@1
+                                              description: producer MP default
+                                              path: $.full.key.kind
+                                              operator: Equal
+                                              value: producer
+                                              valueType: String
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.g.out.role
+                                                  value: production
+                                                  valueType: String
+                                            - type: If@1
+                                              description: consumption OBIS wins
+                                              path: $.g.out.obis
+                                              operator: Contains
+                                              value: ':1.8'
+                                              valueType: String
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.g.out.role
+                                                  value: consumption
+                                                  valueType: String
+                                            - type: If@1
+                                              description: production OBIS wins
+                                              path: $.g.out.obis
+                                              operator: Contains
+                                              value: ':2.8'
+                                              valueType: String
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.g.out.role
+                                                  value: production
+                                                  valueType: String
+                                - type: Flatten@1
+                                  description: Per-MP anchor lists -> one flat list
+                                  path: $._gfLists[*][*]
+                                  targetPath: $.gf.anchors
+                                - type: If@1
+                                  description: anchors resolved — derive windows and fetch
+                                  path: $.gf.anchors[0].id
+                                  operator: NotEquals
+                                  value: null
+                                  valueType: String
+                                  transformations:
+                                    - type: ForEach@1
+                                      description: Collect anchor ids
+                                      maxDegreeOfParallelism: 1
+                                      iterationPath: $.gf.anchors
+                                      mergePath: $.key.v
+                                      targetPath: $._gfIds
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.key.v
+                                          valuePath: $.key.id
+                                          valueType: String
+                                    - type: ForEach@1
+                                      description: Collect anchor roles
+                                      maxDegreeOfParallelism: 1
+                                      iterationPath: $.gf.anchors
+                                      mergePath: $.key.v
+                                      targetPath: $._gfRoles
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.key.v
+                                          valuePath: $.key.role
+                                          valueType: String
+                                    # Version-tolerant StringArray handling (AB#5232).
+                                    - type: ExecuteCSharp@1
+                                      description: Consumption anchors + last 24 Vienna month windows
+                                      targetPath: $.gfwJson
+                                      returnType: String
+                                      usings:
+                                        - System.Linq
+                                        - System.Collections.Generic
+                                        - System.Globalization
+                                        - System.Text.Json
+                                      arguments:
+                                        - name: ids
+                                          dataType: StringArray
+                                          valuePath: $._gfIds
+                                        - name: roles
+                                          dataType: StringArray
+                                          valuePath: $._gfRoles
+                                        - name: nowIso
+                                          dataType: String
+                                          valuePath: $.now
+                                      code: |
+                                        // Version-tolerant (AB#5232): JsonElement array (pre-fix adapter) OR typed array (post-fix).
+                                        string[] Items(object a) => a == null ? new string[0] : (a is JsonElement je ? je.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString()).ToArray() : ((System.Collections.IEnumerable)a).Cast<object>().Select(o => o == null ? null : o.ToString()).ToArray());
+                                        var idArr = Items(ids); var roleArr = Items(roles);
+                                        var cons = new List<string>();
+                                        for (var i = 0; i < idArr.Length; i++)
+                                        {
+                                          var id = (idArr[i] ?? "").Trim();
+                                          if (id.Length == 0) continue;
+                                          var role = i < roleArr.Length ? (roleArr[i] ?? "") : "";
+                                          if (role != "production") cons.Add(id);
+                                        }
+                                        if (cons.Count == 0) return "{\"cCount\":0}";
+                                        var culture = CultureInfo.InvariantCulture;
+                                        var styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+                                        DateTime now; if (!DateTime.TryParse(nowIso, culture, styles, out now)) now = DateTime.UtcNow;
+                                        TimeZoneInfo tz;
+                                        try { tz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Vienna"); }
+                                        catch { try { tz = TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time"); } catch { tz = TimeZoneInfo.CreateCustomTimeZone("vie", TimeSpan.FromHours(1), "vie", "vie"); } }
+                                        var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(now, tz);
+                                        DateTime MonthStartUtc(int yy, int mm) { while (mm < 1) { mm += 12; yy--; } while (mm > 12) { mm -= 12; yy++; } var local = new DateTime(yy, mm, 1, 0, 0, 0, DateTimeKind.Unspecified); return TimeZoneInfo.ConvertTimeToUtc(local, tz); }
+                                        string F(DateTime d) => d.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", culture);
+                                        var sb = new System.Text.StringBuilder();
+                                        sb.Append("{\"cCount\":").Append(cons.Count).Append(",\"c\":[");
+                                        for (var i = 0; i < cons.Count; i++) { if (i > 0) sb.Append(','); sb.Append('"').Append(cons[i]).Append('"'); }
+                                        sb.Append("],\"mLimit\":").Append(cons.Count * 30).Append(",\"months\":[");
+                                        for (var k = 0; k < 24; k++)
+                                        {
+                                          var offset = -23 + k;
+                                          var y = nowLocal.Year; var m = nowLocal.Month + offset;
+                                          while (m < 1) { m += 12; y--; } while (m > 12) { m -= 12; y++; }
+                                          var from = MonthStartUtc(y, m); var to = MonthStartUtc(y, m + 1);
+                                          if (k > 0) sb.Append(',');
+                                          sb.Append("{\"key\":\"").Append(y.ToString("D4", culture)).Append('-').Append(m.ToString("D2", culture))
+                                            .Append("\",\"fromIso\":\"").Append(F(from)).Append("\",\"toIso\":\"").Append(F(to)).Append("\"}");
+                                        }
+                                        sb.Append("],\"mFromIso\":\"").Append(F(MonthStartUtc(nowLocal.Year, nowLocal.Month - 23)))
+                                          .Append("\",\"mToIso\":\"").Append(F(MonthStartUtc(nowLocal.Year, nowLocal.Month + 1))).Append("\"}");
+                                        return sb.ToString();
+                                    - type: WriteJson@1
+                                      description: Parse the grid-fees window JSON into the data context
+                                      jsonStringPath: $.gfwJson
+                                      targetPath: $.gfw
+                                    - type: If@1
+                                      description: consumption anchors exist — fetch datasets
+                                      path: $.gfw.cCount
+                                      operator: GreaterThan
+                                      value: 0
+                                      valueType: Int
+                                      transformations:
+                                        - type: GetStreamData@1
+                                          description: Monthly rollup rows of the last 24 months (energy + completeness)
+                                          archiveRtId: '510000000000000000000a04'
+                                          rtIdsPath: $.gfw.c
+                                          fromPath: $.gfw.mFromIso
+                                          toPath: $.gfw.mToIso
+                                          limitPath: $.gfw.mLimit
+                                          columns:
+                                            - amountvalue_sum
+                                            - amountvalue_count
+                                          targetPath: $.gridFees2027.monthly
+                                        - type: ForEach@1
+                                          description: Per month — highest raw 15-min slot (server-side sort, take 1)
+                                          maxDegreeOfParallelism: 1
+                                          iterationPath: $.gfw.months
+                                          keyPath: $.mw
+                                          mergePath: $.mw.out
+                                          targetPath: $.gridFees2027.peaks
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.mw.out.key
+                                              valuePath: $.mw.key
+                                              valueType: String
+                                            - type: GetStreamData@1
+                                              description: Peak slot of the month
+                                              archiveRtId: '510000000000000000000a01'
+                                              rtIdsPath: $.full.gfw.c
+                                              fromPath: $.mw.fromIso
+                                              toPath: $.mw.toIso
+                                              columns:
+                                                - Amount.Value
+                                              sortOrders:
+                                                - sortOrder: Descending
+                                                  attributeName: Amount.Value
+                                              take: 1
+                                              targetPath: $.mw.pk
+                                            # Raw peak QueryResult Values layout (verified live):
+                                            # [Timestamp, WindowStart, WindowEnd, Amount.Value].
+                                            - type: If@1
+                                              description: month has data
+                                              path: $.mw.pk.Rows[0].Values[3]
+                                              operator: GreaterEqualsThan
+                                              value: 0
+                                              valueType: Double
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.mw.out.peakKwh
+                                                  valuePath: $.mw.pk.Rows[0].Values[3]
+                                                  valueType: Double
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.mw.out.endIso
+                                                  valuePath: $.mw.pk.Rows[0].Values[0]
+                                                  valueType: String
+
+        # Shape the HTTP response body: ONLY the public payload (or the error).
+        # The token, the ShareLink result set and every lookup are dropped —
+        # nothing about other customers or links can leak (final Project clear).
+        # year/dashboard/quality exist only when the section flags allow them
+        # (Project@1 skips missing fields), so a disabled section leaves no
+        # trace in the response.
+        - type: Project@1
+          description: Response = { error? } | { customerName, message, sections, meteringPoints, year?, dashboard?, quality?, devices?, recommendations?, gridFees2027? }
+          path: $
+          clear: true
+          fields:
+            - path: $.error
+              inclusion: true
+            - path: $.customerName
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.sections
+              inclusion: true
+            - path: $.meteringPoints
+              inclusion: true
+            - path: $.year
+              inclusion: true
+            - path: $.dashboard
+              inclusion: true
+            - path: $.quality
+              inclusion: true
+            - path: $.devices
+              inclusion: true
+            - path: $.recommendations
+              inclusion: true
+            - path: $.gridFees2027
+              inclusion: true
+
+        # Persist the shaped response as OutputData (audit; never contains the token).
+        - type: SetPipelineExecutionResult@1
+          path: $
