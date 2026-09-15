@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "SmartMeterInsights.Dev",
+  "majorVersion": 1,
+  "latestVersion": "1.0.0",
+  "description": "Development-only add-on to SmartMeterInsights.Base (AB#5252).\n\nSeeds the local-development OIDC client smart-meter-insights-app-debug\n(redirect URIs http(s)://localhost:4400/, the Angular dev server) and nothing\nelse. Install it ALONGSIDE SmartMeterInsights.Base on a local or test\ninstance; production instances install .Base only.\n\nWhy a separate blueprint: \u0060requires\u0060 is evaluated per ROOT blueprint, never\nper seed file or entity, so whole-blueprint split is the only granularity at\nwhich content can be gated by environment. This is the same pattern the\nplatform uses for System.Communication.MainLatest / .Release and\nSystem.UI.SystemCockpit / .TenantCockpit.\n\nThe \u0060requires\u0060 block below makes an install on a staging or production\ninstance a successful NO-OP (BlueprintApplicationResult.Skipped \u2014 no install\nrow, no seed, no history), so a provisioning script may apply it\nunconditionally without branching on the environment.\n\nUntil 1.2.0 this client was part of SmartMeterInsights.Base. Because it\ndeclares AutoProvisionInChildTenants, identity mirrored a localhost-only\nclient into every consulting-firm tenant of the prod-1 app host. Removing it\nfrom .Base does NOT delete an already-provisioned live client \u2014 identity\nclients are runtime entities and deleting them in production is an operator\ndecision (open follow-up on AB#5252).\n\nDeliberately NOT declaring blueprintDependencies on SmartMeterInsights.Base:\nthe two are independent applies, and a dependency edge would only add version\nchurn \u2014 a Skipped root never installs its dependencies anyway.\n",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "directoryPath": "blueprints/v1/s/SmartMeterInsights.Dev/1/SmartMeterInsights.Dev-1.0.0",
+      "publishedAt": "2026-09-15T08:14:33.9187445Z"
+    }
+  ],
+  "updatedAt": "2026-09-15T08:14:33.9230409Z"
+}
