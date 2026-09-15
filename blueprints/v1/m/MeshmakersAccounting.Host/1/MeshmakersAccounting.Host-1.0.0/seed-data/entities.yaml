@@ -1,0 +1,185 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Communication-[3.28,4.0)
+  - System.Identity-[2.19.0,3.0)
+entities:
+  # --- OIDC client for the shared accounting SPA --------------------------------
+  # ClientId is PER ROOT (${octo.tenantId}-app). A shared ClientId let the
+  # parent's auto-provision overwrite a child root's own client — see the
+  # blueprint description. AutoProvisionInChildTenants mirrors this client into
+  # every DIRECT child, which is the whole point of hosting per root.
+  #
+  # The URI attributes are isRuntimeState since System.Identity 2.19.0: the
+  # seeded values below apply on a FRESH install only, and a re-apply preserves
+  # whatever the operator set. That is deliberate — the public hostname is not
+  # derivable from a blueprint variable (${octo.domain} is the PLATFORM domain,
+  # apps live on their own), so the seed can only provide a starting point.
+  # Correct them with `octo-cli -c ApplyClientOverlay` or by setting them
+  # explicitly after the first install.
+  - rtId: aa0000000000000000000211
+    ckTypeId: System.Identity/Client
+    rtWellKnownName: MeshmakersAccountingHostClient
+    attributes:
+      - id: System/Enabled
+        value: true
+      - id: System.Identity/ClientId
+        value: '${octo.tenantId}-app'
+      - id: System/Name
+        value: Meshmakers Accounting (shared host)
+      - id: System.Identity/ClientUri
+        value: '${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}/'
+      - id: System.Identity/ProtocolType
+        value: oidc
+      - id: System.Identity/RequireClientSecret
+        value: false
+      - id: System.Identity/Secrets
+        value: []
+      - id: System.Identity/AllowedGrantTypes
+        value:
+          - authorization_code
+          - 'urn:ietf:params:oauth:grant-type:token-exchange'
+      - id: System.Identity/RequirePkce
+        value: true
+      - id: System.Identity/RequireConsent
+        value: false
+      - id: System.Identity/AllowAccessTokensViaBrowser
+        value: true
+      - id: System.Identity/AlwaysIncludeUserClaimsInIdToken
+        value: true
+      - id: System.Identity/UpdateAccessTokenClaimsOnRefresh
+        value: true
+      - id: System.Identity/AccessTokenType
+        value: 0   # Jwt
+      - id: System.Identity/AutoProvisionInChildTenants
+        value: true
+      - id: System.Identity/RedirectUris
+        value:
+          - ckRecordId: System.Identity/ClientUriEntry
+            attributes:
+              - id: System.Identity/Uri
+                value: '${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}/'
+              - id: System.Identity/Source
+                value: base
+      - id: System.Identity/PostLogoutRedirectUris
+        value:
+          - ckRecordId: System.Identity/ClientUriEntry
+            attributes:
+              - id: System.Identity/Uri
+                value: '${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}/'
+              - id: System.Identity/Source
+                value: base
+      - id: System.Identity/AllowedCorsOrigins
+        value:
+          - ckRecordId: System.Identity/ClientUriEntry
+            attributes:
+              - id: System.Identity/Uri
+                value: '${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}'
+              - id: System.Identity/Source
+                value: base
+      - id: System.Identity/AllowOfflineAccess
+        value: true
+      - id: System.Identity/AllowedScopes
+        value:
+          - openid
+          - profile
+          - email
+          - role
+          - allowed_tenants
+          - octo_api
+          - offline_access
+
+  # --- The shared app workload --------------------------------------------------
+  # Associates to the service-managed Pool (670…001) and the public Helm
+  # repository (670…005) rather than seeding either. Hostname/Values/
+  # ChartVersion/IngressEnabled/DeploymentState are isRuntimeState (AB#4706):
+  # installing this on a RUNNING host does not disturb it.
+  - rtId: aa0000000000000000000210
+    ckTypeId: System.Communication/Application
+    associations:
+      - roleId: System.Communication/Manages
+        targetRtId: '670000000000000000000001'
+        targetCkTypeId: System.Communication/Pool
+      - roleId: System.Communication/HelmRepository
+        targetRtId: '670000000000000000000005'
+        targetCkTypeId: System.Communication/HelmRepositoryConfiguration
+    attributes:
+      - id: System/Name
+        value: '${octo.tenantId}-accounting-shared'
+      - id: System/Description
+        value: Accounting SPA, shared across every tenant below this app host
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System.Communication/ChartName
+        value: meshmakers-app
+      - id: System.Communication/ChartVersion
+        value: ''
+      - id: System.Communication/IngressEnabled
+        value: true
+      - id: System.Communication/ReceivesClusterSecrets
+        value: true
+      - id: System.Communication/LifecycleMode
+        value: 0   # AlwaysOn — an app host must answer the first request
+      - id: System.Communication/Hostname
+        value: '${octo.tenantId}-accounting.{{domain.default}}'
+      - id: System.Communication/Values
+        value:
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: publicUri
+              - id: System.Communication/Value
+                value: '${octo.tenantId}-accounting.{{domain.default}}'
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: rootTenantId
+              - id: System.Communication/Value
+                value: '${octo.tenantId}'
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: clientId
+              - id: System.Communication/Value
+                value: '${octo.tenantId}-app'
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: authorityUrl
+              - id: System.Communication/Value
+                value: '{{service.AUTHORITY}}'
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: apiUrl
+              - id: System.Communication/Value
+                value: '{{service.ASSETREPOSITORY}}'
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: assetServicesUrl
+              - id: System.Communication/Value
+                value: '{{service.ASSETREPOSITORY}}'
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: botServicesUrl
+              - id: System.Communication/Value
+                value: '{{service.BOT}}'
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: communicationServicesUrl
+              - id: System.Communication/Value
+                value: '{{service.COMMUNICATION}}'
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: meshAdapterUrl
+              - id: System.Communication/Value
+                value: 'https://adapter.{{domain.default}}'
+          - ckRecordId: System.Communication/ValueOverride
+            attributes:
+              - id: System.Communication/Path
+                value: finApiAdapterUrl
+              - id: System.Communication/Value
+                value: 'https://adapter-finapi.{{domain.default}}'
