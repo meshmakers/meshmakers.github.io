@@ -6,81 +6,17 @@ dependencies:
   - System.Identity-[2.12.0,3.0)
   - System.UI-[2.2,3.0)
 entities:
-  # --- OIDC client for the deployed accounting SPA ------------------------------
-  # Modeled on the System.Identity.Bootstrap studio client (SPA: authorization
-  # code + PKCE, no secret). Referenced by the Application workload's clientId
-  # value override. Uses install-time blueprint variables (${octo.scheme}/${octo.domain}) —
-  # NOT the ${octo.identity.*} placeholders, which only the identity service's
-  # own bootstrap blueprint resolves. The localhost debug client for local dev
-  # is deliberately NOT seeded here — scripts/om_setupIdentityService_local.ps1
-  # registers it (localhost redirect URIs do not belong on real tenants).
-  - rtId: aa0000000000000000000201
-    ckTypeId: System.Identity/Client
-    rtWellKnownName: MeshmakersAccountingAppClient
-    attributes:
-      - id: System/Enabled
-        value: true
-      - id: System.Identity/ClientId
-        value: meshmakers-app
-      - id: System/Name
-        value: Meshmakers Accounting
-      - id: System.Identity/ClientUri
-        value: '${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}'
-      - id: System.Identity/ProtocolType
-        value: oidc
-      - id: System.Identity/RequireClientSecret
-        value: false
-      - id: System.Identity/Secrets
-        value: []
-      - id: System.Identity/AllowedGrantTypes
-        value:
-          - authorization_code
-      - id: System.Identity/RequirePkce
-        value: true
-      - id: System.Identity/RequireConsent
-        value: false
-      - id: System.Identity/AllowAccessTokensViaBrowser
-        value: true
-      - id: System.Identity/AlwaysIncludeUserClaimsInIdToken
-        value: true
-      - id: System.Identity/UpdateAccessTokenClaimsOnRefresh
-        value: true
-      - id: System.Identity/AccessTokenType
-        value: 0   # Jwt
-      - id: System.Identity/RedirectUris
-        value:
-          - ckRecordId: System.Identity/ClientUriEntry
-            attributes:
-              - id: System.Identity/Uri
-                value: '${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}/'
-              - id: System.Identity/Source
-                value: base
-      - id: System.Identity/PostLogoutRedirectUris
-        value:
-          - ckRecordId: System.Identity/ClientUriEntry
-            attributes:
-              - id: System.Identity/Uri
-                value: '${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}/'
-              - id: System.Identity/Source
-                value: base
-      - id: System.Identity/AllowedCorsOrigins
-        value:
-          - ckRecordId: System.Identity/ClientUriEntry
-            attributes:
-              - id: System.Identity/Uri
-                value: '${octo.scheme}://${octo.tenantId}-accounting.${octo.domain}'
-              - id: System.Identity/Source
-                value: base
-      - id: System.Identity/AllowOfflineAccess
-        value: true
-      - id: System.Identity/AllowedScopes
-        value:
-          - openid
-          - profile
-          - email
-          - role
-          - allowed_tenants
-          - octo_api
+  # --- NOTE: no OIDC client here (AB#5210) -------------------------------------
+  # The app client used to be seeded per leaf, with redirect URIs built from
+  # ${octo.tenantId}-accounting.${octo.domain} — a per-tenant host on the
+  # PLATFORM domain that has no DNS record. Every re-apply rewrote the working
+  # URIs with those dead ones; on prod-1 that took sign-in down for six tenants
+  # on 2026-09-15 (OpenIddict ID2043, invalid redirect_uri).
+  #
+  # A leaf cannot know the public hostname — only the app host it lives under
+  # can. So the client now comes from MeshmakersAccounting.Host, installed on
+  # the root, and reaches this tenant by client mirroring
+  # (AutoProvisionInChildTenants). Do not re-add one here.
   # --- App roles + groups (AB#4677) ---------------------------------------------
   # Role-based access of the accounting SPA: AccountingManagement (full access),
   # AccountingEmployee (inbox/documents/todos, own items only) and
