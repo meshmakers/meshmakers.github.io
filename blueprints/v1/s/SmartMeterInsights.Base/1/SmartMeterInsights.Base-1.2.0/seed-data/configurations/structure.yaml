@@ -1,0 +1,29 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- System-[2.2,3.0)
+- System.Communication-[3.28,4.0)
+- System.Identity-[2.12,3.0)
+- System.StreamData-[1.7,2.0)
+- Basic-[2.0.3,3.0)
+- Basic.Energy-[1.4,2.0)
+- SmartMeterInsights-[1.0.0,2.0)
+
+# Runtime structure anchor (AB#5212): Basic.Energy/OperatingFacility carries a
+# MANDATORY inbound System/ParentChild association (minimum multiplicity One,
+# target Basic/Tree or Basic/TreeNode). Energy-community parents facilities
+# under seeded Basic/City geography nodes — Smart Meter Insights has no
+# geography seed, so every tenant gets ONE Basic/Tree root instead, and the
+# frontend parents every facility it creates under this fixed rtId
+# (customer-gql.service.ts `createFacilityForCustomer`).
+# Part of the SmartMeterInsights.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+- rtId: '510000000000000000000100'
+  ckTypeId: Basic/Tree-1
+  rtWellKnownName: smi-facilities-root
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Anlagen
+  - id: System/Description-1
+    value: Root node for Smart Meter Insights operating facilities (all facilities the app creates are parented here)
