@@ -1,0 +1,47 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: SmartMeterInsights.Dev-1.0.0
+description: |
+  Development-only add-on to SmartMeterInsights.Base (AB#5252).
+
+  Seeds the local-development OIDC client smart-meter-insights-app-debug
+  (redirect URIs http(s)://localhost:4400/, the Angular dev server) and nothing
+  else. Install it ALONGSIDE SmartMeterInsights.Base on a local or test
+  instance; production instances install .Base only.
+
+  Why a separate blueprint: `requires` is evaluated per ROOT blueprint, never
+  per seed file or entity, so whole-blueprint split is the only granularity at
+  which content can be gated by environment. This is the same pattern the
+  platform uses for System.Communication.MainLatest / .Release and
+  System.UI.SystemCockpit / .TenantCockpit.
+
+  The `requires` block below makes an install on a staging or production
+  instance a successful NO-OP (BlueprintApplicationResult.Skipped — no install
+  row, no seed, no history), so a provisioning script may apply it
+  unconditionally without branching on the environment.
+
+  Until 1.2.0 this client was part of SmartMeterInsights.Base. Because it
+  declares AutoProvisionInChildTenants, identity mirrored a localhost-only
+  client into every consulting-firm tenant of the prod-1 app host. Removing it
+  from .Base does NOT delete an already-provisioned live client — identity
+  clients are runtime entities and deleting them in production is an operator
+  decision (open follow-up on AB#5252).
+
+  Deliberately NOT declaring blueprintDependencies on SmartMeterInsights.Base:
+  the two are independent applies, and a dependency edge would only add version
+  churn — a Skipped root never installs its dependencies anyway.
+ckModelDependencies:
+  # Only what the single seeded Client entity needs. Floors match .Base so both
+  # blueprints agree on the System baseline (versioningRules.md: the engine
+  # installs the FLOOR of each range as the exact version).
+  - System-[2.2,3.0)
+  - System.Identity-[2.12,3.0)
+requires:
+  # Environment classes as reported by the blueprint variable octo.environment
+  # (dev | test | staging | production), bound from OCTO_BLUEPRINTS__ENVIRONMENT.
+  # Matching is ordinal and fail-closed: an instance that reports no environment
+  # at all is treated as a mismatch and skips this blueprint.
+  octo.environment:
+    - dev
+    - test
+seedDataPaths:
+  - seed-data/identity/debug-client.yaml
