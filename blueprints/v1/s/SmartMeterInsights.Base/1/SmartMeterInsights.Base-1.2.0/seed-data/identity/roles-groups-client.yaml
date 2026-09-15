@@ -1,0 +1,334 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- System-[2.2,3.0)
+- System.Communication-[3.28,4.0)
+- System.Identity-[2.12,3.0)
+- System.StreamData-[1.7,2.0)
+- Basic-[2.0.3,3.0)
+- Basic.Energy-[1.4,2.0)
+- SmartMeterInsights-[1.0.0,2.0)
+
+# Identity seed of SmartMeterInsights.Base: app roles, user groups and the two
+# OIDC clients of the Smart Meter Insights app (AB#5211).
+# Part of the SmartMeterInsights.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Roles ────────────────────────────────────────────────────────────────
+# Role-based access of the app and its HTTP API: InsightsConsultant is the
+# working role (imports, customers, share links), InsightsAdmin administers
+# the tenant (settings, user management). Roles are additive — the Admins
+# group below carries both so admins can do everything consultants can.
+# Role SubjectIds/IdentityRoleIds are runtime state and preserved on re-apply.
+- rtId: '510000000000000000000301'
+  ckTypeId: System.Identity/Role-1
+  rtWellKnownName: InsightsConsultant
+  attributes:
+  - id: System/Name-1
+    value: InsightsConsultant
+  - id: System.Identity/NormalizedName-1
+    value: INSIGHTSCONSULTANT
+
+- rtId: '510000000000000000000302'
+  ckTypeId: System.Identity/Role-1
+  rtWellKnownName: InsightsAdmin
+  attributes:
+  - id: System/Name-1
+    value: InsightsAdmin
+  - id: System.Identity/NormalizedName-1
+    value: INSIGHTSADMIN
+
+# ─── Groups ───────────────────────────────────────────────────────────────
+# User administration is group membership: each group carries its role(s) via
+# the AssignedRole association (identity-bootstrap TenantOwners pattern).
+- rtId: '510000000000000000000311'
+  ckTypeId: System.Identity/Group-1
+  rtWellKnownName: Consultants
+  attributes:
+  - id: System.Identity/GroupName-1
+    value: Consultants
+  - id: System.Identity/NormalizedGroupName-1
+    value: CONSULTANTS
+  - id: System.Identity/GroupDescription-1
+    value: Energy consultants — customer management, CSV imports and share links.
+  associations:
+  - roleId: System.Identity/AssignedRole-1
+    targetRtId: '510000000000000000000301'
+    targetCkTypeId: System.Identity/Role-1
+
+- rtId: '510000000000000000000312'
+  ckTypeId: System.Identity/Group-1
+  rtWellKnownName: Admins
+  attributes:
+  - id: System.Identity/GroupName-1
+    value: Admins
+  - id: System.Identity/NormalizedGroupName-1
+    value: ADMINS
+  - id: System.Identity/GroupDescription-1
+    value: Administrators — everything consultants can do plus tenant administration.
+  associations:
+  - roleId: System.Identity/AssignedRole-1
+    targetRtId: '510000000000000000000302'
+    targetCkTypeId: System.Identity/Role-1
+  - roleId: System.Identity/AssignedRole-1
+    targetRtId: '510000000000000000000301'
+    targetCkTypeId: System.Identity/Role-1
+
+# ─── smart-meter-insights-app OIDC client ─────────────────────────────────
+# Public browser client (authorization code + PKCE, no secret), modeled on
+# the energy-community-app client. AutoProvisionInChildTenants mirrors the
+# client into every child (consulting-firm) tenant: the app is served from
+# one origin on the management tenant but authenticates against whichever
+# tenant is in the /:tenantId route, and clients are per-tenant records —
+# without the mirror, sign-in against a child fails with Invalid redirect_uri.
+#
+# ${octo.scheme}/${octo.domain} are resolved by the blueprint runner at SEED
+# time; {{domain.DEFAULT}} would be stored verbatim here (it is only resolved
+# by the communication operator on workload entities). The host matches the
+# Application's Hostname in configurations/application.yaml, so client and
+# deployment cannot drift. Redirect/post-logout carry a trailing slash
+# (the app sends ${origin}/), the CORS entry is the bare origin.
+- rtId: '510000000000000000000f10'
+  ckTypeId: System.Identity/Client-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Smart Meter Insights
+  - id: System/Description-1
+    value: ''
+  - id: System.Identity/ClientId-1
+    value: smart-meter-insights-app
+  - id: System/Enabled-1
+    value: true
+  - id: System.Identity/ProtocolType-1
+    value: oidc
+  - id: System.Identity/AutoProvisionInChildTenants-1
+    value: true
+  - id: System.Identity/Secrets-1
+    value: []
+  - id: System.Identity/RequireClientSecret-1
+    value: false
+  - id: System.Identity/RequirePkce-1
+    value: true
+  - id: System.Identity/AllowPlainTextPkce-1
+    value: false
+  - id: System.Identity/RequireRequestObject-1
+    value: false
+  - id: System.Identity/AllowAccessTokensViaBrowser-1
+    value: true
+  - id: System.Identity/AllowRememberConsent-1
+    value: true
+  - id: System.Identity/RequireConsent-1
+    value: false
+  - id: System.Identity/RequireDPoP-1
+    value: false
+  - id: System.Identity/DPoPValidationMode-1
+    value: 1
+  - id: System.Identity/DPoPClockSkew-1
+    value: 300
+  - id: System.Identity/FrontChannelLogoutSessionRequired-1
+    value: true
+  - id: System.Identity/BackChannelLogoutSessionRequired-1
+    value: true
+  - id: System.Identity/AllowOfflineAccess-1
+    value: true
+  - id: System.Identity/AllowedGrantTypes-1
+    value:
+    - authorization_code
+  - id: System.Identity/AllowedScopes-1
+    value:
+    - openid
+    - profile
+    - email
+    - role
+    - octo_api
+  - id: System.Identity/AlwaysIncludeUserClaimsInIdToken-1
+    value: true
+  - id: System.Identity/IdentityTokenLifetime-1
+    value: 300
+  - id: System.Identity/AllowedIdentityTokenSigningAlgorithms-1
+    value: []
+  - id: System.Identity/AccessTokenLifetime-1
+    value: 3600
+  - id: System.Identity/AuthorizationCodeLifetime-1
+    value: 300
+  - id: System.Identity/AbsoluteRefreshTokenLifetime-1
+    value: 2592000
+  - id: System.Identity/SlidingRefreshTokenLifetime-1
+    value: 1296000
+  - id: System.Identity/UpdateAccessTokenClaimsOnRefresh-1
+    value: false
+  - id: System.Identity/RefreshTokenExpiration-1
+    value: ABSOLUTE
+  - id: System.Identity/AccessTokenType-1
+    value: JWT
+  - id: System.Identity/EnableLocalLogin-1
+    value: true
+  - id: System.Identity/IdentityProviderRestrictions-1
+    value: []
+  - id: System.Identity/IncludeJwtId-1
+    value: true
+  - id: System.Identity/ClientClaims-1
+    value: []
+  - id: System.Identity/AlwaysSendClientClaims-1
+    value: false
+  - id: System.Identity/DynamicRegistration-1
+    value: false
+  - id: System.Identity/RedirectUris-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: '${octo.scheme}://energy-insights.${octo.domain}/'
+      - id: System.Identity/Source-1
+        value: blueprint
+  - id: System.Identity/PostLogoutRedirectUris-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: '${octo.scheme}://energy-insights.${octo.domain}/'
+      - id: System.Identity/Source-1
+        value: blueprint
+  - id: System.Identity/AllowedCorsOrigins-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: '${octo.scheme}://energy-insights.${octo.domain}'
+      - id: System.Identity/Source-1
+        value: blueprint
+
+# ─── smart-meter-insights-app-debug OIDC client ───────────────────────────
+# Local-development twin of the client above (config.json clientId
+# smart-meter-insights-app-debug per docs/CONVENTIONS.md). Same PKCE shape,
+# localhost redirect URIs for the Angular dev server. Mirrored into child
+# tenants too, so a locally served frontend can sign in against any child
+# tenant of a dev instance.
+- rtId: '510000000000000000000f11'
+  ckTypeId: System.Identity/Client-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Smart Meter Insights (Debug)
+  - id: System/Description-1
+    value: 'Local development client for the Angular dev server.'
+  - id: System.Identity/ClientId-1
+    value: smart-meter-insights-app-debug
+  - id: System/Enabled-1
+    value: true
+  - id: System.Identity/ProtocolType-1
+    value: oidc
+  - id: System.Identity/AutoProvisionInChildTenants-1
+    value: true
+  - id: System.Identity/Secrets-1
+    value: []
+  - id: System.Identity/RequireClientSecret-1
+    value: false
+  - id: System.Identity/RequirePkce-1
+    value: true
+  - id: System.Identity/AllowPlainTextPkce-1
+    value: false
+  - id: System.Identity/RequireRequestObject-1
+    value: false
+  - id: System.Identity/AllowAccessTokensViaBrowser-1
+    value: true
+  - id: System.Identity/AllowRememberConsent-1
+    value: true
+  - id: System.Identity/RequireConsent-1
+    value: false
+  - id: System.Identity/RequireDPoP-1
+    value: false
+  - id: System.Identity/DPoPValidationMode-1
+    value: 1
+  - id: System.Identity/DPoPClockSkew-1
+    value: 300
+  - id: System.Identity/FrontChannelLogoutSessionRequired-1
+    value: true
+  - id: System.Identity/BackChannelLogoutSessionRequired-1
+    value: true
+  - id: System.Identity/AllowOfflineAccess-1
+    value: true
+  - id: System.Identity/AllowedGrantTypes-1
+    value:
+    - authorization_code
+  - id: System.Identity/AllowedScopes-1
+    value:
+    - openid
+    - profile
+    - email
+    - role
+    - octo_api
+  - id: System.Identity/AlwaysIncludeUserClaimsInIdToken-1
+    value: true
+  - id: System.Identity/IdentityTokenLifetime-1
+    value: 300
+  - id: System.Identity/AllowedIdentityTokenSigningAlgorithms-1
+    value: []
+  - id: System.Identity/AccessTokenLifetime-1
+    value: 3600
+  - id: System.Identity/AuthorizationCodeLifetime-1
+    value: 300
+  - id: System.Identity/AbsoluteRefreshTokenLifetime-1
+    value: 2592000
+  - id: System.Identity/SlidingRefreshTokenLifetime-1
+    value: 1296000
+  - id: System.Identity/UpdateAccessTokenClaimsOnRefresh-1
+    value: false
+  - id: System.Identity/RefreshTokenExpiration-1
+    value: ABSOLUTE
+  - id: System.Identity/AccessTokenType-1
+    value: JWT
+  - id: System.Identity/EnableLocalLogin-1
+    value: true
+  - id: System.Identity/IdentityProviderRestrictions-1
+    value: []
+  - id: System.Identity/IncludeJwtId-1
+    value: true
+  - id: System.Identity/ClientClaims-1
+    value: []
+  - id: System.Identity/AlwaysSendClientClaims-1
+    value: false
+  - id: System.Identity/DynamicRegistration-1
+    value: false
+  - id: System.Identity/RedirectUris-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'https://localhost:4400/'
+      - id: System.Identity/Source-1
+        value: blueprint
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'http://localhost:4400/'
+      - id: System.Identity/Source-1
+        value: blueprint
+  - id: System.Identity/PostLogoutRedirectUris-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'https://localhost:4400/'
+      - id: System.Identity/Source-1
+        value: blueprint
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'http://localhost:4400/'
+      - id: System.Identity/Source-1
+        value: blueprint
+  - id: System.Identity/AllowedCorsOrigins-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'https://localhost:4400'
+      - id: System.Identity/Source-1
+        value: blueprint
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'http://localhost:4400'
+      - id: System.Identity/Source-1
+        value: blueprint
