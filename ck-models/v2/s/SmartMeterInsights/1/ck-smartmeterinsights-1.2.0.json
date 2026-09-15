@@ -1,0 +1,801 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.0.3",
+    "Basic.Energy-1.4.0",
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Customer-1",
+      "derivedFromCkTypeId": "Basic-2.0.3/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "SmartMeterInsights-1.2.0/AssociatedFacilities-1",
+          "targetCkTypeId": "Basic.Energy-1.4.0/OperatingFacility-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "An end customer of the consulting firm. End customers are runtime entities inside the firm tenant, never tenants (AB#4059).",
+      "attributes": [
+        {
+          "id": "Basic-2.0.3/Contact-1",
+          "name": "Contact",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/Notes-1",
+          "name": "Notes",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "DetectionResult-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "DeviceKind"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "SmartMeterInsights-1.2.0/DetectedMeteringPoint-1",
+          "targetCkTypeId": "Basic.Energy-1.4.0/MeteringPoint-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One explainable device-detection verdict per (metering point, device kind) \u2014 upserted by every detection run, never duplicated (AB#5245).",
+      "attributes": [
+        {
+          "id": "SmartMeterInsights-1.2.0/DeviceKind-1",
+          "name": "DeviceKind",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/Confidence-1",
+          "name": "Confidence",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/EvidenceFrom-1",
+          "name": "EvidenceFrom",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/EvidenceTo-1",
+          "name": "EvidenceTo",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/EvidenceSummary-1",
+          "name": "EvidenceSummary",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/DetectedAt-1",
+          "name": "DetectedAt",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ImportSession-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "PeriodFrom"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "PeriodFrom",
+                "PeriodTo"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "SmartMeterInsights-1.2.0/ImportedMeteringPoint-1",
+          "targetCkTypeId": "Basic.Energy-1.4.0/MeteringPoint-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One CSV import of normalized 15-minute smart-meter readings, with quality counts and gap diagnostics (AB#5213).",
+      "attributes": [
+        {
+          "id": "SmartMeterInsights-1.2.0/FileName-1",
+          "name": "FileName",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/DetectedFormat-1",
+          "name": "DetectedFormat",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/PeriodFrom-1",
+          "name": "PeriodFrom",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/PeriodTo-1",
+          "name": "PeriodTo",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/ValueCount-1",
+          "name": "ValueCount",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/DuplicateCount-1",
+          "name": "DuplicateCount",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/CountL1-1",
+          "name": "CountL1",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/CountL2-1",
+          "name": "CountL2",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/CountL3-1",
+          "name": "CountL3",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/CountMissing-1",
+          "name": "CountMissing",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/GapList-1",
+          "name": "GapList",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/State-1",
+          "name": "State",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Recommendation-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "RecommendationState",
+                "SortOrder"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "SmartMeterInsights-1.2.0/RecommendedCustomer-1",
+          "targetCkTypeId": "SmartMeterInsights-1.2.0/Customer-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A consultant-editable saving recommendation for a customer; only Published ones reach the shared customer view (AB#5245).",
+      "attributes": [
+        {
+          "id": "SmartMeterInsights-1.2.0/Title-1",
+          "name": "Title",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/Text-1",
+          "name": "Text",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/EstimatedYearlySavingEur-1",
+          "name": "EstimatedYearlySavingEur",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/Source-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/RecommendationState-1",
+          "name": "RecommendationState",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/SortOrder-1",
+          "name": "SortOrder",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ShareLink-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "UniqueNotDeleted",
+          "fields": [
+            {
+              "attributePaths": [
+                "Token"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "SmartMeterInsights-1.2.0/SharedCustomer-1",
+          "targetCkTypeId": "SmartMeterInsights-1.2.0/Customer-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A revocable, optionally expiring token that exposes a customer\u0027s dashboard read-only via the public /v/:token route.",
+      "attributes": [
+        {
+          "id": "SmartMeterInsights-1.2.0/Token-1",
+          "name": "Token",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/CreatedBy-1",
+          "name": "CreatedBy",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/ExpiresAt-1",
+          "name": "ExpiresAt",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/RevokedAt-1",
+          "name": "RevokedAt",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/Message-1",
+          "name": "Message",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/AccessCount-1",
+          "name": "AccessCount",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/LastAccessAt-1",
+          "name": "LastAccessAt",
+          "isOptional": true
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/ShowDashboard-1",
+          "name": "ShowDashboard",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/ShowRecommendations-1",
+          "name": "ShowRecommendations",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/ShowQualityDetails-1",
+          "name": "ShowQualityDetails",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/ShowDevices-1",
+          "name": "ShowDevices",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/ShowRawExport-1",
+          "name": "ShowRawExport",
+          "isOptional": false
+        },
+        {
+          "id": "SmartMeterInsights-1.2.0/ShowGridFees2027-1",
+          "name": "ShowGridFees2027",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "AssociatedFacilities-1",
+      "inboundName": "Customer",
+      "outboundName": "Facilities",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "N",
+      "description": "The operating facilities associated with a customer. Optional: facilities may exist without a customer (same shape as EnergyCommunity 4.x AssociatedFacilities)."
+    },
+    {
+      "id": "DetectedMeteringPoint-1",
+      "inboundName": "DetectionResults",
+      "outboundName": "MeteringPoint",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "The metering point a detection result belongs to. One result per (metering point, device kind); a metering point accumulates one result per device kind."
+    },
+    {
+      "id": "ImportedMeteringPoint-1",
+      "inboundName": "ImportSessions",
+      "outboundName": "MeteringPoint",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "The metering point an import session persisted readings for. Every session references exactly one metering point; a metering point accumulates many sessions."
+    },
+    {
+      "id": "RecommendedCustomer-1",
+      "inboundName": "Recommendations",
+      "outboundName": "Customer",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "The customer a recommendation is written for. Every recommendation belongs to exactly one customer; a customer may have many recommendations."
+    },
+    {
+      "id": "SharedCustomer-1",
+      "inboundName": "ShareLinks",
+      "outboundName": "Customer",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "The customer whose data a share link exposes. Every link belongs to exactly one customer; a customer may have many links."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AccessCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Number of successful reads through this link"
+    },
+    {
+      "id": "Confidence-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "SmartMeterInsights-1.2.0/DetectionConfidence-1",
+      "isRuntimeState": false,
+      "description": "Confidence level of the detection (NotDetected is a first-class, honest result)"
+    },
+    {
+      "id": "CountL1-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Number of readings with data quality L1 (measured)"
+    },
+    {
+      "id": "CountL2-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Number of readings with data quality L2 (interpolated)"
+    },
+    {
+      "id": "CountL3-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Number of readings with data quality L3 (estimated)"
+    },
+    {
+      "id": "CountMissing-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Number of 15-minute slots missing in the covered period (gaps)"
+    },
+    {
+      "id": "CreatedBy-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Display name or subject id of the consultant who created the link"
+    },
+    {
+      "id": "DetectedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "UTC instant the detection run produced this result"
+    },
+    {
+      "id": "DetectedFormat-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The CSV dialect / grid-operator format the frontend parser detected"
+    },
+    {
+      "id": "DeviceKind-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "SmartMeterInsights-1.2.0/DeviceKind-1",
+      "isRuntimeState": false,
+      "description": "The device kind this detection result is about"
+    },
+    {
+      "id": "DuplicateCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Number of duplicate readings the frontend removed before upload"
+    },
+    {
+      "id": "EstimatedYearlySavingEur-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Estimated yearly saving in EUR derived from deterministic consumption facts"
+    },
+    {
+      "id": "EvidenceFrom-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Start (UTC) of the data window the heuristic evaluated"
+    },
+    {
+      "id": "EvidenceSummary-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Human-readable German explanation of the rule that fired and its measured evidence"
+    },
+    {
+      "id": "EvidenceTo-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "End (UTC, exclusive) of the data window the heuristic evaluated"
+    },
+    {
+      "id": "ExpiresAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "UTC instant after which the link is rejected (unset = never expires)"
+    },
+    {
+      "id": "FileName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of the uploaded CSV file the readings were parsed from"
+    },
+    {
+      "id": "GapList-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "JSON array of gap ranges [{\u0022from\u0022:\u0022...\u0022,\u0022to\u0022:\u0022...\u0022}] detected by the frontend parser"
+    },
+    {
+      "id": "LastAccessAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "UTC instant of the most recent successful read"
+    },
+    {
+      "id": "Message-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Personal message shown to the customer on the shared dashboard"
+    },
+    {
+      "id": "Notes-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Free-form consultant notes about the customer"
+    },
+    {
+      "id": "PeriodFrom-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Start (UTC) of the time range covered by the imported readings"
+    },
+    {
+      "id": "PeriodTo-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "End (UTC) of the time range covered by the imported readings"
+    },
+    {
+      "id": "RecommendationState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "SmartMeterInsights-1.2.0/RecommendationState-1",
+      "isRuntimeState": false,
+      "description": "Draft (consultant only) or Published (visible on the shared view)"
+    },
+    {
+      "id": "RevokedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "UTC instant the link was revoked (unset = active)"
+    },
+    {
+      "id": "ShowDashboard-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Section flag: consumption dashboard visible on the shared view"
+    },
+    {
+      "id": "ShowDevices-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Section flag: device breakdown visible on the shared view"
+    },
+    {
+      "id": "ShowGridFees2027-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "isRuntimeState": false,
+      "description": "Section flag: Netzentgelt 2027 comparison (capacity-based grid fees, draft SNE-G-V) visible on the shared view (AB#5246)"
+    },
+    {
+      "id": "ShowQualityDetails-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Section flag: data-quality details visible on the shared view"
+    },
+    {
+      "id": "ShowRawExport-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Section flag: raw data export available on the shared view"
+    },
+    {
+      "id": "ShowRecommendations-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Section flag: recommendations visible on the shared view"
+    },
+    {
+      "id": "SortOrder-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Display position on the customer view (ascending; consultant-reorderable)"
+    },
+    {
+      "id": "Source-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "SmartMeterInsights-1.2.0/RecommendationSource-1",
+      "isRuntimeState": false,
+      "description": "Provenance of the text (Heuristic template, Ai generated, Manual)"
+    },
+    {
+      "id": "State-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "SmartMeterInsights-1.2.0/ImportState-1",
+      "isRuntimeState": false,
+      "description": "Lifecycle state of the import session"
+    },
+    {
+      "id": "Text-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "German body text of the recommendation (consultant-editable)"
+    },
+    {
+      "id": "Title-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Short German headline of the recommendation (consultant-editable)"
+    },
+    {
+      "id": "Token-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Opaque URL token of the share link (unique per tenant)"
+    },
+    {
+      "id": "ValueCount-1",
+      "valueType": "Int",
+      "defaultValues": [
+        "0"
+      ],
+      "isRuntimeState": false,
+      "description": "Number of 15-minute readings persisted by this import"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "DetectionConfidence-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "NotDetected",
+          "description": "The heuristic found no evidence for the device (honest default)",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Uncertain",
+          "description": "Weak evidence \u2014 the pattern is present but ambiguous",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Likely",
+          "description": "Clear evidence for the device",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "VeryLikely",
+          "description": "Strong, multi-signal evidence for the device",
+          "isExtension": false
+        }
+      ],
+      "description": "Confidence level of a device detection result (UI: sehr wahrscheinlich / wahrscheinlich / unsicher / nicht erkannt)"
+    },
+    {
+      "enumId": "DeviceKind-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "HeatPump",
+          "description": "Heat pump (winter/summer consumption ratio \u002B cold-season base elevation)",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "EvCharging",
+          "description": "Electric-vehicle charging (recurring multi-kW night blocks)",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Pv",
+          "description": "Photovoltaic system (2.8.x production series or systematic midday consumption dips)",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "ElectricWaterHeater",
+          "description": "Electric water heater / boiler (fixed nightly high-power windows, moderate power)",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "NightStorage",
+          "description": "Night storage heating (fixed nightly high-power windows, high power, winter-heavy)",
+          "isExtension": false
+        }
+      ],
+      "description": "Kind of electrical device/consumer a detection heuristic looks for (AB#5245)"
+    },
+    {
+      "enumId": "ImportState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Pending",
+          "description": "The import has been created but not all values are persisted yet",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Completed",
+          "description": "All readings of the import were persisted successfully",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Failed",
+          "description": "The import was aborted; the session exists for diagnostics only",
+          "isExtension": false
+        }
+      ],
+      "description": "State of a smart-meter CSV import session"
+    },
+    {
+      "enumId": "RecommendationSource-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Heuristic",
+          "description": "Deterministic template text generated from detection \u002B consumption facts",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Ai",
+          "description": "Text generated via the platform AI path (AnthropicAiQuery pipeline node)",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Manual",
+          "description": "Written or substantially edited by the consultant",
+          "isExtension": false
+        }
+      ],
+      "description": "How a recommendation\u0027s text was produced (AB#5245)"
+    },
+    {
+      "enumId": "RecommendationState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Draft",
+          "description": "Visible to the consultant only; editable",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Published",
+          "description": "Visible on the shared customer view (ShowRecommendations flag)",
+          "isExtension": false
+        }
+      ],
+      "description": "Publication state of a recommendation \u2014 only Published ones reach the end customer"
+    }
+  ],
+  "modelId": "SmartMeterInsights-1.2.0",
+  "description": "Smart Meter Insights domain model (Epic AB#4059): end customers of an energy consulting firm, CSV import sessions for 15-minute smart-meter readings, revocable share links for the public read-only dashboard, device detection results and consultant-editable saving recommendations (AB#5245). 1.2.0 adds the ShareLink section flag ShowGridFees2027 for the capacity-based grid-fee analysis (AB#5246). Time-series values reuse Basic.Energy/EnergyMeasurement (one anchor per metering point and OBIS code, slots in the stream-data archive)."
+}
