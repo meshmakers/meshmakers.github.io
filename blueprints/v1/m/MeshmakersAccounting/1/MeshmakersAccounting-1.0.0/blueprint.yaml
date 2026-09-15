@@ -37,10 +37,11 @@ description: |
   - the MicrosoftGraphDocuments configuration (placeholder Azure app-registration
     credentials) used by the e-mail import via the Uses association
   - the _trees repo-browser query
-  - the accounting SPA as an Application workload (meshmakers-app Helm
-    chart), rolled out by the Communication Operator
-  - the meshmakers-app OIDC client (authorization code + PKCE, redirect
-    ${octo.scheme}://accounting.${octo.domain}/) used by the deployed SPA
+  NOT the app and NOT its OIDC client (AB#5210): both belong to the APP HOST,
+  seeded by MeshmakersAccounting.Host on the root tenant. A leaf cannot know the
+  public hostname, so seeding either here produced dead per-tenant URIs that a
+  re-apply kept restoring. The client reaches this tenant by mirroring from the
+  root instead.
   - the AnthropicAiConfig AiConfiguration (placeholder API key) referenced by
     the AI pipelines via apiKeyConfigurationName
   - the FinApiConfiguration (placeholder credentials, live.finapi.io) that all
@@ -52,7 +53,8 @@ description: |
   this seed associates to.
 
   Post-install:
-  - DeployDataFlow per DataFlow + DeployWorkload for the app (operator pools)
+  - DeployDataFlow per DataFlow. The app workload is NOT part of this blueprint
+    any more — it lives on the app host (MeshmakersAccounting.Host)
   - Set the real Anthropic API key on the AnthropicAiConfig configuration and
     the finAPI credentials on FinApiConfiguration — ONCE. Credential attributes
     carry isRuntimeState: true in the System.Communication model (ApiKey,
@@ -103,7 +105,8 @@ seedDataPaths:
   - seed-data/configurations/integrations.yaml
   - seed-data/configurations/reporting.yaml
 
-  # Roles, groups, the OIDC client and the data-permission policies
+  # Roles, groups and the data-permission policies (the OIDC client moved to
+  # MeshmakersAccounting.Host — AB#5210)
   - seed-data/identity/data-permissions.yaml
   - seed-data/identity/roles-groups-client.yaml
 
