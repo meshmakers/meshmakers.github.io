@@ -1,0 +1,62 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: MeshmakersAccounting.Host-1.0.0
+description: |
+  The accounting SPA as a shared deployment of an APP-HOST tenant (AB#5210).
+
+  Install this on a root that hosts the app — today `accounting` and `bernkopf`.
+  One Helm release serves every tenant below it: the app reads the tenant from
+  its `/:tenantId` route, and `available-tenants.service.ts` walks the root's
+  descendants to depth 2, skipping any child that has children of its own
+  (a grouping/identity tenant) in favour of its grandchildren.
+
+  Seeds exactly the two entities that make an app host self-contained:
+
+  1. `System.Identity/Client` — the OIDC client (authorization code + PKCE, no
+     secret) with `AutoProvisionInChildTenants: true`, so every DIRECT child
+     gets a mirror instead of an operator adding redirect URIs by hand.
+  2. `System.Communication/Application` — the Helm deployment (aa0…210), with
+     `rootTenantId` bound to the tenant it is installed on.
+
+  WHY ONE HOST PER ROOT, NOT ONE FOR THE WHOLE TREE
+
+  Client mirroring is deliberately ONE level: `ClientMirrorProvisioningService`
+  resolves DIRECT children only, and writes each mirror with
+  `AutoProvisionInChildTenants: false` so it cannot cascade — "a grandchild is
+  its own parent's business" (AB#5025). A single host on `accounting` would
+  therefore reach `meshmakers` and `salzburgdev`, but never the four companies
+  below `bernkopf`. The app could render them; identity would not issue for
+  them. Hence: `accounting` hosts its own leaves, `bernkopf` hosts its four.
+
+  WHY THE CLIENTID IS PER ROOT
+
+  `${octo.tenantId}-app`, not a shared name. `bernkopf` is itself a child of
+  `accounting`, so a shared ClientId made the parent's auto-provision overwrite
+  the child's own client — the mirror carries the PARENT's redirect URIs, and
+  sign-in on the child's host died with `invalid redirect_uri`. That happened on
+  prod-1 on 2026-08-31 and was only noticed on 2026-09-15. Distinct ClientIds
+  remove the collision by construction; the SPA receives its ClientId through a
+  ValueOverride anyway.
+
+  WHAT IS DELIBERATELY NOT HERE
+
+  No `Meshmakers.Accounting` CK model dependency: an app host carries no
+  accounting data. Both production roots hold 0 pipelines, and `bernkopf` is a
+  pure identity tenant. The Pool (670…001) and Mesh Adapter (670…002) belong to
+  the service-managed System.Communication blueprint — this seed associates to
+  the existing Pool rather than fighting the service for ownership.
+
+  INSTALL NOTES
+
+  `Hostname`, `Values`, `ChartVersion`, `IngressEnabled` and `DeploymentState`
+  are `isRuntimeState` (AB#4706), so the seeded values apply on a FRESH install
+  only and a re-apply never overwrites what the operator set. The seeded
+  hostname is a starting point — set the real public hostname after the first
+  install. Since System.Identity 2.19.0 the client's URI attributes are
+  runtime-state too (AB#5210), for exactly the same reason.
+
+ckModelDependencies:
+  - System-[2.0,)
+  - System.Communication-[3.28,4.0)
+  - System.Identity-[2.19.0,3.0)
+
+seedDataPath: seed-data/entities.yaml
