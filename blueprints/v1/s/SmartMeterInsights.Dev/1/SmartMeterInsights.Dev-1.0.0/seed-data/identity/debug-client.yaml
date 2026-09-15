@@ -1,0 +1,150 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- System-[2.2,3.0)
+- System.Identity-[2.12,3.0)
+
+# The LOCAL-DEVELOPMENT OIDC client of Smart Meter Insights (AB#5252).
+#
+# This file lives in SmartMeterInsights.Dev, NOT in .Base, because the blueprint
+# around it carries `requires: octo.environment: [dev, test]`. It previously sat
+# in .Base and was therefore seeded into PRODUCTION tenants — and because it
+# declares AutoProvisionInChildTenants, identity mirrored a client whose only
+# redirect URIs are http(s)://localhost:4400/ into every consulting-firm tenant
+# on prod. `requires` is evaluated per ROOT blueprint, so splitting the file out
+# into its own blueprint is the only granularity at which it can be gated.
+# Part of the SmartMeterInsights.Dev blueprint — see blueprint.yaml.
+#
+# Same PKCE shape as the production client smart-meter-insights-app in
+# SmartMeterInsights.Base, with localhost redirect URIs for the Angular dev
+# server. AutoProvisionInChildTenants is kept so a locally served frontend can
+# sign in against any child tenant of a dev instance.
+entities:
+
+- rtId: '510000000000000000000f11'
+  ckTypeId: System.Identity/Client-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Smart Meter Insights (Debug)
+  - id: System/Description-1
+    value: 'Local development client for the Angular dev server.'
+  - id: System.Identity/ClientId-1
+    value: smart-meter-insights-app-debug
+  - id: System/Enabled-1
+    value: true
+  - id: System.Identity/ProtocolType-1
+    value: oidc
+  - id: System.Identity/AutoProvisionInChildTenants-1
+    value: true
+  - id: System.Identity/Secrets-1
+    value: []
+  - id: System.Identity/RequireClientSecret-1
+    value: false
+  - id: System.Identity/RequirePkce-1
+    value: true
+  - id: System.Identity/AllowPlainTextPkce-1
+    value: false
+  - id: System.Identity/RequireRequestObject-1
+    value: false
+  - id: System.Identity/AllowAccessTokensViaBrowser-1
+    value: true
+  - id: System.Identity/AllowRememberConsent-1
+    value: true
+  - id: System.Identity/RequireConsent-1
+    value: false
+  - id: System.Identity/RequireDPoP-1
+    value: false
+  - id: System.Identity/DPoPValidationMode-1
+    value: 1
+  - id: System.Identity/DPoPClockSkew-1
+    value: 300
+  - id: System.Identity/FrontChannelLogoutSessionRequired-1
+    value: true
+  - id: System.Identity/BackChannelLogoutSessionRequired-1
+    value: true
+  - id: System.Identity/AllowOfflineAccess-1
+    value: true
+  - id: System.Identity/AllowedGrantTypes-1
+    value:
+    - authorization_code
+  - id: System.Identity/AllowedScopes-1
+    value:
+    - openid
+    - profile
+    - email
+    - role
+    - octo_api
+  - id: System.Identity/AlwaysIncludeUserClaimsInIdToken-1
+    value: true
+  - id: System.Identity/IdentityTokenLifetime-1
+    value: 300
+  - id: System.Identity/AllowedIdentityTokenSigningAlgorithms-1
+    value: []
+  - id: System.Identity/AccessTokenLifetime-1
+    value: 3600
+  - id: System.Identity/AuthorizationCodeLifetime-1
+    value: 300
+  - id: System.Identity/AbsoluteRefreshTokenLifetime-1
+    value: 2592000
+  - id: System.Identity/SlidingRefreshTokenLifetime-1
+    value: 1296000
+  - id: System.Identity/UpdateAccessTokenClaimsOnRefresh-1
+    value: false
+  - id: System.Identity/RefreshTokenExpiration-1
+    value: ABSOLUTE
+  - id: System.Identity/AccessTokenType-1
+    value: JWT
+  - id: System.Identity/EnableLocalLogin-1
+    value: true
+  - id: System.Identity/IdentityProviderRestrictions-1
+    value: []
+  - id: System.Identity/IncludeJwtId-1
+    value: true
+  - id: System.Identity/ClientClaims-1
+    value: []
+  - id: System.Identity/AlwaysSendClientClaims-1
+    value: false
+  - id: System.Identity/DynamicRegistration-1
+    value: false
+  - id: System.Identity/RedirectUris-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'https://localhost:4400/'
+      - id: System.Identity/Source-1
+        value: blueprint
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'http://localhost:4400/'
+      - id: System.Identity/Source-1
+        value: blueprint
+  - id: System.Identity/PostLogoutRedirectUris-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'https://localhost:4400/'
+      - id: System.Identity/Source-1
+        value: blueprint
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'http://localhost:4400/'
+      - id: System.Identity/Source-1
+        value: blueprint
+  - id: System.Identity/AllowedCorsOrigins-1
+    value:
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'https://localhost:4400'
+      - id: System.Identity/Source-1
+        value: blueprint
+    - ckRecordId: System.Identity/ClientUriEntry-1
+      attributes:
+      - id: System.Identity/Uri-1
+        value: 'http://localhost:4400'
+      - id: System.Identity/Source-1
+        value: blueprint
