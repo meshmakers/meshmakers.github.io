@@ -1,0 +1,109 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- System-[2.2,3.0)
+- System.Communication-[3.28,4.0)
+- System.Identity-[2.12,3.0)
+- System.StreamData-[1.7,2.0)
+- Basic-[2.0.3,3.0)
+- Basic.Energy-[1.4,2.0)
+- SmartMeterInsights-[1.0.0,2.0)
+
+# The smart-meter-insights Application workload (chart smart-meter-insights),
+# deployed by the Communication Operator on the app-host (management) tenant.
+# One deployment serves every consulting-firm child tenant — the app reads the
+# tenant from its /:tenantId route (energy-community AB#3683 topology).
+#
+# Pool (670…001), Mesh Adapter (670…002) and the dev Helm repository (670…003)
+# are referenced, never seeded: all three belong to the service-managed
+# System.Communication blueprint and return on every EnableCommunication.
+#
+# Hostname / Values / ChartVersion / IngressEnabled are isRuntimeState since
+# System.Communication 3.28 (AB#4706): the seed values apply on FRESH installs
+# only, and a blueprint re-apply never overwrites what an operator changed in
+# Studio. ChartVersion '' = newest chart in the repository.
+# Part of the SmartMeterInsights.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+- rtId: '510000000000000000000200'
+  ckTypeId: System.Communication/Application-1
+  associations:
+  - roleId: System.Communication/Manages-1
+    targetRtId: '670000000000000000000001'
+    targetCkTypeId: System.Communication/Pool-1
+    attributes: []
+  - roleId: System.Communication/HelmRepository-1
+    targetRtId: '670000000000000000000003'
+    targetCkTypeId: System.Communication/HelmRepositoryConfiguration-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: smart-meter-insights
+  - id: System/Description-1
+    value: 'Smart Meter Insights web app (shared app-host deployment).'
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/LastDeploymentError-1
+  - id: System.Communication/LastDeploymentErrorTimestamp-1
+  - id: System.Communication/ChartName-1
+    value: smart-meter-insights
+  - id: System.Communication/ChartVersion-1
+    value: ''
+  - id: System.Communication/ValuesYaml-1
+    value: ''
+  - id: System.Communication/ReceivesClusterSecrets-1
+    value: false
+  - id: System.Communication/IngressEnabled-1
+    value: true
+  - id: System.Communication/Hostname-1
+    value: 'energy-insights.{{domain.DEFAULT}}'
+  - id: System.Communication/Values-1
+    value:
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: publicUri
+      - id: System.Communication/Value-1
+        value: 'https://energy-insights.{{domain.DEFAULT}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: authUri
+      - id: System.Communication/Value-1
+        value: '{{service.AUTHORITY}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: assetRepoUri
+      - id: System.Communication/Value-1
+        value: '{{service.ASSETREPOSITORY}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: meshAdapterUri
+      - id: System.Communication/Value-1
+        value: 'https://adapter.{{domain.DEFAULT}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: rootTenantId
+      - id: System.Communication/Value-1
+        value: '{{context.tenantId}}'
+      - id: System.Communication/IsSecret-1
+        value: false
+    - ckRecordId: System.Communication/ValueOverride-1
+      attributes:
+      - id: System.Communication/Path-1
+        value: clientId
+      - id: System.Communication/Value-1
+        value: smart-meter-insights-app
+      - id: System.Communication/IsSecret-1
+        value: false
