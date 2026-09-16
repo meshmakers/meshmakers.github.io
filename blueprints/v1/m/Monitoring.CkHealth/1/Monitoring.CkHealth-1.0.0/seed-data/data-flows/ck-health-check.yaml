@@ -1,0 +1,195 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- System.Communication-[3.1,4.0)
+- Monitoring-[1.0,2.0)
+entities:
+  # ==========================================================================
+  # CK Health Monitoring
+  #
+  # Hourly cron pipeline: acquires a client-credentials token, queries
+  # {tenantId}/v1/Models/LibraryStatus for every MonitoredTenant and posts
+  # Teams alerts for ResolveFailed models, catalog inconsistencies and
+  # unreachable tenants. Runs on the Mesh Adapter that System.Communication
+  # seeds (rtId 670000000000000000000002).
+  # ==========================================================================
+
+  # --- DataFlow ---
+  - rtId: '0c4ea1000000000000000001'
+    ckTypeId: System.Communication/DataFlow-1
+    attributes:
+      - id: System/Name-1
+        value: CK Health Monitoring
+      - id: System/Description-1
+        value: Scheduled check of CK model library health across tenants with Teams alerting.
+
+  # --- Pipeline ---
+  - rtId: '0c4ea1000000000000000002'
+    ckTypeId: System.Communication/Pipeline-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0c4ea1000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Executes-1
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter-1
+    attributes:
+      - id: System/Name-1
+        value: ck-health-check
+      - id: System/Description-1
+        value: Queries LibraryStatus of every monitored tenant and posts Teams alerts for broken CK models.
+      - id: System/Enabled-1
+        value: true
+      - id: System.Communication/DeploymentState-1
+        value: 0
+      - id: System.Communication/PipelineDefinition-1
+        value: |
+          triggers:
+            - type: FromPipelineTriggerEvent@1
+            - type: FromExecutePipelineCommand@1
+          transformations:
+            - type: GetRtEntitiesByType@1
+              description: Load monitor configuration
+              ckTypeId: Monitoring/CkHealthMonitorConfig
+              targetPath: $.cfg
+            - type: WriteJson@1
+              description: Token request body (client_credentials)
+              jsonString: '{"grant_type":"client_credentials"}'
+              targetPath: $.tokenRequest
+            - type: SetPrimitiveValue@1
+              valuePath: $.cfg.Items[0].Attributes.ClientId
+              valueType: String
+              targetPath: $.tokenRequest.client_id
+            - type: SetPrimitiveValue@1
+              valuePath: $.cfg.Items[0].Attributes.ClientSecret
+              valueType: String
+              targetPath: $.tokenRequest.client_secret
+            - type: SetPrimitiveValue@1
+              valuePath: $.cfg.Items[0].Attributes.Scope
+              valueType: String
+              targetPath: $.tokenRequest.scope
+            - type: MakeHttpRequest@1
+              description: Acquire access token
+              method: POST
+              urlPath: $.cfg.Items[0].Attributes.TokenUrl
+              bodyPath: $.tokenRequest
+              bodyContentType: application/x-www-form-urlencoded
+              onHttpError: Throw
+              retry:
+                maxAttempts: 3
+              targetPath: $.token
+            - type: FormatString@1
+              description: Build Authorization header value
+              format: "Bearer {$.token.access_token}"
+              targetPath: $.authHeader
+            - type: GetRtEntitiesByType@1
+              description: Load monitored tenants
+              ckTypeId: Monitoring/MonitoredTenant
+              targetPath: $.tenants
+            - type: ForEach@1
+              description: Check every monitored tenant
+              path: $
+              iterationPath: $.tenants.Items
+              targetPath: $.checkedTenants
+              errorsPath: $.tenantErrors
+              continueOnError: true
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: FormatString@1
+                  description: Build LibraryStatus URL
+                  format: "{$.full.cfg.Items[0].Attributes.AssetServicesBaseUrl}/{$.key.Attributes.TenantId}/v1/Models/LibraryStatus"
+                  targetPath: $.key.statusUrl
+                - type: MakeHttpRequest@1
+                  description: Query CK model library status
+                  method: GET
+                  urlPath: $.key.statusUrl
+                  headerParameters:
+                    - name: Authorization
+                      valuePath: $.full.authHeader
+                  onHttpError: Throw
+                  retry:
+                    maxAttempts: 3
+                  targetPath: $.key.status
+                - type: ForEach@1
+                  description: Evaluate every model of the tenant
+                  path: $
+                  iterationPath: $.key.status.items
+                  targetPath: $.key.evaluated
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: If@1
+                      description: Only installed models are relevant
+                      path: $.key.installedVersion
+                      operator: NotEquals
+                      valueType: String
+                      transformations:
+                        - type: If@1
+                          description: Alert on ResolveFailed
+                          path: $.key.modelState
+                          operator: Equals
+                          value: ResolveFailed
+                          valueType: String
+                          transformations:
+                            - type: FormatString@1
+                              format: "🔴 Tenant '{$.full.key.Attributes.TenantId}': CK model '{$.key.name}' ({$.key.installedVersion}) is in state RESOLVE FAILED - its types are not loaded and dependent pipelines will fail. Run octo-cli LibraryStatus/FixAll against this tenant."
+                              targetPath: $.key.alertResolveFailed
+                            - type: ReplyToTeamsChannel@1
+                              webhookUrlPath: $.full.full.cfg.Items[0].Attributes.TeamsWebhookUrl
+                              messageBodyPath: $.key.alertResolveFailed
+                              title: OctoMesh CK Health Alert
+                              themeColor: "CC0000"
+                              continueOnError: false
+                        - type: If@1
+                          description: Alert on catalog inconsistency
+                          path: $.key.hasCatalogInconsistency
+                          operator: Equals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: FormatString@1
+                              format: "🟡 Tenant '{$.full.key.Attributes.TenantId}': CK model '{$.key.name}' ({$.key.installedVersion}) has a catalog inconsistency (a pinned dependency version is not published). The model cannot be (re)installed as-is."
+                              targetPath: $.key.alertInconsistency
+                            - type: ReplyToTeamsChannel@1
+                              webhookUrlPath: $.full.full.cfg.Items[0].Attributes.TeamsWebhookUrl
+                              messageBodyPath: $.key.alertInconsistency
+                              title: OctoMesh CK Health Alert
+                              themeColor: "E3A008"
+                              continueOnError: false
+            - type: ForEach@1
+              description: Alert for tenants whose check failed (unreachable, auth error, ...)
+              path: $
+              iterationPath: $.tenantErrors
+              targetPath: $.tenantErrorAlerts
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: FormatString@1
+                  format: "🔴 CK health check could not verify a monitored tenant (LibraryStatus request failed): {$.key.errorType}: {$.key.message}"
+                  targetPath: $.key.alert
+                - type: ReplyToTeamsChannel@1
+                  webhookUrlPath: $.full.cfg.Items[0].Attributes.TeamsWebhookUrl
+                  messageBodyPath: $.key.alert
+                  title: OctoMesh CK Health Alert
+                  themeColor: "CC0000"
+                  continueOnError: false
+            - type: SetPipelineExecutionResult@1
+              description: Persist the per-tenant errors as the execution output
+              path: $.tenantErrors
+
+  # --- PipelineTrigger (hourly at :05) ---
+  - rtId: '0c4ea1000000000000000003'
+    ckTypeId: System.Communication/PipelineTrigger-1
+    associations:
+      - roleId: System/ParentChild-1
+        targetRtId: '0c4ea1000000000000000001'
+        targetCkTypeId: System.Communication/DataFlow-1
+      - roleId: System.Communication/Triggers-1
+        targetRtId: '0c4ea1000000000000000002'
+        targetCkTypeId: System.Communication/Pipeline-1
+    attributes:
+      - id: System/Name-1
+        value: CK Health Check Hourly
+      - id: System/Description-1
+        value: Triggers the ck-health-check pipeline once per hour.
+      - id: System/Enabled-1
+        value: true
+      - id: System.Bot/CronExpression-1
+        value: "0 5 * * * ?"
