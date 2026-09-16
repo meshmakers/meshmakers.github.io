@@ -808,6 +808,22 @@ entities:
               targetPath: $.txTo
               value: "9999-12-31T23:59:59Z"
               valueType: String
+            # Default to the FISCAL YEAR's own bounds, not to open bounds: the frontend
+            # omits from/to for a full-year export (handover.ts computeRange returns
+            # undefined), and with open bounds the payment axis would list every
+            # transaction the tenant ever had - on prod-1 meshmakers that is 2962 rows
+            # back to 2024 in a package for 2026, plus one association call each.
+            # The document axis is already bounded by DocumentToFiscalYear; this gives
+            # the payment axis the matching bound. A fiscal year without dates keeps the
+            # open fallback (SelectByPath skips missing paths).
+            - type: SelectByPath@1
+              description: Bound the payment axis to the fiscal year
+              selectPath:
+                - path: $.fy.Items[0].Attributes.StartDate
+                  targetPath: $.txFrom
+                - path: $.fy.Items[0].Attributes.EndDate
+                  targetPath: $.txTo
+            # An explicit period narrows it further, so this must stay LAST.
             - type: SelectByPath@1
               description: Copy the optional from/to query params when present
               selectPath:
