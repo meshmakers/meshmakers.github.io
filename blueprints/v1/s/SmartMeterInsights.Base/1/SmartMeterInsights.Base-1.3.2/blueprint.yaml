@@ -1,0 +1,137 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: SmartMeterInsights.Base-1.3.2
+description: |
+  Base blueprint for Smart Meter Insights tenants (Epic AB#4059,
+  AB#5211/AB#5213/AB#5245/AB#5246/AB#5252).
+
+  Topology: the app-host (management) tenant runs the single shared Application
+  workload; one child tenant per consulting firm (energy-community AB#3683
+  pattern). This blueprint is installed on BOTH: the app host needs the
+  Application + the client mirror source, the consulting-firm tenants need the
+  model, archives, roles and the HTTP API. End customers are runtime entities
+  (SmartMeterInsights/Customer) inside the firm tenant — never tenants.
+
+  Installs:
+  - The SmartMeterInsights CK model (Customer, ImportSession, ShareLink,
+    DetectionResult, Recommendation on top of Basic/Basic.Energy; time series
+    reuse Basic.Energy/EnergyMeasurement).
+  - Identity: roles InsightsConsultant/InsightsAdmin, groups Consultants/Admins,
+    and the PKCE client smart-meter-insights-app (AutoProvisionInChildTenants,
+    so every consulting-firm child tenant gets a mirror and sign-in against a
+    child never fails with Invalid redirect_uri). The local-development twin
+    smart-meter-insights-app-debug moved to the sibling blueprint
+    SmartMeterInsights.Dev in 1.3.0 (AB#5252) — it is gated to dev/test, because
+    a localhost-only client was being mirrored into production tenants.
+  - The Basic/Tree root "Anlagen" (510…100) — the parent anchor for every
+    OperatingFacility the app creates (the CK association System/ParentChild on
+    OperatingFacility is mandatory; SMI has no geography seed, unlike
+    energy-community's Basic/City nodes).
+  - Stream-data archives for Basic.Energy/EnergyMeasurement: raw 15-min
+    TimeRangeArchive (energy-measurements, 510…a01) with the cascaded rollup
+    ladder raw -> hourly -> daily -> monthly (calendar-aligned Europe/Vienna;
+    SUM amountvalue_sum + MAX dataquality_max + count chain). All archives ship
+    Disabled (Archive.Status = 2) — activate bottom-up via
+    octo-cli -c ActivateArchive after EnableStreamData (CrateDB reachable).
+  - The smart-meter-insights DataFlow (510…001) with two HTTP pipelines on the
+    default Mesh Adapter 670…002:
+      POST /smi/import (smi-import-readings, role InsightsConsultant) —
+        pre-normalized 15-min readings -> EnergyMeasurement anchor upsert per
+        (MeteringPoint, ObisCode) + archive save + ImportSession entity.
+      POST /smi/share (smi-share-read, anonymous — THE one deliberate
+        exception) — validates a ShareLink token, counts the access and returns
+        the scoped dashboard payload; with ShowDevices/ShowRecommendations set
+        it additionally carries the current DetectionResults / the PUBLISHED
+        Recommendations (AB#5245).
+  - The System.Communication/Application workload (510…200, chart
+    smart-meter-insights from the shared APPS Helm repository 670…005, hostname
+    energy-insights.{{domain.DEFAULT}}). Hostname/Values/ChartVersion/
+    IngressEnabled are isRuntimeState (System.Communication >= 3.28), so seed
+    values apply on fresh installs only.
+
+    1.3.0 re-pins the chart source from the dev repo 670…003 to 670…005
+    (AB#5252): 670…003 exists only on dev/test instances, so on staging and
+    production the association dangled and DeployWorkload failed with "no Helm
+    repository is linked". 670…005 resolves to the environment-correct URL on
+    both channels (AB#4706).
+
+    The hostname stays on the portable {{domain.DEFAULT}}; the customer-facing
+    domain (prod-1: energy-insights.meshmakers.cloud = {{domain.MESHMAKERS}})
+    is set per install on the live entity, because that domain key does not
+    exist on every cluster. See seed-data/configurations/application.yaml.
+
+  DELIBERATELY NOT SEEDED: the Pool (670…001), the Mesh Adapter (670…002) and
+  the Helm repositories (670…003/004/005) belong to the service-managed
+  System.Communication blueprint and reappear on every EnableCommunication.
+
+  PER-INSTALL, NOT SEEDABLE (AB#5252 drift audit, 1.3.2). Three settings a
+  production installation needs are deliberately absent from this seed because
+  they name something that exists only in one installation. They are applied by
+  scripts/om_install_apphost.ps1 as explicit idempotent steps — see the
+  "Production" section of the repo README:
+    * Application Hostname + the publicUri override — the customer-facing vanity
+      host ({{domain.MESHMAKERS}} on prod-1). The seed keeps the portable
+      {{domain.DEFAULT}}, which is the only domain key every cluster defines;
+      seeding MESHMAKERS would fail a test-2 deploy with
+      WorkloadTemplateUnknownPlaceholder. Change Hostname and publicUri
+      TOGETHER — the explicit override wins over the operator-derived value.
+    * The shareTenant value override — names the ONE firm tenant whose Mesh
+      Adapter serves the anonymous /smi/ share proxy (prod-1: mm-beratung).
+      Unset, the app proxies to the app host, which runs no adapter, and the
+      public share view answers 502.
+    * ChartVersion — owned by the CD pipeline / operator, pinned to the released
+      chart (an empty ChartVersion re-resolves to "newest in the repository" on
+      every pool re-registration, AB#4955).
+  All four attributes are isRuntimeState (System.Communication >= 3.28), so a
+  re-apply never overwrites them — which is exactly why the seed cannot carry
+  them and the provisioning script must.
+
+  IN CONTRAST, the OIDC client URIs ARE seeded in full, including the vanity
+  host, because they are NOT runtime state and a forced re-apply rewrites them
+  from this blueprint — see the comment block in
+  seed-data/identity/roles-groups-client.yaml.
+
+  COMPANION BLUEPRINT: SmartMeterInsights.Dev seeds the local-development OIDC
+  client and gates itself to dev/test via `requires`. Install it alongside this
+  one on local and test instances; on production it is a successful no-op.
+
+  Prerequisites:
+  - Communication enabled on the tenant (default Pool/Adapter/Helm repo exist).
+  - Stream data enabled (octo-cli -c EnableStreamData; CrateDB reachable)
+    BEFORE activating the archives.
+
+  Post-install:
+  1. Activate the archives bottom-up:
+     octo-cli -c ActivateArchive 510000000000000000000a01 (raw), then …a02
+     (hourly), …a03 (daily), …a04 (monthly).
+  2. Deploy the HTTP API:
+     octo-cli -c DeployDataFlow --identifier 510000000000000000000001
+  3. On the app-host tenant only: deploy the workload
+     octo-cli -c DeployWorkload -id 510000000000000000000200
+
+  The seed is split with seedDataPaths (one file per topic); all files are
+  merged into ONE runtime model before the import runs, so the order is
+  presentation only and associations may cross files. Requires an engine that
+  knows seedDataPaths (AB#4758).
+ckModelDependencies:
+  # Install order; the blueprint engine installs the FLOOR of each range as the
+  # exact version (versioningRules.md). System floors follow EnergyCommunity /
+  # MeshmakersAccounting: System.Communication 3.28 for the isRuntimeState
+  # workload attributes (AB#4706), System.Identity 2.12 for
+  # AutoProvisionInChildTenants + role/group seeds, System.StreamData 1.7 for
+  # RollupArchive.ReferenceTimeZone (>= 1.6.4) and the runtime-state
+  # Archive.Status (AB#4582). Basic 2.0.3 shares the System-2.2 baseline
+  # (Basic 2.0.0 pins System-2.0.2 and would conflict).
+  - System-[2.2,3.0)
+  - System.Communication-[3.28,4.0)
+  - System.Identity-[2.12,3.0)
+  - System.StreamData-[1.7,2.0)
+  - Basic-[2.0.3,3.0)
+  - Basic.Energy-[1.4,2.0)
+  - SmartMeterInsights-[1.2.0,2.0)
+# All files below are merged into ONE runtime model before the import runs.
+seedDataPaths:
+  - seed-data/identity/roles-groups-client.yaml
+  - seed-data/configurations/structure.yaml
+  - seed-data/configurations/archives.yaml
+  - seed-data/configurations/application.yaml
+  - seed-data/data-flows/smi.yaml
