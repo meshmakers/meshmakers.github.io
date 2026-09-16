@@ -52,6 +52,10 @@ entities:
             doneFolderAttribute: EmailImportDoneFolder
             # AB#5142: park mails that exhausted their import attempts (e.g. a poison
             # mail the render step cannot survive) instead of retrying them forever.
+            # AB#5260: also the way back — a parked mail is marked
+            # 'OctoMesh-Import-Failed', and moving it back into the source folder clears
+            # every marker and imports it again. The path itself comes from the
+            # configuration (Settings -> E-Mail Import), like mailbox and folders.
             failedFolderAttribute: EmailImportFailedFolder
             pollingSecondsAttribute: EmailImportPollingSeconds
         transformations:
