@@ -1,0 +1,46 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: Monitoring.CkHealth-1.0.0
+description: |
+  CK model health monitoring with Microsoft Teams alerting.
+
+  Installs a cron pipeline (hourly) that reads
+  {tenantId}/v1/Models/LibraryStatus for every configured MonitoredTenant and
+  posts an alert to a Teams incoming webhook when an installed CK model is in
+  state ResolveFailed (its types are not loaded and dependent pipelines fail)
+  or has a catalog inconsistency. Tenants whose check request fails
+  (unreachable, auth error) are alerted too - one dead tenant never hides the
+  others.
+
+  Install this blueprint into a HEALTHY operations tenant, not into the
+  tenants being watched, so the watchdog does not share fate with its patient.
+  Cross-tenant reads work because client-credentials tokens bypass the
+  allowed_tenants check.
+
+  Post-install steps:
+    1. Edit the "CK Health Monitor Configuration" entity: TokenUrl,
+       AssetServicesBaseUrl (no trailing slash), ClientId/ClientSecret of a
+       service client with asset read access, Scope (octo_api),
+       TeamsWebhookUrl.
+    2. Edit/add "Monitored Tenant" entities (attribute TenantId), one per
+       tenant to watch.
+    3. Deploy the DataFlow and activate the trigger:
+       octo-cli -c DeployDataFlow --identifier 0c4ea1000000000000000001
+       octo-cli -c DeployTriggers
+    4. Smoke test without waiting for the cron:
+       octo-cli -c ExecutePipeline --identifier 0c4ea1000000000000000002
+
+  Notes: a force re-apply (InstallBlueprint -f) resets the configuration
+  entities to their placeholders - reconfigure afterwards. Alerts repeat on
+  every run until the condition is fixed (intentional). If the token endpoint
+  itself is down, the execution fails visibly but no Teams alert is sent.
+ckModelDependencies:
+  # Satisfiability floor only, NOT the install target: System.Communication is
+  # service-managed and the install is redirected to the
+  # IServiceManagedCkModelDescriptor version (AB#4294).
+  - System.Communication-[3.22.0,4.0)
+  # Floor pinned to the published version (the engine installs the range's
+  # lower bound as an exact version).
+  - Monitoring-[1.0.0,2.0)
+seedDataPaths:
+  - seed-data/master-data/monitor-config.yaml
+  - seed-data/data-flows/ck-health-check.yaml
