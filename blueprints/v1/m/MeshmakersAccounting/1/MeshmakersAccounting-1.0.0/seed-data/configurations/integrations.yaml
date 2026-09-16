@@ -129,6 +129,16 @@ entities:
         value: false
       - id: Meshmakers.Accounting/EmailImportPollingSeconds
         value: 120
+      # EmailImportFailedFolder is deliberately NOT seeded (AB#5260). It matters —
+      # without it a mail the import gave up on stays in the source folder, invisible,
+      # and there is nowhere to drag it back FROM to retry it — but it is a folder PATH,
+      # and this seed carries no mailbox and no folder paths at all: they are tenant
+      # configuration entered in Settings -> E-Mail Import. A path seeded here would be
+      # wrong for every tenant whose mailbox is laid out differently, and a failure
+      # folder that cannot be resolved degrades the import (the adapter logs it and
+      # skips exhausted mails). The rule "a `Failed` sibling of the done folder" is
+      # therefore applied in the Settings page, which is the first place a done folder
+      # actually exists: see defaultFailedFolderFor in email-import-settings.ts.
 
   # ################################################################################
   # ##  BEFORE FLIPPING ANY POLICY IN THIS FILE TO ENFORCE - INCLUDING THE FIVE   ##
