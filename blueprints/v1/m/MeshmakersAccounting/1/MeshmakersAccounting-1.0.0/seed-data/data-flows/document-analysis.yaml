@@ -293,7 +293,7 @@ entities:
                   responseFormat: json
                   temperature: 0.1
                   question: >-
-                    Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. The file may contain ONE invoice or SEVERAL independent invoices concatenated into a single PDF (typical: an Amazon marketplace order produces one invoice per seller for the same order; a scan batch combines several receipts). A new invoice starts ONLY where a new invoice number appears — a multi-page invoice is still ONE invoice; never split by page. Output "invoices" as an array with exactly one element per invoice found and "invoiceCount" as the number of elements. Per invoice also output "pageFrom" and "pageTo" (the 1-based first and last PDF page of that invoice) when the page boundaries are recognizable from the text (page markers, "Seite X von Y", repeated per-invoice headers); OMIT both keys when unsure. Apply ALL of the following rules to EACH invoice element independently. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal for that invoice; otherwise false. Determine the ISO 4217 currency code of the invoice amounts (from the currency symbol or code printed next to the totals, e.g. "$"/"USD", "£"/"GBP", "CHF") and output it as "currency" ONLY when it is NOT euro; OMIT "currency" entirely for euro (€/EUR) invoices. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section. For BOTH parties independently, extract the printed VAT identification number (UID, USt-IdNr., VAT Reg No, e.g. "ATU12345678", "DE123456789") into that party's "vatId" WITHOUT inner spaces; assign each VAT id to the correct party (the vendor's UID is usually in its letterhead, footer or legal block; the customer's next to the billing address); OMIT "vatId" when none is printed for that party.
+                    Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. The file may contain ONE invoice or SEVERAL independent invoices concatenated into a single PDF (typical: an Amazon marketplace order produces one invoice per seller for the same order; a scan batch combines several receipts). A new invoice starts ONLY where a new invoice number appears — a multi-page invoice is still ONE invoice; never split by page. Output "invoices" as an array with exactly one element per invoice found and "invoiceCount" as the number of elements. Per invoice also output "pageFrom" and "pageTo" (the 1-based first and last PDF page of that invoice) when the page boundaries are recognizable from the text (page markers, "Seite X von Y", repeated per-invoice headers); OMIT both keys when unsure. Apply ALL of the following rules to EACH invoice element independently. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal for that invoice; otherwise false. Determine the ISO 4217 currency code of the invoice amounts (from the currency symbol or code printed next to the totals, e.g. "$"/"USD", "£"/"GBP", "CHF") and output it as "currency" ONLY when it is NOT euro; OMIT "currency" entirely for euro (€/EUR) invoices. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section. For BOTH parties independently, extract the printed VAT identification number (UID, USt-IdNr., VAT Reg No, e.g. "ATU12345678", "DE123456789") into that party's "vatId" WITHOUT inner spaces; assign each VAT id to the correct party (the vendor's UID is usually in its letterhead, footer or legal block; the customer's next to the billing address); OMIT "vatId" when none is printed for that party. The amounts of ONE invoice must be internally consistent: netTotal + taxTotal MUST equal grossTotal, and netTotal * (1 + taxRate/100) MUST equal grossTotal. NEVER combine a net, tax or gross figure read on one page of the file with figures read on another page — an image-only PDF assembled from several phone photos puts a different receipt on every page. Read the total block of ONE invoice as a unit, and OMIT a figure you cannot find in that same block rather than substituting one from elsewhere in the file.
                   jsonFormatSample: '{ "invoiceCount": 1, "invoices": [ { "extractionComplete": true, "documentType": "INCOMING", "documentNumber": "RE-2026-001", "documentDate": "2026-03-01", "dueDate": "2026-03-31", "pageFrom": 1, "pageTo": 2, "vendor": { "companyName": "Supplier GmbH", "iban": "AT123456789012345678", "accountName": "Supplier Trading Ltd", "vatId": "ATU12345678", "address": { "street": "Hauptstrasse 1", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "customer": { "companyName": "Our Company GmbH", "address": { "street": "Firmianstrasse 31A", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "grossTotal": 1200.00, "netTotal": 1000.00, "taxTotal": 200.00, "taxRate": 20.0, "currency": "USD" } ] }'
                   targetPath: $.ai.result
                   continueOnError: true
@@ -417,6 +417,15 @@ entities:
                           targetPath: $.docOk
                           valueType: Boolean
                           value: false
+                        # AB#5259: reason for an arithmetic-implausibility demotion. Kept apart
+                        # from the generic "extraction incomplete" note so the inbox states WHY
+                        # the figures were rejected; defaulted here (outside the completeness
+                        # gate) because the reporting block below reads it unconditionally.
+                        - type: SetPrimitiveValue@1
+                          description: Default - totals are arithmetically plausible
+                          targetPath: $.plausNote
+                          valueType: String
+                          value: ""
                         - type: If@1
                           description: Extraction claims complete
                           path: $.key.extractionComplete
@@ -518,6 +527,251 @@ entities:
                                   targetPath: $.docOk
                                   valueType: Boolean
                                   value: false
+                            # --- AB#5259: arithmetic plausibility of the extracted totals ---
+                            # A 3-page image-only PDF (three phone screenshots merged by the iOS
+                            # Quartz PDF writer, "Parkticket CDK Marcel.pdf") made the AI take
+                            # the figures from DIFFERENT pages of the same file: grossTotal 13.88
+                            # with netTotal 10.83 + taxTotal 2.17 = 13.00. The document was marked
+                            # COMPLETED and flowed on into transaction matching with a wrong gross
+                            # total - a silent success is worse than a visible failure. Verify the
+                            # identities the totals must satisfy and demote to INCOMPLETE on a
+                            # mismatch so the document lands in the inbox for review instead.
+                            # Presence-gated throughout: a shop receipt that yields only a gross
+                            # total (no net, no tax, no rate - the normal case) must never be
+                            # demoted by this check. A taxRate of 0 is a genuine 0% invoice and a
+                            # NUMBER; an absent taxRate is not - the null-safe >=0 / <0 pattern of
+                            # the grossTotal guard above is what tells the two apart.
+                            # Every Math@1 below sits INSIDE those gates on purpose: a valuePath
+                            # pointing at an absent value makes the node throw ValueNotSet, which
+                            # would abort the whole upload ForEach.
+                            - type: SetPrimitiveValue@1
+                              description: Default - net total not a number
+                              targetPath: $.netOk
+                              valueType: Boolean
+                              value: false
+                            - type: If@1
+                              description: Net total is a non-negative number
+                              path: $.key.netTotal
+                              operator: GreaterEqualsThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.netOk
+                                  valueType: Boolean
+                                  value: true
+                            - type: If@1
+                              description: Net total is a negative number (credit note)
+                              path: $.key.netTotal
+                              operator: LessThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.netOk
+                                  valueType: Boolean
+                                  value: true
+                            - type: SetPrimitiveValue@1
+                              description: Default - tax total not a number
+                              targetPath: $.taxOk
+                              valueType: Boolean
+                              value: false
+                            - type: If@1
+                              description: Tax total is a non-negative number
+                              path: $.key.taxTotal
+                              operator: GreaterEqualsThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.taxOk
+                                  valueType: Boolean
+                                  value: true
+                            - type: If@1
+                              description: Tax total is a negative number (credit note)
+                              path: $.key.taxTotal
+                              operator: LessThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.taxOk
+                                  valueType: Boolean
+                                  value: true
+                            - type: SetPrimitiveValue@1
+                              description: Default - tax rate not reported
+                              targetPath: $.rateOk
+                              valueType: Boolean
+                              value: false
+                            - type: If@1
+                              description: Tax rate is a number (0% invoices included)
+                              path: $.key.taxRate
+                              operator: GreaterEqualsThan
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.rateOk
+                                  valueType: Boolean
+                                  value: true
+                            - type: SetPrimitiveValue@1
+                              description: Default - no arithmetic contradiction found
+                              targetPath: $.totalsMismatch
+                              valueType: Boolean
+                              value: false
+                            - type: If@1
+                              description: Gross total present - the totals can be cross-checked
+                              path: $.grossOk
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: If@1
+                                  description: Net total present
+                                  path: $.netOk
+                                  operator: Equals
+                                  value: true
+                                  valueType: Boolean
+                                  transformations:
+                                    # (a) netTotal + taxTotal == grossTotal. The strong identity:
+                                    # it holds for every invoice, mixed tax rates included.
+                                    - type: If@1
+                                      description: Tax total present - check netTotal + taxTotal against grossTotal
+                                      path: $.taxOk
+                                      operator: Equals
+                                      value: true
+                                      valueType: Boolean
+                                      transformations:
+                                        - type: Math@1
+                                          description: netTotal + taxTotal
+                                          path: $.key
+                                          itemPath: $.netTotal
+                                          itemTargetPath: $._plausSum
+                                          operation: Add
+                                          valuePath: $.key.taxTotal
+                                        - type: Math@1
+                                          description: (netTotal + taxTotal) - grossTotal
+                                          path: $.key
+                                          itemPath: $._plausSum
+                                          itemTargetPath: $._plausSumDiff
+                                          operation: Subtract
+                                          valuePath: $.key.grossTotal
+                                        # Tolerance 0.02: an invoice with many positions rounds
+                                        # every line, so the sum may legitimately drift a cent or
+                                        # two against the printed gross total. The prod evidence
+                                        # was off by 0.88 - three orders of magnitude clear of it.
+                                        - type: If@1
+                                          description: Sum exceeds the gross total beyond rounding
+                                          path: $.key._plausSumDiff
+                                          operator: GreaterThan
+                                          value: 0.02
+                                          valueType: Double
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.totalsMismatch
+                                              valueType: Boolean
+                                              value: true
+                                        - type: If@1
+                                          description: Sum falls short of the gross total beyond rounding
+                                          path: $.key._plausSumDiff
+                                          operator: LessThan
+                                          value: -0.02
+                                          valueType: Double
+                                          transformations:
+                                            - type: SetPrimitiveValue@1
+                                              targetPath: $.totalsMismatch
+                                              valueType: Boolean
+                                              value: true
+                                    # (b) netTotal * (1 + taxRate/100) == grossTotal, used ONLY
+                                    # when (a) is not decidable because no taxTotal was reported.
+                                    # With a taxTotal present, (a) is both stronger and always
+                                    # true, whereas (b) legitimately fails on a MIXED-RATE
+                                    # document (a restaurant bill: 10% food + 20% drinks) where
+                                    # the AI can report only one rate - running it there would
+                                    # demote perfectly good invoices.
+                                    - type: If@1
+                                      description: No tax total - fall back to the tax-rate identity
+                                      path: $.taxOk
+                                      operator: NotEquals
+                                      value: true
+                                      valueType: Boolean
+                                      transformations:
+                                        - type: If@1
+                                          description: Tax rate reported (0 is a rate, absent is not)
+                                          path: $.rateOk
+                                          operator: Equals
+                                          value: true
+                                          valueType: Boolean
+                                          transformations:
+                                            - type: Math@1
+                                              description: taxRate / 100
+                                              path: $.key
+                                              itemPath: $.taxRate
+                                              itemTargetPath: $._plausRate
+                                              operation: Divide
+                                              value: 100
+                                            - type: Math@1
+                                              description: 1 + taxRate/100
+                                              path: $.key
+                                              itemPath: $._plausRate
+                                              itemTargetPath: $._plausFactor
+                                              operation: Add
+                                              value: 1
+                                            - type: Math@1
+                                              description: netTotal * (1 + taxRate/100)
+                                              path: $.key
+                                              itemPath: $.netTotal
+                                              itemTargetPath: $._plausGross
+                                              operation: Multiply
+                                              valuePath: $.key._plausFactor
+                                            - type: Math@1
+                                              description: netTotal * (1 + taxRate/100) - grossTotal
+                                              path: $.key
+                                              itemPath: $._plausGross
+                                              itemTargetPath: $._plausRateDiff
+                                              operation: Subtract
+                                              valuePath: $.key.grossTotal
+                                            # Wider tolerance than (a): the reported rate carries
+                                            # less precision than a printed tax amount, and the
+                                            # net total is itself rounded to cents before it is
+                                            # multiplied by the factor.
+                                            - type: If@1
+                                              description: Computed gross exceeds the reported one beyond rounding
+                                              path: $.key._plausRateDiff
+                                              operator: GreaterThan
+                                              value: 0.05
+                                              valueType: Double
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.totalsMismatch
+                                                  valueType: Boolean
+                                                  value: true
+                                            - type: If@1
+                                              description: Computed gross falls short of the reported one beyond rounding
+                                              path: $.key._plausRateDiff
+                                              operator: LessThan
+                                              value: -0.05
+                                              valueType: Double
+                                              transformations:
+                                                - type: SetPrimitiveValue@1
+                                                  targetPath: $.totalsMismatch
+                                                  valueType: Boolean
+                                                  value: true
+                            - type: If@1
+                              description: Totals contradict each other - demote instead of matching a wrong gross total
+                              path: $.totalsMismatch
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docOk
+                                  valueType: Boolean
+                                  value: false
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.plausNote
+                                  valueType: String
+                                  value: "The extracted amounts are arithmetically inconsistent - net, tax and gross total do not add up. This typically happens when a multi-page file mixes figures from different pages. No document was created - please verify the amounts and process the document manually."
                         # AB#4452: semantic duplicate detection. The SHA-256 FileHash check
                         # only catches byte-identical files - the same invoice arriving via
                         # two channels (e-mail receipt vs. portal export) passes it, and
@@ -1229,6 +1483,20 @@ entities:
                                   targetPath: $.procError
                                   valueType: String
                                   valuePath: $.dupNote
+                            # AB#5259: the plausibility gate is evaluated BEFORE the duplicate
+                            # checks and clears docOk, so those never run and dupNote stays empty
+                            # when it fires - the two reasons cannot collide.
+                            - type: If@1
+                              description: Totals failed the arithmetic plausibility check (AB#5259)
+                              path: $.plausNote
+                              operator: NotEquals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.procError
+                                  valueType: String
+                                  valuePath: $.plausNote
                             - type: CreateUpdateInfo@1
                               targetPath: $.invoiceError
                               targetValueKind: Array
