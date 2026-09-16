@@ -418,6 +418,41 @@ entities:
                   graphDirection: Outbound        # [1] validate
                   targetPath: $.key.txGroups
 
+                # AB#5085: payment-side lookup, built HERE because txGroups is already
+                # loaded for the cover sheet - no extra association call and no second
+                # copy of the document entities. Emits one compact JSON line per
+                # document: [docId, docNumber, docDate, taxAdvisorNote, txId...], which
+                # zahlungen.csv inverts into txId -> documents. Runs for EVERY document
+                # of the fiscal year, before the scope/period gate, so a payment whose
+                # document is out of period still resolves its number. Returns null when
+                # the document settles no transaction, so Flatten drops it.
+                - type: ExecuteCSharp@1
+                  description: Payment lookup line (document + the transactions it settles)
+                  code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; var ids = new List<string>(); object txObj = txs; if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var t in te.EnumerateArray()) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement p; if (t.TryGetProperty("RtId", out p)) { var s = S(p); if (!string.IsNullOrWhiteSpace(s)) ids.Add(s); } } } if (ids.Count == 0) return null; var head = new List<string> { S(docId), S(docNumber), S(docDate), S(taxNote) }; head.AddRange(ids); return JsonSerializer.Serialize(head.ToArray());'
+                  usings:
+                    - System
+                    - System.Linq
+                    - System.Text.Json
+                    - System.Collections.Generic
+                  returnType: String
+                  arguments:
+                    - name: docId
+                      valuePath: $.key.RtId
+                      dataType: String
+                    - name: docNumber
+                      valuePath: $.key.Attributes.DocumentNumber
+                      dataType: String
+                    - name: docDate
+                      valuePath: $.key.Attributes.DocumentDate
+                      dataType: String
+                    - name: taxNote
+                      valuePath: $.key.Attributes.TaxAdvisorNote
+                      dataType: String
+                    - name: txs
+                      valuePath: $.key.txGroups[0].Items
+                      dataType: RecordArray
+                  targetPath: $.key.payLink
+
                 # 2c) assemble the cover-sheet model — escaping-safe and null-safe.
                 #     We seed a full skeleton (labels set, values ""), then SelectByPath@1
                 #     copies each source attribute into its row VALUE by JSON node (not by
@@ -842,100 +877,34 @@ entities:
                   operator: LessEqualThan
                   comparisonValuePath: $.txTo
               targetPath: $.payTx
-            - type: ForEach@1
-              description: One CSV row per booked transaction, with its linked documents
-              iterationPath: $.payTx.Items
-              targetPath: $.payResults
-              targetValueKind: Simple
-              targetValueWriteMode: Overwrite
-              maxDegreeOfParallelism: 1
-              continueOnError: true
-              transformations:
-                # Reverse of the cover sheet's lookup (there: document -> transactions,
-                # Outbound), so from the payment side the same role is Inbound. Resolves
-                # documents of ANY fiscal year, not just the exported one.
-                - type: GetAssociationTargets@1
-                  description: Documents backing this payment
-                  originRtIdPath: $.key.RtId
-                  originCkTypeId: Basic.Accounting/BankTransaction
-                  targetCkTypeId: Meshmakers.Accounting/AccountingDocument
-                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                  graphDirection: Inbound
-                  targetPath: $.key.docGroups
-                # One node builds the whole row: payment-method classification from the
-                # purpose (there is NO payment-method attribute on BankTransaction, and
-                # bankTransactionCode / transactionText are empty on every finAPI row),
-                # card index and card date extraction, and the linked-document columns.
-                # Emitted as a JSON array of cells so the CSV pass below only has to
-                # quote and join - the same split as the lieferanten.csv index.
-                - type: ExecuteCSharp@1
-                  description: Build the payment row (classification + document columns)
-                  code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<string,string> D10 = v => (v ?? "").Length >= 10 ? v.Substring(0, 10) : (v ?? ""); var pur = Regex.Replace(S(purpose), @"\s+", " ").Trim(); var up = pur.ToUpperInvariant(); string art; if (up.Contains("E-COMM")) art = "Kartenzahlung online"; else if (Regex.IsMatch(up, @"\bPOS\b")) art = "Kartenzahlung POS"; else if (up.Contains("PAYPAL")) art = "PayPal"; else if (up.Contains("SEPA-LASTSCHRIFT") || up.StartsWith("EINZUG")) art = "SEPA-Lastschrift"; else if (up.StartsWith("GEHALT") || up.Contains("LOHN")) art = "Gehalt/Lohn"; else art = "Ueberweisung"; var mk = Regex.Match(pur, @"\bK(\d)\b"); var karte = mk.Success ? "K" + mk.Groups[1].Value : ""; var md = Regex.Match(pur, @"\bK\d\s+(\d{2}\.\d{2}\.)"); if (!md.Success) md = Regex.Match(pur, @"(\d{2}\.\d{2}\.\d{2})\s+\d{2}:\d{2}\s+K\d"); var kartendatum = md.Success ? md.Groups[1].Value : ""; var richtung = amount < 0 ? "Ausgang" : "Eingang"; var status = matchState == 1 ? "Zugeordnet" : matchState == 2 ? "Ohne Beleg" : matchState == 3 ? "Ignoriert" : "Offen"; var ids = new List<string>(); var nums = new List<string>(); var dates = new List<string>(); var months = new List<string>(); var notes = new List<string>(); object docsObj = docs; if (docsObj is JsonElement de && de.ValueKind == JsonValueKind.Array) { foreach (var d in de.EnumerateArray()) { if (d.ValueKind != JsonValueKind.Object) continue; string id = ""; if (d.TryGetProperty("RtId", out var pid)) id = S(pid); string num = "", dat = "", note = ""; if (d.TryGetProperty("Attributes", out var at) && at.ValueKind == JsonValueKind.Object) { if (at.TryGetProperty("DocumentNumber", out var pn)) num = S(pn); if (at.TryGetProperty("DocumentDate", out var pd)) dat = D10(S(pd)); if (at.TryGetProperty("TaxAdvisorNote", out var pt)) note = Regex.Replace(S(pt), @"\s+", " ").Trim(); } if (!string.IsNullOrWhiteSpace(id)) ids.Add(id); if (!string.IsNullOrWhiteSpace(num)) nums.Add(num); if (!string.IsNullOrWhiteSpace(dat)) { dates.Add(dat); months.Add(dat.Length >= 7 ? dat.Substring(0, 7) : ""); } if (!string.IsNullOrWhiteSpace(note)) notes.Add(note); } } var cells = new string[] { D10(S(bookingDate)), D10(S(valueDate)), amount.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("de-AT")), S(currency), richtung, art, karte, kartendatum, S(counterpartName).Trim(), Regex.Replace(S(counterpartIban), @"\s+", "").ToUpperInvariant(), pur, status, ids.Count > 0 ? "Ja" : "Nein", string.Join("|", nums), string.Join("|", ids), string.Join("|", dates), string.Join("|", months.Distinct()), Regex.Replace(S(matchComment), @"\s+", " ").Trim(), inClarification ? "Ja" : "Nein", Regex.Replace(S(clarificationNote), @"\s+", " ").Trim(), string.Join(" | ", notes) }; return JsonSerializer.Serialize(cells);'
-                  usings:
-                    - System
-                    - System.Linq
-                    - System.Text.Json
-                    - System.Text.RegularExpressions
-                    - System.Collections.Generic
-                  returnType: String
-                  arguments:
-                    - name: bookingDate
-                      valuePath: $.key.Attributes.BookingDate
-                      dataType: String
-                    - name: valueDate
-                      valuePath: $.key.Attributes.ValueDate
-                      dataType: String
-                    - name: amount
-                      valuePath: $.key.Attributes.Amount
-                      dataType: Double
-                    - name: currency
-                      valuePath: $.key.Attributes.Currency
-                      dataType: String
-                    - name: purpose
-                      valuePath: $.key.Attributes.Purpose
-                      dataType: String
-                    - name: counterpartName
-                      valuePath: $.key.Attributes.CounterpartName
-                      dataType: String
-                    - name: counterpartIban
-                      valuePath: $.key.Attributes.CounterpartIban
-                      dataType: String
-                    - name: matchComment
-                      valuePath: $.key.Attributes.MatchComment
-                      dataType: String
-                    - name: clarificationNote
-                      valuePath: $.key.Attributes.ClarificationNote
-                      dataType: String
-                    - name: inClarification
-                      valuePath: $.key.Attributes.InClarification
-                      dataType: Boolean
-                    - name: matchState
-                      valuePath: $.key.Attributes.MatchState
-                      dataType: Int
-                    # RecordArray maps to `object` in the generated script, so the whole
-                    # association result arrives as a JsonElement array and the node reads
-                    # the document attributes directly - no inner ForEach needed.
-                    - name: docs
-                      valuePath: $.key.docGroups[0].Items
-                      dataType: RecordArray
-                  targetPath: $.key.payLine
+            # Collect the per-document lookup lines emitted inside the document loop.
             - type: Flatten@1
-              description: Collect the per-transaction payment rows
-              path: $.payResults[*].payLine
-              targetPath: $.payLines
+              description: Collect the payment lookup lines
+              path: $.docResults[*].payLink
+              targetPath: $.payLinkLines
+            # ONE node builds the whole file. Deliberately not a ForEach over the
+            # transactions: that accumulated the full transaction entity AND the full
+            # linked document entities per iteration on top of the document loop, and
+            # took the mesh adapter down on prod-1 meshmakers (orphaned by adapter
+            # restart at 67s and 94s on an export that renders ~800 documents). Here the
+            # context holds the transactions plus a few hundred short strings.
             - type: ExecuteCSharp@1
-              description: Sort the payment rows and emit zahlungen.csv as base64 (UTF-8 BOM)
-              code: 'var list = new List<string>(); object linesObj = lines; if (linesObj is JsonElement je && je.ValueKind == JsonValueKind.Array) { foreach (var el in je.EnumerateArray()) { if (el.ValueKind == JsonValueKind.String) { var s = el.GetString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } } else if (linesObj is System.Collections.IEnumerable seq) { foreach (var o in seq) { var s = o == null ? null : o.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } var parsed = new List<string[]>(); foreach (var s in list) { try { var a = JsonSerializer.Deserialize<string[]>(s); if (a != null && a.Length == 21) parsed.Add(a); } catch { } } if (parsed.Count == 0) return null; parsed = parsed.OrderBy(r => r[0], StringComparer.Ordinal).ThenBy(r => r[8], StringComparer.OrdinalIgnoreCase).ToList(); Func<string,string> q = v => { v = v ?? ""; return (v.Contains(";") || v.Contains("\"") || v.Contains("\n") || v.Contains("\r")) ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; }; var header = "Buchungsdatum;Valutadatum;Betrag;Waehrung;Richtung;Zahlungsart;Karte;Kartendatum;Gegenpartei;GegenIBAN;Verwendungszweck;Status;BelegVorhanden;Belegnummer;BelegId;Belegdatum;Belegmonat;Kommentar;Klaerung;Klaerungsnotiz;NotizStB"; var rows = parsed.Select(r => string.Join(";", r.Select(q))); var csv = "﻿" + header + "\r\n" + string.Join("\r\n", rows) + "\r\n"; return Convert.ToBase64String(Encoding.UTF8.GetBytes(csv));'
+              description: Build zahlungen.csv (classification + document columns) as base64
+              code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<string,string> D10 = v => (v ?? "").Length >= 10 ? v.Substring(0, 10) : (v ?? ""); Func<string,string> W = v => Regex.Replace(v ?? "", @"\s+", " ").Trim(); var map = new Dictionary<string, List<string[]>>(StringComparer.Ordinal); object linksObj = links; var lst = new List<string>(); if (linksObj is JsonElement lj && lj.ValueKind == JsonValueKind.Array) { foreach (var el in lj.EnumerateArray()) { if (el.ValueKind == JsonValueKind.String) { var s0 = el.GetString(); if (!string.IsNullOrWhiteSpace(s0)) lst.Add(s0); } } } else if (linksObj is System.Collections.IEnumerable lseq) { foreach (var o in lseq) { var s0 = o == null ? null : (o is JsonElement je2 ? (je2.ValueKind == JsonValueKind.String ? je2.GetString() : je2.ToString()) : o.ToString()); if (!string.IsNullOrWhiteSpace(s0)) lst.Add(s0); } } foreach (var s1 in lst) { try { var a = JsonSerializer.Deserialize<string[]>(s1); if (a == null || a.Length < 5) continue; var head = new string[] { a[0], a[1], a[2], a[3] }; for (var i = 4; i < a.Length; i++) { var k = a[i]; if (string.IsNullOrWhiteSpace(k)) continue; List<string[]> l; if (!map.TryGetValue(k, out l)) { l = new List<string[]>(); map[k] = l; } l.Add(head); } } catch { } } var rows = new List<string[]>(); object txObj = tx; if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var t in te.EnumerateArray()) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement pid; var rtid = t.TryGetProperty("RtId", out pid) ? S(pid) : ""; JsonElement at; if (!t.TryGetProperty("Attributes", out at) || at.ValueKind != JsonValueKind.Object) continue; Func<string,string> A = n => { JsonElement v; return at.TryGetProperty(n, out v) ? S(v) : ""; }; double amount = 0; JsonElement pa; if (at.TryGetProperty("Amount", out pa) && pa.ValueKind == JsonValueKind.Number) amount = pa.GetDouble(); int ms = 0; JsonElement pm; if (at.TryGetProperty("MatchState", out pm) && pm.ValueKind == JsonValueKind.Number) ms = pm.GetInt32(); JsonElement pc; var incl = at.TryGetProperty("InClarification", out pc) && pc.ValueKind == JsonValueKind.True; var pur = W(A("Purpose")); var up = pur.ToUpperInvariant(); string art; if (up.Contains("E-COMM")) art = "Kartenzahlung online"; else if (Regex.IsMatch(up, @"\bPOS\b")) art = "Kartenzahlung POS"; else if (up.Contains("PAYPAL")) art = "PayPal"; else if (up.Contains("SEPA-LASTSCHRIFT") || up.StartsWith("EINZUG")) art = "SEPA-Lastschrift"; else if (up.StartsWith("GEHALT") || up.Contains("LOHN")) art = "Gehalt/Lohn"; else art = "Ueberweisung"; var mk = Regex.Match(pur, @"\bK(\d)\b"); var karte = mk.Success ? "K" + mk.Groups[1].Value : ""; var md = Regex.Match(pur, @"\bK\d\s+(\d{2}\.\d{2}\.)"); if (!md.Success) md = Regex.Match(pur, @"(\d{2}\.\d{2}\.\d{2})\s+\d{2}:\d{2}\s+K\d"); var kartendatum = md.Success ? md.Groups[1].Value : ""; var status = ms == 1 ? "Zugeordnet" : ms == 2 ? "Ohne Beleg" : ms == 3 ? "Ignoriert" : "Offen"; List<string[]> docs; if (!map.TryGetValue(rtid, out docs)) docs = new List<string[]>(); var nums = docs.Select(x => x[1]).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var ids = docs.Select(x => x[0]).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var dates = docs.Select(x => D10(x[2])).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var months = dates.Select(x => x.Length >= 7 ? x.Substring(0, 7) : "").Where(x => x.Length > 0).Distinct().ToList(); var notes = docs.Select(x => W(x[3])).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); rows.Add(new string[] { D10(A("BookingDate")), D10(A("ValueDate")), amount.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("de-AT")), A("Currency"), amount < 0 ? "Ausgang" : "Eingang", art, karte, kartendatum, A("CounterpartName").Trim(), Regex.Replace(A("CounterpartIban"), @"\s+", "").ToUpperInvariant(), pur, status, ids.Count > 0 ? "Ja" : "Nein", string.Join("|", nums), string.Join("|", ids), string.Join("|", dates), string.Join("|", months), W(A("MatchComment")), incl ? "Ja" : "Nein", W(A("ClarificationNote")), string.Join(" | ", notes) }); } } if (rows.Count == 0) return null; rows = rows.OrderBy(r => r[0], StringComparer.Ordinal).ThenBy(r => r[8], StringComparer.OrdinalIgnoreCase).ToList(); Func<string,string> q = v => { v = v ?? ""; return (v.Contains(";") || v.Contains("\"") || v.Contains("\n") || v.Contains("\r")) ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; }; var header = "Buchungsdatum;Valutadatum;Betrag;Waehrung;Richtung;Zahlungsart;Karte;Kartendatum;Gegenpartei;GegenIBAN;Verwendungszweck;Status;BelegVorhanden;Belegnummer;BelegId;Belegdatum;Belegmonat;Kommentar;Klaerung;Klaerungsnotiz;NotizStB"; var csv = "﻿" + header + "\r\n" + string.Join("\r\n", rows.Select(r => string.Join(";", r.Select(q)))) + "\r\n"; return Convert.ToBase64String(Encoding.UTF8.GetBytes(csv));'
               usings:
                 - System
                 - System.Linq
                 - System.Text
                 - System.Text.Json
+                - System.Text.RegularExpressions
                 - System.Collections.Generic
               returnType: String
               arguments:
-                - name: lines
-                  valuePath: $.payLines
+                - name: tx
+                  valuePath: $.payTx.Items
+                  dataType: RecordArray
+                - name: links
+                  valuePath: $.payLinkLines
                   dataType: StringArray
               targetPath: $.zahlungenB64
             - type: If@1
