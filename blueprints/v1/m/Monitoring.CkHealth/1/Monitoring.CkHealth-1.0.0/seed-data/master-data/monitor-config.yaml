@@ -1,0 +1,35 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Monitoring-[1.0,2.0)
+entities:
+  # --- Monitor configuration (edit after install; not blueprint-locked) ---
+  - rtId: '0c4ea1000000000000000004'
+    ckTypeId: Monitoring/CkHealthMonitorConfig-1
+    attributes:
+      - id: System/Name-1
+        value: CK Health Monitor Configuration
+      - id: System/RtBlueprintLocked-1
+        value: false
+      - id: Monitoring/TokenUrl-1
+        value: https://CHANGE-ME-identity.example.com/connect/token
+      - id: Monitoring/AssetServicesBaseUrl-1
+        value: https://CHANGE-ME-asset.example.com
+      - id: Monitoring/ClientId-1
+        value: CHANGE-ME-client-id
+      - id: Monitoring/ClientSecret-1
+        value: CHANGE-ME-client-secret
+      - id: Monitoring/Scope-1
+        value: octo_api
+      - id: Monitoring/TeamsWebhookUrl-1
+        value: https://CHANGE-ME.webhook.office.com/webhookb2/...
+
+  # --- Example monitored tenant (edit/duplicate; not blueprint-locked) ---
+  - rtId: '0c4ea1000000000000000005'
+    ckTypeId: Monitoring/MonitoredTenant-1
+    attributes:
+      - id: System/Name-1
+        value: Monitored Tenant CHANGE-ME
+      - id: System/RtBlueprintLocked-1
+        value: false
+      - id: Monitoring/TenantId-1
+        value: CHANGE-ME-tenant-id
