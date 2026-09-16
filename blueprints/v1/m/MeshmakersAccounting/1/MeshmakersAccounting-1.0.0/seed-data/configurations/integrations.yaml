@@ -40,22 +40,40 @@ entities:
   # Same rtId/wellKnownName as demo-energy-iq's configuration so a tenant carrying
   # both imports is upserted in place.
   #
-  # SECRET — the ClientSecret (and the environment-specific IssuerUri/TenantId) are
-  # intentionally NOT committed. Every blueprint (re-)apply upserts this entity and
-  # RESETS these to the placeholders — restore them afterwards via
-  # scripts/om_set_secrets.ps1 (reads the gitignored scripts/secrets.local.json).
+  # SECRET — the ClientSecret is intentionally NOT committed. It IS runtime state, so a
+  # re-apply preserves whatever an operator set; a fresh tenant gets the angle-bracket
+  # placeholder, which the platform reads as "this account HAS no secret" and routes
+  # through the impersonation / on-behalf-of grant (AB#5114/AB#5115). Restore a real
+  # secret via scripts/om_set_secrets.ps1 only where the classic client_credentials
+  # path is wanted.
+  #
+  # IssuerUri and TenantId are DELIBERATELY NOT runtime state (see the CK model comment
+  # on System.Communication/ServiceAccountConfiguration): they are author configuration,
+  # so every re-apply WRITES WHAT STANDS HERE. Shipping angle-bracket placeholders here
+  # therefore overwrote the working values on every existing tenant — prod-1 incident
+  # 15.09.2026: all six accounting tenants lost their pipeline identity at once and
+  # every service-account pipeline was refused fail-closed ("no token could be acquired
+  # for client 'accounting-ai-prompt'"). `serviceAccount/reconcile` does NOT repair it:
+  # it treats any concrete-looking URI it does not recognise as a deliberate foreign
+  # identity target and leaves it alone.
+  #   * IssuerUri -> the {{service.authority}} deploy-time token. The communication
+  #     controller resolves it per installation when it projects the configuration to
+  #     the adapter (AB#5111), so the same seed is correct on every environment.
+  #   * TenantId  -> empty, which means "the tenant the adapter runs for" (AB#5115).
+  #     Older controllers rewrite it to the current tenant at projection time anyway.
+  # Never put an environment-specific literal or a <placeholder> into either.
   - rtId: 67f0c00ec4ff02221e0b7002
     ckTypeId: System.Communication/ServiceAccountConfiguration
     rtWellKnownName: ServiceAccountConfig
     attributes:
       - id: System.Communication/IssuerUri
-        value: "<identity-service-url-here>"
+        value: "{{service.authority}}"
       - id: System.Communication/ClientId
         value: "accounting-ai-prompt"
       - id: System.Communication/ClientSecret
         value: "<service-account-client-secret-here>"
       - id: System/TenantId
-        value: "<tenant-id-here>"
+        value: ""
   # --- finAPI configuration ------------------------------------------------------
   # Loaded via GetPipelineConfigByWellKnownName (wellKnownName: FinApiConfiguration)
   # by all finAPI pipelines. A pipeline's GlobalConfiguration is built from its
