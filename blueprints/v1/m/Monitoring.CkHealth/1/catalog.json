@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "Monitoring.CkHealth",
+  "majorVersion": 1,
+  "latestVersion": "1.0.0",
+  "description": "CK model health monitoring with Microsoft Teams alerting.\n\nInstalls a cron pipeline (hourly) that reads\n{tenantId}/v1/Models/LibraryStatus for every configured MonitoredTenant and\nposts an alert to a Teams incoming webhook when an installed CK model is in\nstate ResolveFailed (its types are not loaded and dependent pipelines fail)\nor has a catalog inconsistency. Tenants whose check request fails\n(unreachable, auth error) are alerted too - one dead tenant never hides the\nothers.\n\nInstall this blueprint into a HEALTHY operations tenant, not into the\ntenants being watched, so the watchdog does not share fate with its patient.\nCross-tenant reads work because client-credentials tokens bypass the\nallowed_tenants check.\n\nPost-install steps:\n  1. Edit the \u0022CK Health Monitor Configuration\u0022 entity: TokenUrl,\n     AssetServicesBaseUrl (no trailing slash), ClientId/ClientSecret of a\n     service client with asset read access, Scope (octo_api),\n     TeamsWebhookUrl.\n  2. Edit/add \u0022Monitored Tenant\u0022 entities (attribute TenantId), one per\n     tenant to watch.\n  3. Deploy the DataFlow and activate the trigger:\n     octo-cli -c DeployDataFlow --identifier 0c4ea1000000000000000001\n     octo-cli -c DeployTriggers\n  4. Smoke test without waiting for the cron:\n     octo-cli -c ExecutePipeline --identifier 0c4ea1000000000000000002\n\nNotes: a force re-apply (InstallBlueprint -f) resets the configuration\nentities to their placeholders - reconfigure afterwards. Alerts repeat on\nevery run until the condition is fixed (intentional). If the token endpoint\nitself is down, the execution fails visibly but no Teams alert is sent.\n",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "directoryPath": "blueprints/v1/m/Monitoring.CkHealth/1/Monitoring.CkHealth-1.0.0",
+      "publishedAt": "2026-09-16T11:09:58.8025275Z"
+    }
+  ],
+  "updatedAt": "2026-09-16T11:09:58.8171455Z"
+}
