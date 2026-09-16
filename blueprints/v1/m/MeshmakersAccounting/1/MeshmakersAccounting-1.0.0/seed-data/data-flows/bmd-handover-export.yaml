@@ -98,9 +98,18 @@ entities:
           #      running number and per-segment sanitizing come from CreateZipArchive@1
           #      (appendSequenceNumber; pathSegments entries). A belege.csv index
           #      (semicolon CSV, UTF-8 BOM) in the ZIP root lists every document's
-          #      parsed data (Datum/Belegnummer/Typ/LieferantKunde/Netto/USt/Brutto/
-          #      Waehrung) plus its final path — usable as a BMD-import starting point
-          #      (no Kontierung/account mapping by design).
+          #      parsed data (Datum/Belegnummer/BelegId/Typ/LieferantKunde/Netto/USt/
+          #      Brutto/Waehrung) plus its final path — usable as a BMD-import starting
+          #      point (no Kontierung/account mapping by design).
+          #  [PAY] zahlungen.csv (AB#5085) is the PAYMENT-side index beside it: one row
+          #      per bank transaction booked in the delivered period — including the ones
+          #      with no document at all, which appear nowhere else in the package. Gated
+          #      on BookingDate while the documents stay gated on DocumentDate, carries
+          #      the transaction comments (MatchComment/ClarificationNote) and the linked
+          #      document's TaxAdvisorNote, and joins to belege.csv on BelegId. Payment
+          #      method is derived from the Purpose text (E-COMM / POS / PAYPAL / …) —
+          #      BankTransaction has no payment-method attribute and finAPI leaves
+          #      bankTransactionCode and transactionText empty.
           # =============================================================================
 
           triggers:
@@ -645,7 +654,7 @@ entities:
                       targetPath: $.key.baseFileName
                     - type: WriteJson@1
                       description: Entry skeleton (path segments + belege.csv manifest columns)
-                      jsonString: '{"pathSegments":["","","",""],"scratchFileToken":"","length":0,"manifest":{"Datum":"","Belegnummer":"","Typ":"","LieferantKunde":"","UID":"","Netto":"","USt":"","Brutto":"","Waehrung":""}}'
+                      jsonString: '{"pathSegments":["","","",""],"scratchFileToken":"","length":0,"manifest":{"Datum":"","Belegnummer":"","BelegId":"","Typ":"","LieferantKunde":"","UID":"","Netto":"","USt":"","Brutto":"","Waehrung":""}}'
                       targetPath: $.key.entry
                     - type: SelectByPath@1
                       description: Fill path, content reference and manifest (skips missing)
@@ -666,6 +675,11 @@ entities:
                           targetPath: $.key.entry.manifest.Datum
                         - path: $.key.docNumberClean
                           targetPath: $.key.entry.manifest.Belegnummer
+                        # AB#5085: join key into zahlungen.csv. Document numbers are
+                        # frequently missing or mis-OCRed on scans, so the rtId is the
+                        # only reliable way to tie a payment row to its document row.
+                        - path: $.key.RtId
+                          targetPath: $.key.entry.manifest.BelegId
                         - path: $.key.typeFolder
                           targetPath: $.key.entry.manifest.Typ
                         - path: $.key.party
@@ -759,6 +773,168 @@ entities:
                 - type: WriteJson@1
                   description: Append the entry to the zip entries
                   jsonStringPath: $.lieferantenEntryJson
+                  targetPath: $.zipEntries
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+            # -- 3c) zahlungen.csv: the payment-side index (AB#5085) --------------------
+            # Everything above is document-axis: a payment shows up only inside the cover
+            # sheet of ITS document, and a payment without a document does not show up at
+            # all. The tax advisor reconciles the bank statement, so she needs the payment
+            # axis too - one row per transaction booked in the delivered period, the
+            # receiptless ones included, carrying the comments kept on the transaction
+            # (MatchComment / ClarificationNote) and the note on the linked document
+            # (TaxAdvisorNote). Joins to belege.csv on BelegId.
+            #
+            # The two axes stay deliberately different: documents are gated on
+            # DocumentDate, this file on BookingDate. That is the decision from the
+            # 03.09.2026 root-cause analysis - PeriodBasis stays DOCUMENTDATE (GmbH,
+            # section 189 UGB accrual accounting + section 17 UStG Soll-Besteuerung) and
+            # the payment axis ships as an ADDITIONAL index rather than moving the cut.
+            #
+            # Field filters on BookingDate were verified against prod-1 (109 hits for
+            # August 2026), so the transactions are narrowed server-side instead of
+            # loading the whole history - AB#4389 (dynamic date attributes do not coerce)
+            # does not bite here.
+            #
+            # Amounts use the de-AT decimal comma: this file is read in Excel by the tax
+            # advisor, not imported into BMD.
+            - type: SetPrimitiveValue@1
+              description: Default payment period lower bound (open)
+              targetPath: $.txFrom
+              value: "0001-01-01T00:00:00Z"
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Default payment period upper bound (open)
+              targetPath: $.txTo
+              value: "9999-12-31T23:59:59Z"
+              valueType: String
+            - type: SelectByPath@1
+              description: Copy the optional from/to query params when present
+              selectPath:
+                - path: $.query.from
+                  targetPath: $.txFrom
+                - path: $.query.to
+                  targetPath: $.txTo
+            - type: GetRtEntitiesByType@1
+              description: Bank transactions booked inside the delivered period
+              ckTypeId: Basic.Accounting/BankTransaction
+              fieldFilters:
+                - attributePath: BookingDate
+                  operator: GreaterEqualThan
+                  comparisonValuePath: $.txFrom
+                - attributePath: BookingDate
+                  operator: LessEqualThan
+                  comparisonValuePath: $.txTo
+              targetPath: $.payTx
+            - type: ForEach@1
+              description: One CSV row per booked transaction, with its linked documents
+              iterationPath: $.payTx.Items
+              targetPath: $.payResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              continueOnError: true
+              transformations:
+                # Reverse of the cover sheet's lookup (there: document -> transactions,
+                # Outbound), so from the payment side the same role is Inbound. Resolves
+                # documents of ANY fiscal year, not just the exported one.
+                - type: GetAssociationTargets@1
+                  description: Documents backing this payment
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Basic.Accounting/BankTransaction
+                  targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                  graphDirection: Inbound
+                  targetPath: $.key.docGroups
+                # One node builds the whole row: payment-method classification from the
+                # purpose (there is NO payment-method attribute on BankTransaction, and
+                # bankTransactionCode / transactionText are empty on every finAPI row),
+                # card index and card date extraction, and the linked-document columns.
+                # Emitted as a JSON array of cells so the CSV pass below only has to
+                # quote and join - the same split as the lieferanten.csv index.
+                - type: ExecuteCSharp@1
+                  description: Build the payment row (classification + document columns)
+                  code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<string,string> D10 = v => (v ?? "").Length >= 10 ? v.Substring(0, 10) : (v ?? ""); var pur = Regex.Replace(S(purpose), @"\s+", " ").Trim(); var up = pur.ToUpperInvariant(); string art; if (up.Contains("E-COMM")) art = "Kartenzahlung online"; else if (Regex.IsMatch(up, @"\bPOS\b")) art = "Kartenzahlung POS"; else if (up.Contains("PAYPAL")) art = "PayPal"; else if (up.Contains("SEPA-LASTSCHRIFT") || up.StartsWith("EINZUG")) art = "SEPA-Lastschrift"; else if (up.StartsWith("GEHALT") || up.Contains("LOHN")) art = "Gehalt/Lohn"; else art = "Ueberweisung"; var mk = Regex.Match(pur, @"\bK(\d)\b"); var karte = mk.Success ? "K" + mk.Groups[1].Value : ""; var md = Regex.Match(pur, @"\bK\d\s+(\d{2}\.\d{2}\.)"); if (!md.Success) md = Regex.Match(pur, @"(\d{2}\.\d{2}\.\d{2})\s+\d{2}:\d{2}\s+K\d"); var kartendatum = md.Success ? md.Groups[1].Value : ""; var richtung = amount < 0 ? "Ausgang" : "Eingang"; var status = matchState == 1 ? "Zugeordnet" : matchState == 2 ? "Ohne Beleg" : matchState == 3 ? "Ignoriert" : "Offen"; var ids = new List<string>(); var nums = new List<string>(); var dates = new List<string>(); var months = new List<string>(); var notes = new List<string>(); if (docs is JsonElement de && de.ValueKind == JsonValueKind.Array) { foreach (var d in de.EnumerateArray()) { if (d.ValueKind != JsonValueKind.Object) continue; string id = ""; if (d.TryGetProperty("RtId", out var pid)) id = S(pid); string num = "", dat = "", note = ""; if (d.TryGetProperty("Attributes", out var at) && at.ValueKind == JsonValueKind.Object) { if (at.TryGetProperty("DocumentNumber", out var pn)) num = S(pn); if (at.TryGetProperty("DocumentDate", out var pd)) dat = D10(S(pd)); if (at.TryGetProperty("TaxAdvisorNote", out var pt)) note = Regex.Replace(S(pt), @"\s+", " ").Trim(); } if (!string.IsNullOrWhiteSpace(id)) ids.Add(id); if (!string.IsNullOrWhiteSpace(num)) nums.Add(num); if (!string.IsNullOrWhiteSpace(dat)) { dates.Add(dat); months.Add(dat.Length >= 7 ? dat.Substring(0, 7) : ""); } if (!string.IsNullOrWhiteSpace(note)) notes.Add(note); } } var cells = new string[] { D10(S(bookingDate)), D10(S(valueDate)), amount.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("de-AT")), S(currency), richtung, art, karte, kartendatum, S(counterpartName).Trim(), Regex.Replace(S(counterpartIban), @"\s+", "").ToUpperInvariant(), pur, status, ids.Count > 0 ? "Ja" : "Nein", string.Join("|", nums), string.Join("|", ids), string.Join("|", dates), string.Join("|", months.Distinct()), Regex.Replace(S(matchComment), @"\s+", " ").Trim(), inClarification ? "Ja" : "Nein", Regex.Replace(S(clarificationNote), @"\s+", " ").Trim(), string.Join(" | ", notes) }; return JsonSerializer.Serialize(cells);'
+                  usings:
+                    - System
+                    - System.Linq
+                    - System.Text.Json
+                    - System.Text.RegularExpressions
+                    - System.Collections.Generic
+                  returnType: String
+                  arguments:
+                    - name: bookingDate
+                      valuePath: $.key.Attributes.BookingDate
+                      dataType: String
+                    - name: valueDate
+                      valuePath: $.key.Attributes.ValueDate
+                      dataType: String
+                    - name: amount
+                      valuePath: $.key.Attributes.Amount
+                      dataType: Double
+                    - name: currency
+                      valuePath: $.key.Attributes.Currency
+                      dataType: String
+                    - name: purpose
+                      valuePath: $.key.Attributes.Purpose
+                      dataType: String
+                    - name: counterpartName
+                      valuePath: $.key.Attributes.CounterpartName
+                      dataType: String
+                    - name: counterpartIban
+                      valuePath: $.key.Attributes.CounterpartIban
+                      dataType: String
+                    - name: matchComment
+                      valuePath: $.key.Attributes.MatchComment
+                      dataType: String
+                    - name: clarificationNote
+                      valuePath: $.key.Attributes.ClarificationNote
+                      dataType: String
+                    - name: inClarification
+                      valuePath: $.key.Attributes.InClarification
+                      dataType: Boolean
+                    - name: matchState
+                      valuePath: $.key.Attributes.MatchState
+                      dataType: Int
+                    # RecordArray maps to `object` in the generated script, so the whole
+                    # association result arrives as a JsonElement array and the node reads
+                    # the document attributes directly - no inner ForEach needed.
+                    - name: docs
+                      valuePath: $.key.docGroups[0].Items
+                      dataType: RecordArray
+                  targetPath: $.key.payLine
+            - type: Flatten@1
+              description: Collect the per-transaction payment rows
+              path: $.payResults[*].payLine
+              targetPath: $.payLines
+            - type: ExecuteCSharp@1
+              description: Sort the payment rows and emit zahlungen.csv as base64 (UTF-8 BOM)
+              code: 'var list = new List<string>(); if (lines is JsonElement je && je.ValueKind == JsonValueKind.Array) { foreach (var el in je.EnumerateArray()) { if (el.ValueKind == JsonValueKind.String) { var s = el.GetString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } } else if (lines is System.Collections.IEnumerable seq) { foreach (var o in seq) { var s = o == null ? null : o.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } var parsed = new List<string[]>(); foreach (var s in list) { try { var a = JsonSerializer.Deserialize<string[]>(s); if (a != null && a.Length == 21) parsed.Add(a); } catch { } } if (parsed.Count == 0) return null; parsed = parsed.OrderBy(r => r[0], StringComparer.Ordinal).ThenBy(r => r[8], StringComparer.OrdinalIgnoreCase).ToList(); Func<string,string> q = v => { v = v ?? ""; return (v.Contains(";") || v.Contains("\"") || v.Contains("\n") || v.Contains("\r")) ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; }; var header = "Buchungsdatum;Valutadatum;Betrag;Waehrung;Richtung;Zahlungsart;Karte;Kartendatum;Gegenpartei;GegenIBAN;Verwendungszweck;Status;BelegVorhanden;Belegnummer;BelegId;Belegdatum;Belegmonat;Kommentar;Klaerung;Klaerungsnotiz;NotizStB"; var rows = parsed.Select(r => string.Join(";", r.Select(q))); var csv = "﻿" + header + "\r\n" + string.Join("\r\n", rows) + "\r\n"; return Convert.ToBase64String(Encoding.UTF8.GetBytes(csv));'
+              usings:
+                - System
+                - System.Linq
+                - System.Text
+                - System.Text.Json
+                - System.Collections.Generic
+              returnType: String
+              arguments:
+                - name: lines
+                  valuePath: $.payLines
+                  dataType: StringArray
+              targetPath: $.zahlungenB64
+            - type: If@1
+              description: Append the payment index only when there is at least one row
+              path: $.zahlungenB64
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: FormatString@1
+                  description: Verbatim zip entry for the payment index (base64 is JSON-safe)
+                  format: '{"fileName":"zahlungen.csv","contentBase64":"{$.zahlungenB64}","verbatim":true}'
+                  targetPath: $.zahlungenEntryJson
+                - type: WriteJson@1
+                  description: Append the entry to the zip entries
+                  jsonStringPath: $.zahlungenEntryJson
                   targetPath: $.zipEntries
                   targetValueKind: Array
                   targetValueWriteMode: Append
