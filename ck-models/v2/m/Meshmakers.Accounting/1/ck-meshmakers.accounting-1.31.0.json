@@ -1284,7 +1284,7 @@
       "id": "EmailImportFailedFolder-1",
       "valueType": "String",
       "isRuntimeState": true,
-      "description": "Graph folder path a mail is moved to once it exhausted its import attempts (AB#5142) \u2014 e.g. a poison mail whose processing keeps failing or killing the adapter. Empty = exhausted mails stay in the source folder and are skipped."
+      "description": "Graph folder path a mail is moved to once it exhausted its import attempts (AB#5142) \u2014 e.g. a poison mail whose processing keeps failing or killing the adapter. Also the retry affordance (AB#5260): the adapter marks a parked mail \u0027OctoMesh-Import-Failed\u0027, and moving it back into the source folder clears every marker and imports it again. Empty = exhausted mails stay in the source folder, silently skipped and with nowhere to move them back from; Settings -\u003E E-Mail Import therefore proposes a \u0027Failed\u0027 sibling of the done folder."
     },
     {
       "id": "EmailImportMailbox-1",
