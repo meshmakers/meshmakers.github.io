@@ -82,9 +82,11 @@ entities:
           #      absent then, and a missing path would make FormatString throw — seeded
           #      via SetPrimitiveValue + SelectByPath, same pattern as the AB#4395
           #      PeriodBasis read). The frontend Handover page computes from/to from the
-          #      period picker. NOTE: out-of-period documents are still rendered (like
-          #      scope-excluded ones) — they are only dropped from the ZIP; rendering is
-          #      cheap (~40ms/doc), a skip-early refactor was deliberately not done.
+          #      period picker. AB#5263 reversed the earlier "rendering is cheap, skip
+          #      early is not worth it" call: out-of-period and scope-excluded documents
+          #      used to be rendered, file-loaded and merged in full and only dropped
+          #      from the ZIP, so a one-month export cost exactly as much as the whole
+          #      fiscal year. They are now gated out before any of that work.
           #  [5] DONE: the Zahlungsnachweis section lists ONE row per linked transaction
           #      (inner ForEach over $.key.txGroups[0].Items -> Flatten -> inject). Verified
           #      live with a document linked to two transactions.
@@ -298,377 +300,439 @@ entities:
                       value: "no"
                       valueType: String
 
-                # Folder + file-name building blocks (AB#4392 v2): the ZIP is grouped
-                # as {fiscal year}/{month yyyy-MM}/{type} and files are named
-                # {document date}_{vendor or customer}_{sequence}.pdf. The sequence
-                # number is appended by CreateZipArchive@1 (appendSequenceNumber) and
-                # all segments are sanitized there, so vendor names with slashes or
-                # other invalid characters cannot break the archive structure.
-                - type: SetPrimitiveValue@1
-                  description: Default document date (documents without a date)
-                  targetPath: $.key.docDate
-                  value: "0000-00-00"
-                  valueType: String
-                - type: SelectByPath@1
-                  description: Copy the document date when present
-                  selectPath:
-                    - path: $.key.Attributes.DocumentDate
-                      targetPath: $.key.docDate
-                - type: TransformString@1
-                  description: Trim to the date (yyyy-MM-dd)
-                  sourcePath: $.key.docDate
-                  targetPath: $.key.docDate
-                  operation: SubstringFromStart
-                  length: 10
-                - type: TransformString@1
-                  description: Month folder (yyyy-MM)
-                  sourcePath: $.key.docDate
-                  targetPath: $.key.monthFolder
-                  operation: SubstringFromStart
-                  length: 7
-                # Type folder: recurring master documents (Dauerbelege — contracts,
-                # insurance, subscriptions; DocumentState RECURRING=4) go to
-                # "Verträge", the rest split by DocumentType into incoming/outgoing
-                # invoices. Defaults to incoming (DocumentType 0).
-                - type: SetPrimitiveValue@1
-                  description: Default type folder (incoming invoices)
-                  targetPath: $.key.typeFolder
-                  value: Eingangsrechnungen
-                  valueType: String
+                # AB#5263: everything below is per-document work that costs a file load, a
+                # cover render and a PDF merge. It used to run for EVERY document of the
+                # fiscal year even when a month or quarter was requested, because only the
+                # ZIP entry was gated - so a one-month export cost exactly as much memory
+                # as the full year and hit the adapter's 3 GiB limit just the same. Gate
+                # the whole block, not just its result.
                 - type: If@1
-                  description: Outgoing invoice folder
-                  path: $.key.Attributes.DocumentType
+                  description: Only in-scope documents are rendered, merged and costed
+                  path: $.key.include
                   operator: Equal
-                  value: 1
-                  valueType: Int
-                  transformations:
-                    - type: SetPrimitiveValue@1
-                      targetPath: $.key.typeFolder
-                      value: Ausgangsrechnungen
-                      valueType: String
-                - type: If@1
-                  description: Recurring master document (Dauerbeleg) -> contracts folder
-                  path: $.key.Attributes.DocumentState
-                  operator: Equal
-                  value: 4
-                  valueType: Int
-                  transformations:
-                    - type: SetPrimitiveValue@1
-                      targetPath: $.key.typeFolder
-                      value: Verträge
-                      valueType: String
-                # Party for the file name: vendor for incoming, customer for outgoing
-                # documents; falls back to "Unbekannt" when no name is present.
-                - type: SetPrimitiveValue@1
-                  description: Default party (no vendor/customer name)
-                  targetPath: $.key.party
-                  value: Unbekannt
-                  valueType: String
-                - type: If@1
-                  description: Incoming -> vendor name
-                  path: $.key.Attributes.DocumentType
-                  operator: Equal
-                  value: 0
-                  valueType: Int
-                  transformations:
-                    - type: SelectByPath@1
-                      selectPath:
-                        - path: $.key.Attributes.Vendor.Attributes.CompanyName
-                          targetPath: $.key.party
-                - type: If@1
-                  description: Outgoing -> customer name
-                  path: $.key.Attributes.DocumentType
-                  operator: Equal
-                  value: 1
-                  valueType: Int
-                  transformations:
-                    - type: SelectByPath@1
-                      selectPath:
-                        - path: $.key.Attributes.Customer.Attributes.CompanyName
-                          targetPath: $.key.party
-                - type: If@1
-                  description: Empty party name -> Unbekannt
-                  path: $.key.party
-                  operator: Equal
-                  value: ""
+                  value: "yes"
                   valueType: String
                   transformations:
-                    - type: SetPrimitiveValue@1
-                      targetPath: $.key.party
-                      value: Unbekannt
-                      valueType: String
+                  # Folder + file-name building blocks (AB#4392 v2): the ZIP is grouped
+                  # as {fiscal year}/{month yyyy-MM}/{type} and files are named
+                  # {document date}_{vendor or customer}_{sequence}.pdf. The sequence
+                  # number is appended by CreateZipArchive@1 (appendSequenceNumber) and
+                  # all segments are sanitized there, so vendor names with slashes or
+                  # other invalid characters cannot break the archive structure.
+                  - type: SetPrimitiveValue@1
+                    description: Default document date (documents without a date)
+                    targetPath: $.key.docDate
+                    value: "0000-00-00"
+                    valueType: String
+                  - type: SelectByPath@1
+                    description: Copy the document date when present
+                    selectPath:
+                      - path: $.key.Attributes.DocumentDate
+                        targetPath: $.key.docDate
+                  - type: TransformString@1
+                    description: Trim to the date (yyyy-MM-dd)
+                    sourcePath: $.key.docDate
+                    targetPath: $.key.docDate
+                    operation: SubstringFromStart
+                    length: 10
+                  - type: TransformString@1
+                    description: Month folder (yyyy-MM)
+                    sourcePath: $.key.docDate
+                    targetPath: $.key.monthFolder
+                    operation: SubstringFromStart
+                    length: 7
+                  # Type folder: recurring master documents (Dauerbelege — contracts,
+                  # insurance, subscriptions; DocumentState RECURRING=4) go to
+                  # "Verträge", the rest split by DocumentType into incoming/outgoing
+                  # invoices. Defaults to incoming (DocumentType 0).
+                  - type: SetPrimitiveValue@1
+                    description: Default type folder (incoming invoices)
+                    targetPath: $.key.typeFolder
+                    value: Eingangsrechnungen
+                    valueType: String
+                  - type: If@1
+                    description: Outgoing invoice folder
+                    path: $.key.Attributes.DocumentType
+                    operator: Equal
+                    value: 1
+                    valueType: Int
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key.typeFolder
+                        value: Ausgangsrechnungen
+                        valueType: String
+                  - type: If@1
+                    description: Recurring master document (Dauerbeleg) -> contracts folder
+                    path: $.key.Attributes.DocumentState
+                    operator: Equal
+                    value: 4
+                    valueType: Int
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key.typeFolder
+                        value: Verträge
+                        valueType: String
+                  # Party for the file name: vendor for incoming, customer for outgoing
+                  # documents; falls back to "Unbekannt" when no name is present.
+                  - type: SetPrimitiveValue@1
+                    description: Default party (no vendor/customer name)
+                    targetPath: $.key.party
+                    value: Unbekannt
+                    valueType: String
+                  - type: If@1
+                    description: Incoming -> vendor name
+                    path: $.key.Attributes.DocumentType
+                    operator: Equal
+                    value: 0
+                    valueType: Int
+                    transformations:
+                      - type: SelectByPath@1
+                        selectPath:
+                          - path: $.key.Attributes.Vendor.Attributes.CompanyName
+                            targetPath: $.key.party
+                  - type: If@1
+                    description: Outgoing -> customer name
+                    path: $.key.Attributes.DocumentType
+                    operator: Equal
+                    value: 1
+                    valueType: Int
+                    transformations:
+                      - type: SelectByPath@1
+                        selectPath:
+                          - path: $.key.Attributes.Customer.Attributes.CompanyName
+                            targetPath: $.key.party
+                  - type: If@1
+                    description: Empty party name -> Unbekannt
+                    path: $.key.party
+                    operator: Equal
+                    value: ""
+                    valueType: String
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key.party
+                        value: Unbekannt
+                        valueType: String
 
-                # 2a) original stored PDF via System/Related
-                - type: GetAssociationTargets@1
-                  description: Original stored PDF (FileSystemItem)
-                  originRtIdPath: $.key.RtId
-                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                  targetCkTypeId: System.Reporting/FileSystemItem
-                  associationRoleId: System/Related
-                  graphDirection: Outbound        # [1] validate
-                  targetPath: $.key.fileGroups
+                  # 2a) original stored PDF via System/Related
+                  - type: GetAssociationTargets@1
+                    description: Original stored PDF (FileSystemItem)
+                    originRtIdPath: $.key.RtId
+                    originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                    targetCkTypeId: System.Reporting/FileSystemItem
+                    associationRoleId: System/Related
+                    graphDirection: Outbound        # [1] validate
+                    targetPath: $.key.fileGroups
 
-                # 2b) first linked bank transaction (payment proof) via TransactionToDocument
-                - type: GetAssociationTargets@1
-                  description: Linked bank transactions (payment proof)
-                  originRtIdPath: $.key.RtId
-                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                  targetCkTypeId: Basic.Accounting/BankTransaction
-                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                  graphDirection: Outbound        # [1] validate
-                  targetPath: $.key.txGroups
+                  # 2b) first linked bank transaction (payment proof) via TransactionToDocument
+                  - type: GetAssociationTargets@1
+                    description: Linked bank transactions (payment proof)
+                    originRtIdPath: $.key.RtId
+                    originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                    targetCkTypeId: Basic.Accounting/BankTransaction
+                    associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                    graphDirection: Outbound        # [1] validate
+                    targetPath: $.key.txGroups
 
-                # AB#5085: payment-side lookup, built HERE because txGroups is already
-                # loaded for the cover sheet - no extra association call and no second
-                # copy of the document entities. Emits one compact JSON line per
-                # document: [docId, docNumber, docDate, taxAdvisorNote, txId...], which
-                # zahlungen.csv inverts into txId -> documents. Runs for EVERY document
-                # of the fiscal year, before the scope/period gate, so a payment whose
-                # document is out of period still resolves its number. Returns null when
-                # the document settles no transaction, so Flatten drops it.
-                - type: ExecuteCSharp@1
-                  description: Payment lookup line (document + the transactions it settles)
-                  code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; var ids = new List<string>(); object txObj = txs; if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var t in te.EnumerateArray()) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement p; if (t.TryGetProperty("RtId", out p)) { var s = S(p); if (!string.IsNullOrWhiteSpace(s)) ids.Add(s); } } } if (ids.Count == 0) return null; var head = new List<string> { S(docId), S(docNumber), S(docDate), S(taxNote) }; head.AddRange(ids); return JsonSerializer.Serialize(head.ToArray());'
-                  usings:
-                    - System
-                    - System.Linq
-                    - System.Text.Json
-                    - System.Collections.Generic
-                  returnType: String
-                  arguments:
-                    - name: docId
-                      valuePath: $.key.RtId
-                      dataType: String
-                    - name: docNumber
-                      valuePath: $.key.Attributes.DocumentNumber
-                      dataType: String
-                    - name: docDate
-                      valuePath: $.key.Attributes.DocumentDate
-                      dataType: String
-                    - name: taxNote
-                      valuePath: $.key.Attributes.TaxAdvisorNote
-                      dataType: String
-                    - name: txs
-                      valuePath: $.key.txGroups[0].Items
-                      dataType: RecordArray
-                  targetPath: $.key.payLink
+                  # AB#5085: payment-side lookup, built HERE because txGroups is already
+                  # loaded for the cover sheet - no extra association call and no second
+                  # copy of the document entities. Emits one compact JSON line per
+                  # document: [docId, docNumber, docDate, taxAdvisorNote, txId...], which
+                  # zahlungen.csv inverts into txId -> documents. Runs for EVERY document
+                  # of the fiscal year, before the scope/period gate, so a payment whose
+                  # document is out of period still resolves its number. Returns null when
+                  # the document settles no transaction, so Flatten drops it.
+                  - type: ExecuteCSharp@1
+                    description: Payment lookup line (document + the transactions it settles)
+                    code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; var ids = new List<string>(); object txObj = txs; var txEls = new List<JsonElement>(); if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) txEls.Add(el); } else if (txObj is System.Collections.IEnumerable tseq) { foreach (var o in tseq) { if (o is JsonElement oe) txEls.Add(oe); else if (o != null) { try { txEls.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(o))); } catch { } } } } { foreach (var t in txEls) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement p; if (t.TryGetProperty("RtId", out p)) { var s = S(p); if (!string.IsNullOrWhiteSpace(s)) ids.Add(s); } } } if (ids.Count == 0) return null; var head = new List<string> { S(docId), S(docNumber), S(docDate), S(taxNote) }; head.AddRange(ids); return JsonSerializer.Serialize(head.ToArray());'
+                    usings:
+                      - System
+                      - System.Linq
+                      - System.Text.Json
+                      - System.Collections.Generic
+                    returnType: String
+                    arguments:
+                      - name: docId
+                        valuePath: $.key.RtId
+                        dataType: String
+                      - name: docNumber
+                        valuePath: $.key.Attributes.DocumentNumber
+                        dataType: String
+                      - name: docDate
+                        valuePath: $.key.Attributes.DocumentDate
+                        dataType: String
+                      - name: taxNote
+                        valuePath: $.key.Attributes.TaxAdvisorNote
+                        dataType: String
+                      - name: txs
+                        valuePath: $.key.txGroups[0].Items
+                        dataType: RecordArray
+                    targetPath: $.key.payLink
 
-                # 2c) assemble the cover-sheet model — escaping-safe and null-safe.
-                #     We seed a full skeleton (labels set, values ""), then SelectByPath@1
-                #     copies each source attribute into its row VALUE by JSON node (not by
-                #     string interpolation) — so values are auto-escaped ([3] fixed) and
-                #     missing / null / nested-under-null sources are simply skipped, leaving
-                #     the "" default ([OPT] fixed). Payment proof uses the first linked
-                #     transaction only ([5] multi-payment is a follow-up).
-                - type: WriteJson@1
-                  description: Cover-sheet skeleton (labels + empty values)
-                  # Amounts carry format N2 with explicit Austrian separators so the
-                  # cover sheet shows "1.186,96 EUR" — BMD document recognition does
-                  # not accept the raw JSON number ("1186.96") as an amount. The
-                  # separators are explicit (not culture-derived) because containers
-                  # without ICU fall back to invariant globalization. The currency
-                  # suffix defaults to EUR (Currency attribute missing = EUR) and is
-                  # overridden below.
-                  jsonString: '{"title":"Belegübergabe an den Steuerberater","subtitle":"","culture":"de-AT","numberDecimalSeparator":",","numberGroupSeparator":".","sections":[{"heading":"Beleg","rows":[{"label":"Belegnummer","value":""},{"label":"Belegdatum","value":""},{"label":"Fälligkeit","value":""},{"label":"Belegart","value":""},{"label":"Brutto","value":"","format":"N2","suffix":"EUR"},{"label":"Ersatzbeleg","value":"Nein"}]},{"heading":"Kontakt","rows":[{"label":"Lieferant","value":""},{"label":"UID","value":""},{"label":"IBAN","value":""},{"label":"Kunde","value":""}]},{"heading":"Beträge","rows":[{"label":"Netto","value":"","format":"N2","suffix":"EUR"},{"label":"USt","value":"","format":"N2","suffix":"EUR"},{"label":"Steuersatz %","value":"","format":"0.##"},{"label":"Währung","value":"EUR"}]},{"heading":"Zahlungsnachweis","rows":[]}],"footerHeading":"Notiz an den Steuerberater","footerText":""}'
-                  targetPath: $.key.sheet
-                # BMD keys on the Belegnummer, and numbers extracted from scans often
-                # carry (inner) whitespace ("26-7010 / 6554") — strip ALL whitespace for
-                # the handover package (cover sheet + belege.csv). The stored document
-                # keeps its original number. Null-safe: a missing DocumentNumber stays
-                # null and SelectByPath skips it (defaults remain "").
-                - type: ExecuteCSharp@1
-                  description: Document number without whitespace for the tax-advisor package
-                  code: 'docNumber == null ? null : string.Concat(docNumber.Where(ch => !char.IsWhiteSpace(ch)))'
-                  usings:
-                    - System.Linq
-                  returnType: String
-                  arguments:
-                    - name: docNumber
-                      valuePath: $.key.Attributes.DocumentNumber
-                      dataType: String
-                  targetPath: $.key.docNumberClean
-                - type: SelectByPath@1
-                  description: Copy present document values into the skeleton (skips missing/null)
-                  selectPath:
-                    - path: $.key.docNumberClean
-                      targetPath: $.key.sheet.subtitle
-                    - path: $.key.docNumberClean
-                      targetPath: $.key.sheet.sections[0].rows[0].value
-                    - path: $.key.Attributes.DocumentDate
-                      targetPath: $.key.sheet.sections[0].rows[1].value
-                    - path: $.key.Attributes.DueDate
-                      targetPath: $.key.sheet.sections[0].rows[2].value
-                    - path: $.key.prefix
-                      targetPath: $.key.sheet.sections[0].rows[3].value
-                    - path: $.key.Attributes.GrossTotal
-                      targetPath: $.key.sheet.sections[0].rows[4].value
-                    - path: $.key.Attributes.Vendor.Attributes.CompanyName
-                      targetPath: $.key.sheet.sections[1].rows[0].value
-                    - path: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
-                      targetPath: $.key.sheet.sections[1].rows[1].value
-                    - path: $.key.Attributes.Vendor.Attributes.IBAN
-                      targetPath: $.key.sheet.sections[1].rows[2].value
-                    - path: $.key.Attributes.Customer.Attributes.CompanyName
-                      targetPath: $.key.sheet.sections[1].rows[3].value
-                    - path: $.key.Attributes.NetTotal
-                      targetPath: $.key.sheet.sections[2].rows[0].value
-                    - path: $.key.Attributes.TaxTotal
-                      targetPath: $.key.sheet.sections[2].rows[1].value
-                    - path: $.key.Attributes.TaxRate
-                      targetPath: $.key.sheet.sections[2].rows[2].value
-                    # Currency (missing = EUR, then the skeleton defaults stay): explicit
-                    # Währung row + suffix on the amount rows (Brutto/Netto/USt).
-                    - path: $.key.Attributes.Currency
-                      targetPath: $.key.sheet.sections[2].rows[3].value
-                    - path: $.key.Attributes.Currency
-                      targetPath: $.key.sheet.sections[0].rows[4].suffix
-                    - path: $.key.Attributes.Currency
-                      targetPath: $.key.sheet.sections[2].rows[0].suffix
-                    - path: $.key.Attributes.Currency
-                      targetPath: $.key.sheet.sections[2].rows[1].suffix
-                    - path: $.key.txGroups[0].Items[0].Attributes.BookingDate
-                      targetPath: $.key.sheet.sections[3].rows[0].value
-                    - path: $.key.txGroups[0].Items[0].Attributes.Amount
-                      targetPath: $.key.sheet.sections[3].rows[1].value
-                    - path: $.key.txGroups[0].Items[0].Attributes.CounterpartIban
-                      targetPath: $.key.sheet.sections[3].rows[2].value
-                    - path: $.key.Attributes.TaxAdvisorNote
-                      targetPath: $.key.sheet.footerText
-                # Ersatzbeleg (substitute voucher) marker: skeleton defaults the row to
-                # "Nein"; flip to "Ja" only when the document carries IsSubstitute=true.
-                # Missing/absent attribute (pre-migration documents) stays "Nein".
-                - type: If@1
-                  description: Substitute voucher => mark Ersatzbeleg row as Ja
-                  path: $.key.Attributes.IsSubstitute
-                  operator: Equals
-                  value: true
-                  valueType: Boolean
-                  transformations:
-                    - type: SetPrimitiveValue@1
-                      targetPath: $.key.sheet.sections[0].rows[5].value
-                      value: Ja
-                      valueType: String
-                # Trim ISO date/time values to the date only (yyyy-MM-dd). SubstringFromStart
-                # is null-safe and clamps to the string length, so blank values stay blank.
-                - type: TransformString@1
-                  description: Trim document date
-                  sourcePath: $.key.sheet.sections[0].rows[1].value
-                  targetPath: $.key.sheet.sections[0].rows[1].value
-                  operation: SubstringFromStart
-                  length: 10
-                - type: TransformString@1
-                  description: Trim due date
-                  sourcePath: $.key.sheet.sections[0].rows[2].value
-                  targetPath: $.key.sheet.sections[0].rows[2].value
-                  operation: SubstringFromStart
-                  length: 10
+                  # 2c) assemble the cover-sheet model — escaping-safe and null-safe.
+                  #     We seed a full skeleton (labels set, values ""), then SelectByPath@1
+                  #     copies each source attribute into its row VALUE by JSON node (not by
+                  #     string interpolation) — so values are auto-escaped ([3] fixed) and
+                  #     missing / null / nested-under-null sources are simply skipped, leaving
+                  #     the "" default ([OPT] fixed). Payment proof uses the first linked
+                  #     transaction only ([5] multi-payment is a follow-up).
+                  - type: WriteJson@1
+                    description: Cover-sheet skeleton (labels + empty values)
+                    # Amounts carry format N2 with explicit Austrian separators so the
+                    # cover sheet shows "1.186,96 EUR" — BMD document recognition does
+                    # not accept the raw JSON number ("1186.96") as an amount. The
+                    # separators are explicit (not culture-derived) because containers
+                    # without ICU fall back to invariant globalization. The currency
+                    # suffix defaults to EUR (Currency attribute missing = EUR) and is
+                    # overridden below.
+                    jsonString: '{"title":"Belegübergabe an den Steuerberater","subtitle":"","culture":"de-AT","numberDecimalSeparator":",","numberGroupSeparator":".","sections":[{"heading":"Beleg","rows":[{"label":"Belegnummer","value":""},{"label":"Belegdatum","value":""},{"label":"Fälligkeit","value":""},{"label":"Belegart","value":""},{"label":"Brutto","value":"","format":"N2","suffix":"EUR"},{"label":"Ersatzbeleg","value":"Nein"}]},{"heading":"Kontakt","rows":[{"label":"Lieferant","value":""},{"label":"UID","value":""},{"label":"IBAN","value":""},{"label":"Kunde","value":""}]},{"heading":"Beträge","rows":[{"label":"Netto","value":"","format":"N2","suffix":"EUR"},{"label":"USt","value":"","format":"N2","suffix":"EUR"},{"label":"Steuersatz %","value":"","format":"0.##"},{"label":"Währung","value":"EUR"}]},{"heading":"Zahlungsnachweis","rows":[]}],"footerHeading":"Notiz an den Steuerberater","footerText":""}'
+                    targetPath: $.key.sheet
+                  # BMD keys on the Belegnummer, and numbers extracted from scans often
+                  # carry (inner) whitespace ("26-7010 / 6554") — strip ALL whitespace for
+                  # the handover package (cover sheet + belege.csv). The stored document
+                  # keeps its original number. Null-safe: a missing DocumentNumber stays
+                  # null and SelectByPath skips it (defaults remain "").
+                  - type: ExecuteCSharp@1
+                    description: Document number without whitespace for the tax-advisor package
+                    code: 'docNumber == null ? null : string.Concat(docNumber.Where(ch => !char.IsWhiteSpace(ch)))'
+                    usings:
+                      - System.Linq
+                    returnType: String
+                    arguments:
+                      - name: docNumber
+                        valuePath: $.key.Attributes.DocumentNumber
+                        dataType: String
+                    targetPath: $.key.docNumberClean
+                  - type: SelectByPath@1
+                    description: Copy present document values into the skeleton (skips missing/null)
+                    selectPath:
+                      - path: $.key.docNumberClean
+                        targetPath: $.key.sheet.subtitle
+                      - path: $.key.docNumberClean
+                        targetPath: $.key.sheet.sections[0].rows[0].value
+                      - path: $.key.Attributes.DocumentDate
+                        targetPath: $.key.sheet.sections[0].rows[1].value
+                      - path: $.key.Attributes.DueDate
+                        targetPath: $.key.sheet.sections[0].rows[2].value
+                      - path: $.key.prefix
+                        targetPath: $.key.sheet.sections[0].rows[3].value
+                      - path: $.key.Attributes.GrossTotal
+                        targetPath: $.key.sheet.sections[0].rows[4].value
+                      - path: $.key.Attributes.Vendor.Attributes.CompanyName
+                        targetPath: $.key.sheet.sections[1].rows[0].value
+                      - path: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
+                        targetPath: $.key.sheet.sections[1].rows[1].value
+                      - path: $.key.Attributes.Vendor.Attributes.IBAN
+                        targetPath: $.key.sheet.sections[1].rows[2].value
+                      - path: $.key.Attributes.Customer.Attributes.CompanyName
+                        targetPath: $.key.sheet.sections[1].rows[3].value
+                      - path: $.key.Attributes.NetTotal
+                        targetPath: $.key.sheet.sections[2].rows[0].value
+                      - path: $.key.Attributes.TaxTotal
+                        targetPath: $.key.sheet.sections[2].rows[1].value
+                      - path: $.key.Attributes.TaxRate
+                        targetPath: $.key.sheet.sections[2].rows[2].value
+                      # Currency (missing = EUR, then the skeleton defaults stay): explicit
+                      # Währung row + suffix on the amount rows (Brutto/Netto/USt).
+                      - path: $.key.Attributes.Currency
+                        targetPath: $.key.sheet.sections[2].rows[3].value
+                      - path: $.key.Attributes.Currency
+                        targetPath: $.key.sheet.sections[0].rows[4].suffix
+                      - path: $.key.Attributes.Currency
+                        targetPath: $.key.sheet.sections[2].rows[0].suffix
+                      - path: $.key.Attributes.Currency
+                        targetPath: $.key.sheet.sections[2].rows[1].suffix
+                      - path: $.key.txGroups[0].Items[0].Attributes.BookingDate
+                        targetPath: $.key.sheet.sections[3].rows[0].value
+                      - path: $.key.txGroups[0].Items[0].Attributes.Amount
+                        targetPath: $.key.sheet.sections[3].rows[1].value
+                      - path: $.key.txGroups[0].Items[0].Attributes.CounterpartIban
+                        targetPath: $.key.sheet.sections[3].rows[2].value
+                      - path: $.key.Attributes.TaxAdvisorNote
+                        targetPath: $.key.sheet.footerText
+                  # Ersatzbeleg (substitute voucher) marker: skeleton defaults the row to
+                  # "Nein"; flip to "Ja" only when the document carries IsSubstitute=true.
+                  # Missing/absent attribute (pre-migration documents) stays "Nein".
+                  - type: If@1
+                    description: Substitute voucher => mark Ersatzbeleg row as Ja
+                    path: $.key.Attributes.IsSubstitute
+                    operator: Equals
+                    value: true
+                    valueType: Boolean
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key.sheet.sections[0].rows[5].value
+                        value: Ja
+                        valueType: String
+                  # Trim ISO date/time values to the date only (yyyy-MM-dd). SubstringFromStart
+                  # is null-safe and clamps to the string length, so blank values stay blank.
+                  - type: TransformString@1
+                    description: Trim document date
+                    sourcePath: $.key.sheet.sections[0].rows[1].value
+                    targetPath: $.key.sheet.sections[0].rows[1].value
+                    operation: SubstringFromStart
+                    length: 10
+                  - type: TransformString@1
+                    description: Trim due date
+                    sourcePath: $.key.sheet.sections[0].rows[2].value
+                    targetPath: $.key.sheet.sections[0].rows[2].value
+                    operation: SubstringFromStart
+                    length: 10
 
-                # Payment proof: one row per linked transaction ([5]). The inner ForEach
-                # iterates the linked transactions (inside it $.key = the transaction),
-                # builds a {label,value} row per payment, and collects each whole iteration
-                # into $.key.payItems; Flatten then lifts just the .row of each into
-                # $.key.payRows, which replaces the (empty) Zahlungsnachweis rows. Zero
-                # transactions -> payRows empty -> the section shows just its heading.
-                - type: ForEach@1
-                  description: Build one payment row per linked transaction
-                  iterationPath: $.key.txGroups[0].Items
-                  targetPath: $.key.payItems
-                  targetValueKind: Simple
-                  targetValueWriteMode: Overwrite
-                  maxDegreeOfParallelism: 1
-                  transformations:
-                    - type: WriteJson@1
-                      jsonString: '{"d":"","a":"","i":""}'
-                      targetPath: $.key.f
-                    - type: WriteJson@1
-                      jsonString: '{"label":"","value":""}'
-                      targetPath: $.key.row
-                    - type: SelectByPath@1
-                      selectPath:
-                        - path: $.key.Attributes.BookingDate
-                          targetPath: $.key.f.d
-                        - path: $.key.Attributes.Amount
-                          targetPath: $.key.f.a
-                        - path: $.key.Attributes.CounterpartIban
-                          targetPath: $.key.f.i
-                    - type: TransformString@1
-                      description: Trim booking date
-                      sourcePath: $.key.f.d
-                      targetPath: $.key.f.d
-                      operation: SubstringFromStart
-                      length: 10
-                    # amounts / IBANs contain no JSON-special chars, so FormatString here is
-                    # safe; f.* are always present (defaulted) so no undefined lookups.
-                    - type: FormatString@1
-                      format: "Zahlung {$.key.f.d}"
-                      targetPath: $.key.row.label
-                    - type: FormatString@1
-                      format: "{$.key.f.a} · {$.key.f.i}"
-                      targetPath: $.key.row.value
-                - type: Flatten@1
-                  description: Lift each payment row out of the collected iterations
-                  path: $.key.payItems[*].row
-                  targetPath: $.key.payRows
-                - type: SelectByPath@1
-                  description: Inject payment rows into the cover sheet
-                  selectPath:
-                    - path: $.key.payRows
-                      targetPath: $.key.sheet.sections[3].rows
+                  # Payment proof: one row per linked transaction ([5]). The inner ForEach
+                  # iterates the linked transactions (inside it $.key = the transaction),
+                  # builds a {label,value} row per payment, and collects each whole iteration
+                  # into $.key.payItems; Flatten then lifts just the .row of each into
+                  # $.key.payRows, which replaces the (empty) Zahlungsnachweis rows. Zero
+                  # transactions -> payRows empty -> the section shows just its heading.
+                  - type: ForEach@1
+                    description: Build one payment row per linked transaction
+                    iterationPath: $.key.txGroups[0].Items
+                    targetPath: $.key.payItems
+                    targetValueKind: Simple
+                    targetValueWriteMode: Overwrite
+                    maxDegreeOfParallelism: 1
+                    transformations:
+                      - type: WriteJson@1
+                        jsonString: '{"d":"","a":"","i":""}'
+                        targetPath: $.key.f
+                      - type: WriteJson@1
+                        jsonString: '{"label":"","value":""}'
+                        targetPath: $.key.row
+                      - type: SelectByPath@1
+                        selectPath:
+                          - path: $.key.Attributes.BookingDate
+                            targetPath: $.key.f.d
+                          - path: $.key.Attributes.Amount
+                            targetPath: $.key.f.a
+                          - path: $.key.Attributes.CounterpartIban
+                            targetPath: $.key.f.i
+                      - type: TransformString@1
+                        description: Trim booking date
+                        sourcePath: $.key.f.d
+                        targetPath: $.key.f.d
+                        operation: SubstringFromStart
+                        length: 10
+                      # amounts / IBANs contain no JSON-special chars, so FormatString here is
+                      # safe; f.* are always present (defaulted) so no undefined lookups.
+                      - type: FormatString@1
+                        format: "Zahlung {$.key.f.d}"
+                        targetPath: $.key.row.label
+                      - type: FormatString@1
+                        format: "{$.key.f.a} · {$.key.f.i}"
+                        targetPath: $.key.row.value
+                  - type: Flatten@1
+                    description: Lift each payment row out of the collected iterations
+                    path: $.key.payItems[*].row
+                    targetPath: $.key.payRows
+                  - type: SelectByPath@1
+                    description: Inject payment rows into the cover sheet
+                    selectPath:
+                      - path: $.key.payRows
+                        targetPath: $.key.sheet.sections[3].rows
 
-                - type: RenderDataSheetPdf@1
-                  description: Render the cover sheet PDF
-                  path: $.key.sheet
-                  targetPath: $.key.coverPdf
+                  - type: RenderDataSheetPdf@1
+                    description: Render the cover sheet PDF
+                    path: $.key.sheet
+                    targetPath: $.key.coverPdf
 
-                # 2d) merge cover + original (when an original exists), else cover only.
-                - type: If@1
-                  description: Has an original PDF
-                  path: $.key.fileGroups[0].TotalCount
-                  operator: GreaterThan
-                  value: 0
-                  valueType: Int
-                  transformations:
-                    - type: GetFileSystemContent@1
-                      description: Load original PDF bytes
-                      rtIdPath: $.key.fileGroups[0].Items[0].RtId   # [4] validate
-                      targetPath: $.key.originalPdf
-                    - type: FormatString@1
-                      description: Merge inputs [cover, original]
-                      format: '["{$.key.coverPdf}","{$.key.originalPdf}"]'
-                      targetPath: $.key.mergeJson
-                    - type: WriteJson@1
-                      jsonStringPath: $.key.mergeJson
-                      targetPath: $.key.mergeInputs
-                    - type: MergePdf@1
-                      description: Prepend cover sheet to the original
-                      path: $.key.mergeInputs
-                      targetPath: $.key.finalPdf
-                      # Write the merged PDF to the per-execution scratch space and emit a
-                      # small reference instead of a base64 string, so a full fiscal-year
-                      # export never accumulates every merged PDF (or the ZIP) on the heap
-                      # (AB#4642). CreateZipArchive streams it from scratch into the archive.
-                      outputAsScratchFile: true
-                - type: If@1
-                  description: No original PDF -> cover sheet only
-                  path: $.key.fileGroups[0].TotalCount
-                  operator: Equal
-                  value: 0
-                  valueType: Int
-                  transformations:
-                    # Route the cover-only case through MergePdf too, so $.key.finalPdf is
-                    # always a scratch reference (uniform entry building below).
-                    - type: FormatString@1
-                      description: Merge inputs [cover] only
-                      format: '["{$.key.coverPdf}"]'
-                      targetPath: $.key.mergeJson
-                    - type: WriteJson@1
-                      jsonStringPath: $.key.mergeJson
-                      targetPath: $.key.mergeInputs
-                    - type: MergePdf@1
-                      description: Cover sheet only, written to the scratch space
-                      path: $.key.mergeInputs
-                      targetPath: $.key.finalPdf
-                      outputAsScratchFile: true
+                  # 2d) merge cover + original (when an original exists), else cover only.
+                  - type: If@1
+                    description: Has an original PDF
+                    path: $.key.fileGroups[0].TotalCount
+                    operator: GreaterThan
+                    value: 0
+                    valueType: Int
+                    transformations:
+                      - type: GetFileSystemContent@1
+                        description: Load original PDF bytes
+                        rtIdPath: $.key.fileGroups[0].Items[0].RtId   # [4] validate
+                        targetPath: $.key.originalPdf
+                      # AB#5263: build the array by copying the JSON nodes, NOT by
+                      # interpolating them into a string. FormatString + WriteJson held a
+                      # third and fourth copy of both PDFs (the joined string, then its
+                      # re-parsed node) on top of coverPdf and originalPdf.
+                      - type: WriteJson@1
+                        description: Empty merge-input array
+                        jsonString: '[]'
+                        targetPath: $.key.mergeInputs
+                      - type: SelectByPath@1
+                        description: Reference cover and original without copying them twice
+                        selectPath:
+                          - path: $.key.coverPdf
+                            targetPath: $.key.mergeInputs[0]
+                          - path: $.key.originalPdf
+                            targetPath: $.key.mergeInputs[1]
+                      - type: MergePdf@1
+                        description: Prepend cover sheet to the original
+                        path: $.key.mergeInputs
+                        targetPath: $.key.finalPdf
+                        # Write the merged PDF to the per-execution scratch space and emit a
+                        # small reference instead of a base64 string, so a full fiscal-year
+                        # export never accumulates every merged PDF (or the ZIP) on the heap
+                        # (AB#4642). CreateZipArchive streams it from scratch into the archive.
+                        outputAsScratchFile: true
+                      # AB#5263: release the base64 blobs as soon as the merge has them.
+                      # Each PDF lives in the context as a base64 string, which is 1.33x the
+                      # bytes and UTF-16 on top - roughly 2.7x the file per copy. The ForEach
+                      # collects every iteration into $.docResults, so anything still hanging
+                      # off $.key here is retained for the WHOLE run: on a 715-document
+                      # fiscal year that is gigabytes, and the adapter is OOMKilled against
+                      # its 3 GiB limit. $.key.finalPdf is a scratch reference and stays.
+                      - type: SetPrimitiveValue@1
+                        description: Release the cover-sheet base64
+                        targetPath: $.key.coverPdf
+                        value: ""
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        description: Release the merge input array
+                        targetPath: $.key.mergeInputs
+                        value: ""
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        description: Release the original-PDF base64
+                        targetPath: $.key.originalPdf
+                        value: ""
+                        valueType: String
+                  - type: If@1
+                    description: No original PDF -> cover sheet only
+                    path: $.key.fileGroups[0].TotalCount
+                    operator: Equal
+                    value: 0
+                    valueType: Int
+                    transformations:
+                      # Route the cover-only case through MergePdf too, so $.key.finalPdf is
+                      # always a scratch reference (uniform entry building below).
+                      - type: WriteJson@1
+                        description: Empty merge-input array
+                        jsonString: '[]'
+                        targetPath: $.key.mergeInputs
+                      - type: SelectByPath@1
+                        description: Reference the cover sheet without copying it twice
+                        selectPath:
+                          - path: $.key.coverPdf
+                            targetPath: $.key.mergeInputs[0]
+                      - type: MergePdf@1
+                        description: Cover sheet only, written to the scratch space
+                        path: $.key.mergeInputs
+                        targetPath: $.key.finalPdf
+                        outputAsScratchFile: true
+                      # AB#5263: release the base64 blobs as soon as the merge has them.
+                      # Each PDF lives in the context as a base64 string, which is 1.33x the
+                      # bytes and UTF-16 on top - roughly 2.7x the file per copy. The ForEach
+                      # collects every iteration into $.docResults, so anything still hanging
+                      # off $.key here is retained for the WHOLE run: on a 715-document
+                      # fiscal year that is gigabytes, and the adapter is OOMKilled against
+                      # its 3 GiB limit. $.key.finalPdf is a scratch reference and stays.
+                      - type: SetPrimitiveValue@1
+                        description: Release the cover-sheet base64
+                        targetPath: $.key.coverPdf
+                        value: ""
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        description: Release the merge input array
+                        targetPath: $.key.mergeInputs
+                        value: ""
+                        valueType: String
 
                 # 2e) zip entry { pathSegments, scratchFileToken, length, manifest } —
                 #     only in-scope docs. Documents excluded by scope never get
@@ -867,15 +931,17 @@ entities:
                 - path: $.query.to
                   targetPath: $.txTo
             - type: GetRtEntitiesByType@1
-              description: Bank transactions booked inside the delivered period
+              # AB#5263: NO date fieldFilters here. A field filter's comparison value
+              # is handed to the query layer as the raw JSON scalar - a string - and
+              # Mongo never matches a string against a BSON date, so this query
+              # silently returned nothing and zahlungen.csv was never written since
+              # the day it shipped. Same trap as AB#4389, which is why the in-loop
+              # period gate uses If@1 valueType DateTime instead of a field filter.
+              # The period is applied in the C# node below, which parses BookingDate
+              # anyway; transactions are small flat records, so loading the tenant's
+              # set and filtering in memory is the cheaper of the two honest options.
+              description: Bank transactions (the period is applied in the CSV node)
               ckTypeId: Basic.Accounting/BankTransaction
-              fieldFilters:
-                - attributePath: BookingDate
-                  operator: GreaterEqualThan
-                  comparisonValuePath: $.txFrom
-                - attributePath: BookingDate
-                  operator: LessEqualThan
-                  comparisonValuePath: $.txTo
               targetPath: $.payTx
             # Collect the per-document lookup lines emitted inside the document loop.
             - type: Flatten@1
@@ -890,7 +956,7 @@ entities:
             # context holds the transactions plus a few hundred short strings.
             - type: ExecuteCSharp@1
               description: Build zahlungen.csv (classification + document columns) as base64
-              code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<string,string> D10 = v => (v ?? "").Length >= 10 ? v.Substring(0, 10) : (v ?? ""); Func<string,string> W = v => Regex.Replace(v ?? "", @"\s+", " ").Trim(); var map = new Dictionary<string, List<string[]>>(StringComparer.Ordinal); object linksObj = links; var lst = new List<string>(); if (linksObj is JsonElement lj && lj.ValueKind == JsonValueKind.Array) { foreach (var el in lj.EnumerateArray()) { if (el.ValueKind == JsonValueKind.String) { var s0 = el.GetString(); if (!string.IsNullOrWhiteSpace(s0)) lst.Add(s0); } } } else if (linksObj is System.Collections.IEnumerable lseq) { foreach (var o in lseq) { var s0 = o == null ? null : (o is JsonElement je2 ? (je2.ValueKind == JsonValueKind.String ? je2.GetString() : je2.ToString()) : o.ToString()); if (!string.IsNullOrWhiteSpace(s0)) lst.Add(s0); } } foreach (var s1 in lst) { try { var a = JsonSerializer.Deserialize<string[]>(s1); if (a == null || a.Length < 5) continue; var head = new string[] { a[0], a[1], a[2], a[3] }; for (var i = 4; i < a.Length; i++) { var k = a[i]; if (string.IsNullOrWhiteSpace(k)) continue; List<string[]> l; if (!map.TryGetValue(k, out l)) { l = new List<string[]>(); map[k] = l; } l.Add(head); } } catch { } } var rows = new List<string[]>(); object txObj = tx; if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var t in te.EnumerateArray()) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement pid; var rtid = t.TryGetProperty("RtId", out pid) ? S(pid) : ""; JsonElement at; if (!t.TryGetProperty("Attributes", out at) || at.ValueKind != JsonValueKind.Object) continue; Func<string,string> A = n => { JsonElement v; return at.TryGetProperty(n, out v) ? S(v) : ""; }; double amount = 0; JsonElement pa; if (at.TryGetProperty("Amount", out pa) && pa.ValueKind == JsonValueKind.Number) amount = pa.GetDouble(); int ms = 0; JsonElement pm; if (at.TryGetProperty("MatchState", out pm) && pm.ValueKind == JsonValueKind.Number) ms = pm.GetInt32(); JsonElement pc; var incl = at.TryGetProperty("InClarification", out pc) && pc.ValueKind == JsonValueKind.True; var pur = W(A("Purpose")); var up = pur.ToUpperInvariant(); string art; if (up.Contains("E-COMM")) art = "Kartenzahlung online"; else if (Regex.IsMatch(up, @"\bPOS\b")) art = "Kartenzahlung POS"; else if (up.Contains("PAYPAL")) art = "PayPal"; else if (up.Contains("SEPA-LASTSCHRIFT") || up.StartsWith("EINZUG")) art = "SEPA-Lastschrift"; else if (up.StartsWith("GEHALT") || up.Contains("LOHN")) art = "Gehalt/Lohn"; else art = "Ueberweisung"; var mk = Regex.Match(pur, @"\bK(\d)\b"); var karte = mk.Success ? "K" + mk.Groups[1].Value : ""; var md = Regex.Match(pur, @"\bK\d\s+(\d{2}\.\d{2}\.)"); if (!md.Success) md = Regex.Match(pur, @"(\d{2}\.\d{2}\.\d{2})\s+\d{2}:\d{2}\s+K\d"); var kartendatum = md.Success ? md.Groups[1].Value : ""; var status = ms == 1 ? "Zugeordnet" : ms == 2 ? "Ohne Beleg" : ms == 3 ? "Ignoriert" : "Offen"; List<string[]> docs; if (!map.TryGetValue(rtid, out docs)) docs = new List<string[]>(); var nums = docs.Select(x => x[1]).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var ids = docs.Select(x => x[0]).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var dates = docs.Select(x => D10(x[2])).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var months = dates.Select(x => x.Length >= 7 ? x.Substring(0, 7) : "").Where(x => x.Length > 0).Distinct().ToList(); var notes = docs.Select(x => W(x[3])).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); rows.Add(new string[] { D10(A("BookingDate")), D10(A("ValueDate")), amount.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("de-AT")), A("Currency"), amount < 0 ? "Ausgang" : "Eingang", art, karte, kartendatum, A("CounterpartName").Trim(), Regex.Replace(A("CounterpartIban"), @"\s+", "").ToUpperInvariant(), pur, status, ids.Count > 0 ? "Ja" : "Nein", string.Join("|", nums), string.Join("|", ids), string.Join("|", dates), string.Join("|", months), W(A("MatchComment")), incl ? "Ja" : "Nein", W(A("ClarificationNote")), string.Join(" | ", notes) }); } } if (rows.Count == 0) return null; rows = rows.OrderBy(r => r[0], StringComparer.Ordinal).ThenBy(r => r[8], StringComparer.OrdinalIgnoreCase).ToList(); Func<string,string> q = v => { v = v ?? ""; return (v.Contains(";") || v.Contains("\"") || v.Contains("\n") || v.Contains("\r")) ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; }; var header = "Buchungsdatum;Valutadatum;Betrag;Waehrung;Richtung;Zahlungsart;Karte;Kartendatum;Gegenpartei;GegenIBAN;Verwendungszweck;Status;BelegVorhanden;Belegnummer;BelegId;Belegdatum;Belegmonat;Kommentar;Klaerung;Klaerungsnotiz;NotizStB"; var csv = "﻿" + header + "\r\n" + string.Join("\r\n", rows.Select(r => string.Join(";", r.Select(q)))) + "\r\n"; return Convert.ToBase64String(Encoding.UTF8.GetBytes(csv));'
+              code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<string,string> D10 = v => (v ?? "").Length >= 10 ? v.Substring(0, 10) : (v ?? ""); Func<string,string> W = v => Regex.Replace(v ?? "", @"\s+", " ").Trim(); var map = new Dictionary<string, List<string[]>>(StringComparer.Ordinal); object linksObj = links; var lst = new List<string>(); if (linksObj is JsonElement lj && lj.ValueKind == JsonValueKind.Array) { foreach (var el in lj.EnumerateArray()) { if (el.ValueKind == JsonValueKind.String) { var s0 = el.GetString(); if (!string.IsNullOrWhiteSpace(s0)) lst.Add(s0); } } } else if (linksObj is System.Collections.IEnumerable lseq) { foreach (var o in lseq) { var s0 = o == null ? null : (o is JsonElement je2 ? (je2.ValueKind == JsonValueKind.String ? je2.GetString() : je2.ToString()) : o.ToString()); if (!string.IsNullOrWhiteSpace(s0)) lst.Add(s0); } } foreach (var s1 in lst) { try { var a = JsonSerializer.Deserialize<string[]>(s1); if (a == null || a.Length < 5) continue; var head = new string[] { a[0], a[1], a[2], a[3] }; for (var i = 4; i < a.Length; i++) { var k = a[i]; if (string.IsNullOrWhiteSpace(k)) continue; List<string[]> l; if (!map.TryGetValue(k, out l)) { l = new List<string[]>(); map[k] = l; } l.Add(head); } } catch { } } object fromObj = pFrom; object toObj = pTo; var dFrom = D10(fromObj as string ?? ""); var dTo = D10(toObj as string ?? ""); var rows = new List<string[]>(); object txObj = tx; var txEls = new List<JsonElement>(); if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) txEls.Add(el); } else if (txObj is System.Collections.IEnumerable tseq) { foreach (var o in tseq) { if (o is JsonElement oe) txEls.Add(oe); else if (o != null) { try { txEls.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(o))); } catch { } } } } { foreach (var t in txEls) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement pid; var rtid = t.TryGetProperty("RtId", out pid) ? S(pid) : ""; JsonElement at; if (!t.TryGetProperty("Attributes", out at) || at.ValueKind != JsonValueKind.Object) continue; Func<string,string> A = n => { JsonElement v; return at.TryGetProperty(n, out v) ? S(v) : ""; }; var bd = D10(A("BookingDate")); if (dFrom.Length > 0 && string.CompareOrdinal(bd, dFrom) < 0) continue; if (dTo.Length > 0 && string.CompareOrdinal(bd, dTo) > 0) continue; double amount = 0; JsonElement pa; if (at.TryGetProperty("Amount", out pa) && pa.ValueKind == JsonValueKind.Number) amount = pa.GetDouble(); int ms = 0; JsonElement pm; if (at.TryGetProperty("MatchState", out pm) && pm.ValueKind == JsonValueKind.Number) ms = pm.GetInt32(); JsonElement pc; var incl = at.TryGetProperty("InClarification", out pc) && pc.ValueKind == JsonValueKind.True; var pur = W(A("Purpose")); var up = pur.ToUpperInvariant(); string art; if (up.Contains("E-COMM")) art = "Kartenzahlung online"; else if (Regex.IsMatch(up, @"\bPOS\b")) art = "Kartenzahlung POS"; else if (up.Contains("PAYPAL")) art = "PayPal"; else if (up.Contains("SEPA-LASTSCHRIFT") || up.StartsWith("EINZUG")) art = "SEPA-Lastschrift"; else if (up.StartsWith("GEHALT") || up.Contains("LOHN")) art = "Gehalt/Lohn"; else art = "Ueberweisung"; var mk = Regex.Match(pur, @"\bK(\d)\b"); var karte = mk.Success ? "K" + mk.Groups[1].Value : ""; var md = Regex.Match(pur, @"\bK\d\s+(\d{2}\.\d{2}\.)"); if (!md.Success) md = Regex.Match(pur, @"(\d{2}\.\d{2}\.\d{2})\s+\d{2}:\d{2}\s+K\d"); var kartendatum = md.Success ? md.Groups[1].Value : ""; var status = ms == 1 ? "Zugeordnet" : ms == 2 ? "Ohne Beleg" : ms == 3 ? "Ignoriert" : "Offen"; List<string[]> docs; if (!map.TryGetValue(rtid, out docs)) docs = new List<string[]>(); var nums = docs.Select(x => x[1]).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var ids = docs.Select(x => x[0]).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var dates = docs.Select(x => D10(x[2])).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var months = dates.Select(x => x.Length >= 7 ? x.Substring(0, 7) : "").Where(x => x.Length > 0).Distinct().ToList(); var notes = docs.Select(x => W(x[3])).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); rows.Add(new string[] { bd, D10(A("ValueDate")), amount.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("de-AT")), A("Currency"), amount < 0 ? "Ausgang" : "Eingang", art, karte, kartendatum, A("CounterpartName").Trim(), Regex.Replace(A("CounterpartIban"), @"\s+", "").ToUpperInvariant(), pur, status, ids.Count > 0 ? "Ja" : "Nein", string.Join("|", nums), string.Join("|", ids), string.Join("|", dates), string.Join("|", months), W(A("MatchComment")), incl ? "Ja" : "Nein", W(A("ClarificationNote")), string.Join(" | ", notes) }); } } if (rows.Count == 0) return null; rows = rows.OrderBy(r => r[0], StringComparer.Ordinal).ThenBy(r => r[8], StringComparer.OrdinalIgnoreCase).ToList(); Func<string,string> q = v => { v = v ?? ""; return (v.Contains(";") || v.Contains("\"") || v.Contains("\n") || v.Contains("\r")) ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; }; var header = "Buchungsdatum;Valutadatum;Betrag;Waehrung;Richtung;Zahlungsart;Karte;Kartendatum;Gegenpartei;GegenIBAN;Verwendungszweck;Status;BelegVorhanden;Belegnummer;BelegId;Belegdatum;Belegmonat;Kommentar;Klaerung;Klaerungsnotiz;NotizStB"; var csv = "﻿" + header + "\r\n" + string.Join("\r\n", rows.Select(r => string.Join(";", r.Select(q)))) + "\r\n"; return Convert.ToBase64String(Encoding.UTF8.GetBytes(csv));'
               usings:
                 - System
                 - System.Linq
@@ -906,6 +972,12 @@ entities:
                 - name: links
                   valuePath: $.payLinkLines
                   dataType: StringArray
+                - name: pFrom
+                  valuePath: $.txFrom
+                  dataType: String
+                - name: pTo
+                  valuePath: $.txTo
+                  dataType: String
               targetPath: $.zahlungenB64
             - type: If@1
               description: Append the payment index only when there is at least one row
