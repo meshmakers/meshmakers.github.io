@@ -489,6 +489,61 @@ entities:
                                   targetPath: $.docOk
                                   valueType: Boolean
                                   value: false
+                            # AB#5282: a digit swap in the YEAR passes every guard here -
+                            # the date is present, well-formed and the totals add up - and
+                            # then silently falls out of every fiscal year, so the receipt
+                            # reaches no tax-advisor handover and nobody notices for months
+                            # ("19.06.2086" for "19.06.2026" on a 10,80 EUR receipt). Bound
+                            # the year instead. The window is deliberately lopsided: old
+                            # receipts are imported late all the time, so the lower bound is
+                            # generous, while a document dated far in the future is never
+                            # real and is exactly what a year typo produces. An unparseable
+                            # but non-empty date is rejected here too: nothing else checks
+                            # it, and writing it to the DateTime attribute FatalErrors
+                            # ApplyChanges and aborts the whole upload ForEach - the poison
+                            # item of the 2026-07-26 incident. Absent/empty dates never
+                            # reach this node's demotion path in a way that matters, the
+                            # guards above already cleared docOk for them.
+                            - type: ExecuteCSharp@1
+                              description: Document date inside a plausible window (year-typo guard)
+                              code: 'DateTime.TryParse(d, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt) && dt <= DateTime.UtcNow.AddMonths(12) && dt >= DateTime.UtcNow.AddYears(-15)'
+                              usings:
+                                - System
+                              returnType: Boolean
+                              arguments:
+                                - name: d
+                                  valuePath: $.key.documentDate
+                                  dataType: String
+                              targetPath: $.dateOk
+                            - type: If@1
+                              description: documentDate implausible or unreadable - demote to incomplete
+                              path: $.dateOk
+                              operator: Equals
+                              value: false
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docOk
+                                  valueType: Boolean
+                                  value: false
+                                # Reuses the AB#5259 plausibility channel, so the inbox states
+                                # WHY the document was held back and the reporting block below
+                                # needs no new branch. Only for a date that is actually THERE:
+                                # an absent or empty date also fails the parse, but it already
+                                # has its own reason from the two guards above, and this text
+                                # would be wrong for it. A missing path does not fire an If,
+                                # and "" fails NotEqual "", so both are skipped here.
+                                - type: If@1
+                                  description: A date was extracted, it is just not usable
+                                  path: $.key.documentDate
+                                  operator: NotEqual
+                                  value: ""
+                                  valueType: String
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.plausNote
+                                      valueType: String
+                                      value: "The extracted document date is not usable - it is either unreadable or implausibly far in the future or past, which is what a digit swap in the year looks like. No document was created - please correct the date and process the document manually."
                             - type: SetPrimitiveValue@1
                               description: Default - gross total not a number
                               targetPath: $.grossOk
