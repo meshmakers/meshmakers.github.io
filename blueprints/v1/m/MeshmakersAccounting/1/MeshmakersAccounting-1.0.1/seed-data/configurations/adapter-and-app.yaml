@@ -1,0 +1,55 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # Application workload for the accounting SPA (modeled on voest-app's
+  # rt-voestalpine-app.yaml). The Communication Operator deploys it via the
+  # meshmakers-app Helm chart published by this repo's CI; the empty
+  # ChartVersion resolves to the latest published version at deploy time.
+  # The {{...}} placeholders are blueprint template variables resolved per
+  # installation (domain + public service URIs).
+  # --- NOTE: no Application workload here (AB#5210) -----------------------------
+  # aa0000000000000000000200 was the pre-AB#4936 per-tenant SPA, one deployment
+  # per tenant at <tenant>-accounting.<domain>. Since the two-host cutover it is
+  # dead: UNDEPLOYED on every tenant, pinned to a stale chart, on a hostname with
+  # no DNS record — yet every re-apply stamped it back. The live app is the
+  # shared host aa0000000000000000000210, seeded by MeshmakersAccounting.Host on
+  # the root. Removing it from this seed does NOT remove it from tenants that
+  # already carry it (AB#4685) — that is a separate cleanup.
+  - rtId: 67e10c0bfe3e19891bbfd261
+    ckTypeId: System.Communication/Adapter
+    associations:
+      # Default Cloud pool, seeded by the System.Communication blueprint.
+      - roleId: System.Communication/Manages
+        targetRtId: "670000000000000000000001"
+        targetCkTypeId: System.Communication/Pool
+        attributes: []
+      # Chart source: meshmakers-dev Helm repo (dev channel, 003) — required
+      # for DeployWorkload ("no Helm repository is linked" otherwise).
+      - roleId: System.Communication/HelmRepository
+        targetRtId: "670000000000000000000003"
+        targetCkTypeId: System.Communication/HelmRepositoryConfiguration
+        attributes: []
+    attributes:
+      - id: System/Name
+        value: FinAPI Adapter
+      - id: System/Description
+        value: Adapter for synchronizing bank accounts and transactions via finAPI
+      - id: System.Communication/ChartName
+        value: octo-finapi-adapter
+      - id: System.Communication/ChartVersion
+        value: ''
+      - id: System.Communication/AdapterConfiguration
+        value: >-
+          {
+            "FinApi": {
+              "BaseUrl": "https://sandbox.finapi.io",
+              "ClientId": "<your-client-id>",
+              "ClientSecret": "<your-client-secret>"
+            }
+          }
+      - id: System.Communication/StatusMessage
