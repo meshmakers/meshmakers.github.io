@@ -94,7 +94,8 @@ entities:
           #      precondition; on salzburgdev this was done manually for the test.
           #  [STRUCT] ZIP layout v2: entries are grouped as
           #      {fiscal year name}/{month yyyy-MM}/{type} where type is "Verträge" for
-          #      recurring master documents (DocumentState RECURRING=4) and
+          #      recurring master documents (DocumentState RECURRING=4 - reachable only
+          #      since AB#5282 loaded them by type; they carry no DocumentToFiscalYear) and
           #      "Eingangsrechnungen"/"Ausgangsrechnungen" by DocumentType otherwise.
           #      File names are {document date}_{vendor or customer}_{NNN}.pdf — the
           #      running number and per-segment sanitizing come from CreateZipArchive@1
@@ -156,10 +157,123 @@ entities:
               graphDirection: Inbound          # [1] validate
               targetPath: $.docGroups
 
+            # AB#5282: the window a recurring master must fall into to ship with THIS
+            # package - the fiscal year INTERSECTED with the optional from/to, computed
+            # once here rather than per document. Recurring masters bypass
+            # DocumentToFiscalYear (see 1b below), so nothing else keeps them inside the
+            # requested year: with the raw from/to alone, "fiscalYearId=2026&from=2025-01-01"
+            # would pull a 2025 contract into the 2026 package. Intersecting means neither
+            # side can ever widen the other. Absent/unparseable inputs fall back to the open
+            # bound, so a tenant whose fiscal year carries no dates behaves as before.
+            # AdjustToUniversal|AssumeUniversal is mandatory: a plain TryParse turns
+            # "2026-08-01T00:00:00Z" into the HOST's local time, and emitting that without
+            # an offset shifts the window by the adapter's UTC offset - on a CEST host the
+            # August window started at 02:00 and dropped every document dated on the 1st.
+            # Parse to UTC, emit with the Z, and the result is host-independent.
+            - type: ExecuteCSharp@1
+              description: Recurring-document window start (fiscal year intersected with from)
+              code: 'var st = System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal; DateTime a; var hasA = DateTime.TryParse(fyStart, System.Globalization.CultureInfo.InvariantCulture, st, out a); DateTime b; var hasB = DateTime.TryParse(qFrom, System.Globalization.CultureInfo.InvariantCulture, st, out b); var r = hasA && hasB ? (a > b ? a : b) : hasA ? a : hasB ? b : DateTime.MinValue; return r.ToString("yyyy-MM-ddTHH:mm:ss") + "Z";'
+              usings:
+                - System
+              returnType: String
+              arguments:
+                - name: fyStart
+                  valuePath: $.fy.Items[0].Attributes.StartDate
+                  dataType: String
+                - name: qFrom
+                  valuePath: $.query.from
+                  dataType: String
+              targetPath: $.recPeriodFrom
+            - type: ExecuteCSharp@1
+              description: Recurring-document window end (fiscal year intersected with to)
+              code: 'var st = System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal; DateTime a; var hasA = DateTime.TryParse(fyEnd, System.Globalization.CultureInfo.InvariantCulture, st, out a); DateTime b; var hasB = DateTime.TryParse(qTo, System.Globalization.CultureInfo.InvariantCulture, st, out b); var r = hasA && hasB ? (a < b ? a : b) : hasA ? a : hasB ? b : DateTime.MaxValue; return r.ToString("yyyy-MM-ddTHH:mm:ss") + "Z";'
+              usings:
+                - System
+              returnType: String
+              arguments:
+                - name: fyEnd
+                  valuePath: $.fy.Items[0].Attributes.EndDate
+                  dataType: String
+                - name: qTo
+                  valuePath: $.query.to
+                  dataType: String
+              targetPath: $.recPeriodTo
+
+            # -- 1b) Recurring master documents (Dauerbelege, DocumentState 4) ----------
+            #     AB#5282: a Dauerbeleg is NEVER assigned to a fiscal year: the FY assignment pass
+            #     in match-transactions-to-documents excludes DocumentState 4 by design
+            #     (a standing contract is a template, not a receipt of one year). So the
+            #     association load above can never see one, and every payment settled by
+            #     a leasing, insurance or rent Dauerbeleg reported "BelegVorhanden=Nein"
+            #     with an empty Belegnummer and NotizStB - 9 of 43 such rows in the
+            #     2026-08 handover. The "Verträge" type folder below was dead code for the
+            #     same reason. Load them by type and merge them into the document set;
+            #     the period gate still decides whether the contract PDF itself ships with
+            #     a given month, while the payment lookup above now always resolves it.
+            #     Distinct on RtId because a Dauerbeleg MAY also carry a manual
+            #     DocumentToFiscalYear and would otherwise be exported twice.
+            - type: GetRtEntitiesByType@1
+              description: Recurring master documents (never fiscal-year assigned)
+              ckTypeId: Meshmakers.Accounting/AccountingDocument
+              targetPath: $.recDocs
+              take: 500
+              fieldFilters:
+                - attributePath: DocumentState
+                  operator: Equals
+                  comparisonValue: 4
+            # take is a hard cap, not a page size, and there is no continuation loop
+            # here. 500 standing contracts per tenant is far beyond anything real (the
+            # busiest tenant has 13), but a silent truncation would drop payments back
+            # to "BelegVorhanden=Nein" with no way to tell why - the exact failure this
+            # work item is about. Same treatment as the AB#4702 cap in the fiscal-year
+            # assignment pass: never skip quietly.
+            - type: If@1
+              description: Recurring-document cap exceeded — never truncate silently (AB#5282)
+              path: $.recDocs.TotalCount
+              operator: GreaterThan
+              value: 500
+              valueType: Int64
+              transformations:
+                - type: Logger@1
+                  message: "Handover export - more than 500 recurring master documents (Dauerbelege); the ones beyond the 500 loaded are MISSING from this package and their payments will report BelegVorhanden=Nein. Raise the take cap or add paging (AB#5282)."
+            - type: Flatten@1
+              description: Start the export document set with the fiscal year's documents
+              path: $.docGroups[0].Items[*]
+              targetPath: $.mergedDocs
+            - type: Flatten@1
+              description: Append the recurring master documents
+              path: $.recDocs.Items[*]
+              targetPath: $.mergedDocs
+              targetValueWriteMode: Append
+            # Distinct@1 passes straight through when its path is not an array, so it
+            # must point at the array itself ($.mergedDocs), never at $.mergedDocs[*] -
+            # $.exportDocs would silently never be written and the ForEach below would
+            # fail with PathMustBeArray.
+            - type: Distinct@1
+              description: Drop a Dauerbeleg that is also fiscal-year assigned
+              path: $.mergedDocs
+              distinctValuePath: $.RtId
+              targetPath: $.exportDocs
+            - type: SetPrimitiveValue@1
+              description: Release the intermediate document lists
+              targetPath: $.mergedDocs
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the fiscal-year association result
+              targetPath: $.docGroups
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the recurring-document load
+              targetPath: $.recDocs
+              value: ""
+              valueType: String
+
             # -- 2) Per document: resolve original, render cover, merge, collect entry --
             - type: ForEach@1
               description: Build one merged PDF per document
-              iterationPath: $.docGroups[0].Items
+              iterationPath: $.exportDocs
               targetPath: $.docResults
               targetValueKind: Simple
               targetValueWriteMode: Overwrite
@@ -252,14 +366,30 @@ entities:
                       value: "no"
                       valueType: String
 
+                # AB#5282: snapshot the include decision HERE, between the
+                # scope/cancelled gates and the period gate. The payment lookup below
+                # runs before the render gate, so without this a document excluded by
+                # SCOPE (an AR invoice in an AP-only export) or CANCELLED (AB#4704:
+                # a storno is never handed over) would still emit a lookup line and
+                # surface in zahlungen.csv as "BelegVorhanden=Ja" with its number and
+                # tax-advisor note. Those two exclusions must hold for the payment
+                # side too. The PERIOD gate below must NOT touch this flag - resolving
+                # an out-of-period document is the whole point of the lookup.
+                - type: SetPrimitiveValue@1
+                  description: Payment-lookup eligibility = the scope/cancelled decision
+                  targetPath: $.key.payEligible
+                  valuePath: $.key.include
+                  valueType: String
+
                 # period gate (AB#4535): optional query from/to narrow the export
                 # to a month or quarter — a document dated outside [from, to] is
-                # flipped back to include=no. The params are ABSENT for a
-                # full-year export and a missing path makes FormatString throw,
-                # so all-inclusive bounds are seeded first and SelectByPath only
-                # copies the params when present (AB#4395 pattern). Date tests
-                # run as If@1 valueType DateTime — date field filters on dynamic
-                # CK attributes do not coerce (AB#4389).
+                # flipped back to include=no. Date tests run as If@1 valueType
+                # DateTime — date field filters on dynamic CK attributes do not
+                # coerce (AB#4389).
+                #
+                # The params are ABSENT for a full-year export and a missing path makes
+                # FormatString throw, so all-inclusive bounds are seeded first and
+                # SelectByPath only copies the params when present (AB#4395 pattern).
                 - type: SetPrimitiveValue@1
                   description: Default period lower bound (open)
                   targetPath: $.key.periodFrom
@@ -277,6 +407,28 @@ entities:
                       targetPath: $.key.periodFrom
                     - path: $.full.query.to
                       targetPath: $.key.periodTo
+                # AB#5282: a recurring master is bounded by the precomputed fiscal-year
+                # window instead. LAST, so it overrides the raw params - they may not
+                # widen a Dauerbeleg out of the requested year. Deliberately scoped to
+                # DocumentState 4: association-sourced documents keep the open default,
+                # because they are in the year by construction and a MANUAL
+                # DocumentToFiscalYear outside the year's range is a deliberate act that
+                # must not be silently overridden.
+                - type: If@1
+                  description: Recurring master — bound to the fiscal-year window
+                  path: $.key.Attributes.DocumentState
+                  operator: Equal
+                  value: 4
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.periodFrom
+                      valuePath: $.full.recPeriodFrom
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.periodTo
+                      valuePath: $.full.recPeriodTo
+                      valueType: String
                 - type: If@1
                   description: Document date before the period start — exclude
                   path: $.key.Attributes.DocumentDate
@@ -298,6 +450,83 @@ entities:
                     - type: SetPrimitiveValue@1
                       targetPath: $.key.include
                       value: "no"
+                      valueType: String
+
+                # AB#5282: scope- and cancellation-excluded documents stay out of the
+                # payment index too - see the payEligible snapshot above.
+                - type: If@1
+                  description: Document is eligible for the payment index
+                  path: $.key.payEligible
+                  operator: Equal
+                  value: "yes"
+                  valueType: String
+                  transformations:
+                  # AB#5282: the payment-side lookup runs for EVERY document of the fiscal
+                  # year, OUTSIDE the AB#5263 render gate below. It was nested inside that
+                  # gate, which made zahlungen.csv report "BelegVorhanden=Nein" for every
+                  # payment whose document is dated outside the requested period - 23 of 43
+                  # such rows in the 2026-08 handover, all of them actually linked. The two
+                  # nodes here are cheap (one association read, no file load, no render); the
+                  # transactions are released again below for documents the gate excludes, so
+                  # the memory profile of a one-month export is unchanged.
+                  # 2b) linked bank transactions (payment proof + payment lookup)
+                  - type: GetAssociationTargets@1
+                    description: Linked bank transactions (payment proof)
+                    originRtIdPath: $.key.RtId
+                    originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                    targetCkTypeId: Basic.Accounting/BankTransaction
+                    associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                    graphDirection: Outbound        # [1] validate
+                    targetPath: $.key.txGroups
+
+                  # AB#5085: payment-side lookup. Emits one compact JSON line per
+                  # document: [docId, docNumber, docDate, taxAdvisorNote, txId...], which
+                  # zahlungen.csv inverts into txId -> documents. It reuses the txGroups
+                  # the cover sheet needs anyway for in-scope documents - no second
+                  # association call there and no second copy of the document entities.
+                  # Returns null when the document settles no transaction, so Flatten
+                  # drops it.
+                  - type: ExecuteCSharp@1
+                    description: Payment lookup line (document + the transactions it settles)
+                    code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; var ids = new List<string>(); object txObj = txs; var txEls = new List<JsonElement>(); if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) txEls.Add(el); } else if (txObj is System.Collections.IEnumerable tseq) { foreach (var o in tseq) { if (o is JsonElement oe) txEls.Add(oe); else if (o != null) { try { txEls.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(o))); } catch { } } } } { foreach (var t in txEls) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement p; if (t.TryGetProperty("RtId", out p)) { var s = S(p); if (!string.IsNullOrWhiteSpace(s)) ids.Add(s); } } } if (ids.Count == 0) return null; var head = new List<string> { S(docId), S(docNumber), S(docDate), S(taxNote) }; head.AddRange(ids); return JsonSerializer.Serialize(head.ToArray());'
+                    usings:
+                      - System
+                      - System.Linq
+                      - System.Text.Json
+                      - System.Collections.Generic
+                    returnType: String
+                    arguments:
+                      - name: docId
+                        valuePath: $.key.RtId
+                        dataType: String
+                      - name: docNumber
+                        valuePath: $.key.Attributes.DocumentNumber
+                        dataType: String
+                      - name: docDate
+                        valuePath: $.key.Attributes.DocumentDate
+                        dataType: String
+                      - name: taxNote
+                        valuePath: $.key.Attributes.TaxAdvisorNote
+                        dataType: String
+                      - name: txs
+                        valuePath: $.key.txGroups[0].Items
+                        dataType: RecordArray
+                    targetPath: $.key.payLink
+
+                # Release the transactions again for documents the render gate excludes -
+                # they were loaded only to build the lookup line above. Without this the
+                # context would hold every fiscal-year document's transactions at once,
+                # which is exactly the AB#5263 regression.
+                - type: If@1
+                  description: Out-of-scope document — release the loaded transactions
+                  path: $.key.include
+                  operator: NotEqual
+                  value: "yes"
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.txGroups
+                      value: ""
                       valueType: String
 
                 # AB#5263: everything below is per-document work that costs a file load, a
@@ -422,51 +651,6 @@ entities:
                     associationRoleId: System/Related
                     graphDirection: Outbound        # [1] validate
                     targetPath: $.key.fileGroups
-
-                  # 2b) first linked bank transaction (payment proof) via TransactionToDocument
-                  - type: GetAssociationTargets@1
-                    description: Linked bank transactions (payment proof)
-                    originRtIdPath: $.key.RtId
-                    originCkTypeId: Meshmakers.Accounting/AccountingDocument
-                    targetCkTypeId: Basic.Accounting/BankTransaction
-                    associationRoleId: Meshmakers.Accounting/TransactionToDocument
-                    graphDirection: Outbound        # [1] validate
-                    targetPath: $.key.txGroups
-
-                  # AB#5085: payment-side lookup, built HERE because txGroups is already
-                  # loaded for the cover sheet - no extra association call and no second
-                  # copy of the document entities. Emits one compact JSON line per
-                  # document: [docId, docNumber, docDate, taxAdvisorNote, txId...], which
-                  # zahlungen.csv inverts into txId -> documents. Runs for EVERY document
-                  # of the fiscal year, before the scope/period gate, so a payment whose
-                  # document is out of period still resolves its number. Returns null when
-                  # the document settles no transaction, so Flatten drops it.
-                  - type: ExecuteCSharp@1
-                    description: Payment lookup line (document + the transactions it settles)
-                    code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; var ids = new List<string>(); object txObj = txs; var txEls = new List<JsonElement>(); if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) txEls.Add(el); } else if (txObj is System.Collections.IEnumerable tseq) { foreach (var o in tseq) { if (o is JsonElement oe) txEls.Add(oe); else if (o != null) { try { txEls.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(o))); } catch { } } } } { foreach (var t in txEls) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement p; if (t.TryGetProperty("RtId", out p)) { var s = S(p); if (!string.IsNullOrWhiteSpace(s)) ids.Add(s); } } } if (ids.Count == 0) return null; var head = new List<string> { S(docId), S(docNumber), S(docDate), S(taxNote) }; head.AddRange(ids); return JsonSerializer.Serialize(head.ToArray());'
-                    usings:
-                      - System
-                      - System.Linq
-                      - System.Text.Json
-                      - System.Collections.Generic
-                    returnType: String
-                    arguments:
-                      - name: docId
-                        valuePath: $.key.RtId
-                        dataType: String
-                      - name: docNumber
-                        valuePath: $.key.Attributes.DocumentNumber
-                        dataType: String
-                      - name: docDate
-                        valuePath: $.key.Attributes.DocumentDate
-                        dataType: String
-                      - name: taxNote
-                        valuePath: $.key.Attributes.TaxAdvisorNote
-                        dataType: String
-                      - name: txs
-                        valuePath: $.key.txGroups[0].Items
-                        dataType: RecordArray
-                    targetPath: $.key.payLink
 
                   # 2c) assemble the cover-sheet model — escaping-safe and null-safe.
                   #     We seed a full skeleton (labels set, values ""), then SelectByPath@1
