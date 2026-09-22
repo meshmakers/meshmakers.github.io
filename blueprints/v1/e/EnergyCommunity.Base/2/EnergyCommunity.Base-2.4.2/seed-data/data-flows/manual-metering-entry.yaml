@@ -1,0 +1,199 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.2,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.7.0,2.0)
+- System.UI-[2.4,3.0)
+
+# manual-metering-entry (AB#4558) — deployed HTTP endpoint the frontend calls to
+# enter or correct metering values on stream data.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Manual metering entry / correction pipeline (AB#4558) ───────────────
+# Deployed HTTP endpoint the Energy Community frontend (Phase 2) calls to enter
+# or correct a metering value directly on the stream data. Base owns it because
+# Base owns the raw archive (ec0000000000000000000a01).
+#
+# Contract:
+#   POST /manualMeteringEntry
+#   { "anchorRtId": "<Basic.Energy/EnergyMeasurement rtId>",
+#     "unit": "KWh",
+#     "entries": [ { "from": "<iso>", "to": "<iso>", "value": <number> } ] }
+#
+# For each entry a single window is upserted into the raw archive for anchorRtId
+# with amount.value = entry.value, amount.unit = unit, dataQuality = Manual
+# (Basic.Energy DataQuality key 4), window = [from, to). SaveTimeRangeStreamDataInArchive@1
+# writes via an EnergyMeasurement UPDATE update-info keyed to the EXISTING anchor
+# (no ApplyChanges — the anchor must already exist; the node hard-fails with a
+# clear error if anchorRtId is not an existing entity). The CrateDB write is an
+# UPSERT on (window_start, window_end, rtId, ckTypeId), so re-writing an existing
+# window corrects it; retroactive writes auto-schedule rollup recompute.
+#
+# Ships DeploymentState 2 (Deployed) — the frontend calls it live. Executes on the
+# default Mesh Adapter 670000000000000000000002.
+- rtId: ec0000000000000000000a31
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: manual-metering-entry
+  - id: System/Description-1
+    value: Manual entry / correction of metering values on stream data (AB#4558)
+
+- rtId: ec0000000000000000000a32
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a31
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@1
+          path: /manualMeteringEntry
+          method: POST
+      transformations:
+        - type: Logger@1
+          message: "Manual metering entry (AB#4558): request received on /manualMeteringEntry"
+
+        # Audit trail: the full request payload (anchorRtId, unit, entries) is
+        # dumped to the adapter log; the adapter log line carries the timestamp
+        # (when). Caller identity (who), if present, is in the request headers.
+        - type: PrintDebug@1
+          severity: Information
+
+        # Default response — overwritten with status=ok on the happy path. Bad
+        # input leaves this in place and returns HTTP 200 with a clear error body
+        # instead of a raw 500.
+        - type: SetPrimitiveValue@1
+          targetPath: $.response.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.response.message
+          value: "Invalid request: 'anchorRtId' (string) and a non-empty 'entries' array of { from, to, value } are required."
+          valueType: String
+
+        # Guard 1: anchorRtId present
+        - type: If@1
+          description: anchorRtId present
+          path: $.body.anchorRtId
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            # Guard 2: at least one entry present (entries[0] carries a 'to')
+            - type: If@1
+              description: at least one entry present
+              path: $.body.entries[0].to
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                # Resolve the anchor EnergyMeasurement so its ObisCode can be
+                # carried into every write. ObisCode is a REQUIRED non-null column
+                # on the raw archive (ec0000000000000000000a01); the write fails at
+                # CrateDB (XX000 "obiscode" must not be null) if it is omitted.
+                # The anchor already carries the correct ObisCode, so preserve it.
+                - type: GetRtEntitiesById@1
+                  description: Resolve the anchor EnergyMeasurement (carries ObisCode)
+                  ckTypeId: Basic.Energy/EnergyMeasurement
+                  rtIdsPath: $.body.anchorRtId
+                  take: 1
+                  targetPath: $.anchor
+
+                # Guard 3: the anchor exists. An orphan anchorRtId now returns
+                # status=error (HTTP 200) instead of a null-ObisCode CrateDB 500.
+                - type: If@1
+                  description: anchor EnergyMeasurement exists
+                  path: $.anchor.Items[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    # Build one EnergyMeasurement UPDATE update-info per entry, keyed
+                    # to the existing anchor. Per-entry guard drops windows where
+                    # from >= to so degenerate ranges never reach the archive.
+                    - type: ForEach@1
+                      description: Build archive write items (skip entries where from >= to)
+                      maxDegreeOfParallelism: 1
+                      iterationPath: $.body.entries
+                      mergePath: $.key.updateInfo
+                      targetPath: $.writeItems
+                      transformations:
+                        - type: If@1
+                          description: Valid window (from < to)
+                          path: $.key.from
+                          operator: LessThan
+                          valuePath: $.key.to
+                          valueType: DateTime
+                          transformations:
+                            - type: Logger@1
+                              message: "Manual metering entry: writing corrected window with dataQuality=Manual"
+                            - type: CreateUpdateInfo@1
+                              targetPath: $.key.updateInfo
+                              updateKind: UPDATE
+                              ckTypeId: Basic.Energy/EnergyMeasurement
+                              rtIdPath: $.full.body.anchorRtId
+                              attributeUpdates:
+                                - attributeName: Amount.Value
+                                  attributeValueType: Double
+                                  valuePath: $.key.value
+                                - attributeName: Amount.Unit
+                                  attributeValueType: Enum
+                                  valuePath: $.full.body.unit
+                                - attributeName: DataQuality
+                                  attributeValueType: Enum
+                                  value: Manual
+                                - attributeName: TimeRange.From
+                                  attributeValueType: DateTime
+                                  valuePath: $.key.from
+                                - attributeName: TimeRange.To
+                                  attributeValueType: DateTime
+                                  valuePath: $.key.to
+                                # Preserve the anchor's ObisCode (required non-null
+                                # archive column) so the manual/corrected window
+                                # stays on the same OBIS meter channel.
+                                - attributeName: ObisCode
+                                  attributeValueType: String
+                                  valuePath: $.full.anchor.Items[0].Attributes.ObisCode
+
+                    # Upsert the manual/corrected windows into the raw archive. The
+                    # node enforces that anchorRtId exists as an EnergyMeasurement
+                    # entity (orphan-row guard) and skips rows without a usable window.
+                    - type: SaveTimeRangeStreamDataInArchive@1
+                      description: Upsert manual/corrected windows into the raw energy-measurements archive
+                      path: $.writeItems
+                      archiveRtId: ec0000000000000000000a01
+                      fromAttributePath: TimeRange.From
+                      toAttributePath: TimeRange.To
+
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.response.status
+                      value: ok
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.response.message
+                      value: "Manual metering entries written to the raw archive with dataQuality=Manual."
+                      valueType: String
+
+        # Persist the status/message as OutputData (retrievable via
+        # GetLatestPipelineExecution) — the per-execution audit record.
+        - type: SetPipelineExecutionResult@1
+          path: $.response
