@@ -1,0 +1,215 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.2,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.7.0,2.0)
+- System.UI-[2.4,3.0)
+
+# The energy-statistics MeshBoard: Dashboard `energy-community-energy-quantities`
+# and its five widgets.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Energy-statistics MeshBoard (EC v2, AB#4578 — Board 2) ──────────────
+# System.UI/Dashboard `energy-community-energy-quantities` + widgets. Adopts
+# and converts the retired EnergyCommunity/EnergyQuantity board
+# (misc/energy-community-deployment/data/boards/Energy_quantity_statistics.yaml)
+# to stream data: the widgets bind to the persisted SD queries above by rtId
+# (a21/a22/a23), so those queries MUST be seeded before the board — they are,
+# just above. Requires the service-managed System.UI CK model
+# (octo-platform-services). The old RT navigation
+# (parent...energyCommunityMeteringPoint->ckTypeId) and the RT
+# quantity/timeRange field filters are gone — the time window is supplied by
+# the dashboard time filter as StreamDataArguments.from/to.
+#
+# Binding notes (verified against the meshboard widget source):
+#   - KPI groupedAggregation picks the FIRST aggregation row whose
+#     queryCategoryField cell == queryCategoryValue (it does NOT sum rows).
+#     Producer feed-in is a single OBIS (1-1:2.9.0 …) so its KPI is exact;
+#     consumer consumption is split over two OBIS series (1-1:1.9.0 G.01 /
+#     P.01) — the KPI shows the primary grid series (…1.9.0 G.01). The
+#     by-OBIS pie below shows every series (production vs both consumption
+#     series) so nothing is hidden.
+#   - Physical SD columns: group-by columns are lower-cased with no suffix
+#     (obiscode, dataquality, amountunit); SUM(amount.value) -> amountvalue_sum.
+#   - queryFamily is set to streamData explicitly to skip the runtime lookup.
+#   - rtId scheme: dashboard/widgets use the ec00…0cXX block.
+
+# Dashboard
+- rtId: ec0000000000000000000c01
+  ckTypeId: System.UI/Dashboard-1
+  rtWellKnownName: energy-community-energy-quantities
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Energy quantity statistics
+  - id: System/Description-1
+    value: |-
+      ---MESHBOARD_VARIABLES---
+      {"timeFilter":{"enabled":true,"defaultSelection":{"type":"custom","customFrom":"2026-07-01T00:00:00.000Z","customTo":"2026-08-01T00:00:00.000Z"},"selection":{"type":"custom","customFrom":"2026-07-01T00:00:00.000Z","customTo":"2026-08-01T00:00:00.000Z"}}}
+  - id: System.UI/Dashboard.Columns-1
+    value: 4
+  - id: System.UI/Dashboard.RowHeight-1
+    value: 200
+  - id: System.UI/Dashboard.Gap-1
+    value: 16
+
+# Widget: Erzeuger (producer feed-in) KPI — a22 by OBIS 1-1:2.9.0.
+- rtId: ec0000000000000000000c02
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeuger
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"queryMode":"groupedAggregation","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.01","queryValueField":"amountvalue_sum","suffix":"kWh","icon":"chart","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22"}'
+
+# Widget: Verbraucher (consumer) KPI — a22 by OBIS 1-1:1.9.0 G.01.
+- rtId: ec0000000000000000000c03
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Verbraucher
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"queryMode":"groupedAggregation","queryCategoryField":"obiscode","queryCategoryValue":"1-1:1.9.0 G.01","queryValueField":"amountvalue_sum","suffix":"kWh","icon":"chart","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22"}'
+
+# Widget: Energy amounts by OBIS code (pie) — a22, all series
+# (production 2.9.0 vs consumption 1.9.0). Replaces the old
+# produced-vs-consumed RT pie.
+- rtId: ec0000000000000000000c04
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy amounts by OBIS code (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"pie","categoryField":"obiscode","valueField":"amountvalue_sum","showLabels":false,"showLegend":true,"legendPosition":"right","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22"}'
+
+# Widget: Energy amounts by data quality (donut) — a23.
+- rtId: ec0000000000000000000c05
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy amounts by data quality (in kWh)
+  - id: System.UI/DashboardWidget.Type-1
+    value: pieChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a23
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"donut","categoryField":"dataquality","valueField":"amountvalue_sum","showLabels":true,"showLegend":false,"legendPosition":"right","queryFamily":"streamData","queryName":"energy-measurements-aggregation-by-data-quality","queryRtId":"ec0000000000000000000a23"}'
+
+# Widget: energy time series (lineChart) — one line per OBIS code, each the SUM
+# over all metering registers of that code (the community total). Resolution-aware
+# (AB#4290) so the server picks the rollup grain for the window (hourly for a month,
+# coarser for a year) instead of scanning the raw 15-min archive; aggregateSeriesByGroup
+# (AB#4714) buckets the source EnergyMeasurement entities by obisCode and sums each
+# group server-side — without it the per-rtId fan-out would render one arbitrary meter
+# per OBIS code, not the total. queryRtId a21 supplies only the base archive family.
+- rtId: ec0000000000000000000c06
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c01
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy over time
+  - id: System.UI/DashboardWidget.Type-1
+    value: lineChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 4
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 4
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a21
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"line","categoryField":"window_start","seriesGroupField":"obisCode","valueField":"amount.value","unitField":"amount.unit","showLegend":true,"legendPosition":"right","showMarkers":false,"showDataBadge":true,"queryFamily":"streamData","queryName":"energy_measurements","queryRtId":"ec0000000000000000000a21","resolutionAware":true,"requiredAggregation":"SUM","aggregateSeriesByGroup":true}'
