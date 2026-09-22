@@ -1,0 +1,132 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.2,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.7.0,2.0)
+- System.UI-[2.4,3.0)
+
+# Shared RT queries over the master data (_trees, _energy_customers,
+# _energy_operating_facilities, _energy_meter_consumer, _energy_meter_producer).
+# Used by the Excel import above and by the EDA and Billing blueprints.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Shared queries: Excel-import ────────────────────────────────────────
+- rtId: 682f0020af1fe4dd0f346f3c
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _trees
+  - id: System/Query.CkTypeId-1
+    value: Basic/Tree
+  - id: System/Query.Columns-1
+    value:
+    - rtId
+    - name
+    - description
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+
+- rtId: 682f0758900aec7bc66dcb74
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _energy_customers
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Customer
+  - id: System/Query.Columns-1
+    value:
+    - contact.legalEntityType
+    - taxProcedureCreditNote
+    - contact.salutation
+    - contact.firstName
+    - contact.lastName
+    - contact.companyName
+    - contact.address.street
+    - contact.address.zipcode
+    - contact.address.cityTown
+    - contact.address.nationalCode
+    - customerNumber
+    - contact.taxIdentificationNumber
+    - contact.companyRegisterNumber
+    - contact.email
+    - bankAccount.iban
+    - bankAccount.swiftCode
+    - bankAccount.bankName
+    - bankAccount.accountHolder
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+
+- rtId: 682f0d3cce5a9c50f9241cc8
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _energy_operating_facilities
+  # EC v2 (ADR 0001): OperatingFacility moved to Basic.Energy — EnergyCommunity 4.x
+  # no longer duplicates it.
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/OperatingFacility
+  - id: System/Query.Columns-1
+    value:
+    - address.street
+    - address.zipcode
+    - address.cityTown
+    - address.nationalCode
+    - facilityType
+    - name
+    - customer.energyCommunityCustomer->customerNumber
+    - parent.basicCity->zipcode
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+
+- rtId: 682f1209ce5a9c50f9242880
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _energy_meter_consumer
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Consumer
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+    - name
+    - energyConsumption
+    - parent.basicEnergyOperatingFacility->name
+    - parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->customerNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+
+- rtId: 682f1218ce5a9c50f9242881
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: _energy_meter_producer
+  - id: System/Query.CkTypeId-1
+    value: EnergyCommunity/Producer
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+    - energyProductionCapacity
+    - name
+    - productionType
+    - parent.basicEnergyOperatingFacility->name
+    - parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->customerNumber
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
