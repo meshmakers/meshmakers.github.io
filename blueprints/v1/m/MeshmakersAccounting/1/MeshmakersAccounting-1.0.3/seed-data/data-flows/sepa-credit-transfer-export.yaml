@@ -1,0 +1,208 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipeline: SEPA credit-transfer export (AB#4658) -----------------------
+  # On-demand outbound export triggered via POST /exportSepa. Body:
+  #   { "documentIds": ["<rtId>", ...],       # selected OPEN incoming invoices
+  #     "debtorBankAccountId": "<rtId>",       # the paying company BankAccount
+  #     "executionDate": "yyyy-MM-dd" }        # optional; defaults to today
+  # Builds an ISO 20022 pain.001.001.03 (Austrian variant) SEPA credit-transfer
+  # batch from the selected documents (payee name = Vendor.AccountName, falling
+  # back to Vendor.CompanyName; payee IBAN/BIC = Vendor.IBAN/Vendor.Bic; amount =
+  # GrossTotal; remittance = DocumentNumber) and returns it as a FileSystemItem:
+  #   { "fileSystemItem": "<rtId>" }
+  # The frontend resolves the download URL via GetFileSystemItem and bearer-fetches
+  # the XML blob (same pattern as /exportHandover). The user imports the file into
+  # their e-banking and approves it there — the app never executes the payment
+  # (no finAPI PIS; SCA stays at the bank). Post-install: DeployDataFlow for this
+  # DataFlow. Uses the BuildSepaCreditTransfer@1 mesh-adapter node (AB#4658).
+  - rtId: aa0000000000000000000700
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: SEPA Credit Transfer Export
+      - id: System/Description
+        value: Exports selected open incoming invoices as a pain.001.001.03 SEPA credit-transfer file for e-banking import
+  - rtId: aa0000000000000000000701
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000700
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: SEPA Credit Transfer Export Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |
+          triggers:
+            - type: FromHttpRequest@2
+              path: /exportSepa
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            # Payment-order workflow (AB#4658): the body carries the selected payment
+            # orders and the paying account:
+            #   { "paymentOrderIds": ["<rtId>", ...], "debtorBankAccountId": "<rtId>" }
+            # Each PaymentOrder already holds recipient + amount + its own ExecutionDate,
+            # so the node groups them into per-date PmtInf blocks. After the file is
+            # stored, every order is marked Executed with PaymentExternalId = file rtId.
+            # -- 1) Debtor: our company (name) + the paying bank account (IBAN) ----------
+            # BankAccount stores no BIC; the BuildSepaCreditTransfer node emits the
+            # debtor agent as Othr/Id=NOTPROVIDED when no BIC is supplied.
+            - type: GetRtEntitiesByType@1
+              description: Load our own company profile for the debtor name
+              ckTypeId: Meshmakers.Accounting/CompanyProfile
+              take: 1
+              targetPath: $.company
+            - type: FormatString@1
+              description: Debtor bank account rtId as a single-element JSON array
+              format: '["{$.body.debtorBankAccountId}"]'
+              targetPath: $.debtorIdJson
+            - type: WriteJson@1
+              jsonStringPath: $.debtorIdJson
+              targetPath: $.debtorIdArr
+            - type: GetRtEntitiesById@1
+              description: Load the paying bank account (debtor)
+              ckTypeId: Basic.Accounting/BankAccount
+              rtIdsPath: $.debtorIdArr
+              targetPath: $.debtorAcct
+
+            # -- 2) Per selected payment order: project one SEPA payment item ------------
+            # paymentOrderIds is an array of rtId strings; load each PaymentOrder and
+            # copy its (top-level) fields into a payment item collected via the ForEach
+            # merge path. SelectByPath skips missing/null sources, leaving the defaults.
+            - type: ForEach@1
+              description: Build one SEPA payment item per selected payment order
+              iterationPath: $.body.paymentOrderIds
+              targetPath: $.payments
+              mergePath: $.item
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: FormatString@1
+                  format: '["{$.key}"]'
+                  targetPath: $.idJson
+                - type: WriteJson@1
+                  jsonStringPath: $.idJson
+                  targetPath: $.idArr
+                - type: GetRtEntitiesById@1
+                  description: Load the PaymentOrder
+                  ckTypeId: Basic.Accounting/PaymentOrder
+                  rtIdsPath: $.idArr
+                  targetPath: $.po
+                - type: SetPrimitiveValue@1
+                  targetPath: $.item.recipientName
+                  value: ""
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.item.recipientIban
+                  value: ""
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.item.remittance
+                  value: ""
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.item.currency
+                  value: EUR
+                  valueType: String
+                # PaymentOrder attributes are top-level (not a record). Attribute
+                # names are the CK 'name' values (Amount, RecipientName, ...).
+                - type: SelectByPath@1
+                  description: Copy recipient, amount, remittance and execution date
+                  selectPath:
+                    - path: $.po.Items[0].Attributes.RecipientName
+                      targetPath: $.item.recipientName
+                    - path: $.po.Items[0].Attributes.RecipientIban
+                      targetPath: $.item.recipientIban
+                    - path: $.po.Items[0].Attributes.RecipientBic
+                      targetPath: $.item.recipientBic
+                    - path: $.po.Items[0].Attributes.Amount
+                      targetPath: $.item.amount
+                    - path: $.po.Items[0].Attributes.Currency
+                      targetPath: $.item.currency
+                    - path: $.po.Items[0].Attributes.Purpose
+                      targetPath: $.item.remittance
+                    - path: $.po.Items[0].Attributes.EndToEndReference
+                      targetPath: $.item.endToEndId
+                    - path: $.po.Items[0].Attributes.ExecutionDate
+                      targetPath: $.item.executionDate
+
+            # -- 3) Build the pain.001.001.03 batch (Austrian variant) -------------------
+            - type: BuildSepaCreditTransfer@1
+              description: Build the SEPA credit-transfer XML from the payment items
+              path: $.payments
+              targetPath: $.sepaXml
+              contentLengthTargetPath: $.sepaLen
+              debtorNamePath: $.company.Items[0].Attributes.Name
+              debtorIbanPath: $.debtorAcct.Items[0].Attributes.Iban
+
+            # -- 4) Store the XML as a FileSystemItem ------------------------------------
+            - type: SetPrimitiveValue@1
+              description: Export file name
+              targetPath: $.fileName
+              value: SEPA-Ueberweisung.xml
+              valueType: String
+            - type: CreateFileSystemUpdate@1
+              description: Store the SEPA XML
+              targetPath: $.fsItem
+              path: $.sepaXml
+              generateRtId: true
+              fileNamePath: $.fileName
+              contentType: application/xml
+              contentLengthPath: $.sepaLen
+              rootFolderWellKnownName: "Documents"
+
+            # -- 5) Mark every exported order Executed + stamp the file rtId -------------
+            - type: ForEach@1
+              description: Mark each payment order as exported
+              iterationPath: $.body.paymentOrderIds
+              targetPath: $.orderUpdates
+              mergePath: $.u
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Set PaymentOrder Status=Executed + ExternalId=file rtId
+                  targetPath: $.u
+                  updateKind: Update
+                  ckTypeId: Basic.Accounting/PaymentOrder
+                  rtIdPath: $.key
+                  attributeUpdates:
+                    - attributeName: Status
+                      attributeValueType: Enum
+                      value: Executed
+                    - attributeName: ExternalId
+                      attributeValueType: String
+                      valuePath: $.full.fsItem.RtId
+            - type: ApplyChanges@2
+              description: Persist the exported status on the payment orders
+              entityUpdatesPath: $.orderUpdates
+
+            # -- 6) Return { fileSystemItem: <rtId> } ------------------------------------
+            - type: SetPrimitiveValue@1
+              description: Response id at root
+              targetPath: $.fileSystemItem
+              valuePath: $.fsItem.RtId
+              valueType: String
+            - type: SetPipelineExecutionResult@1
+              path: $.fileSystemItem
+            # Scrub the context so the HTTP body is a clean { "fileSystemItem": "<rtId>" }
+            # and never echoes the request headers/body (echo-leak guard).
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.fileSystemItem
+                  inclusion: true
