@@ -1,0 +1,446 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+
+  # ============================================================================
+  # Board 1 — Finance Cockpit (meshmakers-finance-cockpit)
+  # ============================================================================
+  - rtId: 6a4dcf0100000000000000f1
+    ckTypeId: System.UI/Dashboard
+    rtWellKnownName: meshmakers-finance-cockpit
+    associations: []
+    attributes:
+    - id: System/Name
+      value: Finance Cockpit
+    # The blob after the ---MESHBOARD_VARIABLES--- marker carries the FiscalYear
+    # entity selector (see the header note). defaultRtId = FY 2026 (seeded).
+    - id: System/Description
+      value: |-
+        Costs vs revenue and budget overview.
+        ---MESHBOARD_VARIABLES---
+        {"entitySelectors":[{"id":"fy","label":"Geschäftsjahr","ckTypeId":"Meshmakers.Accounting/FiscalYear","attributeMappings":[{"attributePath":"startDate","variableName":"fyStart","attributeValueType":"DATE_TIME"},{"attributePath":"endDate","variableName":"fyEnd","attributeValueType":"DATE_TIME"}],"showInToolbar":true,"defaultRtId":"aa0000000000000000000100"}]}
+    - id: System.UI/Dashboard.Columns
+      value: 6
+    - id: System.UI/Dashboard.RowHeight
+      value: 200
+    - id: System.UI/Dashboard.Gap
+      value: 16
+
+  - rtId: 6a4dcf0100000000000000a1
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f1
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Net total by document type
+    - id: System.UI/DashboardWidget.Type
+      value: pieChart
+    - id: System.UI/DashboardWidget.Col
+      value: 1
+    - id: System.UI/DashboardWidget.Row
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 3
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c3
+    - id: System.UI/DashboardWidget.Config
+      value: '{"chartType":"donut","categoryField":"documenttype","valueField":"nettotal_sum","showLabels":true,"showLegend":true,"legendPosition":"right","queryName":"meshmakers-nettotal-by-documenttype","queryRtId":"6a4dcf0100000000000000c3","queryFamily":"runtime","filters":[{"attributePath":"fiscalYear.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}]}'
+
+  - rtId: 6a4dcf0100000000000000a2
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f1
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Outgoing invoices (revenue)
+    - id: System.UI/DashboardWidget.Type
+      value: table
+    - id: System.UI/DashboardWidget.Col
+      value: 4
+    - id: System.UI/DashboardWidget.Row
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 3
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c4
+    - id: System.UI/DashboardWidget.Config
+      value: '{"columns":[],"sorting":[{"field":"documentDate","dir":"desc"}],"filters":[{"attributePath":"documentType","operator":"EQUALS","comparisonValue":"OUTGOING"},{"attributePath":"fiscalYear.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}],"pageSize":10,"sortable":true,"queryName":"meshmakers-outgoing-invoices","queryRtId":"6a4dcf0100000000000000c4","queryFamily":"runtime"}'
+
+  - rtId: 6a4dcf0100000000000000a3
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f1
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Budget vs. actual — expenses
+    - id: System.UI/DashboardWidget.Type
+      value: barChart
+    - id: System.UI/DashboardWidget.Col
+      value: 1
+    - id: System.UI/DashboardWidget.Row
+      value: 3
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 4
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c6
+    # NOT_EQUALS INCOME (not EQUALS EXPENSE) so pre-1.5.0 categories with a
+    # missing CategoryKind attribute stay in the expenses chart (AB#4507).
+    # parent-nav filter scopes to the selected fiscal year (AB#4434).
+    - id: System.UI/DashboardWidget.Config
+      value: '{"chartType":"column","categoryField":"name","series":[{"field":"budgetAmount","name":"Budget"},{"field":"actualAmount","name":"Actual"}],"showLegend":true,"legendPosition":"bottom","queryName":"meshmakers-category-budget-actuals","queryRtId":"6a4dcf0100000000000000c6","queryFamily":"runtime","filters":[{"attributePath":"categoryKind","operator":"NOT_EQUALS","comparisonValue":"INCOME"},{"attributePath":"parent.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}]}'
+
+  - rtId: 6a4dcf0100000000000000a4
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f1
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Categories (budget, actual, last update)
+    - id: System.UI/DashboardWidget.Type
+      value: table
+    - id: System.UI/DashboardWidget.Col
+      value: 5
+    - id: System.UI/DashboardWidget.Row
+      value: 3
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 2
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c6
+    - id: System.UI/DashboardWidget.Config
+      value: '{"columns":[],"sorting":[{"field":"name","dir":"asc"}],"filters":[{"attributePath":"parent.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}],"pageSize":10,"sortable":true,"queryName":"meshmakers-category-budget-actuals","queryRtId":"6a4dcf0100000000000000c6","queryFamily":"runtime"}'
+
+  # Income counterpart of the budget-vs-actual chart (AB#4507): only categories
+  # with CategoryKind = INCOME; actuals are +(sum of signed amounts), so credits
+  # show as positive income.
+  - rtId: 6a4dcf0100000000000000a5
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f1
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Budget vs. actual — income
+    - id: System.UI/DashboardWidget.Type
+      value: barChart
+    - id: System.UI/DashboardWidget.Col
+      value: 1
+    - id: System.UI/DashboardWidget.Row
+      value: 5
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 4
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c6
+    - id: System.UI/DashboardWidget.Config
+      value: '{"chartType":"column","categoryField":"name","series":[{"field":"budgetAmount","name":"Budget"},{"field":"actualAmount","name":"Actual"}],"showLegend":true,"legendPosition":"bottom","queryName":"meshmakers-category-budget-actuals","queryRtId":"6a4dcf0100000000000000c6","queryFamily":"runtime","filters":[{"attributePath":"categoryKind","operator":"EQUALS","comparisonValue":"INCOME"},{"attributePath":"parent.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}]}'
+
+  # ============================================================================
+  # Board 2 — Document & Inbox Status (meshmakers-document-status)
+  # ============================================================================
+  - rtId: 6a4dcf0100000000000000f2
+    ckTypeId: System.UI/Dashboard
+    rtWellKnownName: meshmakers-document-status
+    associations: []
+    attributes:
+    - id: System/Name
+      value: Document Status
+    - id: System/Description
+      value: |-
+        Invoice and inbox processing health.
+        ---MESHBOARD_VARIABLES---
+        {"entitySelectors":[{"id":"fy","label":"Geschäftsjahr","ckTypeId":"Meshmakers.Accounting/FiscalYear","attributeMappings":[{"attributePath":"startDate","variableName":"fyStart","attributeValueType":"DATE_TIME"},{"attributePath":"endDate","variableName":"fyEnd","attributeValueType":"DATE_TIME"}],"showInToolbar":true,"defaultRtId":"aa0000000000000000000100"}]}
+    - id: System.UI/Dashboard.Columns
+      value: 6
+    - id: System.UI/Dashboard.RowHeight
+      value: 160
+    - id: System.UI/Dashboard.Gap
+      value: 16
+
+  # Row 1 — count KPIs. Now simpleCount over the saved AccountingDocument query
+  # (c7) so the FiscalYear navigation filter scopes them (the ad-hoc runtimeEntity
+  # _count path cannot navigate associations).
+  - rtId: 6a4dcf0100000000000000b1
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f2
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Invoices
+    - id: System.UI/DashboardWidget.Type
+      value: kpi
+    - id: System.UI/DashboardWidget.Col
+      value: 1
+    - id: System.UI/DashboardWidget.Row
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 1
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c7
+    - id: System.UI/DashboardWidget.Config
+      value: '{"valueAttribute":"_count","queryMode":"simpleCount","prefix":"","icon":"chart","queryName":"meshmakers-accounting-documents","queryRtId":"6a4dcf0100000000000000c7","queryFamily":"runtime","filters":[{"attributePath":"fiscalYear.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}]}'
+
+  - rtId: 6a4dcf0100000000000000b2
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f2
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Incoming
+    - id: System.UI/DashboardWidget.Type
+      value: kpi
+    - id: System.UI/DashboardWidget.Col
+      value: 2
+    - id: System.UI/DashboardWidget.Row
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 1
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c7
+    - id: System.UI/DashboardWidget.Config
+      value: '{"valueAttribute":"_count","queryMode":"simpleCount","prefix":"","icon":"chart","queryName":"meshmakers-accounting-documents","queryRtId":"6a4dcf0100000000000000c7","queryFamily":"runtime","filters":[{"attributePath":"documentType","operator":"EQUALS","comparisonValue":"INCOMING"},{"attributePath":"fiscalYear.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}]}'
+
+  - rtId: 6a4dcf0100000000000000b3
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f2
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Outgoing
+    - id: System.UI/DashboardWidget.Type
+      value: kpi
+    - id: System.UI/DashboardWidget.Col
+      value: 3
+    - id: System.UI/DashboardWidget.Row
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 1
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c7
+    - id: System.UI/DashboardWidget.Config
+      value: '{"valueAttribute":"_count","queryMode":"simpleCount","prefix":"","icon":"chart","queryName":"meshmakers-accounting-documents","queryRtId":"6a4dcf0100000000000000c7","queryFamily":"runtime","filters":[{"attributePath":"documentType","operator":"EQUALS","comparisonValue":"OUTGOING"},{"attributePath":"fiscalYear.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}]}'
+
+  - rtId: 6a4dcf0100000000000000b4
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f2
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Open (not booked)
+    - id: System.UI/DashboardWidget.Type
+      value: kpi
+    - id: System.UI/DashboardWidget.Col
+      value: 4
+    - id: System.UI/DashboardWidget.Row
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 1
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c7
+    - id: System.UI/DashboardWidget.Config
+      value: '{"valueAttribute":"_count","queryMode":"simpleCount","prefix":"","icon":"chart","queryName":"meshmakers-accounting-documents","queryRtId":"6a4dcf0100000000000000c7","queryFamily":"runtime","filters":[{"attributePath":"documentState","operator":"EQUALS","comparisonValue":"OPEN"},{"attributePath":"fiscalYear.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}]}'
+
+  # Unmatched transactions — scoped by the valueDate window ($fyStart/$fyEnd), not
+  # the FiscalYear association (transactions are not FY-assigned; see header).
+  - rtId: 6a4dcf0100000000000000b5
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f2
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Unmatched transactions
+    - id: System.UI/DashboardWidget.Type
+      value: kpi
+    - id: System.UI/DashboardWidget.Col
+      value: 5
+    - id: System.UI/DashboardWidget.Row
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 1
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c8
+    - id: System.UI/DashboardWidget.Config
+      value: '{"valueAttribute":"_count","queryMode":"simpleCount","prefix":"","icon":"chart","queryName":"meshmakers-bank-transactions","queryRtId":"6a4dcf0100000000000000c8","queryFamily":"runtime","filters":[{"attributePath":"matchState","operator":"EQUALS","comparisonValue":"Unmatched"},{"attributePath":"valueDate","operator":"GREATER_EQUAL_THAN","comparisonValue":"$fyStart"},{"attributePath":"valueDate","operator":"LESS_EQUAL_THAN","comparisonValue":"$fyEnd"}]}'
+
+  # Inbox failed — UploadedDocument has no FiscalYear association, stays global.
+  - rtId: 6a4dcf0100000000000000b6
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f2
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Inbox failed
+    - id: System.UI/DashboardWidget.Type
+      value: kpi
+    - id: System.UI/DashboardWidget.Col
+      value: 6
+    - id: System.UI/DashboardWidget.Row
+      value: 1
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 1
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 1
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: runtimeEntity
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: Meshmakers.Accounting/UploadedDocument
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: ''
+    - id: System.UI/DashboardWidget.Config
+      value: '{"valueAttribute":"_count","prefix":"","icon":"chart","filters":[{"attributePath":"processingState","operator":"EQUALS","comparisonValue":"FAILED"}]}'
+
+  # Row 2 — breakdown donuts (grouped runtime aggregation queries).
+  # Inbox by processing state stays global (uploads are not FY-bound).
+  - rtId: 6a4dcf0100000000000000b7
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f2
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Inbox by processing state
+    - id: System.UI/DashboardWidget.Type
+      value: pieChart
+    - id: System.UI/DashboardWidget.Col
+      value: 1
+    - id: System.UI/DashboardWidget.Row
+      value: 2
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 3
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c1
+    - id: System.UI/DashboardWidget.Config
+      value: '{"chartType":"donut","categoryField":"processingstate","valueField":"processingstate_count","showLabels":true,"showLegend":true,"legendPosition":"right","queryName":"meshmakers-inbox-by-processing-state","queryRtId":"6a4dcf0100000000000000c1","queryFamily":"runtime","filters":[]}'
+
+  # Documents by state — scoped to the selected fiscal year (nav filter).
+  - rtId: 6a4dcf0100000000000000b8
+    ckTypeId: System.UI/DashboardWidget
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 6a4dcf0100000000000000f2
+      targetCkTypeId: System.UI/Dashboard
+      attributes: []
+    attributes:
+    - id: System/Name
+      value: Documents by state
+    - id: System.UI/DashboardWidget.Type
+      value: pieChart
+    - id: System.UI/DashboardWidget.Col
+      value: 4
+    - id: System.UI/DashboardWidget.Row
+      value: 2
+    - id: System.UI/DashboardWidget.ColSpan
+      value: 3
+    - id: System.UI/DashboardWidget.RowSpan
+      value: 2
+    - id: System.UI/DashboardWidget.DataSourceType
+      value: systemQuery
+    - id: System.UI/DashboardWidget.DataSourceCkTypeId
+      value: ''
+    - id: System.UI/DashboardWidget.DataSourceRtId
+      value: 6a4dcf0100000000000000c2
+    - id: System.UI/DashboardWidget.Config
+      value: '{"chartType":"donut","categoryField":"documentstate","valueField":"documentstate_count","showLabels":true,"showLegend":true,"legendPosition":"right","queryName":"meshmakers-documents-by-state","queryRtId":"6a4dcf0100000000000000c2","queryFamily":"runtime","filters":[{"attributePath":"fiscalYear.meshmakersAccountingFiscalYear->rtId","operator":"EQUALS","comparisonValue":"$fy_rtId"}]}'
