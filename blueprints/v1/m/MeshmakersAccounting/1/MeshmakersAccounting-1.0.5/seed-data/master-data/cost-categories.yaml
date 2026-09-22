@@ -1,0 +1,256 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  - rtId: aa0000000000000000000001
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: IT & Software
+      - id: Meshmakers.Accounting/CategoryType
+        value: IT
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: IT infrastructure, cloud services, software licenses (Hetzner, Anthropic, Adobe, etc.)
+  - rtId: aa0000000000000000000002
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Rent
+      - id: Meshmakers.Accounting/CategoryType
+        value: RENT
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Office rent, internet (building operating costs go to Facility Operations)
+  - rtId: aa0000000000000000000003
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Personnel
+      - id: Meshmakers.Accounting/CategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Salaries, payroll taxes, social security contributions
+  - rtId: aa0000000000000000000004
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Travel & Transportation
+      - id: Meshmakers.Accounting/CategoryType
+        value: TRAVEL
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Business trips, train tickets, fuel costs, hotels
+  - rtId: aa0000000000000000000005
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Office & Supplies
+      - id: Meshmakers.Accounting/CategoryType
+        value: OFFICE
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Office supplies, equipment, catering
+  - rtId: aa0000000000000000000006
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Marketing & Advertising
+      - id: Meshmakers.Accounting/CategoryType
+        value: MARKETING
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: LinkedIn Ads, advertising, events
+  - rtId: aa0000000000000000000007
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Consulting & Services
+      - id: Meshmakers.Accounting/CategoryType
+        value: CONSULTING
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: External consultants, freelancers, legal advice, tax consulting
+  - rtId: aa0000000000000000000008
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Insurance
+      - id: Meshmakers.Accounting/CategoryType
+        value: INSURANCE
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Business liability, D&O, legal protection
+  - rtId: aa0000000000000000000009
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Other
+      - id: Meshmakers.Accounting/CategoryType
+        value: OTHER
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Uncategorized expenses
+  - rtId: aa00000000000000000000a0
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Kosten des Geldverkehrs
+      - id: Meshmakers.Accounting/CategoryType
+        value: BANKFEES
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Bank fees and account charges (Kontoführung, Entgelte, card fees) — costs without a separate receipt
+  # --- AB#4507: IT Operation + Facility Operations cost categories and the
+  #     first income categories (CategoryKind INCOME; missing kind = EXPENSE) ---
+  - rtId: aa00000000000000000000a1
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: IT Operation
+      - id: Meshmakers.Accounting/CategoryType
+        value: ITOPERATION
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: "Operating costs of OctoMesh and other SaaS offerings: hosting, cloud infrastructure, monitoring, API usage"
+  - rtId: aa00000000000000000000a2
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Facility Operations
+      - id: Meshmakers.Accounting/CategoryType
+        value: FACILITY
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: "Building operating costs: cleaning, kitchen supplies, electricity, heating"
+  - rtId: aa00000000000000000000b0
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Revenue
+      - id: Meshmakers.Accounting/CategoryType
+        value: REVENUE
+      - id: Meshmakers.Accounting/CategoryKind
+        value: INCOME
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Income from products and services (customer payments)
+  - rtId: aa00000000000000000000b1
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Interest & Other Income
+      - id: Meshmakers.Accounting/CategoryType
+        value: OTHERINCOME
+      - id: Meshmakers.Accounting/CategoryKind
+        value: INCOME
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Interest, refunds, grants and other income
+  # AB#4584: VAT (Umsatzsteuer) settlement to the tax office. Kept as its own
+  # line so it does not inflate Personnel — mixed Finanzamt payments (wage
+  # levies + VAT) are split (AB#4545) and the VAT part lands here.
+  - rtId: aa00000000000000000000c0
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Umsatzsteuer
+      - id: Meshmakers.Accounting/CategoryType
+        value: VAT
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: Value-added tax (Umsatzsteuer) settlement paid to the tax office
+  # AB#4585: general taxes & levies other than VAT (corporate income tax,
+  # chamber levy, penalties). No auto-rule — no reliable purpose pattern, so
+  # these are assigned manually (few per year).
+  - rtId: aa00000000000000000000c1
+    ckTypeId: Meshmakers.Accounting/CostCategory
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000100
+        targetCkTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Steuern & Abgaben
+      - id: Meshmakers.Accounting/CategoryType
+        value: TAXES
+      - id: Meshmakers.Accounting/CategoryKind
+        value: EXPENSE
+      - id: Meshmakers.Accounting/CategoryDescription
+        value: "Taxes and levies other than VAT: corporate income tax (Körperschaftsteuer), chamber levy (Kammerumlage), penalties"
