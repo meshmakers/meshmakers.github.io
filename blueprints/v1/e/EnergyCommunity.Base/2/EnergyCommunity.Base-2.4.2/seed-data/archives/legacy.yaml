@@ -1,0 +1,189 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.2,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.7.0,2.0)
+- System.UI-[2.4,3.0)
+
+# Legacy archives carrying pre-cutover daily EnergyQuantity history (ADR 0001)
+# plus the legacy monthly and yearly rollups chained on them.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Legacy daily archive + sub-ladder (migration tenants only) ──────────
+# Carries over pre-cutover daily EnergyQuantity history 1:1 (ADR 0001
+# decision 3). Day-sized windows MUST NOT go into the 900 s raw archive —
+# the rollup engine's fully-contained-window rule would silently drop them
+# from the entire ladder. Day windows DO tile calendar months/years, so a
+# small monthly + yearly sub-ladder works on top. Period is advisory
+# (TimeSpan ticks: 864000000000 = 1 d). Fresh (greenfield) tenants leave
+# these three archives Disabled — install-tenant.ps1 only activates them
+# with -IncludeLegacyArchives.
+- rtId: ec0000000000000000000a11
+  ckTypeId: System.StreamData/TimeRangeArchive-1
+  rtWellKnownName: energy-measurements-legacy-daily
+  associations: []
+  attributes:
+  - id: System.StreamData/TimeRangeArchive.Period-1
+    value: 864000000000
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: Amount.Value
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: false
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: Amount.Unit
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: false
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: ObisCode
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: DataQuality
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: true
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# Legacy monthly rollup over the legacy daily archive. Same parametrization
+# as the main monthly rollup (CalendarMonth (3) + Europe/Vienna), but the
+# source is a raw TimeRangeArchive, so the aggregations read the source
+# ENTITY paths (Amount.Value / DataQuality); TargetColumnName pins the stored
+# columns to amountvalue_sum / dataquality_max so query shapes match the main
+# ladder.
+- rtId: ec0000000000000000000a12
+  ckTypeId: System.StreamData/RollupArchive-1
+  rtWellKnownName: energy-measurements-legacy-monthly
+  associations: []
+  attributes:
+  - id: System.StreamData/RollupArchive.SourceArchiveRtId-1
+    value: 'ec0000000000000000000a11'
+  - id: System.StreamData/RollupArchive.BucketSizeMs-1
+    value: 2419200000
+  - id: System.StreamData/RollupArchive.WatermarkLagMs-1
+    value: 900000
+  - id: System.StreamData/RollupArchive.BucketAlignment-1
+    value: 3
+  - id: System.StreamData/RollupArchive.ReferenceTimeZone-1
+    value: Europe/Vienna
+  - id: System.StreamData/RollupArchive.Aggregations-1
+    value:
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: Amount.Value
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 3
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: amountvalue_sum
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: DataQuality
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 2
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: dataquality_max
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: dataquality_max
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
+
+# Legacy yearly rollup CHAINED on legacy monthly — same parametrization as
+# the main yearly rollup (CalendarYear (4) + Europe/Vienna, 336 d = 12 x 28 d
+# informational bucket size), reading the monthly PHYSICAL columns.
+- rtId: ec0000000000000000000a13
+  ckTypeId: System.StreamData/RollupArchive-1
+  rtWellKnownName: energy-measurements-legacy-yearly
+  associations: []
+  attributes:
+  - id: System.StreamData/RollupArchive.SourceArchiveRtId-1
+    value: 'ec0000000000000000000a12'
+  - id: System.StreamData/RollupArchive.BucketSizeMs-1
+    value: 29030400000
+  - id: System.StreamData/RollupArchive.WatermarkLagMs-1
+    value: 900000
+  - id: System.StreamData/RollupArchive.BucketAlignment-1
+    value: 4
+  - id: System.StreamData/RollupArchive.ReferenceTimeZone-1
+    value: Europe/Vienna
+  - id: System.StreamData/RollupArchive.Aggregations-1
+    value:
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 3
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: amountvalue_sum
+    - ckRecordId: System.StreamData/CkRollupAggregation-1
+      attributes:
+      - id: System.StreamData/CkRollupAggregation.SourcePath-1
+        value: dataquality_max
+      - id: System.StreamData/CkRollupAggregation.Function-1
+        value: 2
+      - id: System.StreamData/CkRollupAggregation.TargetColumnName-1
+        value: dataquality_max
+  - id: System.StreamData/Archive.TargetCkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System.StreamData/Archive.Columns-1
+    value:
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: amountvalue_sum
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+    - ckRecordId: System.StreamData/CkArchiveColumn-1
+      attributes:
+      - id: System.StreamData/CkArchiveColumn.Path-1
+        value: dataquality_max
+      - id: System.StreamData/CkArchiveColumn.Required-1
+        value: false
+      - id: System.StreamData/CkArchiveColumn.Indexed-1
+        value: true
+  - id: System.StreamData/Archive.Status-1
+    value: 2
