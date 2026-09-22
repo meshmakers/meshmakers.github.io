@@ -1,0 +1,71 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.2,3.0)
+- Basic.Energy-[1.3,2.0)
+- EnergyCommunity-[4.2,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.7.0,2.0)
+- System.UI-[2.4,3.0)
+
+# The tenant-wide EnergyCommunity runtime configuration and the two auto-increment
+# counters (customer numbers, billing document numbers).
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Energy Community runtime configuration ──────────────────────────────
+# Neutral defaults — fill EnergyCommunityId, NetworkPartnerId and pricing
+# per tenant via Refinery Studio after install. Tax rates are pre-filled with
+# Austrian standard / agricultural rates as conservative defaults.
+- rtId: 69775cca547399077ac963a1
+  ckTypeId: System.Communication/EnergyCommunityConfiguration-1
+  rtWellKnownName: EnergyCommunityConfiguration
+  associations: []
+  attributes:
+  - id: System.Communication/EnergyCommunityId-1
+    value: ''
+  - id: System.Communication/NetworkPartnerId-1
+    value: ''
+  - id: System.Communication/ConsumptionRecordRequestDelay-1
+    value: 5
+  - id: System.Communication/ConsumerPrice-1
+    value: 0
+  - id: System.Communication/ProducerPrice-1
+    value: 0
+  - id: System.Communication/TaxRate-1
+    value: 20
+  - id: System.Communication/FarmerTaxRate-1
+    value: 13
+  # Billing report / notification config (AB#4554 — de-SBEG-ing). Neutral empty
+  # defaults; each tenant fills these via Refinery Studio. The Billing pipelines
+  # resolve billingReportName / billingReportFilePrefix / notificationEmailContact
+  # from here (config-driven). billingMailServerConfiguration names the tenant's
+  # EMailSenderConfiguration (see Billing blueprint notes).
+  - id: System.Communication/BillingReportName-1
+    value: ''
+  - id: System.Communication/BillingReportFilePrefix-1
+    value: ''
+  - id: System.Communication/BillingMailServerConfiguration-1
+    value: ''
+  - id: System.Communication/NotificationEmailContact-1
+    value: ''
+
+# ─── Auto-increment counters ─────────────────────────────────────────────
+- rtId: 68480f3ef579d8c26f35ad47
+  ckTypeId: System/AutoIncrement-1
+  rtWellKnownName: BillingDocumentDocumentNumber
+  attributes:
+  - id: System/AutoIncrement.End-1
+    value: 9999
+  - id: System/AutoIncrement.Format-1
+    value: 25-{0:D4}
+  - id: System/AutoIncrement.CurrentValue-1
+    value: 0
+
+- rtId: 686ad5878ae68659b20571d0
+  ckTypeId: System/AutoIncrement-1
+  rtWellKnownName: CustomerNumber
+  attributes:
+  - id: System/AutoIncrement.End-1
+    value: 9999
+  - id: System/AutoIncrement.CurrentValue-1
+    value: 0
