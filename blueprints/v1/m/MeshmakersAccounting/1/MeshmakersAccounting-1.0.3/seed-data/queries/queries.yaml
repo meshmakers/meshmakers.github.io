@@ -1,0 +1,199 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Tree queries (repo browser) --------------------------------------------
+  - rtId: 682f0020af1fe4dd0f346f3c
+    ckTypeId: System/SimpleRtQuery-1
+    associations: []
+    attributes:
+    - id: System/Query.Columns-1
+      value:
+      - rtId
+      - name
+      - description
+    - id: System/Query.Sorting-1
+    - id: System/Query.FieldFilter-1
+    - id: System/Name-1
+      value: _trees
+    - id: System/Description-1
+    - id: System/Query.CkTypeId-1
+      value: Basic/Tree
+  - rtId: 6a4dcf0100000000000000c3
+    ckTypeId: System/GroupingAggregationRtQuery
+    associations: []
+    attributes:
+    - id: System/Query.GroupByColumns
+      value:
+      - documentType
+    - id: System/AggregationQueryColumns
+      value:
+      - ckRecordId: System/AggregationQueryColumn
+        attributes:
+        - id: System/AttributePath
+          value: netTotal
+        - id: System/AggregationType
+          value: 4
+    - id: System/Query.FieldFilter
+      value: []
+    - id: System/Name
+      value: meshmakers-nettotal-by-documenttype
+    - id: System/Description
+      value: ''
+    - id: System/Query.CkTypeId
+      value: Meshmakers.Accounting/AccountingDocument
+    - id: System/Query.NavigationFilterMode
+      value: 0
+
+  # Document count grouped by document state (OPEN/PAID/PARTIALLYPAID/CANCELLED/RECURRING).
+  - rtId: 6a4dcf0100000000000000c2
+    ckTypeId: System/GroupingAggregationRtQuery
+    associations: []
+    attributes:
+    - id: System/Query.GroupByColumns
+      value:
+      - documentState
+    - id: System/AggregationQueryColumns
+      value:
+      - ckRecordId: System/AggregationQueryColumn
+        attributes:
+        - id: System/AttributePath
+          value: documentState
+        - id: System/AggregationType
+          value: 0
+    - id: System/Query.FieldFilter
+      value: []
+    - id: System/Name
+      value: meshmakers-documents-by-state
+    - id: System/Description
+      value: ''
+    - id: System/Query.CkTypeId
+      value: Meshmakers.Accounting/AccountingDocument
+    - id: System/Query.NavigationFilterMode
+      value: 0
+
+  # Inbox upload count grouped by processing state (NEW/PROCESSING/COMPLETED/INCOMPLETE/FAILED/IGNORED).
+  - rtId: 6a4dcf0100000000000000c1
+    ckTypeId: System/GroupingAggregationRtQuery
+    associations: []
+    attributes:
+    - id: System/Query.GroupByColumns
+      value:
+      - processingState
+    - id: System/AggregationQueryColumns
+      value:
+      - ckRecordId: System/AggregationQueryColumn
+        attributes:
+        - id: System/AttributePath
+          value: processingState
+        - id: System/AggregationType
+          value: 0
+    - id: System/Query.FieldFilter
+      value: []
+    - id: System/Name
+      value: meshmakers-inbox-by-processing-state
+    - id: System/Description
+      value: ''
+    - id: System/Query.CkTypeId
+      value: Meshmakers.Accounting/UploadedDocument
+    - id: System/Query.NavigationFilterMode
+      value: 0
+
+  # Outgoing invoice list (revenue), filtered to OUTGOING in the widget Config.
+  - rtId: 6a4dcf0100000000000000c4
+    ckTypeId: System/SimpleRtQuery
+    associations: []
+    attributes:
+    - id: System/Query.Columns
+      value:
+      - documentNumber
+      - documentDate
+      - netTotal
+      - documentState
+    - id: System/Query.Sorting
+    - id: System/Query.FieldFilter
+      value: []
+    - id: System/Name
+      value: meshmakers-outgoing-invoices
+    - id: System/Description
+      value: ''
+    - id: System/Query.CkTypeId
+      value: Meshmakers.Accounting/AccountingDocument
+    - id: System/Query.NavigationFilterMode
+      value: 0
+
+  # Cost categories with budget + materialized actuals (AB#4434 recompute
+  # pipeline writes ActualAmount/ActualAmountUpdatedAt; scalar columns only,
+  # so no association traversal is needed at query time).
+  - rtId: 6a4dcf0100000000000000c6
+    ckTypeId: System/SimpleRtQuery
+    associations: []
+    attributes:
+    - id: System/Query.Columns
+      value:
+      - name
+      - categoryType
+      - categoryKind
+      - budgetAmount
+      - actualAmount
+      - actualAmountUpdatedAt
+    - id: System/Query.Sorting
+    - id: System/Query.FieldFilter
+      value: []
+    - id: System/Name
+      value: meshmakers-category-budget-actuals
+    - id: System/Description
+      value: ''
+    - id: System/Query.CkTypeId
+      value: Meshmakers.Accounting/CostCategory
+    - id: System/Query.NavigationFilterMode
+      value: 0
+
+  # Generic AccountingDocument list — backs the Document-Status count KPIs as a
+  # simpleCount source so they can carry the FiscalYear navigation field filter
+  # (the ad-hoc runtimeEntity _count path cannot). Per-KPI scalar filters
+  # (documentType / documentState) live in each widget's Config.
+  - rtId: 6a4dcf0100000000000000c7
+    ckTypeId: System/SimpleRtQuery
+    associations: []
+    attributes:
+    - id: System/Query.Columns
+      value:
+      - documentNumber
+    - id: System/Query.Sorting
+    - id: System/Query.FieldFilter
+      value: []
+    - id: System/Name
+      value: meshmakers-accounting-documents
+    - id: System/Description
+      value: ''
+    - id: System/Query.CkTypeId
+      value: Meshmakers.Accounting/AccountingDocument
+    - id: System/Query.NavigationFilterMode
+      value: 0
+
+  # Generic BankTransaction list — backs the unmatched-transactions KPI. Scoped by
+  # the valueDate window ($fyStart/$fyEnd), not the FiscalYear association, because
+  # transactions are not assigned to fiscal years (TransactionToFiscalYear empty).
+  - rtId: 6a4dcf0100000000000000c8
+    ckTypeId: System/SimpleRtQuery
+    associations: []
+    attributes:
+    - id: System/Query.Columns
+      value:
+      - transactionId
+    - id: System/Query.Sorting
+    - id: System/Query.FieldFilter
+      value: []
+    - id: System/Name
+      value: meshmakers-bank-transactions
+    - id: System/Description
+      value: ''
+    - id: System/Query.CkTypeId
+      value: Basic.Accounting/BankTransaction
+    - id: System/Query.NavigationFilterMode
+      value: 0
