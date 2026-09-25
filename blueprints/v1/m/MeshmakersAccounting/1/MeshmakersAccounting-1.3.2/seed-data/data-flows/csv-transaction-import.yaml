@@ -1,0 +1,447 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: import-csv-transactions ---
+  - rtId: 67d4a2f0b2e4d8c3a1f00050
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: CSV Transaction Import
+      - id: System/Description
+        value: Imports bank transactions from Austrian bank CSV exports (UTF-16LE, comma-delimited, German date/number format)
+  - rtId: 67d4a2f0b2e4d8c3a1f00051
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00050
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: CSV Transaction Import Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /importCsvTransactions
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: ImportFromCsv@1
+              description: Parse uploaded CSV file with Austrian bank format
+              fileIndex: 0
+              delimiter: ","
+              encoding: utf-16le
+              hasHeaderRow: true
+              targetPath: $.csvRows
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              columnMappings:
+                - sourceColumn: Buchungsdatum
+                  targetProperty: bookingDate
+                  dataType: DateTime
+                  dateFormat: dd.MM.yyyy
+                - sourceColumn: Valutadatum
+                  targetProperty: valueDate
+                  dataType: DateTime
+                  dateFormat: dd.MM.yyyy
+                - sourceColumn: Betrag
+                  targetProperty: amount
+                  dataType: Double
+                  numberCulture: de-AT
+                - sourceColumn: "W\u00E4hrung"
+                  targetProperty: currency
+                  dataType: String
+                - sourceColumn: Buchungs-Details
+                  targetProperty: purpose
+                  dataType: String
+                - sourceColumn: Buchungsreferenz
+                  targetProperty: transactionId
+                  dataType: String
+                - sourceColumn: Partnername
+                  targetProperty: counterpartName
+                  dataType: String
+                - sourceColumn: Partner IBAN
+                  targetProperty: counterpartIban
+                  dataType: String
+                - sourceColumn: BIC/SWIFT
+                  targetProperty: counterpartBic
+                  dataType: String
+                - sourceColumn: Zahlungsreferenz
+                  targetProperty: paymentReference
+                  dataType: String
+                - sourceColumn: Mandats ID
+                  targetProperty: mandateReference
+                  dataType: String
+                - sourceColumn: Creditor ID
+                  targetProperty: creditorId
+                  dataType: String
+                - sourceColumn: Eigene IBAN
+                  targetProperty: ownerIban
+                  dataType: String
+            - type: ForEach@1
+              description: Upsert BankTransaction entities from CSV rows (idempotent by TransactionId)
+              iterationPath: $.csvRows
+              targetPath: $._updateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: GetOrCreateRtEntitiesByType@1
+                  description: Resolve the existing BankTransaction by TransactionId or generate a new id
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  fieldFilters:
+                    - attributePath: TransactionId
+                      operator: Equals
+                      comparisonValuePath: $.key.transactionId
+                  rtIdTargetPath: $._txRtId
+                  ckTypeIdTargetPath: $._txCkTypeId
+                  modOperationPath: $._txModOp
+                - type: If@1
+                  description: Only insert new transactions — re-importing the same CSV is a no-op
+                  path: $._txModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      description: Default direction Credit (incoming)
+                      targetPath: $._direction
+                      value: 0
+                      valueType: Int
+                    - type: If@1
+                      description: Negative amount means Debit (outgoing)
+                      path: $.key.amount
+                      operator: LessThan
+                      value: 0
+                      valueType: Double
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $._direction
+                          value: 1
+                          valueType: Int
+                    - type: GetRtEntitiesByType@1
+                      description: Find the BankAccount by the CSV owner IBAN
+                      ckTypeId: Basic.Accounting/BankAccount
+                      targetPath: $._account
+                      take: 1
+                      fieldFilters:
+                        - attributePath: Iban
+                          operator: Equals
+                          comparisonValuePath: $.key.ownerIban
+                    - type: CreateUpdateInfo@1
+                      targetPath: $._txUpdate
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Insert
+                      ckTypeId: Basic.Accounting/BankTransaction
+                      rtIdPath: $._txRtId
+                      rtWellKnownNamePath: $.key.transactionId
+                      attributeUpdates:
+                        - attributeName: TransactionId
+                          attributeValueType: String
+                          valuePath: $.key.transactionId
+                        - attributeName: Amount
+                          attributeValueType: Double
+                          valuePath: $.key.amount
+                        - attributeName: Currency
+                          attributeValueType: String
+                          valuePath: $.key.currency
+                        - attributeName: BookingDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.bookingDate
+                        - attributeName: ValueDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.valueDate
+                        - attributeName: Purpose
+                          attributeValueType: String
+                          valuePath: $.key.purpose
+                        - attributeName: CounterpartName
+                          attributeValueType: String
+                          valuePath: $.key.counterpartName
+                        - attributeName: CounterpartIban
+                          attributeValueType: String
+                          valuePath: $.key.counterpartIban
+                        - attributeName: CounterpartBic
+                          attributeValueType: String
+                          valuePath: $.key.counterpartBic
+                        - attributeName: PaymentReference
+                          attributeValueType: String
+                          valuePath: $.key.paymentReference
+                        - attributeName: MandateReference
+                          attributeValueType: String
+                          valuePath: $.key.mandateReference
+                        - attributeName: CreditorId
+                          attributeValueType: String
+                          valuePath: $.key.creditorId
+                        - attributeName: Direction
+                          attributeValueType: Int
+                          valuePath: $._direction
+                        - attributeName: MatchState
+                          attributeValueType: Enum
+                          value: Unreviewed
+                    - type: If@1
+                      description: Link the transaction to its bank account when known
+                      path: $._account.TotalCount
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Int64
+                      transformations:
+                        - type: CreateAssociationUpdate@1
+                          description: BankTransaction -> BankAccount via ParentChild
+                          targetPath: $._assocUpdate
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Create
+                          originRtIdPath: $._txRtId
+                          originCkTypeId: Basic.Accounting/BankTransaction
+                          targetRtIdPath: $._account.Items[0].RtId
+                          targetCkTypeId: Basic.Accounting/BankAccount
+                          associationRoleId: System/ParentChild
+                    - type: ApplyChanges@2
+                      description: Persist transaction and association
+                      entityUpdatesPath: $._txUpdate
+                      associationUpdatesPath: $._assocUpdate
+            # Security: the HTTP response body is the whole data context. Reduce
+            # it to a minimal acknowledgement so it can never echo the caller's
+            # request headers/Authorization or the raw uploaded CSV.
+            - type: SetPrimitiveValue@1
+              targetPath: $.done
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
+  # PayPal activity CSV import (AB#4459, fixed AB#4593): PayPal exports have a
+  # completely different shape than the Austrian bank CSV above — UTF-8 with
+  # BOM, columns Datum/Name/Typ/Status/Brutto/Gebühr/Netto/Transaktionscode/
+  # "Auswirkung auf Guthaben", and both an authorization hold ("Allgemeine
+  # Autorisierung", Memo) and a balancing credit-card funding counter-row
+  # ("Allgemeine Gutschrift auf Kreditkarte", Haben) next to almost every
+  # payment. Only rows whose "Auswirkung auf Guthaben" is Soll (a real balance
+  # debit) and completed are imported — this excludes the Memo authorization
+  # holds (which would duplicate each payment) and Haben credits; the currency-
+  # conversion debit legs are excluded by type. The amount comes from Brutto
+  # (NOT "Betrag", which does not exist in this export). The PayPal account
+  # carries no IBAN, so the target BankAccount rtId is passed by the frontend
+  # as the multipart form field `accountRtId` (the ParentChild association is
+  # mandatory — rows without it would fail).
+  - rtId: 67d4a2f0b2e4d8c3a1f00052
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00050
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: PayPal CSV Transaction Import Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /importPayPalCsvTransactions
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: ImportFromCsv@1
+              description: Parse uploaded PayPal activity CSV (UTF-8, German date/number format)
+              fileIndex: 0
+              delimiter: ","
+              encoding: utf-8
+              hasHeaderRow: true
+              targetPath: $.csvRows
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              columnMappings:
+                - sourceColumn: Datum
+                  targetProperty: bookingDate
+                  dataType: DateTime
+                  dateFormat: dd.MM.yyyy
+                - sourceColumn: Name
+                  targetProperty: counterpartName
+                  dataType: String
+                - sourceColumn: Typ
+                  targetProperty: paymentType
+                  dataType: String
+                - sourceColumn: Status
+                  targetProperty: status
+                  dataType: String
+                - sourceColumn: "Währung"
+                  targetProperty: currency
+                  dataType: String
+                # PayPal activity exports name the transaction amount "Brutto"
+                # (alongside "Gebühr"/"Netto"), NOT "Betrag" (AB#4593). On
+                # outgoing payments Gebühr is 0, so Brutto is the full cash
+                # impact. A wrong column name is only a warning in ImportFromCsv
+                # (the mapping is skipped), so mapping "Betrag" left amount null
+                # and every row was filtered out — a silent zero-row import.
+                - sourceColumn: Brutto
+                  targetProperty: amount
+                  dataType: Double
+                  numberCulture: de-AT
+                # "Auswirkung auf Guthaben" = impact on balance: Soll (debit),
+                # Haben (credit), Memo (authorization hold — no cash movement).
+                # Only Soll rows are real payments; the Memo "Allgemeine
+                # Autorisierung" hold mirrors each card payment and would
+                # otherwise be imported as a duplicate (AB#4593).
+                - sourceColumn: "Auswirkung auf Guthaben"
+                  targetProperty: balanceImpact
+                  dataType: String
+                - sourceColumn: Empfangsnummer
+                  targetProperty: paymentReference
+                  dataType: String
+                - sourceColumn: Transaktionscode
+                  targetProperty: transactionId
+                  dataType: String
+                - sourceColumn: Artikelbezeichnung
+                  targetProperty: transactionText
+                  dataType: String
+            - type: ForEach@1
+              description: Insert one BankTransaction per completed negative PayPal payment (idempotent by TransactionId)
+              iterationPath: $.csvRows
+              targetPath: $._rowResults
+              documentMode: Extend
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: If@1
+                  description: Only completed rows
+                  path: $.key.status
+                  operator: Equals
+                  value: Abgeschlossen
+                  valueType: String
+                  transformations:
+                    - type: If@1
+                      description: Skip balancing credit-card funding rows
+                      path: $.key.paymentType
+                      operator: NotEquals
+                      value: Allgemeine Gutschrift auf Kreditkarte
+                      valueType: String
+                      transformations:
+                        - type: If@1
+                          description: Skip currency conversion pairs
+                          path: $.key.paymentType
+                          operator: NotEquals
+                          value: "Allgemeine Währungsumrechnung"
+                          valueType: String
+                          transformations:
+                            - type: If@1
+                              description: Only real balance debits (Soll) — excludes Memo authorization holds that duplicate each payment and Haben credits (AB#4593)
+                              path: $.key.balanceImpact
+                              operator: Equals
+                              value: Soll
+                              valueType: String
+                              transformations:
+                                - type: GetOrCreateRtEntitiesByType@1
+                                  description: Resolve the existing BankTransaction by TransactionId or generate a new id
+                                  ckTypeId: Basic.Accounting/BankTransaction
+                                  fieldFilters:
+                                    - attributePath: TransactionId
+                                      operator: Equals
+                                      comparisonValuePath: $.key.transactionId
+                                  rtIdTargetPath: $._txRtId
+                                  ckTypeIdTargetPath: $._txCkTypeId
+                                  modOperationPath: $._txModOp
+                                - type: If@1
+                                  description: Only insert new transactions — re-importing the same CSV is a no-op
+                                  path: $._txModOp
+                                  operator: Equals
+                                  value: 0
+                                  valueType: Enum
+                                  transformations:
+                                    - type: CreateUpdateInfo@1
+                                      targetPath: $._txUpdate
+                                      targetValueKind: Array
+                                      targetValueWriteMode: Append
+                                      updateKind: Insert
+                                      ckTypeId: Basic.Accounting/BankTransaction
+                                      rtIdPath: $._txRtId
+                                      rtWellKnownNamePath: $.key.transactionId
+                                      attributeUpdates:
+                                        - attributeName: TransactionId
+                                          attributeValueType: String
+                                          valuePath: $.key.transactionId
+                                        - attributeName: Amount
+                                          attributeValueType: Double
+                                          valuePath: $.key.amount
+                                        - attributeName: Currency
+                                          attributeValueType: String
+                                          valuePath: $.key.currency
+                                        - attributeName: BookingDate
+                                          attributeValueType: DateTime
+                                          valuePath: $.key.bookingDate
+                                        - attributeName: ValueDate
+                                          attributeValueType: DateTime
+                                          valuePath: $.key.bookingDate
+                                        - attributeName: Purpose
+                                          attributeValueType: String
+                                          valuePath: $.key.paymentType
+                                        - attributeName: TransactionText
+                                          attributeValueType: String
+                                          valuePath: $.key.transactionText
+                                        - attributeName: CounterpartName
+                                          attributeValueType: String
+                                          valuePath: $.key.counterpartName
+                                        - attributeName: PaymentReference
+                                          attributeValueType: String
+                                          valuePath: $.key.paymentReference
+                                        - attributeName: Direction
+                                          attributeValueType: Int
+                                          value: 1
+                                        - attributeName: MatchState
+                                          attributeValueType: Enum
+                                          value: Unreviewed
+                                    - type: CreateAssociationUpdate@1
+                                      description: BankTransaction -> BankAccount selected in the import dialog
+                                      targetPath: $._assocUpdate
+                                      targetValueKind: Array
+                                      targetValueWriteMode: Append
+                                      updateKind: Create
+                                      originRtIdPath: $._txRtId
+                                      originCkTypeId: Basic.Accounting/BankTransaction
+                                      targetRtIdPath: $.full.formData.accountRtId
+                                      targetCkTypeId: Basic.Accounting/BankAccount
+                                      associationRoleId: System/ParentChild
+                                    - type: ApplyChanges@2
+                                      description: Persist transaction and association
+                                      entityUpdatesPath: $._txUpdate
+                                      associationUpdatesPath: $._assocUpdate
+            # Security: the HTTP response body is the whole data context. Reduce
+            # it to a minimal acknowledgement so it can never echo the caller's
+            # request headers/Authorization or the raw uploaded CSV.
+            - type: SetPrimitiveValue@1
+              targetPath: $.done
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
