@@ -1,0 +1,24 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.17,2.0)
+  - Meshmakers.Accounting.Tesla-[1.0,2.0)
+  - System.Bot-[3.0,4.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+entities:
+  - rtId: 67d4a2f0b2e4d8c3a1f00300
+    ckTypeId: Meshmakers.Accounting.Tesla/TeslaConfiguration
+    rtWellKnownName: TeslaConfiguration
+    attributes:
+      - id: Meshmakers.Accounting.Tesla/BaseUrl
+        value: "https://fleet-api.prd.eu.vn.cloud.tesla.com"
+      - id: Meshmakers.Accounting.Tesla/TokenUrl
+        value: "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
+      - id: Meshmakers.Accounting.Tesla/ClientId
+        value: "<tesla-client-id-here>"
+      - id: Meshmakers.Accounting.Tesla/ClientSecret
+        value: "<tesla-client-secret-here>"
+      - id: Meshmakers.Accounting.Tesla/RefreshToken
+        value: "<tesla-refresh-token-here>"
+      - id: Meshmakers.Accounting.Tesla/PageSize
+        value: 25
