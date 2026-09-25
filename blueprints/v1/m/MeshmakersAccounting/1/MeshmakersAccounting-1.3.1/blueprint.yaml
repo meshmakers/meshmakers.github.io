@@ -1,0 +1,162 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: MeshmakersAccounting-1.3.1
+description: |
+  Accounting preparation for meshmakers GmbH — connect bank transactions with
+  accounting documents and analyze costs by category.
+
+  Installs:
+  - the Meshmakers.Accounting construction kit model (auto-imported from the
+    catalog, pulls Basic + Basic.Accounting transitively)
+  - fiscal-year 2026 with 12 cost categories and 2 income categories
+    (CategoryKind EXPENSE/INCOME, AB#4507)
+  - reporting root folders (Documents storage)
+  - the FinAPI adapter (octo-finapi-adapter Helm chart, linked to the Release
+    adapter repository; the finAPI credentials live on the FinApiConfiguration
+    entity below, not on the adapter)
+  - 29 pipelines. The six finAPI pipelines (account/transaction sync,
+    bank-connection refresh, BIC resolution, web-form create/complete) share
+    ONE "FinAPI" DataFlow so they
+    deploy together and appear as tabs in one execution-history dialog. There
+    is no direct bank-connection import any more: PSD2/SCA goes through the
+    web-form pair createWebFormImport -> completeWebFormImport. The rest sit in
+    their own DataFlows, among them: Excel tree import, CSV transaction import,
+    AI prompt, document upload (staging + duplicate check only), asynchronous
+    document analysis (5-minute polling + on-demand via POST /processDocuments:
+    OCR + AI extraction of staged uploads, replaces the former synchronous
+    analysis and the Todo fallback — incomplete extractions stay visible on the
+    UploadedDocument inbox entity), transaction matching, document page editing
+    (/editDocument — it also does the multi-page merge that the removed
+    /mergeDocuments route used to do, AB#4760)
+  - every HTTP route of those pipelines is authenticated and role-gated
+    (FromHttpRequest@2, allowAnonymous:false + requiredRoles, AB#4685):
+    AccountingManagement for the money-moving and bulk/export/import routes,
+    AccountingManagement+AccountingEmployee for the inbox/document/ToDo
+    routes. AccountingShareholder reaches none of them
+  - the Microsoft 365 e-mail document import pipeline — ships DISABLED
+    (System/Enabled=false); the meshmakers-app activates it from Settings ->
+    Document import (writes the EmailImportSettings configuration, flips
+    System/Enabled and deploys the DataFlow). Since AB#5345 the app NEVER
+    rewrites a PipelineDefinition: the definition is release content that a
+    re-apply reinstates, so every setting written into it was lost on the next
+    apply and each save produced a new version of the pipeline entity
+  - the MicrosoftGraphDocuments configuration (placeholder Azure app-registration
+    credentials) used by the e-mail import via the Uses association
+  - the _trees repo-browser query
+  NOT the app and NOT its OIDC client (AB#5210): both belong to the APP HOST,
+  seeded by MeshmakersAccounting.Host on the root tenant. A leaf cannot know the
+  public hostname, so seeding either here produced dead per-tenant URIs that a
+  re-apply kept restoring. The client reaches this tenant by mirroring from the
+  root instead.
+  - the AnthropicAiConfig AiConfiguration (placeholder API key) referenced by
+    the AI pipelines via apiKeyConfigurationName
+  - the FinApiConfiguration (placeholder credentials, live.finapi.io) that all
+    finAPI pipelines load via GetPipelineConfigByWellKnownName + Uses association
+
+  PREREQUISITES: communication and reporting must be enabled on the target
+  tenant. The service-managed System.Communication blueprint seeds the Pool
+  (670000000000000000000001) and Mesh Adapter (670000000000000000000002)
+  this seed associates to.
+
+  Post-install:
+  - DeployDataFlow per DataFlow. The app workload is NOT part of this blueprint
+    any more — it lives on the app host (MeshmakersAccounting.Host)
+  - Set the real Anthropic API key on the AnthropicAiConfig configuration and
+    the finAPI credentials on FinApiConfiguration — ONCE. Credential attributes
+    carry isRuntimeState: true in the System.Communication model (ApiKey,
+    ClientSecret, Password, Username, ClientId, AzureTenantId), so a blueprint
+    re-apply PRESERVES them. scripts/om_set_secrets.ps1 sets them initially
+    from the gitignored scripts/secrets.local.json
+  - The two ToDo-notification pipelines (Notify ToDo / Notify ToDo Inbound)
+    ship DISABLED and take their mailbox from EmailImportSettings (AB#4934 —
+    the mailbox is tenant-specific; earlier seeds hardcoded the meshmakers
+    mailbox, so every tenant polled a foreign mailbox). Set the mailbox in
+    MicrosoftGraphDocuments, fill EmailImportSettings (Settings -> Import),
+    then enable + DeployDataFlow. Since AB#5216 the ToDo Inbound trigger reads
+    its mailbox from EmailImportSettings via settingsConfiguration instead of
+    the pipeline definition, so a re-apply no longer loses it — only
+    System/Enabled falls back to false and has to be re-enabled.
+  - The Microsoft 365 e-mail import ships disabled — activate it in the
+    meshmakers-app under Settings -> E-Mail Import after filling the Azure
+    app-registration secrets on MicrosoftGraphDocuments via
+    scripts/om_set_secrets.ps1 (microsoftGraph section). These survive a
+    blueprint re-apply (isRuntimeState, same as Anthropic/finAPI).
+  - The IMAP e-mail import ships disabled too. Its connection (host, port,
+    credentials, default folder) stays on the EmailAccountingAssistant receiver
+    configuration; since AB#5345 its RUNTIME settings — poll interval, only
+    unread, post-processing mode, folders, batch cap, filters — live on the
+    seeded ImapImportSettings configuration (aa0…332, same CK type as
+    EmailImportSettings, one instance per channel) and are edited under
+    Settings -> Document import. Every one of them is optional: unset means the
+    value in the pipeline definition applies, so a tenant upgrading into this
+    keeps running exactly as before until somebody sets something.
+  - The remaining optional Teams/Signal import pipeline TEMPLATES still live in
+    the repo's data/ folder — they carry tenant-specific secrets and are
+    imported manually
+# NOTE: the blueprint engine installs each dependency's range FLOOR as the
+# exact version (ModelVersionRange.MinVersion), so floors must match versions
+# that exist in the catalogs — bump the Meshmakers.Accounting floor together
+# with ckModel.yaml, and the Basic/Basic.Accounting floors when the upstream
+# models are republished. Transitive CK dependencies are NOT resolved on
+# install, so Basic + Basic.Accounting must be listed explicitly and BEFORE
+# Meshmakers.Accounting (install order = list order). The System.* floors are
+# satisfied by the service-managed models already on the tenant (no-op).
+ckModelDependencies:
+- System-[2.0,)
+- System.Communication-[3.0,4.0)
+- System.Reporting-[2.0,3.0)
+- System.Identity-[2.12.0,3.0)
+- System.UI-[2.2,3.0)
+- Basic-[2.0.3,3.0)
+- Basic.Accounting-[1.6.0,2.0)
+# AB#5347: the CK model went to 2.0.0 for the UniqueNotDeleted index on
+# UploadedDocument/FileHash, so both floor AND ceiling move - [2.0.0,2.0) would be
+# an empty range. scripts/check_blueprint_floors.ps1 pins this floor to the
+# modelId in ckModel.yaml, because the engine installs a floor as an EXACT version.
+- Meshmakers.Accounting-[2.2.0,3.0)
+# The seed is split per feature (AB#4758): every listed file is loaded and merged into a
+# single runtime model before the import. Add a new file here when you create one -
+# `octo-bpm validate` warns about YAML under seed-data/ that nothing references.
+seedDataPaths:
+
+  # Adapter, application workload and the external-system configurations
+  - seed-data/configurations/adapter-and-app.yaml
+  - seed-data/configurations/integrations.yaml
+  - seed-data/configurations/reporting.yaml
+
+  # Roles, groups and the data-permission policies (the OIDC client moved to
+  # MeshmakersAccounting.Host — AB#5210)
+  - seed-data/identity/data-permissions.yaml
+  - seed-data/identity/roles-groups-client.yaml
+
+  # Fiscal years, cost categories and categorization rules
+  - seed-data/master-data/categorization-rules.yaml
+  - seed-data/master-data/cost-categories.yaml
+  - seed-data/master-data/fiscal-years.yaml
+
+  # Saved queries backing the list pages and dashboards
+  - seed-data/queries/queries.yaml
+
+  # Dashboards and their widgets
+  - seed-data/ui/dashboards.yaml
+
+  # One file per data flow: the DataFlow plus its pipelines and triggers.
+  # Order is irrelevant - all files are merged into one model before the import,
+  # so a pipeline may reference an entity declared in any other file.
+  - seed-data/data-flows/actuals-recompute.yaml
+  - seed-data/data-flows/ai-prompt.yaml
+  - seed-data/data-flows/attach-document-file.yaml
+  - seed-data/data-flows/attach-upload-to-document.yaml
+  - seed-data/data-flows/bmd-handover-export.yaml
+  - seed-data/data-flows/camt-053-import.yaml
+  - seed-data/data-flows/csv-transaction-import.yaml
+  - seed-data/data-flows/document-analysis.yaml
+  - seed-data/data-flows/document-ingest.yaml
+  - seed-data/data-flows/edit-document.yaml
+  - seed-data/data-flows/excel-pipeline.yaml
+  - seed-data/data-flows/finapi.yaml
+  - seed-data/data-flows/match-transactions-to-documents.yaml
+  - seed-data/data-flows/notify-todo-inbound.yaml
+  - seed-data/data-flows/notify-todo.yaml
+  - seed-data/data-flows/sepa-credit-transfer-export.yaml
+  - seed-data/data-flows/transaction-maintenance.yaml
+  - seed-data/data-flows/upload-documents.yaml
