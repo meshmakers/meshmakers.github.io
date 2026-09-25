@@ -1,0 +1,299 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: notify-todo (ToDo notifications, AB#4656 / AB#5152 / AB#4685) ---
+  # HTTP endpoint POST /notifyTodo — the meshmakers-app calls it on ToDo
+  # assignment/completion and from the "Erinnerung senden" action. Body:
+  # { event: "assigned" | "completed" | "reminder", todoRtId: string (24-hex),
+  #   subject: string, body: string (Markdown) }.
+  #
+  # AB#4685 — THE RECIPIENT COMES FROM THE ENTITY, NEVER FROM THE BODY. The
+  # route used to take toSubjectIds/toEmails straight out of the request, which
+  # made it a confused deputy: everyone allowed to call it could push arbitrary
+  # text to ANY resolvable subject through the tenant's Signal/Graph channels.
+  # The pipeline now loads the ToDo named by todoRtId and derives the recipient
+  # from that entity — "completed" reports back to the creator
+  # (CreatedByUserId / CreatedByEmail), "assigned" and "reminder" go to the
+  # assignee (AssigneeUserId / AssigneeEmail). toSubjectIds and toEmails are
+  # gone from the contract and are IGNORED even when a caller still sends them.
+  # Fail closed: no todoRtId, no such ToDo, an unknown event or a ToDo without
+  # that recipient means NOTHING is sent — there is deliberately no fallback
+  # to anything in the body.
+  # Subject and body stay caller-composed on purpose: the identity service has
+  # no language attribute on a user, so composing the text server-side would
+  # have to guess the recipient's language. Only the ADDRESSEE moved server-side.
+  # E-mail sends via SendMicrosoftGraphEmail@1 (Graph app-only, needs Mail.Send)
+  # from the tenant's notification mailbox. That mailbox is NOT a literal here:
+  # it is read from EmailImportSettings.EmailImportMailbox (AB#5216) — the same
+  # postbox the ToDo replies come back to, which is why the inbound pipeline
+  # reads the very same attribute.
+  - rtId: 67d4a2f0b2e4d8c3a1f00130
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Notify ToDo
+      - id: System/Description
+        value: Sends ToDo notification e-mails (assignment / completion / reminder) via Microsoft Graph
+  - rtId: 67d4a2f0b2e4d8c3a1f00131
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00130
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: 67d4a2f0b2e4d8c3a1f000a0
+        targetCkTypeId: System.Communication/MicrosoftGraphConfiguration
+      # GetPipelineConfigByWellKnownName resolves through this edge and THROWS
+      # when it is missing.
+      - roleId: System.Communication/Uses
+        targetRtId: aa0000000000000000000330
+        targetCkTypeId: Meshmakers.Accounting/EmailImportSettings
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Notify ToDo Pipeline
+      # Ships DISABLED: the notification mailbox is tenant-specific (AB#4934 —
+      # the previous hardcoded meshmakers mailbox leaked into every tenant).
+      # Enable after filling EmailImportSettings (Settings -> Import) and the
+      # MicrosoftGraphDocuments credentials. Since the mailbox lives in that
+      # configuration (isRuntimeState) a re-apply no longer loses it; only
+      # System/Enabled falls back to false.
+      #
+      # Per-user outbound channel preference (AB#5152, decided in AB#5149): the
+      # recipient's identity subjectId is read off the ToDo entity (AB#4685 —
+      # assignee or creator, depending on the event), never off the request.
+      # ResolveNotificationChannel@1
+      # resolves the subjectId against the verified-identifier directory and
+      # applies the deterministic fallback chain — the user's binding-specific
+      # preference (PreferredChannelBindingId, System.Identity 2.18.0) when the
+      # referenced binding is valid, otherwise E-MAIL. Never guesses, never
+      # multi-delivers. Branches: SIGNAL -> SignalSender@1 (endpoint resolves via
+      # the tenant's registered SignalChannel automatically, AB#5145); everything
+      # else -> the Graph e-mail default. TEAMS delivery is DEFERRED: proactive
+      # Bot Framework messages need a stored conversation reference the adapter
+      # does not keep (TeamsBotReply@1 only answers inbound activities), so a
+      # TEAMS-preferring user falls into the e-mail default until that follow-up
+      # lands — the chain is Signal-or-e-mail for now, per the WI.
+      - id: System/Enabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |
+          triggers:
+            - type: FromHttpRequest@2
+              path: /notifyTodo
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+                - AccountingEmployee
+          transformations:
+            # Sender mailbox from the EmailImportSettings singleton, NOT from this
+            # definition: PipelineDefinition is isRuntimeState:false, so an inline
+            # value is lost on every re-apply. SendMicrosoftGraphEmail@1 has no
+            # settingsConfiguration, so the value is read here and handed over via
+            # mailboxPath. Empty default FIRST - SetPrimitiveValue throws on an
+            # undefined valuePath and an unset optional attribute is absent from
+            # the configuration JSON.
+            - type: GetPipelineConfigByWellKnownName@1
+              description: Load the e-mail import settings (notification mailbox)
+              wellKnownName: EmailImportSettings
+              targetPath: $.emailConfig
+            - type: SetPrimitiveValue@1
+              description: Default the notification mailbox to empty (unconfigured tenant)
+              targetPath: $.notifyMailbox
+              value: ""
+              valueType: String
+            - type: If@1
+              description: Notification mailbox configured
+              path: $.emailConfig.attributes.EmailImportMailbox
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.notifyMailbox
+                  valuePath: $.emailConfig.attributes.EmailImportMailbox
+                  valueType: String
+            # Default delivery channel: e-mail (universal - every user has one).
+            - type: SetPrimitiveValue@1
+              description: Default delivery channel = EMAIL
+              targetPath: $.channel
+              value: EMAIL
+              valueType: String
+            # AB#4685 recipient derivation. Everything the pipeline sends to is read
+            # off the ToDo itself, so a caller can only ever reach the people that
+            # ToDo already names. A missing/malformed todoRtId ends the run here and
+            # leaves $.toSubjectId / $.toEmail undefined - nothing is sent.
+            - type: If@1
+              description: Only proceed when the body names a ToDo (24-hex rtId)
+              path: $.body.todoRtId
+              operator: RegexMatch
+              value: '^[0-9a-f]{24}$'
+              valueType: String
+              transformations:
+                # GetRtEntitiesById@1 reads an ARRAY of rtIds - wrap the single one.
+                - type: SetPrimitiveValue@1
+                  description: Wrap the ToDo rtId into an array for GetRtEntitiesById
+                  targetPath: $.todoRtIds
+                  valuePath: $.body.todoRtId
+                  valueType: String
+                  targetValueKind: Array
+                # Loads under the CALLER's identity (node default): the route can only
+                # notify about ToDos the caller may read in the first place.
+                - type: GetRtEntitiesById@1
+                  description: Load the ToDo this notification is about
+                  ckTypeId: Meshmakers.Accounting/Todo
+                  rtIdsPath: $.todoRtIds
+                  targetPath: $.todo
+                - type: If@1
+                  description: The ToDo exists
+                  path: $.todo.TotalCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    # WHO gets told follows from WHAT happened: a completion reports
+                    # back to whoever asked for the ToDo, an assignment/reminder goes
+                    # to whoever has to act on it. An unknown event matches no case
+                    # (there is no default branch on purpose) and leaves both recipient
+                    # paths undefined, so nothing is sent.
+                    # All four ToDo attributes are optional on the CK type, so every
+                    # read sits behind a presence guard - SetPrimitiveValue@1 THROWS
+                    # when its valuePath is undefined.
+                    - type: Switch@1
+                      description: Derive the recipient from the ToDo, by event
+                      path: $.body.event
+                      valueType: String
+                      cases:
+                        - value: ['completed']
+                          transformations:
+                            - type: If@1
+                              description: The ToDo carries the creator's subjectId
+                              path: $.todo.Items[0].Attributes.CreatedByUserId
+                              operator: NotEquals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  description: Recipient subjectId = the ToDo creator
+                                  targetPath: $.toSubjectId
+                                  valuePath: $.todo.Items[0].Attributes.CreatedByUserId
+                                  valueType: String
+                            - type: If@1
+                              description: The ToDo carries the creator's e-mail
+                              path: $.todo.Items[0].Attributes.CreatedByEmail
+                              operator: NotEquals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  description: Recipient e-mail = the ToDo creator
+                                  targetPath: $.toEmail
+                                  valuePath: $.todo.Items[0].Attributes.CreatedByEmail
+                                  valueType: String
+                        - value: ['assigned', 'reminder']
+                          transformations:
+                            - type: If@1
+                              description: The ToDo carries the assignee's subjectId
+                              path: $.todo.Items[0].Attributes.AssigneeUserId
+                              operator: NotEquals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  description: Recipient subjectId = the ToDo assignee
+                                  targetPath: $.toSubjectId
+                                  valuePath: $.todo.Items[0].Attributes.AssigneeUserId
+                                  valueType: String
+                            - type: If@1
+                              description: The ToDo carries the assignee's e-mail
+                              path: $.todo.Items[0].Attributes.AssigneeEmail
+                              operator: NotEquals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  description: Recipient e-mail = the ToDo assignee
+                                  targetPath: $.toEmail
+                                  valuePath: $.todo.Items[0].Attributes.AssigneeEmail
+                                  valueType: String
+            # AB#5152: when the ToDo yielded a subjectId, resolve the recipient's
+            # verified channel identifiers + preference and adopt the effective
+            # channel (falls back to EMAIL inside the node when it is unusable).
+            - type: If@1
+              description: A recipient subjectId was derived - resolve the channel preference
+              path: $.toSubjectId
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: ResolveNotificationChannel@1
+                  description: Resolve the recipient's verified channel identifiers + preference
+                  subjectIdPath: $.toSubjectId
+                  targetPath: $.recipient
+                - type: SetPrimitiveValue@1
+                  description: Adopt the resolved effective channel
+                  targetPath: $.channel
+                  valuePath: $.recipient.effectiveChannel
+                  valueType: String
+            # SIGNAL branch: the exact recipient number comes from the preferred
+            # binding (channelAddress); number/bridge resolve via the tenant's
+            # registered SignalChannel (AB#5145) - no endpoint config here.
+            - type: If@1
+              description: Deliver via Signal when the effective channel is SIGNAL
+              path: $.channel
+              operator: Equal
+              value: SIGNAL
+              valueType: String
+              transformations:
+                - type: FormatString@1
+                  description: Signal message text (subject + body)
+                  format: "{$.body.subject}\n\n{$.body.body}"
+                  targetPath: $.signalMessage
+                - type: SignalSender@1
+                  description: Send the ToDo notification via Signal
+                  recipientPath: $.recipient.channelAddress
+                  messagePath: $.signalMessage
+            # E-mail branch: the default - unset/invalid preference, unresolved
+            # subjectId, no subjectId in the request, and (deferred) TEAMS all land
+            # here. Exactly one branch runs: never multi-deliver.
+            - type: If@1
+              description: Deliver via e-mail unless Signal handled it
+              path: $.channel
+              operator: NotEqual
+              value: SIGNAL
+              valueType: String
+              transformations:
+                # Undefined unless the ToDo yielded one - so an unresolvable ToDo
+                # ends here silently instead of falling back to the request body.
+                - type: If@1
+                  description: Only send when a recipient e-mail was derived from the ToDo
+                  path: $.toEmail
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    # No mailbox configured = no send. Silently skipping beats
+                    # failing the pipeline on a tenant that never set one up.
+                    - type: If@1
+                      description: A notification mailbox is configured
+                      path: $.notifyMailbox
+                      operator: NotEquals
+                      valueType: String
+                      transformations:
+                        - type: SendMicrosoftGraphEmail@1
+                          description: Send the ToDo notification e-mail via Microsoft Graph
+                          serverConfiguration: MicrosoftGraphDocuments
+                          mailboxPath: $.notifyMailbox
+                          subjectPath: $.body.subject
+                          toPath: $.toEmail
+                          path: $.body.body
+            # Terminal echo-leak guard: never echo the request (Authorization/Bearer,
+            # body or intermediate state). See feedback_fromhttprequest_response_echo_leak.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.ok
+                  inclusion: true
