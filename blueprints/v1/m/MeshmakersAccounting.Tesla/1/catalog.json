@@ -2,14 +2,19 @@
   "version": "1.0",
   "blueprintId": "MeshmakersAccounting.Tesla",
   "majorVersion": 1,
-  "latestVersion": "1.0.0",
+  "latestVersion": "1.3.0",
   "description": "Tesla Supercharger invoice fetcher add-on for the Meshmakers Accounting app\n(AB#4678). Periodically pulls charging invoices from the Tesla Fleet API and\nstages them in the accounting inbox as UploadedDocument entities\n(ProcessingState NEW, SourceChannel API) \u2014 the existing analysis pipeline\npicks them up like any uploaded or e-mailed document; the SHA-256 hash dedup\nmakes re-polls idempotent.\n\nInstalls:\n- the Meshmakers.Accounting.Tesla construction kit model (TeslaConfiguration)\n- the TeslaConfiguration entity (placeholder credentials)\n- the \u0022Tesla Charging Invoices\u0022 DataFlow with the fetcher pipeline\n  (cron via PipelineTrigger, daily 05:30, plus manual ExecutePipeline)\n\nREQUIRES an installed MeshmakersAccounting base blueprint (declared via\nblueprintDependencies) \u2014 the fetcher stages into the base app\u0027s inbox\n(Meshmakers.Accounting/UploadedDocument, Documents root folder).\n\nTesla prerequisites (one-time):\n- Tesla developer app (developer.tesla.com) with OAuth grant types\n  Authorization Code \u002B Machine-to-Machine and the \u0022Vehicle Charging\n  Management\u0022 scope; partner registration needs a domain hosting the public\n  key at /.well-known/appspecific/com.tesla.3p.public-key.pem\n- a refresh token generated once via the localhost OAuth callback\n\nPost-install:\n- Set ClientId/ClientSecret/RefreshToken on the TeslaConfiguration entity \u2014\n  from the app (Settings -\u003E Add-ons -\u003E Tesla, AB#5035) or via\n  scripts/om_set_secrets.ps1 (tesla section). Since 1.1.0 the config\n  attributes are isRuntimeState, so a blueprint re-apply/update PRESERVES\n  operator values (they are no longer reset to placeholders).\n- DeployDataFlow \u0022Tesla Charging Invoices\u0022 \u002B DeployTriggers (cron) \u2014 the\n  app\u0027s Tesla add-on card does both on \u0022Activate\u0022.\n- NOTE: Tesla rotates refresh tokens; the pipeline persists the newest token\n  back to TeslaConfiguration on every run. isRuntimeState keeps that newest\n  token across a re-apply, so it is no longer lost \u2014 but a manual\n  om_set_secrets run still overwrites it with the secrets.local.json value.\n",
   "versions": [
     {
       "version": "1.0.0",
       "directoryPath": "blueprints/v1/m/MeshmakersAccounting.Tesla/1/MeshmakersAccounting.Tesla-1.0.0",
       "publishedAt": "2026-08-04T12:24:57.9068359Z"
+    },
+    {
+      "version": "1.3.0",
+      "directoryPath": "blueprints/v1/m/MeshmakersAccounting.Tesla/1/MeshmakersAccounting.Tesla-1.3.0",
+      "publishedAt": "2026-09-25T06:49:54.1632992Z"
     }
   ],
-  "updatedAt": "2026-09-14T05:06:14.6356707Z"
+  "updatedAt": "2026-09-25T06:49:54.1665707Z"
 }
