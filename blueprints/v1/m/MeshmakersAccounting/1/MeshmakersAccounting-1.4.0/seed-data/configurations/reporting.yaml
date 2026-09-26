@@ -1,0 +1,15 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Reporting root folders (documents/receipts storage) -------------------
+  - rtId: 67d4a2f0b2e4d8c3a1f00080
+    ckTypeId: System.Reporting/FolderRoot
+    rtWellKnownName: Documents
+    attributes:
+      - id: System/Name
+        value: Documents
