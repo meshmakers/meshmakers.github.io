@@ -1,0 +1,158 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# Cost-category actuals recompute (AB#4434, kind-aware since AB#4507).
+#
+# Folded into the blueprint under AB#5216: until then this lived only in
+# data/_pipelines/ and was imported by hand, so it was the last accounting
+# pipeline on a productive tenant that no blueprint owned - a re-apply neither
+# updated it nor would a reinstall have reproduced it.
+#
+# The rtIds are the ones the hand-imported entities already carry, so the seed
+# UPSERTS the live pipeline in place instead of creating a second one.
+#
+# Full recompute on every run: per CostCategory, ActualAmount is rebuilt from
+# the signed sum over ALL bank transactions currently assigned via
+# TransactionToCategory, so re-categorizations, corrections and refunds are
+# always reflected; a category with no transactions gets 0. Hourly cron.
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+- rtId: 6a4dcf0100000000000000d1
+  ckTypeId: System.Communication/DataFlow
+  associations: []
+  attributes:
+  - id: System/Name
+    value: Cost Category Actuals
+  - id: System/Description
+    value: Recomputes CostCategory.ActualAmount from assigned bank transactions (full recompute per run)
+- rtId: 6a4dcf0100000000000000d2
+  ckTypeId: System.Communication/Pipeline
+  associations:
+  - roleId: System/ParentChild
+    targetRtId: 6a4dcf0100000000000000d1
+    targetCkTypeId: System.Communication/DataFlow
+  - roleId: System.Communication/Executes
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter
+  attributes:
+  - id: System/Name
+    value: Recompute Category Actuals
+  - id: System/Enabled
+    value: true
+  - id: System.Communication/DeploymentState
+    value: 0
+  - id: System.Communication/PipelineDefinition
+    value: |
+      triggers:
+        - type: FromExecutePipelineCommand@1
+        - type: FromPipelineTriggerEvent@1
+      transformations:
+        - type: DateTime@1
+          description: Timestamp of this recompute run
+          operation: Now
+          targetPath: $.now
+        - type: GetRtEntitiesByType@1
+          description: Load all cost categories
+          ckTypeId: Meshmakers.Accounting/CostCategory
+          targetPath: $.categories
+        - type: ForEach@1
+          description: Recompute actual spend per category; collects one update per category
+          iterationPath: $.categories.Items
+          targetPath: $._updates
+          mergePath: $.key.update
+          maxDegreeOfParallelism: 1
+          transformations:
+            - type: GetAssociationTargets@1
+              description: All bank transactions currently assigned to this category
+              originRtIdPath: $.key.RtId
+              originCkTypeId: Meshmakers.Accounting/CostCategory
+              targetCkTypeId: Basic.Accounting/BankTransaction
+              associationRoleId: Meshmakers.Accounting/TransactionToCategory
+              graphDirection: Outbound
+              targetPath: $.key._tx
+            - type: SumAggregation@1
+              description: Expense actual = -(sum of signed transaction amounts)
+              targetPath: $.key._sumExpense
+              aggregations:
+                - path: $.key._tx[*].Items[*]
+                  filterPath: null
+                  comparisonValue: null
+                  aggregationPath: $.Attributes.Amount
+                  value: -1.0
+            - type: SumAggregation@1
+              description: Income actual = +(sum of signed transaction amounts)
+              targetPath: $.key._sumIncome
+              aggregations:
+                - path: $.key._tx[*].Items[*]
+                  filterPath: null
+                  comparisonValue: null
+                  aggregationPath: $.Attributes.Amount
+                  value: 1.0
+            # CategoryKind guard: exactly one branch fires; missing kind reads
+            # as null -> NotEqual 1 matches -> EXPENSE (pre-1.5.0 entities).
+            - type: If@1
+              description: EXPENSE (or missing kind) -> write the negated sum
+              path: $.key.Attributes.CategoryKind
+              operator: NotEqual
+              value: 1
+              valueType: Enum
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Overwrite the category's materialized actuals (expense sign)
+                  targetPath: $.key.update
+                  updateKind: Update
+                  rtIdPath: $.key.RtId
+                  ckTypeId: Meshmakers.Accounting/CostCategory
+                  attributeUpdates:
+                    - attributeName: ActualAmount
+                      valuePath: $.key._sumExpense
+                      attributeValueType: Double
+                    - attributeName: ActualAmountUpdatedAt
+                      valuePath: $.full.now
+                      attributeValueType: DateTime
+            - type: If@1
+              description: INCOME -> write the plain sum
+              path: $.key.Attributes.CategoryKind
+              operator: Equal
+              value: 1
+              valueType: Enum
+              transformations:
+                - type: CreateUpdateInfo@1
+                  description: Overwrite the category's materialized actuals (income sign)
+                  targetPath: $.key.update
+                  updateKind: Update
+                  rtIdPath: $.key.RtId
+                  ckTypeId: Meshmakers.Accounting/CostCategory
+                  attributeUpdates:
+                    - attributeName: ActualAmount
+                      valuePath: $.key._sumIncome
+                      attributeValueType: Double
+                    - attributeName: ActualAmountUpdatedAt
+                      valuePath: $.full.now
+                      attributeValueType: DateTime
+        - type: ApplyChanges@2
+          description: Persist recomputed actuals
+          entityUpdatesPath: $._updates
+        - type: SetPipelineExecutionResult@1
+          path: $._updates
+- rtId: 6a4dcf0100000000000000d3
+  ckTypeId: System.Communication/PipelineTrigger
+  associations:
+  - roleId: System/ParentChild
+    targetRtId: 6a4dcf0100000000000000d1
+    targetCkTypeId: System.Communication/DataFlow
+  - roleId: System.Communication/Triggers
+    targetRtId: 6a4dcf0100000000000000d2
+    targetCkTypeId: System.Communication/Pipeline
+  attributes:
+  - id: System/Name
+    value: Recompute Category Actuals Hourly
+  - id: System/Enabled
+    value: true
+  - id: System.Communication/DeploymentState
+    value: 0
+  - id: System.Bot/CronExpression
+    value: '0 * * * *'
