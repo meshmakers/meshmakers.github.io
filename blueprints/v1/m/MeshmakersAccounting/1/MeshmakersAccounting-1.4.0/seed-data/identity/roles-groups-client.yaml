@@ -1,0 +1,168 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- NOTE: no OIDC client here (AB#5210) -------------------------------------
+  # The app client used to be seeded per leaf, with redirect URIs built from
+  # ${octo.tenantId}-accounting.${octo.domain} — a per-tenant host on the
+  # PLATFORM domain that has no DNS record. Every re-apply rewrote the working
+  # URIs with those dead ones; on prod-1 that took sign-in down for six tenants
+  # on 2026-09-15 (OpenIddict ID2043, invalid redirect_uri).
+  #
+  # A leaf cannot know the public hostname — only the app host it lives under
+  # can. So the client now comes from MeshmakersAccounting.Host, installed on
+  # the root, and reaches this tenant by client mirroring
+  # (AutoProvisionInChildTenants). Do not re-add one here.
+  # --- App roles + groups (AB#4677) ---------------------------------------------
+  # Role-based access of the accounting SPA: AccountingManagement (full access),
+  # AccountingEmployee (inbox/documents/todos, own items only) and
+  # AccountingShareholder (finance cockpit only). Roles are additive — a user may
+  # hold several. User administration is group membership: each group carries its
+  # role via the AssignedRole association (same pattern as the identity bootstrap
+  # blueprint's TenantOwners group). Role SubjectIds/IdentityRoleIds are runtime
+  # state and preserved on blueprint re-apply.
+  - rtId: aa0000000000000000000301
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: AccountingManagement
+    attributes:
+      - id: System/Name
+        value: AccountingManagement
+      - id: System.Identity/NormalizedName
+        value: ACCOUNTINGMANAGEMENT
+    associations:
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000320
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000324
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000326
+        targetCkTypeId: System.Identity/DataPermission
+      # AB#4685 stage E3: banking (A), master data (C), ToDo activity (E).
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000332
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000336
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000340
+        targetCkTypeId: System.Identity/DataPermission
+  - rtId: aa0000000000000000000302
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: AccountingEmployee
+    attributes:
+      - id: System/Name
+        value: AccountingEmployee
+      - id: System.Identity/NormalizedName
+        value: ACCOUNTINGEMPLOYEE
+    associations:
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000321
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000325
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000326
+        targetCkTypeId: System.Identity/DataPermission
+      # AB#4685 stage E3: transaction read (B), master data read (D), ToDo
+      # activity (E). No banking write and no master data write — those stay (A)
+      # and (C), i.e. management only.
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000334
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000338
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000340
+        targetCkTypeId: System.Identity/DataPermission
+  - rtId: aa0000000000000000000303
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: AccountingShareholder
+    attributes:
+      - id: System/Name
+        value: AccountingShareholder
+      - id: System.Identity/NormalizedName
+        value: ACCOUNTINGSHAREHOLDER
+    # AB#4685 stage E3: the shareholder had no grant at all until now — the
+    # finance cockpit worked only because nothing was enforced. (D) + (F) are
+    # exactly the board's data needs and nothing beyond them.
+    associations:
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000338
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: aa0000000000000000000342
+        targetCkTypeId: System.Identity/DataPermission
+  - rtId: aa0000000000000000000311
+    ckTypeId: System.Identity/Group
+    rtWellKnownName: Accounting
+    attributes:
+      - id: System.Identity/GroupName
+        value: Accounting
+      - id: System.Identity/NormalizedGroupName
+        value: ACCOUNTING
+      - id: System.Identity/GroupDescription
+        value: Accounting responsibles — full access to the accounting app.
+    associations:
+      - roleId: System.Identity/AssignedRole
+        targetRtId: aa0000000000000000000301
+        targetCkTypeId: System.Identity/Role
+  - rtId: aa0000000000000000000312
+    ckTypeId: System.Identity/Group
+    rtWellKnownName: Employees
+    attributes:
+      - id: System.Identity/GroupName
+        value: Employees
+      - id: System.Identity/NormalizedGroupName
+        value: EMPLOYEES
+      - id: System.Identity/GroupDescription
+        value: Employees — inbox, documents and ToDos of the accounting app, own items only.
+    associations:
+      - roleId: System.Identity/AssignedRole
+        targetRtId: aa0000000000000000000302
+        targetCkTypeId: System.Identity/Role
+  - rtId: aa0000000000000000000313
+    ckTypeId: System.Identity/Group
+    rtWellKnownName: Shareholders
+    attributes:
+      - id: System.Identity/GroupName
+        value: Shareholders
+      - id: System.Identity/NormalizedGroupName
+        value: SHAREHOLDERS
+      - id: System.Identity/GroupDescription
+        value: Shareholders — finance cockpit dashboard of the accounting app (read-only).
+    associations:
+      - roleId: System.Identity/AssignedRole
+        targetRtId: aa0000000000000000000303
+        targetCkTypeId: System.Identity/Role
+  # AB#5150: the employee/freelancer distinction moves from Contact.Kind
+  # (bookkeeping category, stays business data) to identity groups. Freelancers
+  # carry the same AccountingEmployee role as Employees today — capabilities are
+  # identical (expense submission, own items only, assistant use); a dedicated
+  # role can be attached here the moment their capabilities diverge, without
+  # touching any contact. Group naming follows the existing short-name
+  # convention of this seed (Accounting/Employees/Shareholders), so the WI's
+  # example names Accounting-Employees/Accounting-Freelancers map to the
+  # existing Employees group and this new Freelancers group.
+  - rtId: aa0000000000000000000314
+    ckTypeId: System.Identity/Group
+    rtWellKnownName: Freelancers
+    attributes:
+      - id: System.Identity/GroupName
+        value: Freelancers
+      - id: System.Identity/NormalizedGroupName
+        value: FREELANCERS
+      - id: System.Identity/GroupDescription
+        value: Freelancers — inbox, documents and ToDos of the accounting app, own items only.
+    associations:
+      - roleId: System.Identity/AssignedRole
+        targetRtId: aa0000000000000000000302
+        targetCkTypeId: System.Identity/Role
