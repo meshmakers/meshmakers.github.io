@@ -1,0 +1,19 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  - rtId: aa0000000000000000000100
+    ckTypeId: Meshmakers.Accounting/FiscalYear
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: "2026"
+      - id: Meshmakers.Accounting/StartDate
+        value: "2026-01-01T00:00:00Z"
+      - id: Meshmakers.Accounting/EndDate
+        value: "2026-12-31T23:59:59Z"
+      - id: Meshmakers.Accounting/IsClosed
+        value: false
