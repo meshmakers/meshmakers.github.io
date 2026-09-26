@@ -1,0 +1,2049 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[1.0,2.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  - rtId: 67d4a2f0b2e4d8c3a1f00111
+    ckTypeId: System.Communication/Pipeline
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 67d4a2f0b2e4d8c3a1f051b0
+      targetCkTypeId: System.Communication/DataFlow
+    - roleId: System.Communication/Executes
+      targetRtId: '670000000000000000000002'
+      targetCkTypeId: System.Communication/Adapter
+    - roleId: System.Communication/Uses
+      targetRtId: 67d4a2f0b2e4d8c3a1f000a0
+      targetCkTypeId: System.Communication/MicrosoftGraphConfiguration
+    - roleId: System.Communication/Uses
+      targetRtId: aa0000000000000000000330
+      targetCkTypeId: Meshmakers.Accounting/EmailImportSettings
+    attributes:
+    - id: System.Communication/DeploymentState
+      value: 0
+    - id: System/Name
+      value: Email Import (Microsoft 365)
+    - id: System/Enabled
+      value: false
+    - id: System.Communication/PipelineDefinition
+      value: |-
+        triggers:
+          # Mailbox + folders come from the EmailImportSettings configuration (set in the app
+          # under Settings -> E-Mail Import), NOT from this definition — so a redeploy never
+          # overwrites what an operator configured and nothing tenant-specific leaks into the
+          # seed. The node resolves them from the Uses-associated config by the attribute names
+          # below (it stays domain-agnostic). pollingIntervalSeconds is the fallback when the
+          # config carries no EmailImportPollingSeconds.
+          - type: FromMicrosoftGraphEmail@1
+            # AB#5136 native channel identity: resolve the sender against the verified-identifier
+            # directory (e-mail binding) and run as that caller when one exists. Optional keeps
+            # unbound senders working via the service account + existing allowlist.
+            callerBinding: BindingOptional
+            # Surface Authentication-Results so DKIM/DMARC feeds the message trust (AB#5125).
+            includeInternetMessageHeaders: true
+            serverConfiguration: MicrosoftGraphDocuments
+            pollingIntervalSeconds: 120
+            settingsConfiguration: EmailImportSettings
+            mailboxAttribute: EmailImportMailbox
+            sourceFolderAttribute: EmailImportSourceFolder
+            doneFolderAttribute: EmailImportDoneFolder
+            # AB#5142: park mails that exhausted their import attempts (e.g. a poison
+            # mail the render step cannot survive) instead of retrying them forever.
+            # AB#5260: also the way back — a parked mail is marked
+            # 'OctoMesh-Import-Failed', and moving it back into the source folder clears
+            # every marker and imports it again. The path itself comes from the
+            # configuration (Settings -> E-Mail Import), like mailbox and folders.
+            failedFolderAttribute: EmailImportFailedFolder
+            pollingSecondsAttribute: EmailImportPollingSeconds
+            # AB#5345: the import confirmation. Done/failed used to be decided on "the run did
+            # not throw", which is not a statement about the import — a pipeline ends normally
+            # while a node reported an error and stopped its branch, and such a mail was filed
+            # under Done with nothing in the inbox to show for it. The pipeline now says so
+            # itself, at the very end and only when at least one inbox item exists.
+            successPath: $.importCompleted
+            # The remaining runtime settings, same rule as the four above: a value on the
+            # configuration wins, the literal in this definition is the fallback. Setting one
+            # must never rewrite this definition — it is release content.
+            postProcessingModeAttribute: EmailImportPostProcessingMode
+            maxMessagesPerPollAttribute: EmailImportMaxMessagesPerPoll
+            senderFilterAttribute: EmailImportSenderFilter
+            successPathAttribute: EmailImportSuccessPath
+        transformations:
+          # --- Sender allowlist (AB#5011) --------------------------------------
+          # Loaded once per run from the EmailImportSettings singleton the Settings page
+          # maintains. Empty/missing list = every sender may submit. The check runs per mail.
+          - type: GetRtEntitiesByType@1
+            description: Load the e-mail import settings (sender allowlist)
+            ckTypeId: Meshmakers.Accounting/EmailImportSettings
+            take: 1
+            fieldFilters:
+              - attributePath: RtWellKnownName
+                operator: Equals
+                comparisonValue: EmailImportSettings
+            targetPath: $.importSettings
+          - type: ForEach@1
+            description: Process each mail in the batch (the trigger sends one mail per run)
+            iterationPath: $.Emails
+            targetPath: $.emailResults
+            targetValueKind: Simple
+            targetValueWriteMode: Overwrite
+            # AB#5347: serialize this loop. The fileHash dedup downstream is check-then-act
+            # (CheckDuplicate@1 reads in its own transaction, ApplyChanges@2 writes in another), so
+            # concurrent iterations of the SAME batch can both pass the check. This narrows the
+            # window; it is mitigation, not the fix (AB#5347 adds a unique index).
+            maxDegreeOfParallelism: 1
+            continueOnError: true
+            transformations:
+              # AB#5345: two per-mail counters, summed at the very end of this pipeline into
+              # the `successPath` flag the trigger reads. `_inboxItems` counts what actually
+              # reached the accounting inbox; `_rejected` marks a mail the sender allowlist
+              # turned away, which is a DECISION and not a failure — without it a rejected
+              # mail would count as "nothing was imported" and be moved aside as poison.
+              # Both are written before anything can skip the mail: the root-level sum reads
+              # them off every collected iteration.
+              - type: SetPrimitiveValue@1
+                description: No inbox item for this mail yet (AB#5345)
+                targetPath: $.key._inboxItems
+                value: 0
+                valueType: Double
+              - type: SetPrimitiveValue@1
+                targetPath: $.key._rejected
+                value: 0
+                valueType: Int
+              - type: ExecuteCSharp@1
+                description: Sender allowlist check (addresses or @domain suffixes, case-insensitive)
+                code: >-
+                  string.IsNullOrWhiteSpace(allowedSenders) ? true :
+                  (!string.IsNullOrWhiteSpace(sender) && allowedSenders
+                    .Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(e => e.Trim())
+                    .Where(e => e.Length > 0)
+                    .Any(e => e.StartsWith("@")
+                      ? sender.TrimEnd().EndsWith(e, StringComparison.OrdinalIgnoreCase)
+                      : string.Equals(sender.Trim(), e, StringComparison.OrdinalIgnoreCase)))
+                usings:
+                  - System
+                  - System.Linq
+                returnType: Boolean
+                arguments:
+                  - name: allowedSenders
+                    valuePath: $.full.importSettings.Items[0].Attributes.EmailImportAllowedSenders
+                    dataType: String
+                  - name: sender
+                    valuePath: $.key.FromAddress
+                    dataType: String
+                targetPath: $.key._senderAllowed
+              - type: If@1
+                description: Sender not allowlisted - skip (the mail still moves to Done, keeping an audit trail)
+                path: $.key._senderAllowed
+                operator: Equals
+                value: false
+                valueType: Boolean
+                transformations:
+                  - type: Logger@1
+                    message: "Email import: sender not on the allowlist, mail skipped (AB#5011)"
+                  - type: SetPrimitiveValue@1
+                    description: Deliberately turned away, not a failed import (AB#5345)
+                    targetPath: $.key._rejected
+                    value: 1
+                    valueType: Int
+              - type: If@1
+                description: Sender allowed - stage the mail's documents
+                path: $.key._senderAllowed
+                operator: Equals
+                value: true
+                valueType: Boolean
+                transformations:
+                  # --- Attachments: hand each to the shared Stage Document pipeline ---
+                  - type: ForEach@1
+                    description: Stage each attachment (PDF or image) for asynchronous analysis
+                    iterationPath: $.key.Attachments
+                    targetPath: $.attachmentResults
+                    targetValueKind: Simple
+                    targetValueWriteMode: Overwrite
+                    maxDegreeOfParallelism: 1
+                    continueOnError: true
+                    transformations:
+                      # AB#5345: set on EVERY attachment, including the ones the filter below
+                      # skips — the per-mail sum reads it off each collected element.
+                      - type: SetPrimitiveValue@1
+                        description: No inbox item from this attachment yet (AB#5345)
+                        targetPath: $.key._inboxItem
+                        value: 0
+                        valueType: Int
+                      - type: If@1
+                        description: Only stage PDFs and receipt-like images; skip signature logos/icons (AB#4647)
+                        path: $.key.IsLikelyDocument
+                        operator: Equals
+                        value: true
+                        valueType: Boolean
+                        transformations:
+                          - type: SelectByPath@1
+                            description: Build the Stage Document input from this attachment
+                            selectPath:
+                              - path: $.key.Data
+                                targetPath: $.stageInput.data
+                              - path: $.key.FileName
+                                targetPath: $.stageInput.fileName
+                              - path: $.key.ContentType
+                                targetPath: $.stageInput.contentType
+                              - path: $.key.Length
+                                targetPath: $.stageInput.length
+                              - path: $.full.key.FromAddress
+                                targetPath: $.stageInput.sourceSender
+                              - path: $.full.key.Date
+                                targetPath: $.stageInput.sourceReceivedAt
+                              - path: $.full.key.Subject
+                                targetPath: $.stageInput.sourceSubject
+                              - path: $.full.key.Body
+                                targetPath: $.stageInput.sourceBody
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.stageInput.sourceChannel
+                            value: "EMAIL"
+                            valueType: String
+                          - type: WriteVerifiedCaller@1
+                            description: Attach the verified caller for native attribution (AB#5136)
+                            targetPath: $.stageInput.caller
+                          - type: ToPipelineDataEvent@1
+                            description: Stage this attachment via the shared Stage Document pipeline
+                            targetPipelineRtId: 67d4a2f0b2e4d8c3a1f051b2
+                            awaitResult: true
+                            timeoutSeconds: 120
+                            path: $.stageInput
+                            targetPath: $.input
+                            resultTargetPath: $.stageOut
+                          # AB#5345: the business outcome of this attachment. `docRtId` is the
+                          # stager's own answer to "is there an inbox item for this?" and it is
+                          # set for BOTH `staged` and `duplicate` — a mail redelivered after it
+                          # was already imported has its receipt in the app, so treating that as
+                          # a failure would move a perfectly good mail into the failed folder.
+                          # `tooLarge`, a stopped branch and a stager that never answered all
+                          # leave it absent, and all three mean: nothing reached the inbox.
+                          - type: If@1
+                            description: The stager reported an inbox item for this attachment (AB#5345)
+                            path: $.stageOut.stageResult.docRtId
+                            operator: NotEquals
+                            valueType: String
+                            transformations:
+                              - type: SetPrimitiveValue@1
+                                targetPath: $.key._inboxItem
+                                value: 1
+                                valueType: Int
+                  # Per-mail total, guarded by the same presence check the branches below use:
+                  # with no stageable attachment the loop above collected nothing to sum over.
+                  - type: If@1
+                    description: The mail carried stageable attachments — total them up (AB#5345)
+                    path: $.key.HasStageableAttachment
+                    operator: Equals
+                    value: true
+                    valueType: Boolean
+                    transformations:
+                      # The default is written first because SetPrimitiveValue throws on a
+                      # valuePath that resolves to nothing.
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.mailInboxItems
+                        value: 0
+                        valueType: Double
+                      - type: SumAggregation@1
+                        description: Inbox items created for this mail (AB#5345)
+                        targetPath: $.mailInboxItems
+                        aggregations:
+                          - path: $.attachmentResults[*]
+                            aggregationPath: $._inboxItem
+                            value: 1
+                            filterPath: null
+                            comparisonValue: null
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key._inboxItems
+                        valuePath: $.mailInboxItems
+                        valueType: Double
+                  # --- No stageable attachment: render the mail body as the receipt ---
+                  # A mail that carries no PDF and no receipt-like image is rendered to a PDF
+                  # from its body and staged, so the mail itself becomes the receipt. Dedup on
+                  # the BODY TEXT hash (deterministic — re-rendering the body is not), passed to
+                  # the stager as dedupHash. Keyed on HasStageableAttachment so an image receipt
+                  # staged above is never double-staged here (AB#4647).
+                  - type: If@1
+                    description: Only when the mail has no PDF and no receipt-like image (AB#4647)
+                    path: $.key.HasStageableAttachment
+                    operator: Equals
+                    value: false
+                    valueType: Boolean
+                    transformations:
+                      - type: FormatString@1
+                        description: Receipt file name derived from the mail subject
+                        format: "{$.key.Subject}.pdf"
+                        nullValue: "E-Mail-Beleg.pdf"
+                        targetPath: $.renderedFileName
+                      - type: RenderHtmlPdf@1
+                        description: Render the mail body (HTML or plain text) as the receipt PDF
+                        path: $.key.Body
+                        titlePath: $.key.Subject
+                        targetPath: $.renderedPdf
+                        contentLengthTargetPath: $.renderedPdfLen
+                      - type: Hash@1
+                        description: Hash the mail body (UTF-8) so the same mail is not staged twice
+                        sourcePath: $.key.Body
+                        algorithm: Sha256
+                        inputFormat: String
+                        targetPath: $.bodyHash
+                      - type: SelectByPath@1
+                        description: Build the Stage Document input from the rendered mail body
+                        selectPath:
+                          - path: $.renderedPdf
+                            targetPath: $.stageInput.data
+                          - path: $.renderedFileName
+                            targetPath: $.stageInput.fileName
+                          - path: $.renderedPdfLen
+                            targetPath: $.stageInput.length
+                          - path: $.bodyHash
+                            targetPath: $.stageInput.dedupHash
+                          - path: $.key.FromAddress
+                            targetPath: $.stageInput.sourceSender
+                          - path: $.key.Date
+                            targetPath: $.stageInput.sourceReceivedAt
+                          - path: $.key.Subject
+                            targetPath: $.stageInput.sourceSubject
+                          - path: $.key.Body
+                            targetPath: $.stageInput.sourceBody
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageInput.contentType
+                        value: "application/pdf"
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageInput.sourceChannel
+                        value: "EMAIL"
+                        valueType: String
+                      - type: WriteVerifiedCaller@1
+                        description: Attach the verified caller for native attribution (AB#5136)
+                        targetPath: $.stageInput.caller
+                      - type: ToPipelineDataEvent@1
+                        description: Stage the rendered mail body via the shared Stage Document pipeline
+                        targetPipelineRtId: 67d4a2f0b2e4d8c3a1f051b2
+                        awaitResult: true
+                        timeoutSeconds: 120
+                        path: $.stageInput
+                        targetPath: $.input
+                        resultTargetPath: $.stageOut
+                      - type: If@1
+                        description: The stager reported an inbox item for the rendered mail (AB#5345)
+                        path: $.stageOut.stageResult.docRtId
+                        operator: NotEquals
+                        valueType: String
+                        transformations:
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.key._inboxItems
+                            value: 1
+                            valueType: Double
+          # --- The trigger's import confirmation (AB#5345) -----------------------------
+          # The LAST thing this pipeline does, so a branch that stopped early never reaches
+          # it. `FromMicrosoftGraphEmail@1` reads it as `successPath` and only a true here
+          # lets it move the mail to the done folder. Without it the trigger decides on "the
+          # execution came back", and a run whose staging branch stopped on a reported node
+          # error comes back exactly like a good one — which is how a mail gets filed under
+          # Done with nothing in the inbox to show for it. An unconfirmed run leaves the mail
+          # in the source folder and counts an attempt; after `maxAttemptsPerMessage` the
+          # trigger parks it in the failed folder, from where moving it back retries it.
+          - type: SetPrimitiveValue@1
+            targetPath: $.importCompleted
+            value: false
+            valueType: Boolean
+          - type: SetPrimitiveValue@1
+            targetPath: $.inboxItems
+            value: 0
+            valueType: Double
+          - type: SumAggregation@1
+            description: Inbox items created, plus the mails the allowlist turned away (AB#5345)
+            targetPath: $.inboxItems
+            aggregations:
+              - path: $.emailResults[*]
+                aggregationPath: $._inboxItems
+                value: 1
+                filterPath: null
+                comparisonValue: null
+              - path: $.emailResults[*]
+                aggregationPath: $._rejected
+                value: 1
+                filterPath: null
+                comparisonValue: null
+          - type: If@1
+            description: At least one mail was dealt with — it may be post-processed (AB#5345)
+            path: $.inboxItems
+            operator: GreaterThan
+            value: 0
+            valueType: Double
+            transformations:
+              - type: SetPrimitiveValue@1
+                targetPath: $.importCompleted
+                value: true
+                valueType: Boolean
+  - rtId: 67d4a2f0b2e4d8c3a1f00161
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: TeamsAccountingAssistant
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 67d4a2f0b2e4d8c3a1f051b0
+      targetCkTypeId: System.Communication/DataFlow
+    - roleId: System.Communication/Executes
+      targetRtId: '670000000000000000000002'
+      targetCkTypeId: System.Communication/Adapter
+    - roleId: System.Communication/Uses
+      targetRtId: 67d4a2f0b2e4d8c3a1f000a0
+      targetCkTypeId: System.Communication/MicrosoftGraphConfiguration
+    - roleId: System.Communication/Uses
+      targetRtId: aa0000000000000000000331
+      targetCkTypeId: Meshmakers.Accounting/SignalImportSettings
+    attributes:
+    - id: System.Communication/DeploymentState
+      value: 0
+    - id: System/Name
+      value: Teams Assistant
+    - id: System/Enabled
+      value: false
+    - id: System.Communication/PipelineDefinition
+      value: |-
+        triggers:
+          - type: FromTeamsBot@1
+            # AB#5136 native channel identity: resolve the Teams sender (aadObjectId)
+            # against the verified-identifier directory; run as that caller when bound.
+            callerBinding: BindingOptional
+            serverConfiguration: MicrosoftGraphDocuments
+            route: /teamsBot
+            # Inbound Bot Framework JWTs are fully validated by default (AB#5010, incl.
+            # signature). Set validateInboundToken: false ONLY for the Bot Framework
+            # Emulator, which sends no token - never on a public endpoint.
+        transformations:
+          # Verified-identity gate (AB#5149, parity with the Signal channel — WI 5149
+          # names Teams explicitly; previously this pipeline answered every sender).
+          # The Teams sender is a tenant user authenticated via AAD, but the assistant
+          # only acts for callers whose aadObjectId resolves to a verified user binding
+          # (System.Identity/VerifiedExternalIdentifier, AB#5136 — created automatically
+          # on EntraID login, AB#5124). WriteVerifiedCaller writes NOTHING without a
+          # verified principal, so an unbound sender is detected by the absent
+          # $.caller.subjectId and gets a polite self-service pointer instead of
+          # answers/staging.
+          - type: WriteVerifiedCaller@1
+            description: Materialize the verified caller for the gate (AB#5149)
+            targetPath: $.caller
+          - type: If@1
+            description: Unbound sender - point at self-service identity binding and stop
+            path: $.caller.subjectId
+            operator: Equals
+            valueType: String
+            transformations:
+              - type: TeamsBotReply@1
+                description: Tell the sender to bind their identity first
+                serverConfiguration: MicrosoftGraphDocuments
+                messageBody: "Dein Teams-Konto ist noch keinem Benutzer zugeordnet. Bitte hinterlege deine Identität unter „Meine Identitäten“ in deinem Benutzerprofil – danach kannst du den Assistenten direkt nutzen."
+                continueOnError: true
+          - type: If@1
+            description: Verified caller present - run the assistant branches
+            path: $.caller.subjectId
+            operator: NotEquals
+            valueType: String
+            transformations:
+              # --- Branch A: attachment present -> stage via the shared pipeline ---
+              - type: If@1
+                description: Message carries an attachment - stage it for asynchronous analysis
+                path: $.Emails[0].Attachments[0].ContentType
+                operator: NotEquals
+                valueType: String
+                transformations:
+                  - type: ForEach@1
+                    description: Process each inbound message (one per activity)
+                    iterationPath: $.Emails
+                    targetPath: $.emailResults
+                    targetValueKind: Simple
+                    targetValueWriteMode: Overwrite
+                    # AB#5347: serialize this loop. The fileHash dedup downstream is check-then-act
+                    # (CheckDuplicate@1 reads in its own transaction, ApplyChanges@2 writes in another), so
+                    # concurrent iterations of the SAME batch can both pass the check. This narrows the
+                    # window; it is mitigation, not the fix (AB#5347 adds a unique index).
+                    maxDegreeOfParallelism: 1
+                    transformations:
+                      # AB#5345: the same import-confirmation seam the two mail channels use.
+                      # Teams has no post-processing to gate today — there is nothing in a chat
+                      # to move, delete or mark — so the flag is inert here; it exists so all
+                      # four ingest channels state the business outcome the same way and a
+                      # trigger that grows a successPath finds it already written.
+                      - type: SetPrimitiveValue@1
+                        description: No inbox item for this message yet (AB#5345)
+                        targetPath: $.key._inboxItems
+                        value: 0
+                        valueType: Double
+                      - type: ForEach@1
+                        description: Stage each attachment
+                        iterationPath: $.key.Attachments
+                        targetPath: $.attachmentResults
+                        targetValueKind: Simple
+                        targetValueWriteMode: Overwrite
+                        maxDegreeOfParallelism: 1
+                        continueOnError: true
+                        transformations:
+                          - type: SetPrimitiveValue@1
+                            description: No inbox item from this attachment yet (AB#5345)
+                            targetPath: $.key._inboxItem
+                            value: 0
+                            valueType: Int
+                          # Build the shared stager's input in one node, then hand it over
+                          # (same DataFlow) via an await-result call. The stager does hashing,
+                          # cross-channel dedup, image->PDF and the UploadedDocument insert.
+                          - type: SelectByPath@1
+                            description: Build the Stage Document input from this attachment
+                            selectPath:
+                              - path: $.key.Data
+                                targetPath: $.stageInput.data
+                              - path: $.key.FileName
+                                targetPath: $.stageInput.fileName
+                              - path: $.key.ContentType
+                                targetPath: $.stageInput.contentType
+                              - path: $.key.Length
+                                targetPath: $.stageInput.length
+                              - path: $.full.key.From
+                                targetPath: $.stageInput.sourceSender
+                              - path: $.full.key.Date
+                                targetPath: $.stageInput.sourceReceivedAt
+                              - path: $.full.key.Body
+                                targetPath: $.stageInput.sourceBody
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.stageInput.sourceChannel
+                            value: "TEAMS"
+                            valueType: String
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.stageInput.sourceSubject
+                            value: "Teams message"
+                            valueType: String
+                          # App base URL so the stager can build the inbox deep link — read from
+                          # the same tenant configuration every channel uses (AB#5145; the
+                          # SignalImportSettings entity carries the app-level URL, written
+                          # by the app's import settings page). No hardcoded URL in the seed.
+                          - type: GetPipelineConfigByWellKnownName@1
+                            description: Load the app settings (app base URL)
+                            wellKnownName: SignalImportSettings
+                            targetPath: $.appConfig
+                          # The attribute is the channel-neutral `AppUrl` since CK 1.30.0
+                          # (AB#5155, renamed from SignalAppUrl). The read is guarded by an If
+                          # and preceded by an empty default: SetPrimitiveValue THROWS on an
+                          # undefined valuePath, and an unset optional attribute is simply
+                          # absent from the configuration JSON — without the default, a tenant
+                          # that never configured a URL lost the whole staging iteration.
+                          - type: SetPrimitiveValue@1
+                            description: Default the deep-link base to empty (unconfigured tenant)
+                            targetPath: $.stageInput.appUrl
+                            value: ""
+                            valueType: String
+                          - type: If@1
+                            description: App base URL configured
+                            path: $.appConfig.attributes.AppUrl
+                            operator: NotEquals
+                            valueType: String
+                            transformations:
+                              - type: SetPrimitiveValue@1
+                                targetPath: $.stageInput.appUrl
+                                valuePath: $.appConfig.attributes.AppUrl
+                                valueType: String
+                          - type: WriteVerifiedCaller@1
+                            description: Attach the verified caller for native attribution (AB#5136)
+                            targetPath: $.stageInput.caller
+                          - type: ToPipelineDataEvent@1
+                            description: Stage this attachment via the shared Stage Document pipeline
+                            targetPipelineRtId: 67d4a2f0b2e4d8c3a1f051b2
+                            awaitResult: true
+                            timeoutSeconds: 120
+                            path: $.stageInput
+                            targetPath: $.input
+                            resultTargetPath: $.stageOut
+                          # Single reply using the shared stager's standard message
+                          # (covers staged / duplicate / tooLarge uniformly across channels).
+                          - type: TeamsBotReply@1
+                            description: Acknowledge with the stager's standard message (markdown link)
+                            serverConfiguration: MicrosoftGraphDocuments
+                            messageBodyPath: $.stageOut.stageResult.messageMd
+                            continueOnError: true
+                          - type: If@1
+                            description: The stager reported an inbox item for this attachment (AB#5345)
+                            path: $.stageOut.stageResult.docRtId
+                            operator: NotEquals
+                            valueType: String
+                            transformations:
+                              - type: SetPrimitiveValue@1
+                                targetPath: $.key._inboxItem
+                                value: 1
+                                valueType: Int
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.msgInboxItems
+                        value: 0
+                        valueType: Double
+                      - type: SumAggregation@1
+                        description: Inbox items created for this message (AB#5345)
+                        targetPath: $.msgInboxItems
+                        aggregations:
+                          - path: $.attachmentResults[*]
+                            aggregationPath: $._inboxItem
+                            value: 1
+                            filterPath: null
+                            comparisonValue: null
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key._inboxItems
+                        valuePath: $.msgInboxItems
+                        valueType: Double
+                  # AB#5345: the batch's business outcome, stated inside this branch because the
+                  # Q&A branch below runs no staging loop at all and would leave the array the
+                  # sum reads absent.
+                  - type: SetPrimitiveValue@1
+                    targetPath: $.importCompleted
+                    value: false
+                    valueType: Boolean
+                  - type: SetPrimitiveValue@1
+                    targetPath: $.inboxItems
+                    value: 0
+                    valueType: Double
+                  - type: SumAggregation@1
+                    description: Inbox items created for the whole activity (AB#5345)
+                    targetPath: $.inboxItems
+                    aggregations:
+                      - path: $.emailResults[*]
+                        aggregationPath: $._inboxItems
+                        value: 1
+                        filterPath: null
+                        comparisonValue: null
+                  - type: If@1
+                    description: At least one inbox item (AB#5345)
+                    path: $.inboxItems
+                    operator: GreaterThan
+                    value: 0
+                    valueType: Double
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.importCompleted
+                        value: true
+                        valueType: Boolean
+              # --- Branch B: no attachment -> shared "Answer Question" pipeline ---
+              - type: If@1
+                description: No attachment - treat the message as a question
+                path: $.Emails[0].Attachments[0].ContentType
+                operator: Equals
+                valueType: String
+                transformations:
+                  - type: SetPrimitiveValue@1
+                    targetPath: $.qInput.question
+                    valuePath: $.Emails[0].Body
+                    valueType: String
+                  - type: WriteVerifiedCaller@1
+                    description: Attach the verified caller for native attribution (AB#5136)
+                    targetPath: $.qInput.caller
+                  - type: ToPipelineDataEvent@1
+                    description: Answer the question via the shared Answer Question pipeline
+                    targetPipelineRtId: 67d4a2f0b2e4d8c3a1f051b3
+                    awaitResult: true
+                    timeoutSeconds: 120
+                    path: $.qInput
+                    targetPath: $.input
+                    resultTargetPath: $.answerOut
+                  - type: TeamsBotReply@1
+                    description: Reply with the answer
+                    serverConfiguration: MicrosoftGraphDocuments
+                    messageBodyPath: $.answerOut.answer
+                    continueOnError: true
+  - rtId: 67d4a2f0b2e4d8c3a1f000b1
+    ckTypeId: System.Communication/Pipeline
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 67d4a2f0b2e4d8c3a1f051b0
+      targetCkTypeId: System.Communication/DataFlow
+    - roleId: System.Communication/Executes
+      targetRtId: '670000000000000000000002'
+      targetCkTypeId: System.Communication/Adapter
+    - roleId: System.Communication/Uses
+      targetRtId: 67d4a2f0b2e4d8c3a1f000d0
+      targetCkTypeId: System.Communication/EMailReceiverConfiguration
+    # AB#5345: the trigger's RUNTIME settings — poll interval, only-unread, post-processing
+    # mode, folders, batch cap, filters — live on this configuration, not in the definition
+    # below. Its own instance, not the Graph channel's: a poll interval and a done folder
+    # belong to one mailbox. The tenant-wide sender allowlist stays on EmailImportSettings
+    # and is read separately further down.
+    - roleId: System.Communication/Uses
+      targetRtId: aa0000000000000000000332
+      targetCkTypeId: Meshmakers.Accounting/EmailImportSettings
+    attributes:
+    - id: System.Communication/DeploymentState
+      value: 0
+    - id: System/Name
+      value: Email Import (IMAP)
+    - id: System/Enabled
+      value: false
+    - id: System.Communication/PipelineDefinition
+      value: |-
+        triggers:
+          # AB#5345: everything below the `settingsConfiguration` block is a FALLBACK. The
+          # effective values come from the ImapImportSettings configuration (Settings ->
+          # Document import), read by the attribute names given here, and a value found there
+          # wins. The literals stay as the behaviour of a tenant that configured nothing.
+          # 🔴 Setting a setting must NEVER rewrite this definition: it is release content,
+          # a blueprint re-apply reinstates it, and the app's old regex patcher moved one
+          # tenant's pipeline entity from v35 over v36 to v39 with nothing but a checkbox.
+          - type: FromEmail@1
+            serverConfiguration: EmailAccountingAssistant
+            pollingIntervalSeconds: 60
+            onlyUnread: true
+            markAsRead: true
+            deleteAfterProcessing: false
+            # AB#5336: every message is downloaded in full and its attachments are
+            # base64-encoded into the batch, so an unbounded search result is an
+            # out-of-memory failure on any mailbox with history (1697 mails killed the
+            # adapter on prod-1). Explicit rather than relying on the node default, so a
+            # later change to that default cannot silently unbound the fleet.
+            maxMessagesPerPoll: 25
+            # AB#5345: the import confirmation. The post-processing above happens only when
+            # the pipeline sets this to true, which it does at the very end and only when at
+            # least one inbox item exists for the batch. "The execution did not throw" is not
+            # that statement — a run ends normally while a node reported an error and stopped
+            # its branch, and a mail marked read after such a run is simply gone.
+            successPath: $.importCompleted
+            settingsConfiguration: ImapImportSettings
+            pollingSecondsAttribute: EmailImportPollingSeconds
+            onlyUnreadAttribute: EmailImportOnlyUnread
+            postProcessingModeAttribute: EmailImportPostProcessingMode
+            sourceFolderAttribute: EmailImportSourceFolder
+            doneFolderAttribute: EmailImportDoneFolder
+            failedFolderAttribute: EmailImportFailedFolder
+            maxMessagesPerPollAttribute: EmailImportMaxMessagesPerPoll
+            sinceDateAttribute: EmailImportSinceDate
+            sinceDaysBackAttribute: EmailImportSinceDaysBack
+            # AB#5341: whether there IS an import window. Both this and the cut-off above are
+            # DERIVED from the open fiscal years by the "Import Window Recompute" pipeline at the
+            # end of this file; neither is edited by hand. A false here makes the trigger skip the
+            # whole polling pass — which is the point: leaving the cut-off unset instead means "no
+            # date filter", and with onlyUnread off that is the unbounded full scan of AB#5336.
+            windowOpenAttribute: EmailImportWindowOpen
+            senderFilterAttribute: EmailImportSenderFilter
+            subjectFilterAttribute: EmailImportSubjectFilter
+            successPathAttribute: EmailImportSuccessPath
+        transformations:
+          # --- Sender allowlist (AB#5011) --------------------------------------
+          # Shares the EmailImportSettings singleton with the Graph document import:
+          # ONE tenant-wide list of senders that may submit documents by e-mail.
+          # Empty/missing = every sender (previous behaviour).
+          - type: GetRtEntitiesByType@1
+            description: Load the e-mail import settings (sender allowlist)
+            ckTypeId: Meshmakers.Accounting/EmailImportSettings
+            take: 1
+            fieldFilters:
+              - attributePath: RtWellKnownName
+                operator: Equals
+                comparisonValue: EmailImportSettings
+            targetPath: $.importSettings
+          - type: ForEach@1
+            description: Process each email
+            iterationPath: $.Emails
+            targetPath: $.results
+            targetValueKind: Simple
+            targetValueWriteMode: Overwrite
+            # AB#5347: serialize this loop. The fileHash dedup downstream is check-then-act
+            # (CheckDuplicate@1 reads in its own transaction, ApplyChanges@2 writes in another), so
+            # concurrent iterations of the SAME batch can both pass the check. This narrows the
+            # window; it is mitigation, not the fix (AB#5347 adds a unique index).
+            maxDegreeOfParallelism: 1
+            continueOnError: true
+            transformations:
+              # AB#5345: two per-mail counters, summed at the very end of this pipeline into
+              # the `successPath` flag the trigger reads. `_inboxItems` counts what actually
+              # reached the accounting inbox; `_rejected` marks a mail the sender allowlist
+              # turned away, which is a DECISION and not a failure — without it a rejected
+              # mail would count as "nothing was imported" and be moved aside as poison.
+              # Both are written before anything can skip the mail: the root-level sum reads
+              # them off every collected iteration.
+              - type: SetPrimitiveValue@1
+                description: No inbox item for this mail yet (AB#5345)
+                targetPath: $.key._inboxItems
+                value: 0
+                valueType: Double
+              - type: SetPrimitiveValue@1
+                targetPath: $.key._rejected
+                value: 0
+                valueType: Int
+              - type: ExecuteCSharp@1
+                description: Sender allowlist check (addresses or @domain suffixes, case-insensitive)
+                code: >-
+                  string.IsNullOrWhiteSpace(allowedSenders) ? true :
+                  (!string.IsNullOrWhiteSpace(sender) && allowedSenders
+                    .Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(e => e.Trim())
+                    .Where(e => e.Length > 0)
+                    .Any(e => e.StartsWith("@")
+                      ? sender.TrimEnd().EndsWith(e, StringComparison.OrdinalIgnoreCase)
+                      : string.Equals(sender.Trim(), e, StringComparison.OrdinalIgnoreCase)))
+                usings:
+                  - System
+                  - System.Linq
+                returnType: Boolean
+                arguments:
+                  - name: allowedSenders
+                    valuePath: $.full.importSettings.Items[0].Attributes.EmailImportAllowedSenders
+                    dataType: String
+                  - name: sender
+                    valuePath: $.key.FromAddress
+                    dataType: String
+                targetPath: $.key._senderAllowed
+              - type: If@1
+                description: Sender not allowlisted - skip (no staging, no AI answer)
+                path: $.key._senderAllowed
+                operator: Equals
+                value: false
+                valueType: Boolean
+                transformations:
+                  - type: Logger@1
+                    message: "Email assistant: sender not on the allowlist, mail skipped (AB#5011)"
+                  - type: SetPrimitiveValue@1
+                    description: Deliberately turned away, not a failed import (AB#5345)
+                    targetPath: $.key._rejected
+                    value: 1
+                    valueType: Int
+              - type: If@1
+                description: Sender allowed - run the assistant
+                path: $.key._senderAllowed
+                operator: Equals
+                value: true
+                valueType: Boolean
+                transformations:
+                  # --- Branch A: stageable attachment -> shared Stage Document pipeline ---
+                  # Keyed on HasStageableAttachment so signature logos / office artwork are
+                  # not staged as documents (AB#4647).
+                  - type: If@1
+                    description: Has a PDF or receipt-like image — stage it for asynchronous analysis
+                    path: $.key.HasStageableAttachment
+                    operator: Equals
+                    value: true
+                    valueType: Boolean
+                    transformations:
+                      - type: ForEach@1
+                        description: Stage each attachment
+                        iterationPath: $.key.Attachments
+                        targetPath: $.attachmentResults
+                        targetValueKind: Simple
+                        targetValueWriteMode: Overwrite
+                        maxDegreeOfParallelism: 1
+                        continueOnError: true
+                        transformations:
+                          # AB#5345: set on EVERY attachment, including the ones the filter below
+                          # skips — the per-mail sum reads it off each collected element.
+                          - type: SetPrimitiveValue@1
+                            description: No inbox item from this attachment yet (AB#5345)
+                            targetPath: $.key._inboxItem
+                            value: 0
+                            valueType: Int
+                          - type: If@1
+                            description: Only stage PDFs and receipt-like images; skip signature logos/icons (AB#4647)
+                            path: $.key.IsLikelyDocument
+                            operator: Equals
+                            value: true
+                            valueType: Boolean
+                            transformations:
+                              # Build the shared stager's input in one node, then hand it over
+                              # (same DataFlow). The stager does hashing, cross-channel dedup,
+                              # image->PDF, the 10 MB guard and the UploadedDocument insert.
+                              - type: SelectByPath@1
+                                description: Build the Stage Document input from this attachment
+                                selectPath:
+                                  - path: $.key.Data
+                                    targetPath: $.stageInput.data
+                                  - path: $.key.FileName
+                                    targetPath: $.stageInput.fileName
+                                  - path: $.key.ContentType
+                                    targetPath: $.stageInput.contentType
+                                  - path: $.key.Length
+                                    targetPath: $.stageInput.length
+                                  - path: $.full.key.FromAddress
+                                    targetPath: $.stageInput.sourceSender
+                                  - path: $.full.key.Date
+                                    targetPath: $.stageInput.sourceReceivedAt
+                                  - path: $.full.key.Subject
+                                    targetPath: $.stageInput.sourceSubject
+                                  - path: $.full.key.Body
+                                    targetPath: $.stageInput.sourceBody
+                              - type: SetPrimitiveValue@1
+                                targetPath: $.stageInput.sourceChannel
+                                value: "EMAIL"
+                                valueType: String
+                              # App base URL so the stager can build the inbox deep link (EDIT
+                              # before import). APP_URL placeholder in the seed.
+                              - type: SetPrimitiveValue@1
+                                targetPath: $.stageInput.appUrl
+                                value: "APP_URL"
+                                valueType: String
+                              - type: ToPipelineDataEvent@1
+                                description: Stage this attachment via the shared Stage Document pipeline
+                                targetPipelineRtId: 67d4a2f0b2e4d8c3a1f051b2
+                                awaitResult: true
+                                timeoutSeconds: 120
+                                path: $.stageInput
+                                targetPath: $.input
+                                resultTargetPath: $.stageOut
+                              - type: SetPrimitiveValue@1
+                                targetPath: $.key.stageMessage
+                                valuePath: $.stageOut.stageResult.message
+                                valueType: String
+                              # AB#5345: the business outcome of this attachment. `docRtId` is the
+                              # stager's own answer to "is there an inbox item for this?" and it is
+                              # set for BOTH `staged` and `duplicate` — a mail redelivered after it
+                              # was already imported has its receipt in the app, so treating that as
+                              # a failure would park a perfectly good mail in the failed folder.
+                              # `tooLarge`, a stopped branch and a stager that never answered all
+                              # leave it absent, and all three mean: nothing reached the inbox.
+                              - type: If@1
+                                description: The stager reported an inbox item for this attachment (AB#5345)
+                                path: $.stageOut.stageResult.docRtId
+                                operator: NotEquals
+                                valueType: String
+                                transformations:
+                                  - type: SetPrimitiveValue@1
+                                    targetPath: $.key._inboxItem
+                                    value: 1
+                                    valueType: Int
+                      # Per-mail total. The default is written first because SetPrimitiveValue
+                      # throws on a valuePath that resolves to nothing.
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.mailInboxItems
+                        value: 0
+                        valueType: Double
+                      - type: SumAggregation@1
+                        description: Inbox items created for this mail (AB#5345)
+                        targetPath: $.mailInboxItems
+                        aggregations:
+                          - path: $.attachmentResults[*]
+                            aggregationPath: $._inboxItem
+                            value: 1
+                            filterPath: null
+                            comparisonValue: null
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key._inboxItems
+                        valuePath: $.mailInboxItems
+                        valueType: Double
+                  # --- Branch B: no stageable attachment -> render the mail body as the receipt ---
+                  # E-mail is documents only (Q&A lives on the Signal/Teams assistants): a mail
+                  # with no PDF and no receipt-like image is rendered to a PDF from its body and
+                  # staged, so the mail itself becomes the receipt — identical to the Graph import.
+                  # Dedup on the BODY TEXT hash (deterministic — re-rendering is not), passed to
+                  # the stager as dedupHash. Keyed on HasStageableAttachment so an image receipt
+                  # staged in Branch A is never double-staged here (AB#4647).
+                  - type: If@1
+                    description: No PDF or receipt-like image — render the mail body as the receipt (AB#4647)
+                    path: $.key.HasStageableAttachment
+                    operator: Equals
+                    value: false
+                    valueType: Boolean
+                    transformations:
+                      - type: FormatString@1
+                        description: Receipt file name derived from the mail subject
+                        format: "{$.key.Subject}.pdf"
+                        nullValue: "E-Mail-Beleg.pdf"
+                        targetPath: $.renderedFileName
+                      - type: RenderHtmlPdf@1
+                        description: Render the mail body (HTML or plain text) as the receipt PDF
+                        path: $.key.Body
+                        titlePath: $.key.Subject
+                        targetPath: $.renderedPdf
+                        contentLengthTargetPath: $.renderedPdfLen
+                      - type: Hash@1
+                        description: Hash the mail body (UTF-8) so the same mail is not staged twice
+                        sourcePath: $.key.Body
+                        algorithm: Sha256
+                        inputFormat: String
+                        targetPath: $.bodyHash
+                      - type: SelectByPath@1
+                        description: Build the Stage Document input from the rendered mail body
+                        selectPath:
+                          - path: $.renderedPdf
+                            targetPath: $.stageInput.data
+                          - path: $.renderedFileName
+                            targetPath: $.stageInput.fileName
+                          - path: $.renderedPdfLen
+                            targetPath: $.stageInput.length
+                          - path: $.bodyHash
+                            targetPath: $.stageInput.dedupHash
+                          - path: $.key.FromAddress
+                            targetPath: $.stageInput.sourceSender
+                          - path: $.key.Date
+                            targetPath: $.stageInput.sourceReceivedAt
+                          - path: $.key.Subject
+                            targetPath: $.stageInput.sourceSubject
+                          - path: $.key.Body
+                            targetPath: $.stageInput.sourceBody
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageInput.contentType
+                        value: "application/pdf"
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageInput.sourceChannel
+                        value: "EMAIL"
+                        valueType: String
+                      # App base URL so the stager can build the inbox deep link (EDIT before
+                      # import). APP_URL placeholder in the seed.
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageInput.appUrl
+                        value: "APP_URL"
+                        valueType: String
+                      - type: ToPipelineDataEvent@1
+                        description: Stage the rendered mail body via the shared Stage Document pipeline
+                        targetPipelineRtId: 67d4a2f0b2e4d8c3a1f051b2
+                        awaitResult: true
+                        timeoutSeconds: 120
+                        path: $.stageInput
+                        targetPath: $.input
+                        resultTargetPath: $.stageOut
+                      - type: If@1
+                        description: The stager reported an inbox item for the rendered mail (AB#5345)
+                        path: $.stageOut.stageResult.docRtId
+                        operator: NotEquals
+                        valueType: String
+                        transformations:
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.key._inboxItems
+                            value: 1
+                            valueType: Double
+          # --- The trigger's import confirmation (AB#5345) -----------------------------
+          # The LAST thing this pipeline does, so a branch that stopped early never reaches
+          # it. `FromEmail@1` reads it as `successPath` and only a true here lets it touch the
+          # mailbox — mark read, delete or move to the done folder. Without it the trigger
+          # would have to read "the execution came back" as success, and a run whose staging
+          # branch stopped on a reported node error comes back exactly like a good one.
+          - type: SetPrimitiveValue@1
+            targetPath: $.importCompleted
+            value: false
+            valueType: Boolean
+          - type: SetPrimitiveValue@1
+            targetPath: $.inboxItems
+            value: 0
+            valueType: Double
+          - type: SumAggregation@1
+            description: Inbox items created, plus the mails the allowlist turned away (AB#5345)
+            targetPath: $.inboxItems
+            aggregations:
+              - path: $.results[*]
+                aggregationPath: $._inboxItems
+                value: 1
+                filterPath: null
+                comparisonValue: null
+              - path: $.results[*]
+                aggregationPath: $._rejected
+                value: 1
+                filterPath: null
+                comparisonValue: null
+          - type: If@1
+            description: At least one mail was dealt with — the batch may be post-processed (AB#5345)
+            path: $.inboxItems
+            operator: GreaterThan
+            value: 0
+            valueType: Double
+            transformations:
+              - type: SetPrimitiveValue@1
+                targetPath: $.importCompleted
+                value: true
+                valueType: Boolean
+  - rtId: 67d4a2f0b2e4d8c3a1f051b0
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+    - id: System/Name
+      value: Document Ingest
+    - id: System/Description
+      value: Shared document ingest — Signal/Teams/Email channels plus the shared Stage Document + Answer Question pipelines (ToPipelineDataEvent await-result)
+  - rtId: 67d4a2f0b2e4d8c3a1f051b1
+    ckTypeId: System.Communication/Pipeline
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 67d4a2f0b2e4d8c3a1f051b0
+      targetCkTypeId: System.Communication/DataFlow
+    - roleId: System.Communication/Executes
+      targetRtId: '670000000000000000000002'
+      targetCkTypeId: System.Communication/Adapter
+    - roleId: System.Communication/Uses
+      targetRtId: aa0000000000000000000331
+      targetCkTypeId: Meshmakers.Accounting/SignalImportSettings
+    attributes:
+    - id: System.Communication/DeploymentState
+      value: 0
+    - id: System/Name
+      value: Signal Assistant
+    - id: System/Enabled
+      value: false
+    - id: System.Communication/PipelineDefinition
+      value: |-
+        triggers:
+          - type: FromSignal@1
+            pollingIntervalSeconds: 5
+            callerBinding: BindingOptional
+        transformations:
+          # The Signal number and bridge apiUrl are resolved by the FromSignal/SignalSender
+          # nodes from the tenant's System.Communication/SignalChannel (activated in Refinery
+          # Studio, AB#5143/AB#5145). Only the app-level AppUrl (for the reply deep link,
+          # channel-neutral since AB#5155) is read from the SignalImportSettings
+          # configuration (via a Uses association).
+          - type: GetPipelineConfigByWellKnownName@1
+            description: Load the Signal import settings
+            wellKnownName: SignalImportSettings
+            targetPath: $.signalConfig
+          - type: ForEach@1
+            description: Process each inbound Signal message
+            iterationPath: $.Messages
+            targetPath: $.results
+            targetValueKind: Simple
+            targetValueWriteMode: Overwrite
+            # AB#5347: serialize this loop. The fileHash dedup downstream is check-then-act
+            # (CheckDuplicate@1 reads in its own transaction, ApplyChanges@2 writes in another), so
+            # concurrent iterations of the SAME batch can both pass the check. This narrows the
+            # window; it is mitigation, not the fix (AB#5347 adds a unique index).
+            maxDegreeOfParallelism: 1
+            continueOnError: true
+            transformations:
+              # Capture the sender before any nested loop rebinds $.key.
+              - type: SetPrimitiveValue@1
+                targetPath: $.msgSource
+                valueType: String
+                valuePath: $.key.Source
+              # AB#5345: the same import-confirmation seam the two mail channels use. Signal
+              # has no post-processing to gate today — there is nothing in a chat to move,
+              # delete or mark — so the flag is inert here; it exists so all four ingest
+              # channels state the business outcome the same way and a trigger that grows a
+              # successPath finds it already written.
+              - type: SetPrimitiveValue@1
+                description: No inbox item for this message yet (AB#5345)
+                targetPath: $.key._inboxItems
+                value: 0
+                valueType: Double
+              # Verified-identity gate (AB#5149, replaces the AB#5011 contact allowlist):
+              # a sender is authorized when their Signal number resolves to a verified
+              # user binding (System.Identity/VerifiedExternalIdentifier, AB#5136).
+              # WriteVerifiedCaller writes NOTHING when the execution carries no verified
+              # principal, so $.caller.subjectId stays absent for unbound senders — the
+              # empty-String Equals below matches exactly that (same idiom as the
+              # attachment-presence checks). Contact master data no longer gates access;
+              # nothing downstream read the former $.contact lookup, so it is dropped.
+              - type: WriteVerifiedCaller@1
+                description: Materialize the verified caller for the gate (AB#5149)
+                targetPath: $.caller
+              - type: If@1
+                description: Unbound sender - point at self-service identity binding and stop
+                path: $.caller.subjectId
+                operator: Equals
+                valueType: String
+                transformations:
+                  - type: SignalSender@1
+                    description: Tell the sender to bind their number first
+                    recipientPath: $.msgSource
+                    message: "Diese Nummer ist noch keinem Benutzer zugeordnet. Bitte hinterlege sie unter „Meine Identitäten“ in deinem Benutzerprofil – danach kannst du den Assistenten direkt nutzen."
+              - type: If@1
+                description: Verified caller present - run the assistant branches
+                path: $.caller.subjectId
+                operator: NotEquals
+                valueType: String
+                transformations:
+                  # --- Branch A: attachment present -> stage via the shared pipeline ---
+                  - type: If@1
+                    description: Has an attachment (invoice photo / PDF)
+                    path: $.key.Attachments[0].ContentType
+                    operator: NotEquals
+                    valueType: String
+                    transformations:
+                      - type: DateTime@1
+                        description: Receive timestamp for staging
+                        operation: Now
+                        targetPath: $.receivedAt
+                      - type: ForEach@1
+                        description: Process each attachment
+                        iterationPath: $.key.Attachments
+                        targetPath: $.documentResults
+                        targetValueKind: Simple
+                        targetValueWriteMode: Overwrite
+                        # AB#5347: serialize this loop. The fileHash dedup downstream is check-then-act
+                        # (CheckDuplicate@1 reads in its own transaction, ApplyChanges@2 writes in another), so
+                        # concurrent iterations of the SAME batch can both pass the check. This narrows the
+                        # window; it is mitigation, not the fix (AB#5347 adds a unique index).
+                        maxDegreeOfParallelism: 1
+                        continueOnError: true
+                        transformations:
+                          - type: SetPrimitiveValue@1
+                            description: No inbox item from this attachment yet (AB#5345)
+                            targetPath: $.key._inboxItem
+                            value: 0
+                            valueType: Int
+                          # Build the shared stager's input in one node, then hand it over
+                          # (same DataFlow) via an await-result call. sourceSubject/sourceBody
+                          # are omitted — Signal has none and the stager tolerates missing
+                          # optional fields.
+                          - type: SelectByPath@1
+                            description: Build the Stage Document input from this attachment
+                            selectPath:
+                              - path: $.key.Data
+                                targetPath: $.stageInput.data
+                              - path: $.key.FileName
+                                targetPath: $.stageInput.fileName
+                              - path: $.key.ContentType
+                                targetPath: $.stageInput.contentType
+                              - path: $.key.Length
+                                targetPath: $.stageInput.length
+                              - path: $.full.msgSource
+                                targetPath: $.stageInput.sourceSender
+                              - path: $.full.receivedAt
+                                targetPath: $.stageInput.sourceReceivedAt
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.stageInput.sourceChannel
+                            value: "SIGNAL"
+                            valueType: String
+                          # App base URL so the stager can build the inbox deep link, read from
+                          # $.signalConfig (loaded at pipeline root above and reachable here
+                          # through the ForEach child context's parent fallback). Channel-neutral
+                          # `AppUrl` since CK 1.30.0 (AB#5155, renamed from SignalAppUrl); same
+                          # guarded read as the Teams branch (SetPrimitiveValue throws on an
+                          # undefined valuePath, and an unset optional attribute is absent from
+                          # the configuration JSON).
+                          - type: SetPrimitiveValue@1
+                            description: Default the deep-link base to empty (unconfigured tenant)
+                            targetPath: $.stageInput.appUrl
+                            value: ""
+                            valueType: String
+                          - type: If@1
+                            description: App base URL configured
+                            path: $.signalConfig.attributes.AppUrl
+                            operator: NotEquals
+                            valueType: String
+                            transformations:
+                              - type: SetPrimitiveValue@1
+                                targetPath: $.stageInput.appUrl
+                                valuePath: $.signalConfig.attributes.AppUrl
+                                valueType: String
+                          - type: WriteVerifiedCaller@1
+                            description: Attach the verified caller for native attribution (AB#5136)
+                            targetPath: $.stageInput.caller
+                          - type: ToPipelineDataEvent@1
+                            description: Stage this attachment via the shared Stage Document pipeline
+                            targetPipelineRtId: 67d4a2f0b2e4d8c3a1f051b2
+                            awaitResult: true
+                            timeoutSeconds: 120
+                            path: $.stageInput
+                            targetPath: $.input
+                            resultTargetPath: $.stageOut
+                          # Carry the stager's full standard message (the inbox deep link is
+                          # already appended by the stager) for the single reply below.
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.key.stageMessage
+                            valuePath: $.stageOut.stageResult.message
+                            valueType: String
+                          - type: If@1
+                            description: The stager reported an inbox item for this attachment (AB#5345)
+                            path: $.stageOut.stageResult.docRtId
+                            operator: NotEquals
+                            valueType: String
+                            transformations:
+                              - type: SetPrimitiveValue@1
+                                targetPath: $.key._inboxItem
+                                value: 1
+                                valueType: Int
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.msgInboxItems
+                        value: 0
+                        valueType: Double
+                      - type: SumAggregation@1
+                        description: Inbox items created for this message (AB#5345)
+                        targetPath: $.msgInboxItems
+                        aggregations:
+                          - path: $.documentResults[*]
+                            aggregationPath: $._inboxItem
+                            value: 1
+                            filterPath: null
+                            comparisonValue: null
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key._inboxItems
+                        valuePath: $.msgInboxItems
+                        valueType: Double
+                      # One reply with the shared stager's standard message — identical to
+                      # every other channel (the stager already appended the inbox link).
+                      - type: SignalSender@1
+                        description: Confirm the invoice import over Signal
+                        recipientPath: $.msgSource
+                        messagePath: $.documentResults[0].stageMessage
+
+                  # --- Branch B: text only -> shared "Answer Question" pipeline ---
+                  - type: If@1
+                    description: Text message, no attachment
+                    path: $.key.Attachments[0].ContentType
+                    operator: Equals
+                    valueType: String
+                    transformations:
+                      - type: If@1
+                        description: Only when a message is present
+                        path: $.key.Message
+                        operator: NotEquals
+                        valueType: String
+                        transformations:
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.qInput.question
+                            valuePath: $.key.Message
+                            valueType: String
+                          - type: WriteVerifiedCaller@1
+                            description: Attach the verified caller to the outbound payload (AB#5136)
+                            targetPath: $.qInput.caller
+                          - type: ToPipelineDataEvent@1
+                            description: Answer the question via the shared Answer Question pipeline
+                            targetPipelineRtId: 67d4a2f0b2e4d8c3a1f051b3
+                            awaitResult: true
+                            timeoutSeconds: 120
+                            path: $.qInput
+                            targetPath: $.input
+                            resultTargetPath: $.answerOut
+                          - type: SignalSender@1
+                            description: Send the answer over Signal
+                            recipientPath: $.msgSource
+                            messagePath: $.answerOut.answer
+          # --- The batch's business outcome (AB#5345) ---------------------------------
+          # Inert for Signal today (nothing in a chat gets moved, deleted or marked), but
+          # written the same way as on the two mail channels so all four state it identically.
+          - type: SetPrimitiveValue@1
+            targetPath: $.importCompleted
+            value: false
+            valueType: Boolean
+          - type: SetPrimitiveValue@1
+            targetPath: $.inboxItems
+            value: 0
+            valueType: Double
+          - type: SumAggregation@1
+            description: Inbox items created for the whole batch (AB#5345)
+            targetPath: $.inboxItems
+            aggregations:
+              - path: $.results[*]
+                aggregationPath: $._inboxItems
+                value: 1
+                filterPath: null
+                comparisonValue: null
+          - type: If@1
+            description: At least one inbox item (AB#5345)
+            path: $.inboxItems
+            operator: GreaterThan
+            value: 0
+            valueType: Double
+            transformations:
+              - type: SetPrimitiveValue@1
+                targetPath: $.importCompleted
+                value: true
+                valueType: Boolean
+  - rtId: 67d4a2f0b2e4d8c3a1f051b2
+    ckTypeId: System.Communication/Pipeline
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 67d4a2f0b2e4d8c3a1f051b0
+      targetCkTypeId: System.Communication/DataFlow
+    - roleId: System.Communication/Executes
+      targetRtId: '670000000000000000000002'
+      targetCkTypeId: System.Communication/Adapter
+    # AB#5136: run the shared stager under the accounting app service account
+    # (accounting-ai-prompt) - the adapter default pipeline SA lacks the Write data
+    # permission on UploadedDocument now that pipeline identity is fail-closed (AB#5115).
+    - roleId: System.Communication/Uses
+      targetRtId: 67f0c00ec4ff02221e0b7002
+      targetCkTypeId: System.Communication/ServiceAccountConfiguration
+    attributes:
+    - id: System.Communication/DeploymentState
+      value: 0
+    - id: System/Name
+      value: Stage Document (shared)
+    - id: System/Enabled
+      value: true
+    - id: System.Communication/PipelineDefinition
+      value: |-
+        triggers:
+          - type: FromPipelineDataEvent@1
+        transformations:
+          # Shared "Stage Document" pipeline (AB#5024). Every ingest channel
+          # (Signal / Teams / Email / HTTP upload / Graph import) calls this via
+          # ToPipelineDataEvent@1 (AwaitResult) with ONE normalized attachment at $.input,
+          # so the staging logic — hashing, cross-channel dedup, image->PDF conversion,
+          # UploadedDocument insert + file link — lives in ONE declarative place instead
+          # of being copy-pasted (and drifting) across every channel pipeline.
+          #
+          # Constraint: the caller and this pipeline MUST share the same DataFlow
+          # (ToPipelineDataEvent routes by DataFlowRtId + target pipeline RtId).
+          #
+          # Input contract ($.input, wrapped by the caller's targetPath):
+          #   data             base64 file bytes
+          #   fileName         original file name
+          #   contentType      MIME type (image/* is converted to application/pdf here)
+          #   length           byte length (int64)
+          #   sourceChannel    UploadedDocument.SourceChannel enum NAME (SIGNAL|TEAMS|EMAIL|API|GRAPH)
+          #   sourceSender     who sent it (phone / e-mail / Teams display name)
+          #   sourceSubject    subject line ("" if the channel has none)
+          #   sourceReceivedAt when the message arrived (ISO-8601 — caller must supply a valid value)
+          #   sourceBody       message body text ("" if none)
+          #
+          # Result contract ($.stageResult, returned to the caller at its resultTargetPath):
+          #   result       "staged" | "duplicate" | "tooLarge"
+          #   rtId         staged UploadedDocument RtId        (result == staged)
+          #   existingRtId already-present UploadedDocument     (result == duplicate)
+          - type: If@1
+            description: Reject files above the 10 MB analysis limit
+            path: $.input.length
+            operator: GreaterThan
+            value: 10000000
+            valueType: Int64
+            transformations:
+              - type: SetPrimitiveValue@1
+                targetPath: $.stageResult.result
+                valueType: String
+                value: "tooLarge"
+              - type: SetPrimitiveValue@1
+                targetPath: $.stageResult.message
+                valueType: String
+                value: "⚠️ Die Datei ist zu groß (max. 10 MB) und konnte nicht übernommen werden."
+          - type: If@1
+            description: Within the size limit — hash, dedup and stage
+            path: $.input.length
+            operator: LessEqualsThan
+            value: 10000000
+            valueType: Int64
+            transformations:
+              # Dedup key: a caller MAY supply a precomputed $.input.dedupHash (e.g. a mail
+              # body text hash, which is deterministic where re-rendering the body to a PDF is
+              # not); otherwise hash the file bytes. Either way it lands in $.fileHash.
+              - type: If@1
+                description: Caller supplied a dedup hash — use it
+                path: $.input.dedupHash
+                operator: NotEquals
+                valueType: String
+                transformations:
+                  - type: SetPrimitiveValue@1
+                    targetPath: $.fileHash
+                    valuePath: $.input.dedupHash
+                    valueType: String
+              - type: If@1
+                description: No dedup hash — hash the file bytes
+                path: $.input.dedupHash
+                operator: Equals
+                valueType: String
+                transformations:
+                  - type: ComputeFileHash@1
+                    description: SHA-256 hash of the ORIGINAL bytes for cross-channel dedup
+                    path: $.input.data
+                    targetPath: $.fileHash
+              - type: CheckDuplicate@1
+                description: Was this exact file already uploaded (any channel)?
+                ckTypeId: Meshmakers.Accounting/UploadedDocument
+                attributeName: FileHash
+                valuePath: $.fileHash
+                targetPath: $.isDuplicate
+                existingEntityPath: $.existingUpload
+              - type: If@1
+                description: Duplicate — return the existing document id, stage nothing
+                path: $.isDuplicate
+                operator: Equals
+                value: true
+                valueType: Boolean
+                transformations:
+                  - type: SetPrimitiveValue@1
+                    targetPath: $.stageResult.result
+                    valueType: String
+                    value: "duplicate"
+                  - type: SetPrimitiveValue@1
+                    targetPath: $.stageResult.existingRtId
+                    valuePath: $.existingUpload.RtId
+                    valueType: String
+                  - type: SetPrimitiveValue@1
+                    targetPath: $.stageResult.docRtId
+                    valuePath: $.existingUpload.RtId
+                    valueType: String
+                  - type: SetPrimitiveValue@1
+                    targetPath: $.stageResult.message
+                    valueType: String
+                    value: "📎 Dieser Beleg wurde bereits eingereicht — er ist schon in der App vorhanden."
+              - type: If@1
+                description: New document — store the file and stage an UploadedDocument
+                path: $.isDuplicate
+                operator: NotEquals
+                value: true
+                valueType: Boolean
+                transformations:
+                  - type: DateTime@1
+                    description: Upload timestamp
+                    operation: Now
+                    targetPath: $.uploadedAt
+                  # Image attachments (phone photos) -> single-page PDF so preview + BMD
+                  # handover work. Dedup hash was already taken on the original bytes.
+                  - type: If@1
+                    description: Convert image attachments to PDF (PDFs pass through)
+                    path: $.input.contentType
+                    operator: NotEquals
+                    value: "application/pdf"
+                    valueType: String
+                    transformations:
+                      - type: FormatString@1
+                        description: Wrap the image as a full-width data-URI in minimal HTML
+                        format: '<!DOCTYPE html><html><body style="margin:0;padding:0"><img src="data:{$.input.contentType};base64,{$.input.data}" style="display:block;width:100%;height:auto"></body></html>'
+                        targetPath: $.imageHtml
+                      - type: RenderHtmlPdf@1
+                        description: Render the image HTML to a single-page PDF
+                        path: $.imageHtml
+                        targetPath: $.imagePdf
+                        contentLengthTargetPath: $.imagePdfLen
+                      - type: SetPrimitiveValue@1
+                        description: Replace the stored bytes with the rendered PDF
+                        targetPath: $.input.data
+                        valuePath: $.imagePdf
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.input.contentType
+                        value: "application/pdf"
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.input.length
+                        valuePath: $.imagePdfLen
+                        valueType: Int64
+                  - type: CreateFileSystemUpdate@1
+                    description: Store the file (always a PDF after image conversion)
+                    targetPath: $.fileSystemItem
+                    path: $.input.data
+                    generateRtId: true
+                    fileNamePath: $.input.fileName
+                    contentTypePath: $.input.contentType
+                    contentLengthPath: $.input.length
+                    rootFolderWellKnownName: "Documents"
+                  - type: CreateUpdateInfo@1
+                    description: Stage the upload for the analysis pipeline
+                    targetPath: $.updates._items
+                    targetValueKind: Array
+                    targetValueWriteMode: Overwrite
+                    updateKind: Insert
+                    ckTypeId: Meshmakers.Accounting/UploadedDocument
+                    rtIdPath: $.uploadRtId
+                    generateRtId: true
+                    attributeUpdates:
+                      - attributeName: OriginalFileName
+                        attributeValueType: String
+                        valuePath: $.input.fileName
+                      - attributeName: FileRtId
+                        attributeValueType: String
+                        valuePath: $.fileSystemItem.RtId
+                      - attributeName: FileHash
+                        attributeValueType: String
+                        valuePath: $.fileHash
+                      - attributeName: UploadedAt
+                        attributeValueType: DateTime
+                        valuePath: $.uploadedAt
+                      - attributeName: ProcessingState
+                        attributeValueType: Enum
+                        value: NEW
+                      - attributeName: SourceChannel
+                        attributeValueType: Enum
+                        valuePath: $.input.sourceChannel
+                      - attributeName: SourceSender
+                        attributeValueType: String
+                        valuePath: $.input.sourceSender
+                      - attributeName: SourceSubject
+                        attributeValueType: String
+                        valuePath: $.input.sourceSubject
+                      - attributeName: SourceReceivedAt
+                        attributeValueType: DateTime
+                        valuePath: $.input.sourceReceivedAt
+                      - attributeName: SourceBody
+                        attributeValueType: String
+                        valuePath: $.input.sourceBody
+                      # AB#5136 native attribution: a verified caller resolved by the channel stager
+                      # travels as data at $.input.caller; the staged document is owned by that user
+                      # (data permissions scope it via ownerAttributePath, AB#4978). Absent for
+                      # anonymous submissions - CreateUpdateInfo skips unmatched valuePaths.
+                      - attributeName: OwnerUserId
+                        attributeValueType: String
+                        valuePath: $.input.caller.subjectId
+                      - attributeName: SubmitterDisplayName
+                        attributeValueType: String
+                        valuePath: $.input.caller.name
+                  - type: CreateAssociationUpdate@1
+                    description: Link the staged upload to the stored file
+                    targetPath: $.updates._assocItems
+                    targetValueKind: Array
+                    targetValueWriteMode: Overwrite
+                    updateKind: Create
+                    originRtIdPath: $.updates._items[0].RtEntity.RtId
+                    originCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
+                    targetRtIdPath: $.fileSystemItem.RtId
+                    targetCkTypeIdPath: $.fileSystemItem.CkTypeId
+                    associationRoleId: System/Related
+                  # AB#5347: the unique index on UploadedDocument/FileHash is what actually holds
+                  # against two callers staging the same file at once - CheckDuplicate@1 above reads
+                  # in its own transaction and this node writes in another, so in a race both pass
+                  # the check. Report instead of Throw because losing that race is a routine
+                  # outcome with a correct answer ("already on file"), not a pipeline failure.
+                  - type: ApplyChanges@2
+                    description: Insert the staged upload; the unique index on FileHash arbitrates the race (AB#5347)
+                    entityUpdatesPath: $.updates._items
+                    associationUpdatesPath: $.updates._assocItems
+                    onDuplicateKey: Report
+                    duplicateKeyTargetPath: $.isDuplicateKey
+                  - type: If@1
+                    description: Lost the race - the unique index refused the insert (AB#5347)
+                    path: $.isDuplicateKey
+                    operator: Equals
+                    value: true
+                    valueType: Boolean
+                    transformations:
+                      # CreateFileSystemUpdate@1 above commits its OWN transaction, so the stored
+                      # file survives the rollback of the refused insert and nothing references it
+                      # any more (the System/Related link was part of the rolled-back batch). Delete
+                      # it here rather than reordering the two writes: FileRtId is a required
+                      # attribute, so inserting the entity first would need a placeholder id and a
+                      # second write, and it would trade an invisible orphan file for a visible
+                      # inbox entry whose file does not exist yet - which the analysis pipeline
+                      # (it polls for NEW uploads) would pick up and fail on. Same idiom as
+                      # edit-document.yaml uses to drop a superseded file.
+                      - type: CreateUpdateInfo@1
+                        description: Delete the file stored before the refused insert (AB#5347)
+                        targetPath: $.orphanFileDeletes._items
+                        targetValueKind: Array
+                        targetValueWriteMode: Overwrite
+                        updateKind: Delete
+                        ckTypeId: System.Reporting/FileSystemItem
+                        rtIdPath: $.fileSystemItem.RtId
+                      - type: ApplyChanges@2
+                        description: Commit the orphan file deletion
+                        entityUpdatesPath: $.orphanFileDeletes._items
+                      # Read back the winner so the caller gets the same answer as the fast path.
+                      # Its insert is committed - that is why ours was refused.
+                      - type: CheckDuplicate@1
+                        description: Resolve the document that won the race
+                        ckTypeId: Meshmakers.Accounting/UploadedDocument
+                        attributeName: FileHash
+                        valuePath: $.fileHash
+                        targetPath: $.isDuplicate
+                        existingEntityPath: $.existingUpload
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageResult.result
+                        valueType: String
+                        value: "duplicate"
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageResult.existingRtId
+                        valuePath: $.existingUpload.RtId
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageResult.docRtId
+                        valuePath: $.existingUpload.RtId
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageResult.message
+                        valueType: String
+                        value: "📎 Dieser Beleg wurde bereits eingereicht — er ist schon in der App vorhanden."
+                  - type: If@1
+                    description: The insert went through - report the staged upload (AB#5347)
+                    path: $.isDuplicateKey
+                    operator: NotEquals
+                    value: true
+                    valueType: Boolean
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageResult.result
+                        valueType: String
+                        value: "staged"
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageResult.rtId
+                        valuePath: $.updates._items[0].RtEntity.RtId
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageResult.docRtId
+                        valuePath: $.updates._items[0].RtEntity.RtId
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.stageResult.message
+                        valueType: String
+                        value: "📎 Beleg empfangen — wird analysiert. Du findest ihn in Kürze in der App unter Inbox (nicht vollständig erkannte Belege bleiben dort zur Prüfung)."
+          # Append the concrete inbox deep link when the caller supplied its app base URL
+          # ($.input.appUrl) and a document exists (staged or duplicate). Built here — once —
+          # in TWO renderings so every channel delivers the identical text with a link that
+          # works in its client:
+          #   message   plain text + raw URL   (Signal etc. auto-link bare URLs)
+          #   messageMd base text + [markdown](url) link (Teams; a raw localhost URL is NOT
+          #             auto-linked there, a markdown link always is)
+          # messageMd defaults to the plain message so the no-link cases (tooLarge) still work.
+          - type: SetPrimitiveValue@1
+            targetPath: $.stageResult.messageMd
+            valuePath: $.stageResult.message
+            valueType: String
+          - type: If@1
+            description: A document id is present (staged or duplicate)
+            path: $.stageResult.docRtId
+            operator: NotEquals
+            valueType: String
+            transformations:
+              - type: If@1
+                description: The caller supplied an app base URL
+                path: $.input.appUrl
+                operator: NotEquals
+                valueType: String
+                transformations:
+                  # Build the markdown variant FIRST (reads the still-plain base message),
+                  # then overwrite the plain message with the raw-URL variant.
+                  - type: FormatString@1
+                    description: Base message + markdown inbox link (Teams)
+                    format: "{$.stageResult.message} → [Beleg öffnen]({$.input.appUrl}/inbox/{$.stageResult.docRtId})"
+                    targetPath: $.stageResult.messageMd
+                  - type: FormatString@1
+                    description: Base message + raw inbox URL (Signal etc.)
+                    format: "{$.stageResult.message} → {$.input.appUrl}/inbox/{$.stageResult.docRtId}"
+                    targetPath: $.stageResult.message
+          # Reduce the returned data context: drop the transported blobs so the caller's
+          # resultTargetPath carries only the small $.stageResult, not the base64 echoed back.
+          - type: Project@1
+            description: Keep only the small result; drop file bytes from the response
+            fields:
+              - path: $.input
+              - path: $.imageHtml
+              - path: $.imagePdf
+              - path: $.fileSystemItem
+              - path: $.updates
+              - path: $.existingUpload
+              - path: $.orphanFileDeletes
+              - path: $.isDuplicateKey
+  - rtId: 67d4a2f0b2e4d8c3a1f051b3
+    ckTypeId: System.Communication/Pipeline
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 67d4a2f0b2e4d8c3a1f051b0
+      targetCkTypeId: System.Communication/DataFlow
+    - roleId: System.Communication/Executes
+      targetRtId: '670000000000000000000002'
+      targetCkTypeId: System.Communication/Adapter
+    - roleId: System.Communication/Uses
+      targetRtId: 67f0c00ec4ff02221e0b7003
+      targetCkTypeId: System.Communication/AiConfiguration
+    - roleId: System.Communication/Uses
+      targetRtId: 67f0c00ec4ff02221e0b7002
+      targetCkTypeId: System.Communication/ServiceAccountConfiguration
+    attributes:
+    - id: System.Communication/DeploymentState
+      value: 0
+    - id: System/Name
+      value: Answer Question (shared)
+    - id: System/Enabled
+      value: true
+    - id: System.Communication/PipelineDefinition
+      value: |-
+        triggers:
+          - type: FromPipelineDataEvent@1
+        transformations:
+          # Shared "Answer Question" pipeline (AB#5024). Every channel (Signal/Teams/Email)
+          # asked the accounting assistant with an identical AnthropicAiQuery block + the same
+          # long systemPrompt — that duplication now lives here. Channels call this via
+          # ToPipelineDataEvent@1 (AwaitResult) with { question } at $.input and read back the
+          # plain-text answer at their resultTargetPath ($.answerOut.answer).
+          #
+          # Same-DataFlow constraint applies (routes by DataFlowRtId + target pipeline RtId).
+          # Requires Uses -> AiConfiguration (AnthropicAiConfig) + ServiceAccountConfiguration.
+          #
+          # Input contract ($.input): question  — the user's message text
+          # Result contract ($.answer): the assistant's plain-text reply
+          - type: SetPrimitiveValue@1
+            description: Fallback reply if the AI call fails
+            targetPath: $.answer
+            valueType: String
+            value: "Entschuldigung, ich konnte deine Frage gerade nicht beantworten. Bitte versuche es noch einmal."
+          - type: GetRtEntitiesByType@1
+            description: Load our own company profile for the assistant context
+            ckTypeId: Meshmakers.Accounting/CompanyProfile
+            take: 1
+            targetPath: $.company
+          - type: AnthropicAiQuery@1
+            description: Answer the accounting question using MCP tools
+            question: >-
+              Answer the following message. Use the available tools to query documents,
+              transactions, and other accounting data from OctoMesh as needed. Reply in the
+              same language as the question. Be concise but complete, as plain text suitable
+              for a chat or e-mail message.
+            dataPaths:
+              - $.input.question
+              - $.input.caller
+              - $.company
+            systemPrompt: >-
+              You are an accounting assistant for the company whose master data
+              The "Additional Context" also carries the calling user under $.input.caller
+              (name, email, roles) — that is WHO YOU ARE TALKING TO. Answer any question about
+              who they are, their name, username or e-mail directly from $.input.caller, never
+              via tools; treat "ich"/"meine" as this user. Data access stays scoped server-side.
+              (name, address, VAT id) is provided in the "Additional Context" block —
+              treat that company as "we"/"us"; if no company context is present, stay
+              generic and do not invent a company name.
+              You have access to OctoMesh tools to query live accounting data including
+              accounting documents (Meshmakers.Accounting/AccountingDocument), bank transactions
+              (Basic.Accounting/BankTransaction), cost categories, and financial accounts.
+              Use the query_entities tool to search for relevant data before answering.
+              Vendor and Customer on AccountingDocument are Record objects (sub-fields
+              CompanyName, FirstName, LastName, Address, Email, IBAN), NOT text. Do not
+              filter on the bare attribute. A party's name is usually stored WHOLE in
+              CompanyName (this holds for people too, e.g. "Rafael Vidas") and only
+              sometimes split into FirstName/LastName. To find documents by a party name,
+              use query_entities with the Contains operator (not Equals) on
+              Vendor.CompanyName; if nothing is found, also try Customer.CompanyName, then
+              Vendor.LastName / Customer.LastName. Search both Vendor (incoming) and
+              Customer (outgoing) unless the user named one.
+              If you cannot find the data, say so.
+            responseFormat: text
+            apiKeyConfigurationName: AnthropicAiConfig
+            mcpServerUrl: https://mac.local:5017
+            mcpServiceAccountConfigName: ServiceAccountConfig
+            maxToolRounds: 12
+            maxTokens: 2000
+            targetPath: $.answer
+            continueOnError: true
+          # Return only the answer; drop the transported question + company context.
+          - type: Project@1
+            description: Keep only $.answer in the response
+            fields:
+              - path: $.input
+              - path: $.company
+
+  # ===================================================================================
+  # Import Window Recompute (AB#5341)
+  # ===================================================================================
+  # The IMAP import must only fetch mail that belongs to a period still being worked on:
+  #
+  #     sinceDate = MIN(StartDate) WHERE IsClosed = false   over all FiscalYear entities
+  #
+  # The rule carries itself. At the turn of the year two fiscal years are open and the
+  # window spans both, which is exactly right — on 2 January last year's December invoices
+  # are still arriving. Close one and the window narrows on its own. A fixed date does not
+  # survive a year change, and a date somebody maintains by hand is a date nobody
+  # maintains.
+  #
+  # 🔴 NO open fiscal year means NOTHING is imported — not "everything". That is not a
+  # nicety: "everything" is the unbounded IMAP search that killed the adapter on prod-1
+  # with 1697 mails and their base64 attachments in one batch (AB#5336). An absent
+  # sinceDate cannot say it, because absent means "no date filter", so the window is its
+  # own value: EmailImportWindowOpen, read by FromEmail@1's windowOpenAttribute.
+  #
+  # Why a pipeline and not a hook in the Settings page (Gerald's call): a fiscal year is
+  # also opened and closed by the CLI, by an import and by the blueprint seed, and each of
+  # those has to move the window too.
+  #
+  # ⚠️ WHY THE DEPLOY IS PART OF THE JOB. GlobalConfiguration is an immutable snapshot
+  # built once per registration (PipelineRegistryService), so a running trigger keeps
+  # seeing the settings it was deployed with — writing the configuration alone is dead
+  # configuration. The Settings page redeploys on every save for the same reason.
+  #
+  # ⚠️ AND WHY IT IS DeployPipeline@1 AND NOT A DATA FLOW DEPLOY. A DataFlow deploy
+  # restarts EVERY trigger of the flow — this pipeline included, since it lives in the
+  # same flow — so the recompute would kill itself mid-run, or retrigger itself in a loop.
+  # DeployPipeline@1 deploys ONE pipeline (and refuses, by construction, to deploy the one
+  # executing it), so only the mail import restarts. Same-DataFlow is also a hard
+  # requirement of that node, which is why this pipeline belongs here rather than in a
+  # DataFlow of its own — in one of those, no deploy node would be reachable at all.
+  # Since AB#5341 the node also skips a pipeline whose System/Enabled is false, so a tenant
+  # that never switched the IMAP import on never gets it started by this.
+  - rtId: 67d4a2f0b2e4d8c3a1f051b4
+    ckTypeId: System.Communication/Pipeline
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 67d4a2f0b2e4d8c3a1f051b0
+      targetCkTypeId: System.Communication/DataFlow
+    - roleId: System.Communication/Executes
+      targetRtId: '670000000000000000000002'
+      targetCkTypeId: System.Communication/Adapter
+    # DeployPipeline@1 authenticates against the communication controller with this
+    # account (ServiceAccountTokenService reads it by well-known name).
+    - roleId: System.Communication/Uses
+      targetRtId: 67f0c00ec4ff02221e0b7002
+      targetCkTypeId: System.Communication/ServiceAccountConfiguration
+    attributes:
+    - id: System.Communication/DeploymentState
+      value: 0
+    - id: System/Name
+      value: Import Window Recompute
+    - id: System/Enabled
+      value: true
+    - id: System.Communication/PipelineDefinition
+      value: |-
+        triggers:
+          # Every change to a fiscal year moves the window: a new one opens it, closing the
+          # last open one empties it, a corrected StartDate shifts it.
+          # ⚠️ A DELETED fiscal year does NOT arrive here — the watch filters on the change
+          # event's fullDocument, which a delete event has none of. The cron below is what
+          # covers that case (and every event missed while the trigger was restarting: a
+          # change stream opened without a resume token starts at "now").
+          - type: FromWatchRtEntity@1
+            updateTypes: All
+            ckTypeId: Meshmakers.Accounting/FiscalYear
+          # Manual run, and the cron PipelineTrigger next to this pipeline.
+          - type: FromExecutePipelineCommand@1
+          - type: FromPipelineTriggerEvent@1
+        transformations:
+          # --- 1. The window -----------------------------------------------------------
+          # Full recompute on every run, from the fiscal years as they stand. NotEquals true
+          # rather than Equals false on purpose: IsClosed is optional, and a year that never
+          # carried the attribute is an OPEN one.
+          - type: GetRtEntitiesByType@1
+            description: All fiscal years that are still open
+            ckTypeId: Meshmakers.Accounting/FiscalYear
+            fieldFilters:
+              - attributePath: IsClosed
+                operator: NotEquals
+                comparisonValue: true
+            targetPath: $.openYears
+          - type: SetPrimitiveValue@1
+            description: No open fiscal year until one is found - the window starts CLOSED
+            targetPath: $.window.open
+            value: false
+            valueType: Boolean
+          - type: If@1
+            description: At least one open fiscal year - the window is open and starts at the oldest one
+            path: $.openYears.TotalCount
+            operator: GreaterThan
+            value: 0
+            valueType: Int64
+            transformations:
+              - type: SetPrimitiveValue@1
+                targetPath: $.window.open
+                value: true
+                valueType: Boolean
+              - type: MinMax@1
+                description: The oldest open fiscal year carries the cut-off
+                path: $.openYears.Items
+                valuePath: Attributes.StartDate
+                mode: Min
+                targetPath: $.window.oldest
+              - type: SetPrimitiveValue@1
+                targetPath: $.window.since
+                valuePath: $.window.oldest.Attributes.StartDate
+                valueType: DateTime
+          # --- 2. The channel's settings entity ----------------------------------------
+          # Filtered by well-known name: the two mail channels share the CK type, and an
+          # unfiltered read would hand us whichever instance the runtime ordered first.
+          # IMAP only — the Graph channel's trigger has no date cut-off to configure.
+          - type: GetRtEntitiesByType@1
+            description: The IMAP channel's settings configuration
+            ckTypeId: Meshmakers.Accounting/EmailImportSettings
+            take: 1
+            fieldFilters:
+              - attributePath: RtWellKnownName
+                operator: Equals
+                comparisonValue: ImapImportSettings
+            targetPath: $.imapSettings
+          # --- 3. Did anything actually change? ----------------------------------------
+          # Read BEFORE the write below. A deploy restarts the mail import and drops its
+          # polling backlog, so it has to happen when the window moved and not every time a
+          # fiscal year's name or PeriodBasis is edited. An unset attribute compares as null
+          # and therefore counts as changed, which is what makes the first run deploy.
+          - type: SetPrimitiveValue@1
+            targetPath: $.changed
+            value: false
+            valueType: Boolean
+          - type: If@1
+            description: The window opened or closed
+            path: $.window.open
+            valuePath: $.imapSettings.Items[0].Attributes.EmailImportWindowOpen
+            operator: NotEqual
+            valueType: Boolean
+            transformations:
+              - type: SetPrimitiveValue@1
+                targetPath: $.changed
+                value: true
+                valueType: Boolean
+          - type: If@1
+            description: The cut-off moved
+            path: $.window.since
+            valuePath: $.imapSettings.Items[0].Attributes.EmailImportSinceDate
+            operator: NotEqual
+            valueType: DateTime
+            transformations:
+              - type: SetPrimitiveValue@1
+                targetPath: $.changed
+                value: true
+                valueType: Boolean
+          # --- 4. Write it -------------------------------------------------------------
+          # Nothing to write on a tenant seeded before AB#5345, where the entity does not
+          # exist. Creating it here is deliberately NOT done: the blueprint owns that entity
+          # and a re-apply is what brings it.
+          - type: If@1
+            description: The settings entity exists
+            path: $.imapSettings.TotalCount
+            operator: GreaterThan
+            value: 0
+            valueType: Int64
+            transformations:
+              - type: If@1
+                description: Window open - write both the flag and the cut-off
+                path: $.window.open
+                operator: Equals
+                value: true
+                valueType: Boolean
+                transformations:
+                  - type: CreateUpdateInfo@1
+                    targetPath: $.updates._items
+                    targetValueKind: Array
+                    updateKind: Update
+                    rtIdPath: $.imapSettings.Items[0].RtId
+                    ckTypeId: Meshmakers.Accounting/EmailImportSettings
+                    attributeUpdates:
+                      - attributeName: EmailImportWindowOpen
+                        valuePath: $.window.open
+                        attributeValueType: Boolean
+                      - attributeName: EmailImportSinceDate
+                        valuePath: $.window.since
+                        attributeValueType: DateTime
+              - type: If@1
+                description: Window closed - only the flag. The stale cut-off is left as it
+                             stands, because nothing reads it while the window is closed and
+                             the next open period overwrites it anyway.
+                path: $.window.open
+                operator: Equals
+                value: false
+                valueType: Boolean
+                transformations:
+                  - type: CreateUpdateInfo@1
+                    targetPath: $.updates._items
+                    targetValueKind: Array
+                    updateKind: Update
+                    rtIdPath: $.imapSettings.Items[0].RtId
+                    ckTypeId: Meshmakers.Accounting/EmailImportSettings
+                    attributeUpdates:
+                      - attributeName: EmailImportWindowOpen
+                        valuePath: $.window.open
+                        attributeValueType: Boolean
+              - type: ApplyChanges@2
+                description: Persist the derived import window
+                entityUpdatesPath: $.updates._items
+              # --- 5. Hand it to the running trigger ---------------------------------
+              # Without this the new window is dead configuration: the trigger keeps the
+              # GlobalConfiguration snapshot it was registered with. Only the mail import is
+              # deployed, never the data flow - see the header of this pipeline.
+              - type: If@1
+                description: Only when the window actually moved
+                path: $.changed
+                operator: Equals
+                value: true
+                valueType: Boolean
+                transformations:
+                  - type: Logger@1
+                    message: "Import window changed - redeploying the IMAP mail import so the trigger picks it up (AB#5341)"
+                  - type: DeployPipeline@1
+                    description: Email Import (IMAP) - same DataFlow, and never this pipeline
+                    pipelineRtId: 67d4a2f0b2e4d8c3a1f000b1
+          - type: SetPipelineExecutionResult@1
+            path: $.window
+  # The safety net. The rule is data-driven and has no schedule of its own, so this is not
+  # about time passing: it is about the events the change stream cannot deliver — a deleted
+  # fiscal year, and anything that happened while the trigger was restarting (every Settings
+  # save redeploys this whole DataFlow). A full recompute is idempotent and deploys nothing
+  # unless the window actually moved, so running it hourly costs a read.
+  - rtId: 67d4a2f0b2e4d8c3a1f051b5
+    ckTypeId: System.Communication/PipelineTrigger
+    associations:
+    - roleId: System/ParentChild
+      targetRtId: 67d4a2f0b2e4d8c3a1f051b0
+      targetCkTypeId: System.Communication/DataFlow
+    - roleId: System.Communication/Triggers
+      targetRtId: 67d4a2f0b2e4d8c3a1f051b4
+      targetCkTypeId: System.Communication/Pipeline
+    attributes:
+    - id: System/Name
+      value: Import Window Recompute Hourly
+    - id: System/Enabled
+      value: true
+    - id: System.Communication/DeploymentState
+      value: 0
+    - id: System.Bot/CronExpression
+      value: '20 * * * *'
