@@ -1,0 +1,518 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+
+  # --- Data permissions (AB#4976, epic AB#4969) ---------------------------------
+  # Server-side protection of inbox items and receipts: AccountingManagement gets
+  # full access, AccountingEmployee only their own entities. Seeded in AuditOnly —
+  # flip to Enforce per tenant only after reviewing the audit events.
+  #
+  # BOTH target types now resolve "own" from an OwnerUserId attribute (AB#5009 for
+  # UploadedDocument, AB#5043 for AccountingDocument), so the pair is consistent:
+  #   * UploadedDocument — the CK model (>= 1.25.0) declares
+  #     `ownerAttributePath: OwnerUserId`, so ownership is the RESOLVED SUBMITTER,
+  #     not the server-stamped RtCreatedBy. This is the whole point of the
+  #     declaration: the ingest pipelines run as system today and, with AB#5028,
+  #     will run as a service account, so RtCreatedBy is either empty or the
+  #     service account — under OwnedOnly a channel-imported receipt would be
+  #     invisible to the very employee who sent it. OwnerUserId is filled by the
+  #     authenticated upload (verified principal subject, AB#4975/AB#5007) and by
+  #     the Document Analysis pipeline for channel imports (Contact/identity match
+  #     on the sender). Uploads whose submitter could NOT be resolved carry no
+  #     OwnerUserId and are therefore owned by NOBODY: under Enforce they are
+  #     visible to full-scope grants only. That is the intended default for
+  #     unattributed channel drops — not a bug to work around.
+  #   * AccountingDocument — the CK model (>= 1.26.0) declares the same
+  #     `ownerAttributePath: OwnerUserId` (AB#5043). It could not follow AB#5009
+  #     earlier because it had no user-id attribute at all: DocumentToSubmitter
+  #     points at a Contact, and an association is rejected as an owner path by the
+  #     compiler. The attribute is now filled from two places, and BOTH are needed —
+  #     declaring the path without them would leave every receipt ownerless, which
+  #     is strictly worse than the old RtCreatedBy fallback:
+  #       - the Document Analysis pipeline copies the originating upload's resolved
+  #         submitter onto every AccountingDocument it creates, so upload and
+  #         receipt always agree on the owner;
+  #       - the app stamps the signed-in user when a document is created by hand
+  #         (Ersatzbeleg, or "create document" from an incomplete inbox item),
+  #         because the declaration replaces the RtCreatedBy fallback entirely.
+  #     NOT filled: documents created through the /aiPrompt pipeline's PDF branch
+  #     (no upload, no caller subject in the pipeline) and every document that
+  #     existed before CK 1.26.0 — AB#5043 does NOT backfill. Those stay ownerless
+  #     and, under Enforce, visible to full-scope grants only. Decide per tenant
+  #     whether that is acceptable or whether a one-off backfill from
+  #     UploadedToDocument is wanted BEFORE enforcing.
+  #
+  # Known cross-tenant trap before any Enforce flip (AB#4661): a cross-tenant
+  # shadow user has no local subject before their first login, and the future
+  # `xt_` sub differs from the provisioning source user id. Enforcement compares
+  # SUBJECT IDs, while parts of the app filter on e-mail (stable) — so a document
+  # attributed via an e-mail match can still be invisible to its submitter until
+  # that first login rewrites the id. Review the audit events for exactly this
+  # mismatch before enforcing.
+  - rtId: aa0000000000000000000320
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingDocumentsFullPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.documents
+      - id: System/Description
+        value: Full access to inbox items (UploadedDocument) and receipts (AccountingDocument).
+  - rtId: aa0000000000000000000321
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingDocumentsOwnPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.documents.own
+      - id: System/Description
+        value: Access to own inbox items and own receipts - both resolved from OwnerUserId (the resolved submitter, propagated to the receipt by the analysis pipeline).
+  - rtId: aa0000000000000000000322
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingDocumentsFullPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Meshmakers.Accounting/UploadedDocument
+          - Meshmakers.Accounting/AccountingDocument
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+          - Write
+          - Delete
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000320
+        targetCkTypeId: System.Identity/DataPermission
+  - rtId: aa0000000000000000000323
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingDocumentsOwnPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Meshmakers.Accounting/UploadedDocument
+          - Meshmakers.Accounting/AccountingDocument
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+          - Write
+      - id: System.Identity/PolicyScope
+        value: 1
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000321
+        targetCkTypeId: System.Identity/DataPermission
+
+  # --- ToDo + chat scoping (AB#4978, epic AB#4969) ------------------------------
+  # The CK model 1.21.0 declares owner attribute paths: Todo.AssigneeUserId,
+  # ChatSession.OwnerUserId and ChatMessage.OwnerUserId — "own items" therefore
+  # means ASSIGNED/OWNED by the caller, independent of who created the entity
+  # (rtCreatedBy). AccountingManagement gets full ToDo access; chats are private
+  # for everyone (owned-only for both roles, no full grant). Seeded in AuditOnly
+  # like the document policies: unassigned ToDos and pre-1.21 chat messages carry
+  # no owner value and are owned by nobody under Enforce — review the audit
+  # events per tenant before flipping. TodoActivity is deliberately unprotected
+  # in v1 (no owner path can traverse to the parent ToDo). Known gap before
+  # Enforce: ToDos assigned to a cross-tenant user who has not logged in yet
+  # carry no (or a non-matching) AssigneeUserId — the enforcement compares the
+  # LOCAL subject (the future xt_ sub), which is why the app's "mine only"
+  # filter keys on AssigneeEmail (AB#4661). Such ToDos stay visible to
+  # full-scope grants only until the assignee's first login rewrites the id.
+  - rtId: aa0000000000000000000324
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingTodosFullPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.todos
+      - id: System/Description
+        value: Full access to ToDos.
+  - rtId: aa0000000000000000000325
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingTodosOwnPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.todos.own
+      - id: System/Description
+        value: Access to own ToDos (assigned to the caller via AssigneeUserId).
+  - rtId: aa0000000000000000000326
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingChatsOwnPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.chats.own
+      - id: System/Description
+        value: Access to own AI chat sessions and messages (OwnerUserId) — chats are private for every role.
+  - rtId: aa0000000000000000000327
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingTodosFullPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Meshmakers.Accounting/Todo
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+          - Write
+          - Delete
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000324
+        targetCkTypeId: System.Identity/DataPermission
+  - rtId: aa0000000000000000000328
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingTodosOwnPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Meshmakers.Accounting/Todo
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+          - Write
+      - id: System.Identity/PolicyScope
+        value: 1
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000325
+        targetCkTypeId: System.Identity/DataPermission
+  - rtId: aa0000000000000000000329
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingChatsOwnPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Meshmakers.Accounting/ChatSession
+          - Meshmakers.Accounting/ChatMessage
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+          - Write
+          - Delete
+      - id: System.Identity/PolicyScope
+        value: 1
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000326
+        targetCkTypeId: System.Identity/DataPermission
+
+  # --- Financial data + master data (AB#4685, epic AB#4969) ---------------------
+  # Stage E3 closes what the first two stages left open. Inbox items, receipts,
+  # ToDos and chats were protected; every bank movement, every contact and the
+  # whole cost-category / fiscal-year master data stayed readable AND writable for
+  # any authenticated tenant user. That was never a decision — it is simply what
+  # "no policy" means. It matters most through the AI chat: the MCP tools run
+  # under the CALLER's identity and expose generic CRUD over any CK type, so a
+  # user who can phrase a prompt reaches types the SPA never puts in front of
+  # them. The SPA's route guards are cosmetics on top of an open API.
+  #
+  # A DataPolicy carries ONE action set and ONE scope for ALL of its target types.
+  # That single constraint is what cuts the six groups below — they are not six
+  # concepts, they are the fewest (types × actions) rectangles that cover the real
+  # role matrix. Wherever a role needs read-only on a subset of a fully granted
+  # set, that subset has to become its own policy: (B) is carved out of (A), (D)
+  # out of (C), and (F) exists because the shareholder needs a different action
+  # set on AccountingDocument than (A)…(E) hand out anywhere else.
+  #
+  # None of the new target types declares an `ownerAttributePath`, so OwnedOnly is
+  # not available to any of them: every policy here is PolicyScope 0 (All). All
+  # six ship in PolicyEnforcementMode 1 (AuditOnly), same contract as the existing
+  # five — Enforce is a per-tenant decision taken after reading the audit events,
+  # and the two warning blocks below are hard preconditions for it.
+
+  # (A) Banking — management only. BankTransaction, BankAccount, BankConnection
+  # and PaymentOrder sit in one policy because management needs the identical
+  # Read+Write+Delete on all four and they are meaningless apart: an account
+  # without its connection cannot sync, a transaction without its account cannot
+  # be read. They are also the types where write access does the most damage — a
+  # re-categorised or deleted transaction silently changes the books, and the
+  # finAPI sync has no undo for it.
+  - rtId: aa0000000000000000000332
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingBankingPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.banking
+      - id: System/Description
+        value: Full access to banking data - transactions, accounts, bank connections and payment orders.
+  - rtId: aa0000000000000000000333
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingBankingPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Basic.Accounting/BankTransaction
+          - Basic.Accounting/BankAccount
+          - Basic.Accounting/BankConnection
+          - Basic.Accounting/PaymentOrder
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+          - Write
+          - Delete
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000332
+        targetCkTypeId: System.Identity/DataPermission
+
+  # (B) Bank transactions, read-only — employees. Split out of (A) because it is a
+  # narrower action set on a subset of (A)'s types, and one policy cannot carry
+  # two action sets. Employees need the read for two concrete screens: the
+  # document detail page renders `linkedTransactions`, and the ToDo link dialog
+  # SEARCHES transactions to offer match candidates. Both go blank without it.
+  #
+  # Said plainly, because it should not be discovered later: this lets any
+  # employee search and read EVERY company bank movement, not only the ones that
+  # touch their own receipts. All is the only scope on offer (BankTransaction has
+  # no owner attribute), and a scoped search dialog would be useless anyway. This
+  # is the status quo written down — it is exactly what every tenant user can do
+  # today — not a new exposure being opened here. The write side (linking and
+  # unlinking a transaction to a document) is NOT granted: it stays management's,
+  # via (A), and the UI hides the action for everyone else.
+  - rtId: aa0000000000000000000334
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingTransactionsReadPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.transactions.read
+      - id: System/Description
+        value: Read access to bank transactions - needed for linked transactions on the document detail page and for the ToDo link dialog search.
+  - rtId: aa0000000000000000000335
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingTransactionsReadPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Basic.Accounting/BankTransaction
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000334
+        targetCkTypeId: System.Identity/DataPermission
+
+  # (C) Master data — management only. Contact, CostCategory, FiscalYear,
+  # CategorizationRule, EmailImportSettings and SignalImportSettings are one
+  # policy because they are one job: deciding how this tenant books. All six take
+  # the same Read+Write+Delete for management and nothing at all for anyone else.
+  # A CategorizationRule edited by the wrong hand mis-files every future document
+  # silently, an import setting redirects a whole channel, and a deleted Contact
+  # breaks submitter resolution for documents that have not arrived yet — none of
+  # which announces itself.
+  #
+  # Meshmakers.Accounting/CompanyProfile is deliberately NOT in this list, and in
+  # no other policy either: every authenticated user reads it on tenant entry via
+  # guards/tenant-setup.guard.ts, so protecting it would lock the app's front
+  # door for exactly the roles that are supposed to get in. Its content is
+  # commercial-register data — public by nature, and that is the decision.
+  #
+  # ################################################################################
+  # ##  STOP - DO NOT FLIP GROUP (C) TO ENFORCE YET. READ THIS FIRST.             ##
+  # ##                                                                            ##
+  # ##  `Contact` must not be enforced before the Document Analysis pipeline's    ##
+  # ##  three Contact lookups run under `identity: ServiceAccount`.               ##
+  # ##                                                                            ##
+  # ##  Those three lookups resolve the SUBMITTER of an incoming document. They   ##
+  # ##  run under the CALLER whenever an employee presses "Analyse now"           ##
+  # ##  (/processDocuments) - there is no elevation on them today. With Contact   ##
+  # ##  enforced and (C) granted to management only, an employee's run resolves   ##
+  # ##  NOTHING. No error, no exception, nothing that reads like a failure: the   ##
+  # ##  lookups simply come back empty and the pipeline carries on.               ##
+  # ##                                                                            ##
+  # ##  The consequence is a data-shaped bug, not a crash. The AccountingDocument ##
+  # ##  is created WITHOUT an owner, and once AccountingDocumentsOwnPolicy        ##
+  # ##  (aa...323) is enforced it is invisible to the very employee who submitted ##
+  # ##  it. The document exists, the pipeline reports success, and the receipt is ##
+  # ##  gone from its submitter's list. That is far worse than a refusal - nobody ##
+  # ##  goes looking for a bug that never logged anything.                        ##
+  # ##                                                                            ##
+  # ##  The fix is elevating those three nodes to the pipeline service account    ##
+  # ##  via NodeExecutionIdentity (AB#5127). That node property is not in any     ##
+  # ##  released platform tag yet, so it cannot be added today. Until it ships:   ##
+  # ##  leave (C) in AuditOnly, or take Contact out of (C) before flipping the    ##
+  # ##  rest.                                                                     ##
+  # ################################################################################
+  - rtId: aa0000000000000000000336
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingMasterDataPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.masterdata
+      - id: System/Description
+        value: Full access to accounting master data - contacts, cost categories, fiscal years, categorization rules and channel import settings.
+  - rtId: aa0000000000000000000337
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingMasterDataPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Meshmakers.Accounting/Contact
+          - Meshmakers.Accounting/CostCategory
+          - Meshmakers.Accounting/FiscalYear
+          - Meshmakers.Accounting/CategorizationRule
+          - Meshmakers.Accounting/EmailImportSettings
+          - Meshmakers.Accounting/SignalImportSettings
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+          - Write
+          - Delete
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000336
+        targetCkTypeId: System.Identity/DataPermission
+
+  # (D) Cost categories + fiscal years, read-only — employees AND shareholders.
+  # A subset of (C) with a smaller action set, so again its own policy. For the
+  # employee it is the category picker on the document form. For the shareholder
+  # it is the whole application: that role holds NO other grant, which makes (D)
+  # and (F) together the entire basis of the finance cockpit. The
+  # meshmakers-finance-cockpit board's widgets a1–a5 query AccountingDocument and
+  # CostCategory, and the board carries a FiscalYear selector that feeds the
+  # $fy_rtId parameter of every widget filter — so all three types have to be
+  # readable or the board comes up empty under Enforce. Empty, not broken: no
+  # error toast, just blank tiles, which is the kind of failure that gets reported
+  # as "the app doesn't work any more" three weeks later.
+  #
+  # UploadedDocument is deliberately NOT granted to the shareholder. Raw,
+  # unprocessed inbox items belong to the management-only
+  # meshmakers-document-status board; the shareholder sees the finished receipt
+  # through (F) and nothing before it.
+  - rtId: aa0000000000000000000338
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingMasterDataReadPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.masterdata.read
+      - id: System/Description
+        value: Read access to cost categories and fiscal years - needed for the document category picker and for the finance cockpit board.
+  - rtId: aa0000000000000000000339
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingMasterDataReadPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Meshmakers.Accounting/CostCategory
+          - Meshmakers.Accounting/FiscalYear
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000338
+        targetCkTypeId: System.Identity/DataPermission
+
+  # (E) ToDo activity — management and employees. AB#4978 left TodoActivity
+  # unprotected for the reason repeated below; it gets a policy now anyway,
+  # because the MCP surface reaches it directly and an activity trail carries the
+  # same content as the ToDo it hangs off. An unprotected child type is an open
+  # door into a protected parent.
+  #
+  # Be honest about what All scope actually buys here: it keeps TodoActivity away
+  # from shareholders, from role-less users and from the generic CRUD tools — but
+  # it does NOT separate one employee from another. Every employee reads, writes
+  # and deletes every activity entry, including entries on ToDos assigned to a
+  # colleague. That is weaker than Todo itself, which is OwnedOnly for employees
+  # (aa...328), so the activity trail is the soft flank of data the parent type
+  # already protects.
+  #
+  # It cannot be tightened today. TodoActivity has no user-id attribute of its
+  # own, and an owner path cannot traverse the ParentChild association up to the
+  # Todo — the CK compiler rejects associations as owner paths (error 69). The
+  # follow-up is to denormalise AssigneeUserId onto TodoActivity, the same move
+  # AB#5043 made for AccountingDocument, and only then switch this policy to
+  # OwnedOnly.
+  - rtId: aa0000000000000000000340
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingTodoActivityPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.todos.activity
+      - id: System/Description
+        value: Access to ToDo activity entries - All scope, because TodoActivity cannot carry an owner attribute path today.
+  - rtId: aa0000000000000000000341
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingTodoActivityPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Meshmakers.Accounting/TodoActivity
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+          - Write
+          - Delete
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000340
+        targetCkTypeId: System.Identity/DataPermission
+
+  # (F) Receipts, read-only — shareholders. The second half of the cockpit grant
+  # described under (D): widgets a1–a5 aggregate AccountingDocument, so without
+  # this the board's numbers are all zero. Read only and AccountingDocument only —
+  # a shareholder never writes a receipt and never sees the inbox it came from.
+  # It is a policy of its own rather than part of (D) because the grantee set is
+  # different: (D) also goes to employees, this one does not.
+  - rtId: aa0000000000000000000342
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: AccountingDocumentsReadPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: accounting.documents.read
+      - id: System/Description
+        value: Read access to receipts (AccountingDocument) - the shareholder's half of the finance cockpit, without inbox access.
+  - rtId: aa0000000000000000000343
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: AccountingDocumentsReadPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Meshmakers.Accounting/AccountingDocument
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: aa0000000000000000000342
+        targetCkTypeId: System.Identity/DataPermission
