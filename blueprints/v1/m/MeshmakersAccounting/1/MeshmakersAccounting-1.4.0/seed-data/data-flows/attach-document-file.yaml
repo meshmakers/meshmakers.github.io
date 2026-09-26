@@ -1,0 +1,130 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipeline: attach-document-file ---
+  # Attaches an original PDF to an EXISTING AccountingDocument that has no stored
+  # file yet (a manually created document, or one whose analysis produced no file
+  # link). POST /attachDocumentFile as multipart/form-data with the PDF as `file`
+  # and the target document's rtId in the `documentRtId` form field. Stores the
+  # PDF as a FileSystemItem under the Documents root and links it to the document
+  # via System/Related — the same association the analysis pipeline creates and
+  # the frontend resolves for the preview — and stamps FileHash for consistency.
+  - rtId: 67d4a2f0b2e4d8c3a1f000fa
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Attach Document File
+      - id: System/Description
+        value: Attaches an original PDF to an existing accounting document that has no stored file
+  - rtId: 67d4a2f0b2e4d8c3a1f000fb
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f000fa
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Attach Document File Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /attachDocumentFile
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+                - AccountingEmployee
+          transformations:
+            - type: If@1
+              description: Only accept PDF files
+              path: $.files[0].contentType
+              operator: Equals
+              value: "application/pdf"
+              valueType: String
+              transformations:
+                - type: If@1
+                  description: Reject files above the 10 MB limit with a speaking error
+                  path: $.files[0].length
+                  operator: GreaterThan
+                  value: 10000000
+                  valueType: Int64
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $._resultType
+                      value: "error"
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $._errorMessage
+                      value: "File too large (max 10 MB). Please reduce the file size."
+                      valueType: String
+                - type: If@1
+                  description: Within the size limit - store the file and link it
+                  path: $.files[0].length
+                  operator: LessEqualsThan
+                  value: 10000000
+                  valueType: Int64
+                  transformations:
+                    - type: ComputeFileHash@1
+                      description: Compute SHA-256 hash of the file
+                      path: $.files[0].data
+                      targetPath: $.fileHash
+                    - type: CreateFileSystemUpdate@1
+                      description: Store the PDF in the file system
+                      targetPath: $.fileSystemItem
+                      path: $.files[0].data
+                      generateRtId: true
+                      fileNamePath: $.files[0].fileName
+                      contentType: application/pdf
+                      contentLengthPath: $.files[0].length
+                      rootFolderWellKnownName: "Documents"
+                    - type: CreateUpdateInfo@1
+                      description: Stamp the file hash on the existing document
+                      targetPath: $.updates._items
+                      targetValueKind: Array
+                      targetValueWriteMode: Overwrite
+                      updateKind: Update
+                      ckTypeId: Meshmakers.Accounting/AccountingDocument
+                      rtIdPath: $.formData.documentRtId
+                      attributeUpdates:
+                        - attributeName: FileHash
+                          attributeValueType: String
+                          valuePath: $.fileHash
+                    - type: CreateAssociationUpdate@1
+                      description: Link the document to the stored file
+                      targetPath: $.updates._assocItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Overwrite
+                      updateKind: Create
+                      originRtIdPath: $.formData.documentRtId
+                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                      targetRtIdPath: $.fileSystemItem.RtId
+                      targetCkTypeIdPath: $.fileSystemItem.CkTypeId
+                      associationRoleId: System/Related
+                    - type: ApplyChanges@2
+                      entityUpdatesPath: $.updates._items
+                      associationUpdatesPath: $.updates._assocItems
+                    - type: SetPrimitiveValue@1
+                      targetPath: $._resultType
+                      value: "attached"
+                      valueType: String
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $._resultType
+                  inclusion: true
+                - path: $._errorMessage
+                  inclusion: true
+      - id: System.Communication/StatusMessage
