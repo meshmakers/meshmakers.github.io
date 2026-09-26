@@ -1,0 +1,774 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: ai-prompt ---
+  - rtId: 67d4a2f0b2e4d8c3a1f000e0
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: AI Prompt
+      - id: System/Description
+        value: Interactive AI assistant that answers accounting questions and processes document uploads
+  - rtId: 67d4a2f0b2e4d8c3a1f000e1
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f000e0
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+      # AI configuration lookup requires BOTH the apiKeyConfigurationName on the
+      # node AND this Uses association (the adapter resolves the config through
+      # the association, the name is validated against it).
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7003
+        targetCkTypeId: System.Communication/AiConfiguration
+      # AB#4315: MCP auth — the Q&A node's mcpServiceAccountConfigName resolves the
+      # service-account credentials through this Uses association (same GlobalConfiguration
+      # trap as AnthropicAiConfig: the name alone fails without the association).
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7002
+        targetCkTypeId: System.Communication/ServiceAccountConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: AI Prompt Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            # AB#5031: FromHttpRequest@2 with a required token, so the Q&A branch below can reach
+            # the MCP server AS THE CALLING USER instead of as a service account with full octo_api
+            # access. The roles are the two that hold DataPermissions on the accounting data;
+            # AccountingShareholder is deliberately NOT listed — that role is restricted to the
+            # cockpit, and admitting it here would let the chat read everything it cannot see in
+            # the UI.
+            - type: FromHttpRequest@2
+              path: /aiPrompt
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+                - AccountingEmployee
+          transformations:
+            - type: If@1
+              description: PDF uploaded — process as document
+              path: $.files[0].contentType
+              operator: Equals
+              value: "application/pdf"
+              valueType: String
+              transformations:
+                - type: ComputeFileHash@1
+                  description: Compute SHA-256 hash of uploaded file
+                  path: $.files[0].data
+                  targetPath: $.fileHash
+                - type: CheckDuplicate@1
+                  description: Check if this document was already uploaded
+                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                  attributeName: FileHash
+                  valuePath: $.fileHash
+                  targetPath: $.isDuplicate
+                  existingEntityPath: $.existingDocument
+                - type: If@1
+                  description: Document already exists — inform user
+                  path: $.isDuplicate
+                  operator: Equals
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: AnthropicAiQuery@1
+                      apiKeyConfigurationName: AnthropicAiConfig
+                      description: Inform about duplicate
+                      path: $.existingDocument
+                      responseFormat: text
+                      temperature: 0.3
+                      maxTokens: 500
+                      question: >-
+                        This document has already been uploaded and exists in the system.
+                        Tell the user the existing document details (document number, vendor, date, amount).
+                        Reply in German.
+                      systemPrompt: >-
+                        You are an accounting assistant. Inform the user that this is a duplicate.
+                      targetPath: $.response
+                      continueOnError: true
+                - type: If@1
+                  description: New document — process normally
+                  path: $.isDuplicate
+                  operator: NotEquals
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: PdfOcrExtraction@1
+                      description: Extract text from uploaded PDF
+                      path: $.files[0].data
+                      targetPath: $.ocr.result
+                      language: de
+                      maxFileSizeBytes: 10000000
+                    # Load our own company profile so the AI can detect the invoice
+                    # direction (see the Document Analysis pipeline for the rationale).
+                    - type: GetRtEntitiesByType@1
+                      description: Load our own company profile for invoice direction detection
+                      ckTypeId: Meshmakers.Accounting/CompanyProfile
+                      take: 1
+                      targetPath: $.company
+                    - type: AnthropicAiQuery@1
+                      apiKeyConfigurationName: AnthropicAiConfig
+                      description: Extract document metadata + detect direction
+                      path: $.ocr.result
+                      dataPaths:
+                        - $.company
+                      responseFormat: json
+                      temperature: 0.1
+                      question: >-
+                        Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal; otherwise false. Determine the ISO 4217 currency code of the invoice amounts (from the currency symbol or code printed next to the totals, e.g. "$"/"USD", "£"/"GBP", "CHF") and output it as "currency" ONLY when it is NOT euro; OMIT "currency" entirely for euro (€/EUR) invoices. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section. For BOTH parties independently, extract the printed VAT identification number (UID, USt-IdNr., VAT Reg No, e.g. "ATU12345678", "DE123456789") into that party's "vatId" WITHOUT inner spaces; assign each VAT id to the correct party (the vendor's UID is usually in its letterhead, footer or legal block; the customer's next to the billing address); OMIT "vatId" when none is printed for that party.
+                      jsonFormatSample: '{ "extractionComplete": true, "documentType": "INCOMING", "documentNumber": "RE-2026-001", "documentDate": "2026-03-01", "dueDate": "2026-03-31", "vendor": { "companyName": "Supplier GmbH", "iban": "AT123456789012345678", "accountName": "Supplier Trading Ltd", "vatId": "ATU12345678", "address": { "street": "Hauptstrasse 1", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "customer": { "companyName": "Our Company GmbH", "address": { "street": "Firmianstrasse 31A", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "grossTotal": 1200.00, "netTotal": 1000.00, "taxTotal": 200.00, "taxRate": 20.0, "currency": "USD" }'
+                      targetPath: $.ai.result
+                      continueOnError: true
+                    - type: CheckDuplicate@1
+                      description: Check if document number already exists
+                      ckTypeId: Meshmakers.Accounting/AccountingDocument
+                      attributeName: DocumentNumber
+                      valuePath: $.ai.result.documentNumber
+                      targetPath: $.isDuplicate
+                      existingEntityPath: $.existingDocument
+                    - type: If@1
+                      description: Document number already exists — inform user
+                      path: $.isDuplicate
+                      operator: Equals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                        - type: AnthropicAiQuery@1
+                          apiKeyConfigurationName: AnthropicAiConfig
+                          description: Inform about duplicate by document number
+                          path: $.existingDocument
+                          responseFormat: text
+                          temperature: 0.3
+                          maxTokens: 500
+                          question: >-
+                            A document with this document number already exists in the system. Tell the user the existing document details. Reply in German.
+                          systemPrompt: >-
+                            You are an accounting assistant. Inform the user that this is a duplicate document.
+                          targetPath: $.response
+                          continueOnError: true
+                    - type: If@1
+                      description: Document number is new — continue processing
+                      path: $.isDuplicate
+                      operator: NotEquals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                        - type: CreateFileSystemUpdate@1
+                          description: Store PDF in file system
+                          targetPath: $.fileSystemItem
+                          path: $.files[0].data
+                          generateRtId: true
+                          fileNamePath: $.files[0].fileName
+                          contentType: application/pdf
+                          contentLengthPath: $.files[0].length
+                          rootFolderWellKnownName: "Documents"
+                        # --- AB#5382: direction consistency check -------------------------
+                        # Same expectation as the Document Analysis pipeline (see its block for
+                        # the rationale and the normalisation): VAT id equality without any
+                        # whitespace, exact normalised name only for a party without a VAT id,
+                        # never Contains. /aiPrompt is ALWAYS an upload (ai-chat.service.ts
+                        # sendMessageWithFile) - the channel that must never be overridden - so
+                        # a contradiction with the model's documentType creates NO document:
+                        # the reason (same wording as the Inbox reason) goes into the HTTP
+                        # response the chat shows, and the self-billing / grant senders (FERCHAU,
+                        # top itservices, FFG) and ISPIM stay a manual step on this route too.
+                        # vendor and customer are never modified. Absent paths: ExecuteCSharp@1
+                        # coalesces an absent argument to null, If@1 reads it as null (an "is
+                        # set" gate has to stay); SetPrimitiveValue@1 and FormatString@1 throw,
+                        # so every value they read is defaulted first.
+                        - type: SetPrimitiveValue@1
+                          description: Default - no direction conflict
+                          targetPath: $.dir.conflict
+                          valueType: Boolean
+                          value: false
+                        - type: SetPrimitiveValue@1
+                          description: Default - do not create (set below when the extraction is complete and consistent)
+                          targetPath: $.createOk
+                          valueType: Boolean
+                          value: false
+                        - type: If@1
+                          description: Extraction complete - check the direction against the parties
+                          path: $.ai.result.extractionComplete
+                          operator: Equals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: Default - no expectation (the model's verdict stands)
+                              targetPath: $.dir.expected
+                              valueType: String
+                              value: ""
+                            - type: If@1
+                              description: CompanyProfile exists (user-created singleton, may be absent)
+                              path: $.company.TotalCount
+                              operator: GreaterThan
+                              value: 0
+                              valueType: Int64
+                              transformations:
+                                - type: ExecuteCSharp@1
+                                  description: Expected direction from the parties - INCOMING, OUTGOING or "" (VAT id equality without any whitespace; exact normalised name only for a party WITHOUT a VAT id; never Contains)
+                                  code: 'string Vat(string s) { return s == null ? "" : Regex.Replace(s, @"\s+", "").ToUpperInvariant(); } string Nm(string s) { if (s == null) return ""; var n = Regex.Replace(s.ToLowerInvariant().Trim(), @"\s+", " "); n = Regex.Replace(n, @"[\s.,]+$", ""); foreach (var f in new[] { "gmbh & co. kg", "gmbh & co kg", "ges.m.b.h", "gesmbh", "gmbh", "limited", "s.r.o", "sarl", "sas", "ltd", "inc", "llc", "plc", "e.u", "ag", "kg", "og", "sa", "bv", "nv", "se", "ug" }) { if (n.EndsWith(" " + f)) { n = n.Substring(0, n.Length - f.Length - 1).TrimEnd(); break; } } return n; } var ov = Vat(ownVat); var on = Nm(ownName); var vv = Vat(vendorVat); var cv = Vat(customerVat); var vendorIsUs = vv.Length > 0 ? ov.Length > 0 && vv == ov : on.Length > 0 && Nm(vendorName) == on; var customerIsUs = cv.Length > 0 ? ov.Length > 0 && cv == ov : on.Length > 0 && Nm(customerName) == on; if (customerIsUs && !vendorIsUs) return "INCOMING"; if (vendorIsUs && !customerIsUs) return "OUTGOING"; return "";'
+                                  usings:
+                                    - System
+                                    - System.Text.RegularExpressions
+                                  returnType: String
+                                  arguments:
+                                    - name: ownVat
+                                      valuePath: $.company.Items[0].Attributes.VatId
+                                      dataType: String
+                                    - name: ownName
+                                      valuePath: $.company.Items[0].Attributes.Name
+                                      dataType: String
+                                    - name: vendorVat
+                                      valuePath: $.ai.result.vendor.vatId
+                                      dataType: String
+                                    - name: vendorName
+                                      valuePath: $.ai.result.vendor.companyName
+                                      dataType: String
+                                    - name: customerVat
+                                      valuePath: $.ai.result.customer.vatId
+                                      dataType: String
+                                    - name: customerName
+                                      valuePath: $.ai.result.customer.companyName
+                                      dataType: String
+                                  targetPath: $.dir.expected
+                            - type: If@1
+                              description: An expectation exists - compare it with the model's verdict
+                              path: $.dir.expected
+                              operator: NotEquals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                # The model's verdict, normalised like the create branch below
+                                # (anything but an exact OUTGOING is INCOMING).
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.dir.model
+                                  valueType: String
+                                  value: INCOMING
+                                - type: If@1
+                                  path: $.ai.result.documentType
+                                  operator: Equals
+                                  value: OUTGOING
+                                  valueType: String
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.dir.model
+                                      valueType: String
+                                      value: OUTGOING
+                                - type: If@1
+                                  description: Contradiction - no document on an upload channel
+                                  path: $.dir.expected
+                                  operator: NotEquals
+                                  valuePath: $.dir.model
+                                  valueType: String
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.dir.conflict
+                                      valueType: Boolean
+                                      value: true
+                            - type: If@1
+                              description: Consistent - the document may be created
+                              path: $.dir.conflict
+                              operator: Equals
+                              value: false
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.createOk
+                                  valueType: Boolean
+                                  value: true
+                        - type: If@1
+                          description: Extraction successful — create AccountingDocument
+                          path: $.createOk
+                          operator: Equals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            # Normalize the AI-detected direction to a guaranteed enum
+                            # name (default INCOMING, promote to OUTGOING on exact match).
+                            - type: SetPrimitiveValue@1
+                              description: Default document direction
+                              targetPath: $.docType
+                              valueType: String
+                              value: INCOMING
+                            - type: If@1
+                              description: Our company is the issuer — outgoing invoice
+                              path: $.ai.result.documentType
+                              operator: Equals
+                              value: OUTGOING
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docType
+                                  valueType: String
+                                  value: OUTGOING
+                            # AB#4542: zero-total invoices (voucher/credit-settled)
+                            # never see a payment — create them as PAID with
+                            # NoTransactionExpected (same rule as the analysis
+                            # pipeline; absent valuePath skips the attribute).
+                            - type: SetPrimitiveValue@1
+                              description: New documents await a payment (default)
+                              targetPath: $.docState
+                              valueType: String
+                              value: OPEN
+                            - type: If@1
+                              description: Zero gross total — voucher/credit-settled, no payment expected
+                              path: $.ai.result.grossTotal
+                              operator: Equals
+                              value: 0
+                              valueType: Double
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.docState
+                                  valueType: String
+                                  value: PAID
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.noTxExpected
+                                  valueType: Boolean
+                                  value: true
+                            # --- Sanitize party addresses (poison-item fix) -------
+                            # Copy each party's address into a sanitized staging path
+                            # ($.san.*) ONLY when its mandatory Street + CityTown are
+                            # both present; otherwise leave it absent so no Basic
+                            # Address record is materialized without its mandatory
+                            # fields (which would FatalError ApplyChanges).
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.vendorAddrOk
+                              valueType: Boolean
+                              value: true
+                            - type: If@1
+                              description: Vendor street absent — no address
+                              path: $.ai.result.vendor.address.street
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor street empty — no address
+                              path: $.ai.result.vendor.address.street
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor city absent — no address
+                              path: $.ai.result.vendor.address.city
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor city empty — no address
+                              path: $.ai.result.vendor.address.city
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.vendorAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Vendor address complete — stage the fields
+                              path: $.vendorAddrOk
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.vendor.address.street
+                                  targetPath: $.san.vendor.address.street
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.vendor.address.zipcode
+                                  targetPath: $.san.vendor.address.zipcode
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.vendor.address.city
+                                  targetPath: $.san.vendor.address.city
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.vendor.address.countryCode
+                                  targetPath: $.san.vendor.address.countryCode
+                                  valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.customerAddrOk
+                              valueType: Boolean
+                              value: true
+                            - type: If@1
+                              description: Customer street absent — no address
+                              path: $.ai.result.customer.address.street
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer street empty — no address
+                              path: $.ai.result.customer.address.street
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer city absent — no address
+                              path: $.ai.result.customer.address.city
+                              operator: Equals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer city empty — no address
+                              path: $.ai.result.customer.address.city
+                              operator: Equals
+                              value: ""
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.customerAddrOk
+                                  valueType: Boolean
+                                  value: false
+                            - type: If@1
+                              description: Customer address complete — stage the fields
+                              path: $.customerAddrOk
+                              operator: Equals
+                              value: true
+                              valueType: Boolean
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.customer.address.street
+                                  targetPath: $.san.customer.address.street
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.customer.address.zipcode
+                                  targetPath: $.san.customer.address.zipcode
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.customer.address.city
+                                  targetPath: $.san.customer.address.city
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  valuePath: $.ai.result.customer.address.countryCode
+                                  targetPath: $.san.customer.address.countryCode
+                                  valueType: String
+                            - type: CreateUpdateInfo@1
+                              targetPath: $.updates._items
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Insert
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              rtIdPath: $.documentRtId
+                              generateRtId: true
+                              rtWellKnownNamePath: $.ai.result.documentNumber
+                              attributeUpdates:
+                                - attributeName: DocumentNumber
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.documentNumber
+                                - attributeName: DocumentDate
+                                  attributeValueType: DateTime
+                                  valuePath: $.ai.result.documentDate
+                                - attributeName: DueDate
+                                  attributeValueType: DateTime
+                                  valuePath: $.ai.result.dueDate
+                                - attributeName: DocumentType
+                                  attributeValueType: Enum
+                                  valuePath: $.docType
+                                - attributeName: DocumentState
+                                  attributeValueType: Enum
+                                  valuePath: $.docState
+                                - attributeName: NoTransactionExpected
+                                  attributeValueType: Boolean
+                                  valuePath: $.noTxExpected
+                                - attributeName: Vendor.LegalEntityType
+                                  attributeValueType: Enum
+                                  value: COMPANY
+                                - attributeName: Vendor.CompanyName
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.vendor.companyName
+                                - attributeName: Vendor.IBAN
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.vendor.iban
+                                - attributeName: Vendor.AccountName
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.vendor.accountName
+                                - attributeName: Vendor.TaxIdentificationNumber
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.vendor.vatId
+                                # Address from the SANITIZED staging path ($.san.*),
+                                # populated above only when the party's mandatory
+                                # Street + CityTown are both present — a partial AI
+                                # address would otherwise materialize the Basic Address
+                                # record without its mandatory fields and FatalError.
+                                - attributeName: Vendor.Address.Street
+                                  attributeValueType: String
+                                  valuePath: $.san.vendor.address.street
+                                - attributeName: Vendor.Address.Zipcode
+                                  attributeValueType: String
+                                  valuePath: $.san.vendor.address.zipcode
+                                - attributeName: Vendor.Address.CityTown
+                                  attributeValueType: String
+                                  valuePath: $.san.vendor.address.city
+                                - attributeName: Vendor.Address.NationalCode
+                                  attributeValueType: String
+                                  valuePath: $.san.vendor.address.countryCode
+                                # Customer (recipient/buyer) — valuePath only, so an
+                                # absent customer materializes no record. Address from
+                                # the sanitized staging path, same as the vendor.
+                                - attributeName: Customer.CompanyName
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.customer.companyName
+                                - attributeName: Customer.IBAN
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.customer.iban
+                                - attributeName: Customer.AccountName
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.customer.accountName
+                                - attributeName: Customer.TaxIdentificationNumber
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.customer.vatId
+                                - attributeName: Customer.Address.Street
+                                  attributeValueType: String
+                                  valuePath: $.san.customer.address.street
+                                - attributeName: Customer.Address.Zipcode
+                                  attributeValueType: String
+                                  valuePath: $.san.customer.address.zipcode
+                                - attributeName: Customer.Address.CityTown
+                                  attributeValueType: String
+                                  valuePath: $.san.customer.address.city
+                                - attributeName: Customer.Address.NationalCode
+                                  attributeValueType: String
+                                  valuePath: $.san.customer.address.countryCode
+                                - attributeName: Comment
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.vendor.addressNotes
+                                - attributeName: GrossTotal
+                                  attributeValueType: Double
+                                  valuePath: $.ai.result.grossTotal
+                                - attributeName: NetTotal
+                                  attributeValueType: Double
+                                  valuePath: $.ai.result.netTotal
+                                - attributeName: TaxTotal
+                                  attributeValueType: Double
+                                  valuePath: $.ai.result.taxTotal
+                                - attributeName: TaxRate
+                                  attributeValueType: Double
+                                  valuePath: $.ai.result.taxRate
+                                # ISO 4217 currency of the amounts; AI omits it for EUR (missing = EUR, AB#4612)
+                                - attributeName: Currency
+                                  attributeValueType: String
+                                  valuePath: $.ai.result.currency
+                                - attributeName: FileHash
+                                  attributeValueType: String
+                                  valuePath: $.fileHash
+                            - type: CreateAssociationUpdate@1
+                              targetPath: $.updates._assocItems
+                              targetValueKind: Array
+                              targetValueWriteMode: Append
+                              updateKind: Create
+                              originRtIdPath: $.updates._items[0].RtEntity.RtId
+                              originCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
+                              targetRtIdPath: $.fileSystemItem.RtId
+                              targetCkTypeIdPath: $.fileSystemItem.CkTypeId
+                              associationRoleId: System/Related
+                            - type: ApplyChanges@2
+                              entityUpdatesPath: $.updates._items
+                              associationUpdatesPath: $.updates._assocItems
+                        # AB#5382: a direction conflict created no document - the chat answer IS
+                        # the Inbox reason (with the identifying details), not an AI summary that
+                        # would confirm a creation which did not happen.
+                        - type: If@1
+                          description: Direction conflict - answer with the reason, no document was created
+                          path: $.dir.conflict
+                          operator: Equals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.dir.docNo
+                              valueType: String
+                              value: "(no number)"
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.dir.vendorLabel
+                              valueType: String
+                              value: "(unknown vendor)"
+                            - type: If@1
+                              path: $.ai.result.documentNumber
+                              operator: NotEquals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.dir.docNo
+                                  valuePath: $.ai.result.documentNumber
+                                  valueType: String
+                            - type: If@1
+                              path: $.ai.result.vendor.companyName
+                              operator: NotEquals
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.dir.vendorLabel
+                                  valuePath: $.ai.result.vendor.companyName
+                                  valueType: String
+                            - type: SetPrimitiveValue@1
+                              description: Reason for expected INCOMING (we are the customer, model says OUTGOING)
+                              targetPath: $.dir.reason
+                              valueType: String
+                              value: "Direction check: the extractor says OUTGOING but our company appears as the customer - please verify the direction and the parties, then create the document manually."
+                            - type: If@1
+                              description: Reason for expected OUTGOING (we are the vendor, model says INCOMING)
+                              path: $.dir.expected
+                              operator: Equals
+                              value: OUTGOING
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.dir.reason
+                                  valueType: String
+                                  value: "Direction check: the extractor says INCOMING but our company appears as the vendor - please verify the direction and the parties, then create the document manually."
+                            - type: FormatString@1
+                              description: Chat answer with the identifying details
+                              format: "{$.dir.reason} (Document {$.dir.docNo} from {$.dir.vendorLabel}.)"
+                              targetPath: $.response
+                            - type: Logger@1
+                              message: "AB#5382 direction conflict: /aiPrompt upload - the extractor's documentType contradicts the parties (our company is on the other side of the document); no document created, the chat response carries the reason, document number and vendor."
+                        # Incomplete extractions create no entity here — the document
+                        # inbox (UploadedDocument ProcessingState INCOMPLETE) is the
+                        # follow-up mechanism; the response below tells the user.
+                        - type: If@1
+                          description: No direction conflict - summarise the result
+                          path: $.dir.conflict
+                          operator: Equals
+                          value: false
+                          valueType: Boolean
+                          transformations:
+                            - type: AnthropicAiQuery@1
+                              apiKeyConfigurationName: AnthropicAiConfig
+                              description: Generate response message
+                              path: $.ai.result
+                              responseFormat: text
+                              temperature: 0.3
+                              maxTokens: 500
+                              question: >-
+                                Based on the extraction result, write a brief response. If extractionComplete is true, confirm the document was created with key details. If false, inform that the document could not be fully extracted and ask the user to upload it via the document inbox for manual completion. Reply in German.
+                              systemPrompt: >-
+                                You are an accounting assistant. Summarize the result briefly.
+                              targetPath: $.response
+                              continueOnError: true
+            - type: If@1
+              description: No file — Q&A mode
+              path: $.files[0].contentType
+              operator: NotEquals
+              value: "application/pdf"
+              valueType: String
+              transformations:
+                # Load our own company profile so the assistant knows which company
+                # it works for instead of a hard-coded name (tenant-specific).
+                - type: GetRtEntitiesByType@1
+                  description: Load our own company profile for the assistant context
+                  ckTypeId: Meshmakers.Accounting/CompanyProfile
+                  take: 1
+                  targetPath: $.company
+                - type: AnthropicAiQuery@1
+                  apiKeyConfigurationName: AnthropicAiConfig
+                  # AB#4315: the MCP server enforces auth — authenticate via the
+                  # ServiceAccountConfiguration (client accounting-ai-prompt) so the
+                  # MCP tools load; without it the handshake is rejected (0 tools).
+                  mcpServiceAccountConfigName: ServiceAccountConfig
+                  # AB#5031: run the MCP tool calls under the CALLING USER's identity — the service
+                  # account above only acts on their behalf (on-behalf-of grant), so the MCP server
+                  # applies the user's own roles and data permissions instead of the service
+                  # account's full octo_api reach. Fails closed: without a caller token, or when the
+                  # delegated token cannot be obtained, the node errors rather than falling back to
+                  # the service account or calling unauthenticated. Requires the FromHttpRequest@2
+                  # trigger above. The shared "Answer Question" pipeline of the channel assistants
+                  # keeps the plain service-account identity — it has no caller.
+                  mcpDelegateToCaller: true
+                  description: Answer user question with MCP tools
+                  path: $.body.message
+                  dataPaths:
+                    - $.company
+                    # AB#4680: the verified caller (FromHttpRequest@2 principal — subjectId,
+                    # name, email, roles). Lets the assistant address the user and reason
+                    # about "my documents"; the actual data scoping happens server-side via
+                    # the delegated MCP identity (AB#5031), never from this context block.
+                    - $.principal
+                  conversationHistoryPath: $.body.history
+                  responseFormat: text
+                  # AB#4541: no mcpServerUrl here — the node resolves it from the
+                  # AnthropicAiConfig entity (McpServerUrl attribute), which carries
+                  # the environment-specific URL (local: https://localhost:5017,
+                  # prod: https://mcp.prod-1.octo-mesh.com; restored per environment
+                  # by scripts/om_set_secrets.ps1). A hardcoded localhost URL here
+                  # broke the Q&A chat on every deployed environment. When neither
+                  # the config nor the node carries a URL, the node answers without
+                  # MCP tools instead of failing.
+                  maxToolRounds: 10
+                  maxTokens: 2000
+                  temperature: 0.3
+                  question: >-
+                    Answer the user's question using the available tools.
+                  systemPrompt: >-
+                    You are an accounting assistant for the company whose master data
+                    (name, address, VAT id) is provided in the "Additional Context"
+                    block — treat that company as "we"/"us". If no company context is
+                    present, stay generic and do not invent a company name.
+                    The "Additional Context" also carries the calling user (principal:
+                    name, email, roles) — address them personally when it fits, and
+                    treat "ich"/"meine" as referring to that user. The data you can
+                    query is already scoped to what this user may see; do not promise
+                    data beyond the query results.
+                    You have tools to query live OctoMesh accounting data.
+
+                    IMPORTANT RULES:
+                    - Use query_entities_simple with the correct ckTypeId to search data.
+                    - DO NOT call get_type_schema or get_available_types unless the user explicitly asks about the data model.
+                    - After receiving query results, formulate your answer immediately. Do not make additional tool calls unless absolutely necessary.
+                    - If a query returns empty results, tell the user — do not retry with variations.
+                    - Vendor and Customer are Record objects (composite), NOT text. Do NOT filter on the bare attribute (Vendor / Customer) — that fails with a cast error. Filter on a record SUB-FIELD using dot notation. A party's name is usually stored WHOLE in CompanyName (this holds for people too, e.g. "Rafael Vidas") and only sometimes split into FirstName/LastName. So to find documents by a party name, use the query_entities tool with the Contains operator (NOT Equals, NOT query_entities_simple) on Vendor.CompanyName; if that returns nothing, also try Customer.CompanyName, then Vendor.LastName / Customer.LastName, then Vendor.AccountName / Customer.AccountName (the bank account holder name, which may be a trading name differing from CompanyName). Search BOTH Vendor (incoming) and Customer (outgoing) unless the user named one. Sub-fields: CompanyName, FirstName, LastName, AccountName, Address, Email, IBAN.
+
+                    Known entity types and their key attributes:
+                    - Meshmakers.Accounting/AccountingDocument: DocumentNumber, DocumentDate, DueDate, GrossTotal, NetTotal, TaxTotal, TaxRate, DocumentType, DocumentState; Vendor and Customer are Record objects — filter via a sub-field like Vendor.CompanyName (see rule above), never the bare attribute
+                    - Basic.Accounting/BankTransaction: TransactionId, Amount, Currency, BookingDate, ValueDate, Purpose, CounterpartName, CounterpartIban, Direction
+                    - Meshmakers.Accounting/CostCategory: Name, CategoryType, CategoryKind (EXPENSE or INCOME; missing = EXPENSE), CategoryDescription
+                    - Meshmakers.Accounting/FiscalYear: Name, StartDate, EndDate, IsClosed
+                    - Basic.Accounting/BankAccount: Iban, AccountHolder, Balance, Currency
+
+                    Reply in the same language as the user.
+                  targetPath: $.response
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.response
+                  inclusion: true
