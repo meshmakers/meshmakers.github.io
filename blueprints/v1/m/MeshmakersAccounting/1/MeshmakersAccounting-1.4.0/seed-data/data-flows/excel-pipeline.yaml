@@ -1,0 +1,61 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: excel ---
+  - rtId: 67e10c68fe3e19891bbfd263
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67e10c68fe3e19891bbfd262
+        targetCkTypeId: System.Communication/DataFlow
+        attributes: []
+      # Managed Mesh adapter, seeded by the System.Communication blueprint.
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+        attributes: []
+    attributes:
+      - id: System/Name
+        value: Mesh Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /import/tree
+              method: POST
+              # AB#5216: the last route the AB#4685 sweep missed. @1 does not look
+              # at the Authorization header at all, so /import/tree was writing
+              # tree structures into the tenant for anyone who could reach the
+              # adapter. Same gate as the other import routes.
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: ImportFromExcel@1
+            # Security: the HTTP response body is the whole data context. Reduce
+            # it to a minimal acknowledgement so it can never echo the caller's
+            # request headers/Authorization or the uploaded workbook.
+            - type: SetPrimitiveValue@1
+              targetPath: $.done
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
+      - id: System.Communication/StatusMessage
+  - rtId: 67e10c68fe3e19891bbfd262
+    ckTypeId: System.Communication/DataFlow
+    associations: []
+    attributes:
+      - id: System/Name
+        value: Excel Pipeline
+      - id: System/Description
