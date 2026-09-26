@@ -1,0 +1,160 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: transaction maintenance (bulk match-state updates) ---
+  - rtId: aa0000000000000000000400
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Transaction Maintenance
+      - id: System/Description
+        value: Bulk maintenance of bank transactions — set the match state (e.g. Ignored with a reason) for a booking-date range
+  - rtId: aa0000000000000000000401
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000400
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Bulk Update Transactions Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /bulkUpdateTransactions
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            # FromHttpRequest is synchronous and cannot return a 202, so a large
+            # booking-date range used to exceed the nginx 60s gateway timeout (504)
+            # while the whole update ran inline. Hand the request body to the worker
+            # pipeline fire-and-forget (awaitResult:false) and return immediately;
+            # the frontend polls the worker's PipelineExecution (Status/OutputData)
+            # for progress and the affected count.
+            - type: ToPipelineDataEvent@1
+              description: Kick off the async worker (same DataFlow)
+              path: $.body
+              targetPath: $.input
+              targetPipelineRtId: aa0000000000000000000402
+              awaitResult: false
+            # The HTTP response is the whole DataContext — reduce it to a small ack.
+            - type: SetPrimitiveValue@1
+              targetPath: $.accepted
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              description: Return a minimal accepted acknowledgement
+              clear: true
+              fields:
+                - path: $.accepted
+                  inclusion: true
+  # Async worker for the bulk transaction update. Triggered fire-and-forget by the
+  # Bulk Update Transactions Pipeline (ToPipelineDataEvent → $.input), so the HTTP
+  # caller never blocks and the nginx 60s gateway timeout can no longer fire. Its
+  # own PipelineExecution carries Status + OutputData (affected count), which the
+  # frontend polls via GraphQL. Same DataFlow (aa..0400) as the trigger — required
+  # for the shared topic exchange. Post-install: DeployDataFlow for this DataFlow.
+  - rtId: aa0000000000000000000402
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000400
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Bulk Update Transactions Worker Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            # Fired fire-and-forget by the Bulk Update Transactions Pipeline. The
+            # request body arrives at $.input (the sender's targetPath).
+            - type: FromPipelineDataEvent@1
+          transformations:
+            # The Mongo field-filter resolver only coerces comparison values for
+            # CLR properties, not for dynamic CK attributes — an ISO date string
+            # never matches the stored BSON date. Filter the state in Mongo and
+            # compare the booking date typed (DateTime) inside the loop instead.
+            - type: GetRtEntitiesByType@1
+              description: Transactions with one of the source states
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.txs
+              take: 10000
+              fieldFilters:
+                - attributePath: MatchState
+                  operator: In
+                  comparisonValuePath: $.input.statesToChange
+            - type: ForEach@1
+              description: Build one state update per transaction in the date range
+              iterationPath: $.txs.Items
+              targetPath: $.result
+              documentMode: Extend
+              mergePath: $._updates
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: If@1
+                  description: BookingDate on or after the range start
+                  path: $.key.Attributes.BookingDate
+                  operator: GreaterEqualsThan
+                  valuePath: $.full.input.from
+                  valueType: DateTime
+                  transformations:
+                    - type: If@1
+                      description: BookingDate on or before the range end
+                      path: $.key.Attributes.BookingDate
+                      operator: LessEqualsThan
+                      valuePath: $.full.input.to
+                      valueType: DateTime
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          targetPath: $._updates._u
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankTransaction
+                          rtIdPath: $.key.RtId
+                          attributeUpdates:
+                            - attributeName: MatchState
+                              attributeValueType: Enum
+                              valuePath: $.full.input.targetState
+                            - attributeName: MatchComment
+                              attributeValueType: String
+                              valuePath: $.full.input.comment
+            - type: Flatten@1
+              path: $.result[*]._u
+              targetPath: $._updateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: ApplyChanges@2
+              description: Persist the bulk state change
+              entityUpdatesPath: $._updateItems
+            # Reduce the context to the affected count and persist it as
+            # PipelineExecution.OutputData so the frontend can read it on completion.
+            - type: Project@1
+              description: Keep only the affected count
+              clear: true
+              fields:
+                - path: $.txs.TotalCount
+                  inclusion: true
+            - type: SetPipelineExecutionResult@1
+              description: Persist {txs:{TotalCount}} as OutputData
+              path: $
