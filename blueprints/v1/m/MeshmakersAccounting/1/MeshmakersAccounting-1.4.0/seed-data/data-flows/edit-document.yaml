@@ -1,0 +1,272 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: edit-document (document page editor, AB#4760) ---
+  # Server side of the document page editor: assembles a corrected PDF from one or
+  # more source uploads via an ordered page-op list (rotate 90° steps, crop,
+  # reorder, delete pages, merge across sources — TransformPdf@1), stages it as a
+  # NEW UploadedDocument (re-runs analysis) and cascade-deletes the source uploads,
+  # their stored files and — when the caller passes deleteDocRtIds — the superseded
+  # AccountingDocuments that were built from the old (wrongly oriented/split)
+  # source. Callers editing a shared multi-invoice source (PageFrom/PageTo,
+  # AB#4543) must pass ALL documents that depend on the edited uploads, because
+  # the source files are always deleted.
+  - rtId: 67d4a2f0b2e4d8c3a1f00140
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Edit Document
+      - id: System/Description
+        value: Rotates, crops, reorders and merges source PDF pages into a corrected document that re-runs analysis
+  - rtId: 67d4a2f0b2e4d8c3a1f00141
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00140
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Edit Document Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /editDocument
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+                - AccountingEmployee
+          transformations:
+            # Guard: need at least one source upload. The op list is validated by
+            # TransformPdf@1 itself (fails the run when empty or out of range).
+            - type: If@1
+              description: Only proceed when at least one source upload is given
+              path: $.body.uploadRtIds[0]
+              operator: NotEquals
+              valueType: String
+              transformations:
+                # --- Load the FIRST source's metadata (inherited onto the edited doc) ---
+                - type: FormatString@1
+                  description: First rtId as a single-element JSON array
+                  format: '["{$.body.uploadRtIds[0]}"]'
+                  targetPath: $.firstIdJson
+                - type: WriteJson@1
+                  jsonStringPath: $.firstIdJson
+                  targetPath: $.firstIdArr
+                - type: GetRtEntitiesById@1
+                  description: Load first source UploadedDocument for inherited metadata
+                  ckTypeId: Meshmakers.Accounting/UploadedDocument
+                  rtIdsPath: $.firstIdArr
+                  targetPath: $.firstDoc
+                # --- Collect each source's stored PDF, IN uploadRtIds ORDER ---
+                # The op list's sourceIndex refers to positions in this array.
+                - type: ForEach@1
+                  description: Load each source PDF in the given source order
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.docResults
+                  mergePath: $.pdf
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: FormatString@1
+                      description: Current rtId as single-element JSON array
+                      format: '["{$.key}"]'
+                      targetPath: $.idJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.idJson
+                      targetPath: $.idArr
+                    - type: GetRtEntitiesById@1
+                      description: Load the UploadedDocument to read its stored file rtId
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdsPath: $.idArr
+                      targetPath: $.doc
+                    - type: GetFileSystemContent@1
+                      description: Read the stored PDF bytes (base64) into the merge path
+                      rtIdPath: $.doc.Items[0].Attributes.FileRtId
+                      targetPath: $.pdf
+                # --- Assemble the corrected PDF from the ordered page ops ---
+                # Strict: an unreadable source aborts the edit instead of silently
+                # dropping pages from a receipt.
+                - type: TransformPdf@1
+                  description: Apply rotate/crop/reorder/delete/merge page ops
+                  path: $.docResults
+                  opsPath: $.body.ops
+                  targetPath: $.editedPdf
+                  contentLengthTargetPath: $.editedLen
+                  failOnInvalidPdf: true
+                - type: ComputeFileHash@1
+                  description: SHA-256 of the edited PDF (fresh content, own hash)
+                  path: $.editedPdf
+                  targetPath: $.fileHash
+                - type: SetPrimitiveValue@1
+                  description: Edited document file name (re-analysis sets the real identity)
+                  targetPath: $.editedFileName
+                  value: 'Bearbeitet.pdf'
+                  valueType: String
+                - type: DateTime@1
+                  description: Upload timestamp
+                  operation: Now
+                  targetPath: $.uploadedAt
+                - type: CreateFileSystemUpdate@1
+                  description: Store the edited PDF
+                  targetPath: $.fileSystemItem
+                  path: $.editedPdf
+                  generateRtId: true
+                  fileNamePath: $.editedFileName
+                  contentType: application/pdf
+                  contentLengthPath: $.editedLen
+                  rootFolderWellKnownName: "Documents"
+                - type: CreateUpdateInfo@1
+                  description: Stage the edited document (NEW -> analysis)
+                  targetPath: $.updates._items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Insert
+                  ckTypeId: Meshmakers.Accounting/UploadedDocument
+                  rtIdPath: $.editedUploadRtId
+                  generateRtId: true
+                  attributeUpdates:
+                    - attributeName: OriginalFileName
+                      attributeValueType: String
+                      valuePath: $.editedFileName
+                    - attributeName: FileRtId
+                      attributeValueType: String
+                      valuePath: $.fileSystemItem.RtId
+                    - attributeName: FileHash
+                      attributeValueType: String
+                      valuePath: $.fileHash
+                    - attributeName: UploadedAt
+                      attributeValueType: DateTime
+                      valuePath: $.uploadedAt
+                    - attributeName: ProcessingState
+                      attributeValueType: Enum
+                      value: NEW
+                    - attributeName: SourceChannel
+                      attributeValueType: Enum
+                      valuePath: $.firstDoc.Items[0].Attributes.SourceChannel
+                    - attributeName: SourceSender
+                      attributeValueType: String
+                      valuePath: $.firstDoc.Items[0].Attributes.SourceSender
+                    - attributeName: SourceReceivedAt
+                      attributeValueType: DateTime
+                      valuePath: $.firstDoc.Items[0].Attributes.SourceReceivedAt
+                - type: CreateAssociationUpdate@1
+                  description: Link edited upload to its stored file
+                  targetPath: $.updates._assocItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Create
+                  originRtIdPath: $.updates._items[0].RtEntity.RtId
+                  originCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
+                  targetRtIdPath: $.fileSystemItem.RtId
+                  targetCkTypeIdPath: $.fileSystemItem.CkTypeId
+                  associationRoleId: System/Related
+                - type: ApplyChanges@2
+                  description: Persist the edited document + file link FIRST
+                  entityUpdatesPath: $.updates._items
+                  associationUpdatesPath: $.updates._assocItems
+                # --- Now that the edited doc is safe, delete the sources ---
+                # Same two sequential loops as the merge pipeline: files first (while
+                # the source docs still exist so FileRtId resolves), then the docs.
+                - type: ForEach@1
+                  description: Delete each source's stored file
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.fileDeletes
+                  mergePath: $.fd
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: FormatString@1
+                      format: '["{$.key}"]'
+                      targetPath: $.idJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.idJson
+                      targetPath: $.idArr
+                    - type: GetRtEntitiesById@1
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdsPath: $.idArr
+                      targetPath: $.doc
+                    - type: CreateUpdateInfo@1
+                      description: Delete the stored file (single object into the merge path)
+                      targetPath: $.fd
+                      updateKind: Delete
+                      ckTypeId: System.Reporting/FileSystemItem
+                      rtIdPath: $.doc.Items[0].Attributes.FileRtId
+                - type: ApplyChanges@2
+                  description: Delete the source stored files
+                  entityUpdatesPath: $.fileDeletes
+                - type: ForEach@1
+                  description: Delete each source UploadedDocument
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.docDeletes
+                  mergePath: $.dd
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: CreateUpdateInfo@1
+                      description: Delete the source upload (single object into the merge path)
+                      targetPath: $.dd
+                      updateKind: Delete
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdPath: $.key
+                - type: ApplyChanges@2
+                  description: Delete the source UploadedDocuments
+                  entityUpdatesPath: $.docDeletes
+                # --- Optionally delete the superseded AccountingDocuments ---
+                # The re-analysis of the edited upload produces the corrected
+                # document(s); the old ones (built from the wrong source, e.g. with
+                # wrong amounts) are removed together with their category/fiscal-year
+                # links. Their System/Related file link pointed at the source files
+                # deleted above.
+                - type: If@1
+                  description: Only when the caller passed superseded document rtIds
+                  path: $.body.deleteDocRtIds[0]
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    - type: ForEach@1
+                      description: Delete each superseded AccountingDocument
+                      iterationPath: $.body.deleteDocRtIds
+                      targetPath: $.accDocDeletes
+                      mergePath: $.ad
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          description: Delete the superseded document (single object into the merge path)
+                          targetPath: $.ad
+                          updateKind: Delete
+                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                          rtIdPath: $.key
+                    - type: ApplyChanges@2
+                      description: Delete the superseded AccountingDocuments
+                      entityUpdatesPath: $.accDocDeletes
+                # --- Return the edited upload rtId to the HTTP caller ---
+                # generateRtId does NOT write the generated id back to rtIdPath, so
+                # copy it out of the staged update info (same place the association
+                # update reads it from).
+                - type: SetPrimitiveValue@1
+                  description: Expose the new upload's rtId for the response
+                  targetPath: $.editedUploadRtId
+                  valuePath: $.updates._items[0].RtEntity.RtId
+                  valueType: String
+                - type: SetPipelineExecutionResult@1
+                  path: $.editedUploadRtId
+            # Terminal response shaping (top-level, always runs — also on the guard-skip
+            # path): rebuild the root with ONLY the edited rtId so the HTTP response never
+            # echoes the request headers (Authorization/Bearer), body or intermediate
+            # state. See feedback_fromhttprequest_response_echo_leak.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.editedUploadRtId
+                  inclusion: true
