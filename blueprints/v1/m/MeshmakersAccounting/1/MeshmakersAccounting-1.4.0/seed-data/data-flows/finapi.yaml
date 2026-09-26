@@ -1,0 +1,962 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: sync-accounts ---
+  # --- finAPI data flow: all six finAPI pipelines share one flow so they deploy
+  #     together and show up as tabs in one execution-history dialog. ---
+  - rtId: 67c9a1f0b2e4d8c3a1f00001
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: FinAPI
+      - id: System/Description
+        value: >-
+          finAPI integration: bank connection import (web form), account and
+          transaction synchronization, and BIC bank resolution.
+  - rtId: 67c9a1f0b2e4d8c3a1f00002
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67c9a1f0b2e4d8c3a1f00001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: 67e10c0bfe3e19891bbfd261
+        targetCkTypeId: System.Communication/Adapter
+      # finAPI credentials — the GlobalConfiguration is built from Uses associations.
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7004
+        targetCkTypeId: System.Communication/FinApiConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Sync Accounts Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromExecutePipelineCommand@1
+              description: Manually triggered or scheduled account synchronization
+          transformations:
+            - type: GetPipelineConfigByWellKnownName@1
+              description: Load finAPI connection configuration
+              wellKnownName: FinApiConfiguration
+              targetPath: $.config
+            - type: FinApiSetConfig@1
+              baseUrlPath: $.config.baseUrl
+              clientIdPath: $.config.clientId
+              clientSecretPath: $.config.clientSecret
+            - type: FinApiAuth@1
+              description: Authenticate with finAPI using credentials from configuration
+              targetPath: $.auth.accessToken
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              usernamePath: $.config.username
+              passwordPath: $.config.password
+            - type: Project@1
+              fields:
+                - path: $.auth
+            # Refresh finAPI's own data from the banks before fetching — finAPI
+            # has no auto-update on our mandator (headless within AIS consent).
+            - type: FinApiSyncBankConnection@1
+              description: Update all bank connections at finAPI (background update task)
+              accessTokenPath: $.auth.accessToken
+            - type: FinApiFetchAccounts@1
+              description: Fetch all bank accounts from finAPI
+              accessTokenPath: $.auth.accessToken
+              targetPath: $.finapi.accounts
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              documentMode: Extend
+            - type: ForEach@1
+              description: Upsert one BankAccount per finAPI account (idempotent by ExternalId)
+              iterationPath: $.finapi.accounts
+              targetPath: $.result
+              documentMode: Replace
+              mergePath: $._updates
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: ConvertDataType@1
+                  description: finAPI account id (number) as string for the ExternalId lookup
+                  path: $.key.id
+                  targetPath: $._externalId
+                  valueType: String
+                - type: GetOrCreateRtEntitiesByType@1
+                  description: Resolve the existing BankAccount by ExternalId or generate a new id
+                  ckTypeId: Basic.Accounting/BankAccount
+                  fieldFilters:
+                    - attributePath: ExternalId
+                      operator: Equals
+                      comparisonValuePath: $._externalId
+                  rtIdTargetPath: $._accountRtId
+                  ckTypeIdTargetPath: $._accountCkTypeId
+                  modOperationPath: $._accountModOp
+                # AB#4720: GetOrCreate only matches by ExternalId, so a manually
+                # created account (no ExternalId yet) or a re-imported finAPI
+                # connection (new account id, same IBAN) would insert a duplicate
+                # entity. Adopt the existing account by IBAN instead - the update
+                # below then writes the current ExternalId onto it.
+                - type: If@1
+                  description: No ExternalId match - adopt an existing account with the same IBAN
+                  path: $._accountModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    - type: If@1
+                      description: Only when finAPI reports an IBAN (PayPal-style accounts have none)
+                      path: $.key.iban
+                      operator: NotEquals
+                      transformations:
+                        - type: GetRtEntitiesByType@1
+                          description: Find an existing BankAccount with the same IBAN
+                          ckTypeId: Basic.Accounting/BankAccount
+                          targetPath: $._ibanMatch
+                          take: 1
+                          fieldFilters:
+                            - attributePath: Iban
+                              operator: Equals
+                              comparisonValuePath: $.key.iban
+                        - type: If@1
+                          description: Reuse the matched account instead of inserting a duplicate
+                          path: $._ibanMatch.TotalCount
+                          operator: GreaterThan
+                          value: 0
+                          valueType: Int64
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: Take over the matched account's rtId
+                              targetPath: $._accountRtId
+                              valuePath: $._ibanMatch.Items[0].RtId
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              description: Switch the upsert from Insert to Update
+                              targetPath: $._accountModOp
+                              value: 1
+                              valueType: Int
+                - type: CreateUpdateInfo@1
+                  description: Map finAPI account to BankAccount entity
+                  targetPath: $._updates._accountUpdate
+                  updateKindPath: $._accountModOp
+                  rtIdPath: $._accountRtId
+                  ckTypeId: Basic.Accounting/BankAccount
+                  attributeUpdates:
+                    - attributeName: Name
+                      valuePath: $.key.accountName
+                      attributeValueType: String
+                    - attributeName: ExternalId
+                      valuePath: $._externalId
+                      attributeValueType: String
+                    - attributeName: Iban
+                      valuePath: $.key.iban
+                      attributeValueType: String
+                    - attributeName: AccountNumber
+                      valuePath: $.key.accountNumber
+                      attributeValueType: String
+                    - attributeName: AccountHolder
+                      valuePath: $.key.accountName
+                      attributeValueType: String
+                    - attributeName: Currency
+                      valuePath: $.key.accountCurrency
+                      attributeValueType: String
+                    - attributeName: Balance
+                      valuePath: $.key.balance
+                      attributeValueType: Double
+                    - attributeName: Overdraft
+                      valuePath: $.key.overdraft
+                      attributeValueType: Double
+                    - attributeName: AvailableFunds
+                      valuePath: $.key.availableFunds
+                      attributeValueType: Double
+            - type: Flatten@1
+              path: $.result[*]._accountUpdate
+              targetPath: $._updateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: ApplyChanges@2
+              description: Persist account updates to OctoMesh
+              entityUpdatesPath: $._updateItems
+            # Security: reduce the result (persisted as PipelineExecution
+            # OutputData) to just the account upsert result so it can never
+            # carry finApiConfig (clientSecret/password/clientId/username) or
+            # the finAPI access token.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
+  # --- Pipelines: resolve-bank-by-bic ---
+  - rtId: 67c9a1f0b2e4d8c3a1f00021
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67c9a1f0b2e4d8c3a1f00001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: 67e10c0bfe3e19891bbfd261
+        targetCkTypeId: System.Communication/Adapter
+      # finAPI credentials — the GlobalConfiguration is built from Uses associations.
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7004
+        targetCkTypeId: System.Communication/FinApiConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Resolve Bank by BIC Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /resolveBankByBic
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: GetPipelineConfigByWellKnownName@1
+              wellKnownName: FinApiConfiguration
+              targetPath: $.config
+            - type: FinApiSetConfig@1
+              baseUrlPath: $.config.baseUrl
+              clientIdPath: $.config.clientId
+              clientSecretPath: $.config.clientSecret
+            - type: FinApiAuth@1
+              description: Authenticate with finAPI
+              targetPath: $.auth.accessToken
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+            - type: FinApiSearchBanks@1
+              description: Search for bank by BIC
+              accessTokenPath: $.auth.accessToken
+              searchPath: $.body.bic
+              targetPath: $.result
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+            # Security: the HTTP response body is the whole data context. Reduce
+            # it to just the bank result so it can never leak finApiConfig
+            # (clientSecret/password/clientId/username), the finAPI access token,
+            # or the caller's request headers/Authorization.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
+  # --- Pipelines: create-webform-import ---
+  - rtId: 67c9a1f0b2e4d8c3a1f00041
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67c9a1f0b2e4d8c3a1f00001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: 67e10c0bfe3e19891bbfd261
+        targetCkTypeId: System.Communication/Adapter
+      # finAPI credentials — the GlobalConfiguration is built from Uses associations.
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7004
+        targetCkTypeId: System.Communication/FinApiConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Create Web Form Import Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /createWebFormImport
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: GetPipelineConfigByWellKnownName@1
+              wellKnownName: FinApiConfiguration
+              targetPath: $.config
+            - type: FinApiSetConfig@1
+              baseUrlPath: $.config.baseUrl
+              clientIdPath: $.config.clientId
+              clientSecretPath: $.config.clientSecret
+            - type: FinApiAuth@1
+              description: Authenticate with finAPI (user token)
+              targetPath: $.auth.accessToken
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              usernamePath: $.config.username
+              passwordPath: $.config.password
+            - type: GetRtEntitiesById@1
+              description: Load BankConnection entity
+              rtIdsPath: $.body.bankConnectionRtId
+              ckTypeId: Basic.Accounting/BankConnection
+              targetPath: $.bankConnection
+            - type: FinApiCreateWebFormImportOrUpdate@1
+              description: Create finAPI Web Form for import or update (auto-detect)
+              accessTokenPath: $.auth.accessToken
+              bankIdPath: $.bankConnection.Items[0].Attributes.BankCode
+              externalIdPath: $.bankConnection.Items[0].Attributes.ExternalId
+              ibanPath: $.bankConnection.Items[0].Attributes.Iban
+              targetPath: $.result
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+            # Security: reduce the HTTP response to just the web-form result
+            # ({Id, Url, Mode}) so it can never leak finApiConfig
+            # (clientSecret/password/clientId/username), the finAPI access token,
+            # or the caller's request headers/Authorization.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
+  # --- Pipelines: complete-webform-import ---
+  - rtId: 67c9a1f0b2e4d8c3a1f00031
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67c9a1f0b2e4d8c3a1f00001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: 67e10c0bfe3e19891bbfd261
+        targetCkTypeId: System.Communication/Adapter
+      # finAPI credentials — the GlobalConfiguration is built from Uses associations.
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7004
+        targetCkTypeId: System.Communication/FinApiConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Complete Web Form Import Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /completeWebFormImport
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: GetPipelineConfigByWellKnownName@1
+              wellKnownName: FinApiConfiguration
+              targetPath: $.config
+            - type: FinApiSetConfig@1
+              baseUrlPath: $.config.baseUrl
+              clientIdPath: $.config.clientId
+              clientSecretPath: $.config.clientSecret
+            - type: FinApiAuth@1
+              description: Authenticate with finAPI (user token)
+              targetPath: $.auth.accessToken
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              usernamePath: $.config.username
+              passwordPath: $.config.password
+            - type: FinApiGetWebFormStatus@1
+              description: Check Web Form completion status
+              accessTokenPath: $.auth.accessToken
+              webFormIdPath: $.body.webFormId
+              targetPath: $.webFormResult
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+            # AB#4720: only stamp the connection when the web form actually yielded
+            # the finAPI connection id — without this guard a not-yet-completed web
+            # form left ExternalId/AccountIds null but still wrote SyncStatus=
+            # Connected, so the transaction sync could never match the connection
+            # and created a duplicate BankAccount.
+            - type: If@1
+              description: Stamp the connection only when the finAPI connection id is present
+              path: $.finApiBankConnectionId
+              operator: NotEquals
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $._updateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Update
+                  ckTypeId: Basic.Accounting/BankConnection
+                  rtIdPath: $.body.bankConnectionRtId
+                  attributeUpdates:
+                    - attributeName: ExternalId
+                      valuePath: $.finApiBankConnectionId
+                      attributeValueType: String
+                    - attributeName: AccountIds
+                      valuePath: $.finApiAccountIds
+                      attributeValueType: IntArray
+                    - attributeName: SyncStatus
+                      value: Connected
+                      attributeValueType: String
+                    - attributeName: LastSuccessfulSync
+                      attributeValueType: DateTime
+                      valuePath: $.completedAt
+                - type: ApplyChanges@2
+                  description: Persist BankConnection update
+                  entityUpdatesPath: $._updateItems
+            # Security: reduce the HTTP response to just the web-form status
+            # result (the status/accountIds it read) so it can never leak
+            # finApiConfig (clientSecret/password/clientId/username), the finAPI
+            # access token, or the caller's request headers/Authorization.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.webFormResult
+                  inclusion: true
+  # --- Pipelines: sync-transactions ---
+  - rtId: 67c9a1f0b2e4d8c3a1f00051
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67c9a1f0b2e4d8c3a1f00001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: 67e10c0bfe3e19891bbfd261
+        targetCkTypeId: System.Communication/Adapter
+      # finAPI credentials — the GlobalConfiguration is built from Uses associations.
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7004
+        targetCkTypeId: System.Communication/FinApiConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Sync Transactions Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            # Cron PipelineTrigger (67c9a1f0b2e4d8c3a1f00052) instead of FromPolling:
+            # the adapter runs OnDemand (scale-to-zero, AB#4984) and an in-process
+            # poller would silently stop while the workload is hibernated.
+            - type: FromPipelineTriggerEvent@1
+            - type: FromHttpRequest@2
+              path: /syncTransactions
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: GetPipelineConfigByWellKnownName@1
+              wellKnownName: FinApiConfiguration
+              targetPath: $.config
+            - type: FinApiSetConfig@1
+              baseUrlPath: $.config.baseUrl
+              clientIdPath: $.config.clientId
+              clientSecretPath: $.config.clientSecret
+            - type: FinApiAuth@1
+              description: Authenticate with finAPI (user token)
+              targetPath: $.auth.accessToken
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              usernamePath: $.config.username
+              passwordPath: $.config.password
+            # No FinApiSyncBankConnection@1 here any more (AB#5315). It ran on
+            # this hourly schedule and left a finAPI web form behind on every
+            # single run (508 WEB_FORM_REQUIRED and zero COMPLETED in one
+            # measured week); finAPI then revoked the user token roughly an
+            # hour later, i.e. exactly during the next hourly run, which made
+            # 37 % of all runs die on a 401. The refresh now lives in its own
+            # pipeline (67c9a1f0b2e4d8c3a1f00061) on a 6-hour schedule. The
+            # bank data stays fresh regardless: the consented interfaces keep
+            # updating, which is what FinApiFetchBankConnections@1 below reads.
+            # --- Ensure BankAccount entities exist BEFORE importing transactions:
+            # the transaction -> account ParentChild association is mandatory
+            # (minimum multiplicity One), so an unknown account would make every
+            # insert fail. Same upsert logic as the Sync Accounts pipeline.
+            - type: FinApiFetchAccounts@1
+              description: Fetch all bank accounts from finAPI
+              accessTokenPath: $.auth.accessToken
+              targetPath: $.finapi.accounts
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              documentMode: Extend
+            - type: ForEach@1
+              description: Upsert one BankAccount per finAPI account (idempotent by ExternalId)
+              iterationPath: $.finapi.accounts
+              targetPath: $.accountResult
+              # Extend, NOT Replace — the config/auth/body context is still
+              # needed by the transaction import steps after this loop.
+              documentMode: Extend
+              mergePath: $._accUpdates
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: ConvertDataType@1
+                  description: finAPI account id (number) as string for the ExternalId lookup
+                  path: $.key.id
+                  targetPath: $._externalId
+                  valueType: String
+                - type: GetOrCreateRtEntitiesByType@1
+                  description: Resolve the existing BankAccount by ExternalId or generate a new id
+                  ckTypeId: Basic.Accounting/BankAccount
+                  fieldFilters:
+                    - attributePath: ExternalId
+                      operator: Equals
+                      comparisonValuePath: $._externalId
+                  rtIdTargetPath: $._accountRtId
+                  ckTypeIdTargetPath: $._accountCkTypeId
+                  modOperationPath: $._accountModOp
+                # AB#4720: GetOrCreate only matches by ExternalId, so a manually
+                # created account (no ExternalId yet) or a re-imported finAPI
+                # connection (new account id, same IBAN) would insert a duplicate
+                # entity. Adopt the existing account by IBAN instead - the update
+                # below then writes the current ExternalId onto it.
+                - type: If@1
+                  description: No ExternalId match - adopt an existing account with the same IBAN
+                  path: $._accountModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    - type: If@1
+                      description: Only when finAPI reports an IBAN (PayPal-style accounts have none)
+                      path: $.key.iban
+                      operator: NotEquals
+                      transformations:
+                        - type: GetRtEntitiesByType@1
+                          description: Find an existing BankAccount with the same IBAN
+                          ckTypeId: Basic.Accounting/BankAccount
+                          targetPath: $._ibanMatch
+                          take: 1
+                          fieldFilters:
+                            - attributePath: Iban
+                              operator: Equals
+                              comparisonValuePath: $.key.iban
+                        - type: If@1
+                          description: Reuse the matched account instead of inserting a duplicate
+                          path: $._ibanMatch.TotalCount
+                          operator: GreaterThan
+                          value: 0
+                          valueType: Int64
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              description: Take over the matched account's rtId
+                              targetPath: $._accountRtId
+                              valuePath: $._ibanMatch.Items[0].RtId
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              description: Switch the upsert from Insert to Update
+                              targetPath: $._accountModOp
+                              value: 1
+                              valueType: Int
+                - type: CreateUpdateInfo@1
+                  description: Map finAPI account to BankAccount entity
+                  targetPath: $._accUpdates._accountUpdate
+                  updateKindPath: $._accountModOp
+                  rtIdPath: $._accountRtId
+                  ckTypeId: Basic.Accounting/BankAccount
+                  attributeUpdates:
+                    - attributeName: Name
+                      valuePath: $.key.accountName
+                      attributeValueType: String
+                    - attributeName: ExternalId
+                      valuePath: $._externalId
+                      attributeValueType: String
+                    - attributeName: Iban
+                      valuePath: $.key.iban
+                      attributeValueType: String
+                    - attributeName: AccountNumber
+                      valuePath: $.key.accountNumber
+                      attributeValueType: String
+                    - attributeName: AccountHolder
+                      valuePath: $.key.accountName
+                      attributeValueType: String
+                    - attributeName: Currency
+                      valuePath: $.key.accountCurrency
+                      attributeValueType: String
+                    - attributeName: Balance
+                      valuePath: $.key.balance
+                      attributeValueType: Double
+                    - attributeName: Overdraft
+                      valuePath: $.key.overdraft
+                      attributeValueType: Double
+                    - attributeName: AvailableFunds
+                      valuePath: $.key.availableFunds
+                      attributeValueType: Double
+            - type: Flatten@1
+              path: $.accountResult[*]._accountUpdate
+              targetPath: $._accountUpdateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: ApplyChanges@2
+              description: Persist account updates before importing transactions
+              entityUpdatesPath: $._accountUpdateItems
+            # Stamp the REAL bank-data freshness, not the pipeline run time:
+            # LastSuccessfulSync = newest OK bank update at finAPI, SyncStatus
+            # honest (Connected / ActionRequired / Error). A connection whose
+            # update fails (SCA required, bank down) keeps its old timestamp
+            # so the UI shows how stale the data actually is.
+            - type: FinApiFetchBankConnections@1
+              description: Fetch per-connection bank-data freshness from finAPI
+              accessTokenPath: $.auth.accessToken
+              targetPath: $.finapi.connections
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              documentMode: Extend
+            - type: ForEach@1
+              description: Stamp bank-data freshness on each BankConnection
+              iterationPath: $.finapi.connections
+              targetPath: $.connResult
+              documentMode: Extend
+              mergePath: $._connUpdates
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: ConvertDataType@1
+                  description: finAPI connection id (number) as string for the ExternalId lookup
+                  path: $.key.id
+                  targetPath: $._connExternalId
+                  valueType: String
+                - type: GetRtEntitiesByType@1
+                  description: Find the BankConnection imported for this finAPI connection
+                  ckTypeId: Basic.Accounting/BankConnection
+                  targetPath: $._conn
+                  take: 1
+                  fieldFilters:
+                    - attributePath: ExternalId
+                      operator: Equals
+                      comparisonValuePath: $._connExternalId
+                - type: If@1
+                  description: Stamp only connections known to the tenant
+                  path: $._conn.TotalCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: If@1
+                      description: Freshness known - stamp timestamp and status
+                      path: $.key.hasSuccessfulUpdate
+                      operator: Equals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          targetPath: $._connUpdates._connUpdate
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankConnection
+                          rtIdPath: $._conn.Items[0].RtId
+                          attributeUpdates:
+                            - attributeName: LastSuccessfulSync
+                              attributeValueType: DateTime
+                              valuePath: $.key.lastSuccessfulUpdate
+                            - attributeName: SyncStatus
+                              attributeValueType: String
+                              valuePath: $.key.syncStatus
+                            - attributeName: ConsentExpiresAt
+                              attributeValueType: DateTime
+                              valuePath: $.key.consentExpiresAt
+                    - type: If@1
+                      description: Never updated - stamp status only, keep old timestamp
+                      path: $.key.hasSuccessfulUpdate
+                      operator: Equals
+                      value: false
+                      valueType: Boolean
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          targetPath: $._connUpdates._connUpdate
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankConnection
+                          rtIdPath: $._conn.Items[0].RtId
+                          attributeUpdates:
+                            - attributeName: SyncStatus
+                              attributeValueType: String
+                              valuePath: $.key.syncStatus
+                            - attributeName: ConsentExpiresAt
+                              attributeValueType: DateTime
+                              valuePath: $.key.consentExpiresAt
+            - type: Flatten@1
+              path: $.connResult[*]._connUpdate
+              targetPath: $._connUpdateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: ApplyChanges@2
+              description: Persist connection sync timestamps
+              entityUpdatesPath: $._connUpdateItems
+            - type: FinApiFetchTransactions@1
+              description: Fetch transactions of ALL accounts of the tenant finAPI user
+              accessTokenPath: $.auth.accessToken
+              minBookingDatePath: $.body.minBookingDate
+              maxBookingDatePath: $.body.maxBookingDate
+              targetPath: $.transactions
+              targetValueWriteMode: Append
+              targetValueKind: Array
+              documentMode: Extend
+            - type: ForEach@1
+              description: Upsert one BankTransaction per finAPI booking (idempotent by TransactionId)
+              iterationPath: $.transactions
+              targetPath: $.result
+              documentMode: Replace
+              mergePath: $._updates
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: ConvertDataType@1
+                  description: finAPI transaction id (number) as string for the duplicate lookup
+                  path: $.key.id
+                  targetPath: $._txId
+                  valueType: String
+                - type: GetOrCreateRtEntitiesByType@1
+                  description: Resolve the existing BankTransaction by TransactionId or generate a new id
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  fieldFilters:
+                    - attributePath: TransactionId
+                      operator: Equals
+                      comparisonValuePath: $._txId
+                  rtIdTargetPath: $._txRtId
+                  ckTypeIdTargetPath: $._txCkTypeId
+                  modOperationPath: $._txModOp
+                - type: If@1
+                  description: Only insert new transactions — bookings are immutable and existing ones keep their MatchState
+                  path: $._txModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    - type: ConvertDataType@1
+                      description: finAPI account id (number) as string for the BankAccount lookup
+                      path: $.key.accountId
+                      targetPath: $._accountExternalId
+                      valueType: String
+                    - type: GetRtEntitiesByType@1
+                      description: Find the BankAccount imported for this finAPI account
+                      ckTypeId: Basic.Accounting/BankAccount
+                      targetPath: $._account
+                      take: 1
+                      fieldFilters:
+                        - attributePath: ExternalId
+                          operator: Equals
+                          comparisonValuePath: $._accountExternalId
+                    # The ParentChild association to the BankAccount is MANDATORY
+                    # (minimum multiplicity One) — never create a transaction
+                    # without its account, the insert would fail.
+                    - type: If@1
+                      description: Insert only when the bank account is known
+                      path: $._account.TotalCount
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Int64
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          description: Map finAPI transaction to a new BankTransaction
+                          targetPath: $._updates._txUpdate
+                          updateKind: Insert
+                          rtIdPath: $._txRtId
+                          ckTypeId: Basic.Accounting/BankTransaction
+                          attributeUpdates:
+                            - attributeName: TransactionId
+                              valuePath: $._txId
+                              attributeValueType: String
+                            - attributeName: Amount
+                              valuePath: $.key.amount
+                              attributeValueType: Double
+                            - attributeName: Currency
+                              valuePath: $.key.currency
+                              attributeValueType: String
+                            - attributeName: BookingDate
+                              valuePath: $.key.bankBookingDate
+                              attributeValueType: DateTime
+                            - attributeName: ValueDate
+                              valuePath: $.key.valueDate
+                              attributeValueType: DateTime
+                            - attributeName: Purpose
+                              valuePath: $.key.purpose
+                              attributeValueType: String
+                            - attributeName: CounterpartName
+                              valuePath: $.key.counterpartName
+                              attributeValueType: String
+                            - attributeName: CounterpartIban
+                              valuePath: $.key.counterpartIban
+                              attributeValueType: String
+                            - attributeName: CounterpartBic
+                              valuePath: $.key.counterpartBic
+                              attributeValueType: String
+                            - attributeName: EndToEndReference
+                              valuePath: $.key.endToEndReference
+                              attributeValueType: String
+                            - attributeName: MandateReference
+                              valuePath: $.key.mandateReference
+                              attributeValueType: String
+                            - attributeName: CreditorId
+                              valuePath: $.key.creditorId
+                              attributeValueType: String
+                            - attributeName: BankTransactionCode
+                              valuePath: $.key.bankTransactionCode
+                              attributeValueType: String
+                            - attributeName: Direction
+                              valuePath: $.key.direction
+                              attributeValueType: Int
+                            - attributeName: MatchState
+                              attributeValueType: Enum
+                              value: Unreviewed
+                        - type: CreateAssociationUpdate@1
+                          description: BankTransaction -> BankAccount via ParentChild (mandatory)
+                          targetPath: $._updates._assocUpdate
+                          updateKind: Create
+                          originRtIdPath: $._txRtId
+                          originCkTypeId: Basic.Accounting/BankTransaction
+                          targetRtIdPath: $._account.Items[0].RtId
+                          targetCkTypeId: Basic.Accounting/BankAccount
+                          associationRoleId: System/ParentChild
+            - type: Flatten@1
+              path: $.result[*]._txUpdate
+              targetPath: $._flatUpdateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Flatten@1
+              path: $.result[*]._assocUpdate
+              targetPath: $._flatAssocItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: ApplyChanges@2
+              description: Persist transaction inserts and account links to OctoMesh
+              entityUpdatesPath: $._flatUpdateItems
+              associationUpdatesPath: $._flatAssocItems
+            - type: DateTime@1
+              description: Sync completion timestamp
+              operation: Now
+              targetPath: $.syncTime
+            # Security: reduce the HTTP response to just the sync completion
+            # timestamp so it can never leak finApiConfig (clientSecret/password/
+            # clientId/username), the finAPI access token, or the caller's
+            # request headers/Authorization.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.syncTime
+                  inclusion: true
+  # Cron trigger for the Sync Transactions pipeline — replaces the former in-process
+  # FromPolling (01:00:00). Scheduled by the Bot/Hangfire scheduler, so it survives
+  # adapter hibernation (scale-to-zero co-wake, AB#4918/4984).
+  - rtId: 67c9a1f0b2e4d8c3a1f00052
+    ckTypeId: System.Communication/PipelineTrigger
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67c9a1f0b2e4d8c3a1f00001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Triggers
+        targetRtId: 67c9a1f0b2e4d8c3a1f00051
+        targetCkTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: Sync Transactions Schedule
+      - id: System/Description
+        value: Runs the finAPI transaction sync pipeline every hour.
+      - id: System/Enabled
+        value: true
+      - id: System.Bot/CronExpression
+        value: "0 0 * * * ?"
+  # --- Pipeline: sync-bank-connections (AB#5315) ---
+  # Split out of the hourly Sync Transactions pipeline. Asking finAPI to refresh
+  # a bank connection creates a background-update task; on our mandator those
+  # tasks end in WEB_FORM_REQUIRED rather than COMPLETED, and finAPI revokes the
+  # user token about an hour after such a web form is created. On the hourly
+  # schedule that revocation landed on the next run. Every six hours the refresh
+  # still happens often enough for a bank connection whose consent is intact,
+  # while the transaction sync keeps a clean token.
+  - rtId: 67c9a1f0b2e4d8c3a1f00061
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67c9a1f0b2e4d8c3a1f00001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: 67e10c0bfe3e19891bbfd261
+        targetCkTypeId: System.Communication/Adapter
+      # finAPI credentials — the GlobalConfiguration is built from Uses associations.
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7004
+        targetCkTypeId: System.Communication/FinApiConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Sync Bank Connections Pipeline
+      - id: System/Description
+        value: >-
+          Asks finAPI to refresh its own copy of every bank connection
+          (background update task). Scheduled every six hours; also reachable
+          on demand at POST /syncBankConnections.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            # Cron PipelineTrigger (67c9a1f0b2e4d8c3a1f00062), not FromPolling:
+            # the adapter runs OnDemand (scale-to-zero, AB#4984) and an
+            # in-process poller would stop while the workload is hibernated.
+            - type: FromPipelineTriggerEvent@1
+            - type: FromHttpRequest@2
+              path: /syncBankConnections
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: GetPipelineConfigByWellKnownName@1
+              wellKnownName: FinApiConfiguration
+              targetPath: $.config
+            - type: FinApiSetConfig@1
+              baseUrlPath: $.config.baseUrl
+              clientIdPath: $.config.clientId
+              clientSecretPath: $.config.clientSecret
+            - type: FinApiAuth@1
+              description: Authenticate with finAPI (user token)
+              targetPath: $.auth.accessToken
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              usernamePath: $.config.username
+              passwordPath: $.config.password
+            - type: FinApiSyncBankConnection@1
+              description: Update all bank connections at finAPI (background update task)
+              accessTokenPath: $.auth.accessToken
+            - type: DateTime@1
+              description: Refresh completion timestamp
+              operation: Now
+              targetPath: $.syncTime
+            # Security: reduce the HTTP response to just the timestamp so it can
+            # never leak finApiConfig (clientSecret/password/clientId/username),
+            # the finAPI access token, or the caller's request headers.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.syncTime
+                  inclusion: true
+  # Cron trigger for the bank-connection refresh (AB#5315). Runs at 00:30, 06:30,
+  # 12:30 and 18:30 — deliberately off the hour, because the transaction sync runs
+  # at :00 and finAPI revokes the user token about an hour after a web form is
+  # created, so the revocation window falls between two transaction runs.
+  - rtId: 67c9a1f0b2e4d8c3a1f00062
+    ckTypeId: System.Communication/PipelineTrigger
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67c9a1f0b2e4d8c3a1f00001
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Triggers
+        targetRtId: 67c9a1f0b2e4d8c3a1f00061
+        targetCkTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: Sync Bank Connections Schedule
+      - id: System/Description
+        value: Refreshes the finAPI bank connections every six hours.
+      - id: System/Enabled
+        value: true
+      - id: System.Bot/CronExpression
+        value: "0 30 0/6 * * ?"
