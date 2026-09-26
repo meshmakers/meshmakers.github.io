@@ -1,0 +1,86 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # Application workload for the accounting SPA (modeled on voest-app's
+  # rt-voestalpine-app.yaml). The Communication Operator deploys it via the
+  # meshmakers-app Helm chart published by this repo's CI; the empty
+  # ChartVersion resolves to the latest published version at deploy time.
+  # The {{...}} placeholders are blueprint template variables resolved per
+  # installation (domain + public service URIs).
+  # --- NOTE: no Application workload here (AB#5210) -----------------------------
+  # aa0000000000000000000200 was the pre-AB#4936 per-tenant SPA, one deployment
+  # per tenant at <tenant>-accounting.<domain>. Since the two-host cutover it is
+  # dead: UNDEPLOYED on every tenant, pinned to a stale chart, on a hostname with
+  # no DNS record — yet every re-apply stamped it back. The live app is the
+  # shared host aa0000000000000000000210, seeded by MeshmakersAccounting.Host on
+  # the root. Removing it from this seed does NOT remove it from tenants that
+  # already carry it (AB#4685) — that is a separate cleanup.
+  - rtId: 67e10c0bfe3e19891bbfd261
+    ckTypeId: System.Communication/Adapter
+    associations:
+      # Default Cloud pool, seeded by the System.Communication blueprint.
+      - roleId: System.Communication/Manages
+        targetRtId: "670000000000000000000001"
+        targetCkTypeId: System.Communication/Pool
+        attributes: []
+      # Chart source (AB#5295): meshmakers-public, the RELEASE adapter index
+      # (670…004, seeded by System.Communication.Release) — required for
+      # DeployWorkload ("no Helm repository is linked" otherwise). It used to pin
+      # 670…003 (meshmakers-dev), which exists only on MainLatest-channel tenants:
+      # on Release tenants the operator's dry-run failed ("chart … not found in
+      # octo-d808d9351847 index") and, where the entity never existed, the import
+      # left a dangling edge that blocked the correct one. On the 3.x line the
+      # platform cannot resolve a repository by purpose, so the seed has to pick
+      # the channel the blueprint is released for. Since AB#5296 (engine
+      # 0.1.2609.21004 / release 3.4.124) an Upsert import REPLACES the edge of a
+      # to-one role: a tenant that still carries another repository on this role
+      # is switched to this one on the next apply (audit event
+      # RtImport.ReplacedToOneEdges). On older engines the import only appended,
+      # and a stale edge had to be removed by hand.
+      - roleId: System.Communication/HelmRepository
+        targetRtId: "670000000000000000000004"
+        targetCkTypeId: System.Communication/HelmRepositoryConfiguration
+        attributes: []
+    attributes:
+      - id: System/Name
+        value: FinAPI Adapter
+      - id: System/Description
+        value: Adapter for synchronizing bank accounts and transactions via finAPI
+      - id: System.Communication/ChartName
+        value: octo-finapi-adapter
+      - id: System.Communication/ChartVersion
+        value: ''
+      # Cluster-level secrets (database, broker, stream data) reach the pod only
+      # when this is true. Not runtime state, CK default false — every prod-1
+      # FinAPI adapter ran without it until 2026-09-21 (AB#5295).
+      - id: System.Communication/ReceivesClusterSecrets
+        value: true
+      # OnDemand (AB#5321). The adapter has no work of its own between a couple of
+      # cron runs and the occasional web form, so it may hibernate at 0 replicas
+      # and be woken by the HTTP activator. Seeded rather than set by hand
+      # because LifecycleMode is explicitly NOT runtime state on this line
+      # (AB#5187) — a re-apply would reset a hand-set value to the CK default
+      # AlwaysOn. Safe for every tenant: the deploy guard re-evaluates
+      # on-demand capability live (AB#4984) and none of the seeded finAPI
+      # pipelines uses a process-bound trigger; the two deployed prod-1 adapters
+      # report onDemandCapable=true. IdleTimeoutMinutes stays at the CK default
+      # of 30 minutes, the value the AB#5281 rollout used for the four HTTP
+      # adapters. This alone changes nothing: hibernation additionally requires
+      # the tenant-level scale-to-zero switch (SetCommunicationLifecycle -sze),
+      # which is not seedable.
+      - id: System.Communication/LifecycleMode
+        value: 1   # OnDemand
+      # No AdapterConfiguration on purpose (AB#5295): the FinAPI adapter reads it
+      # once at startup as a default connection (FinApiAdapterService), but every
+      # finAPI pipeline overrides it with the FinApiConfiguration entity via
+      # FinApiSetConfig@1 before it talks to finAPI. A seeded sandbox URL with
+      # angle-bracket placeholders therefore never carried a working connection
+      # and only looked like a second credential store; the attribute is seed-
+      # owned (isRuntimeState: false), so leaving it out keeps it empty on
+      # re-apply as well.
+      - id: System.Communication/StatusMessage
