@@ -1,0 +1,277 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Anthropic AI configuration -----------------------------------------------
+  # Referenced by name (apiKeyConfigurationName: AnthropicAiConfig) from the
+  # AnthropicAiQuery nodes in the ai-prompt, upload-documents and
+  # match-transactions pipelines. Same rtId/wellKnownName as demo-energy-iq's
+  # configuration so a tenant carrying that import is upserted in place.
+  #
+  # SECRET — the real Anthropic API key is intentionally NOT committed. Set it
+  # after install (Refinery Studio -> Configurations -> AnthropicAiConfig).
+  # NOTE: every blueprint (re-)apply upserts this entity and RESETS the key to
+  # the placeholder — re-enter it after each InstallBlueprint -f / update.
+  - rtId: 67f0c00ec4ff02221e0b7003
+    ckTypeId: System.Communication/AiConfiguration
+    rtWellKnownName: AnthropicAiConfig
+    attributes:
+      - id: System.Communication/ApiKey
+        value: "<anthropic-api-key-here>"
+      # Mandatory since System.Communication 3.24.0 (no default). Keep this a
+      # current model id — pinned dated snapshots get retired (HTTP 404).
+      - id: System.Communication/AiModel
+        value: "claude-sonnet-4-6"
+      - id: System.Communication/MaxTokens
+        value: 8000
+      - id: System.Communication/Temperature
+        value: 0.0
+  # --- MCP service-account configuration -----------------------------------------
+  # AB#4315: the MCP server now ENFORCES auth. The AI Prompt pipeline's Q&A node
+  # (mcpServiceAccountConfigName: ServiceAccountConfig) authenticates to MCP via an
+  # OAuth2 client-credentials token acquired from this entity — without it the MCP
+  # handshake is rejected, 0 tools load and the assistant answers blind (no data).
+  # The identity client (ClientId below) must exist with the `octo_api` scope; the
+  # local-dev client is created by scripts/om_setupIdentityService_local.ps1.
+  # Same rtId/wellKnownName as demo-energy-iq's configuration so a tenant carrying
+  # both imports is upserted in place.
+  #
+  # SECRET — the ClientSecret is intentionally NOT committed. It IS runtime state, so a
+  # re-apply preserves whatever an operator set; a fresh tenant gets the angle-bracket
+  # placeholder, which the platform reads as "this account HAS no secret" and routes
+  # through the impersonation / on-behalf-of grant (AB#5114/AB#5115). Restore a real
+  # secret via scripts/om_set_secrets.ps1 only where the classic client_credentials
+  # path is wanted.
+  #
+  # IssuerUri and TenantId are DELIBERATELY NOT runtime state (see the CK model comment
+  # on System.Communication/ServiceAccountConfiguration): they are author configuration,
+  # so every re-apply WRITES WHAT STANDS HERE. Shipping angle-bracket placeholders here
+  # therefore overwrote the working values on every existing tenant — prod-1 incident
+  # 15.09.2026: all six accounting tenants lost their pipeline identity at once and
+  # every service-account pipeline was refused fail-closed ("no token could be acquired
+  # for client 'accounting-ai-prompt'"). `serviceAccount/reconcile` does NOT repair it:
+  # it treats any concrete-looking URI it does not recognise as a deliberate foreign
+  # identity target and leaves it alone.
+  #   * IssuerUri -> the {{service.authority}} deploy-time token. The communication
+  #     controller resolves it per installation when it projects the configuration to
+  #     the adapter (AB#5111), so the same seed is correct on every environment.
+  #   * TenantId  -> empty, which means "the tenant the adapter runs for" (AB#5115).
+  #     Older controllers rewrite it to the current tenant at projection time anyway.
+  # Never put an environment-specific literal or a <placeholder> into either.
+  - rtId: 67f0c00ec4ff02221e0b7002
+    ckTypeId: System.Communication/ServiceAccountConfiguration
+    rtWellKnownName: ServiceAccountConfig
+    attributes:
+      - id: System.Communication/IssuerUri
+        value: "{{service.authority}}"
+      - id: System.Communication/ClientId
+        value: "accounting-ai-prompt"
+      - id: System.Communication/ClientSecret
+        value: "<service-account-client-secret-here>"
+      - id: System/TenantId
+        value: ""
+  # --- finAPI configuration ------------------------------------------------------
+  # Loaded via GetPipelineConfigByWellKnownName (wellKnownName: FinApiConfiguration)
+  # by all finAPI pipelines. A pipeline's GlobalConfiguration is built from its
+  # Uses associations — every finAPI pipeline below therefore carries a Uses
+  # association to this entity (the well-known name alone fails with "not found
+  # in GlobalConfiguration", same trap as AnthropicAiConfig).
+  #
+  # SECRET — real values are intentionally NOT committed. After install (and after
+  # EVERY blueprint re-apply, which resets these to the placeholders) restore them
+  # via scripts/om_set_secrets.ps1 (reads the gitignored scripts/secrets.local.json)
+  # or Refinery Studio -> Configurations. Create the finAPI user once with
+  # scripts/finapi_setup.ps1.
+  - rtId: 67f0c00ec4ff02221e0b7004
+    ckTypeId: System.Communication/FinApiConfiguration
+    rtWellKnownName: FinApiConfiguration
+    attributes:
+      - id: System.Communication/Host
+        value: "https://live.finapi.io"
+      - id: System.Communication/ClientId
+        value: "<finapi-client-id-here>"
+      - id: System.Communication/ClientSecret
+        value: "<finapi-client-secret-here>"
+      - id: System.Communication/Username
+        value: "<finapi-user-id-here>"
+      - id: System.Communication/Password
+        value: "<finapi-user-password-here>"
+      - id: System.Communication/IsSandbox
+        value: false
+  # --- Microsoft 365 e-mail document import (AB#3328) -------------------------
+  # Moved from data/ into the seed so a fresh tenant gets it present-but-DISABLED.
+  # The pipeline ships with System/Enabled=false; Settings -> E-Mail Import in the
+  # meshmakers-app writes the EmailImportSettings configuration, rewrites the
+  # trigger folders/mailbox into PipelineDefinition, sets Enabled and deploys the
+  # DataFlow. Graph credentials (MicrosoftGraphDocuments) carry placeholders here
+  # and are filled per tenant via scripts/om_set_secrets.ps1 (microsoftGraph).
+  # Default trigger folders are the PROD names (ToDo/Done); local dev overrides
+  # them to Todo_local-test/Done_local-test via the Settings configuration.
+  - rtId: 67d4a2f0b2e4d8c3a1f000a0
+    ckTypeId: System.Communication/MicrosoftGraphConfiguration
+    rtWellKnownName: MicrosoftGraphDocuments
+    attributes:
+      - id: System.Communication/AzureTenantId
+        value: TODO_SET_AZURE_TENANT_ID
+      - id: System.Communication/ClientId
+        value: TODO_SET_CLIENT_ID
+      - id: System.Communication/ClientSecret
+        value: TODO_SET_CLIENT_SECRET
+  - rtId: aa0000000000000000000330
+    ckTypeId: Meshmakers.Accounting/EmailImportSettings
+    rtWellKnownName: EmailImportSettings
+    attributes:
+      - id: Meshmakers.Accounting/EmailImportEnabled
+        value: false
+      - id: Meshmakers.Accounting/EmailImportPollingSeconds
+        value: 120
+      # EmailImportFailedFolder is deliberately NOT seeded (AB#5260). It matters —
+      # without it a mail the import gave up on stays in the source folder, invisible,
+      # and there is nowhere to drag it back FROM to retry it — but it is a folder PATH,
+      # and this seed carries no mailbox and no folder paths at all: they are tenant
+      # configuration entered in Settings -> E-Mail Import. A path seeded here would be
+      # wrong for every tenant whose mailbox is laid out differently, and a failure
+      # folder that cannot be resolved degrades the import (the adapter logs it and
+      # skips exhausted mails). The rule "a `Failed` sibling of the done folder" is
+      # therefore applied in the Settings page, which is the first place a done folder
+      # actually exists: see defaultFailedFolderFor in email-import-settings.ts.
+
+  # AB#5345: the IMAP channel's own settings, same CK type and therefore the same
+  # vocabulary as the Graph channel's above — that shared vocabulary is the point, so a
+  # settings page offers one set of fields for both. A SEPARATE instance, because a poll
+  # interval, a post-processing mode and a done folder belong to one mailbox and not to
+  # both channels at once. What stays shared is the tenant-wide sender allowlist, which
+  # every channel reads off the `EmailImportSettings` instance by well-known name.
+  #
+  # Seeded EMPTY apart from the enabled flag: every attribute is optional and an unset one
+  # means "the value in the pipeline definition still applies", so a tenant that upgrades
+  # into this keeps running exactly as before until somebody sets something. Nothing that
+  # is tenant-specific — no folder path, no mailbox — may be seeded here for the reason
+  # spelled out above.
+  #
+  # `EmailImportEnabled` is NOT what activates the IMAP channel; that is the pipeline's own
+  # `System/Enabled`, flipped by the Settings page. The attribute is mandatory on the type
+  # and is seeded false so the entity is valid.
+  - rtId: aa0000000000000000000332
+    ckTypeId: Meshmakers.Accounting/EmailImportSettings
+    rtWellKnownName: ImapImportSettings
+    attributes:
+      - id: Meshmakers.Accounting/EmailImportEnabled
+        value: false
+      # AB#5372: the behaviour values are seeded EXPLICITLY, not left to the trigger
+      # definition's fallback. Unset never meant "nothing happens" — it meant 60 s, 25
+      # mails and MarkAsRead, decided by the definition an operator cannot see, while the
+      # settings page showed three empty fields. Stating them here is what AB#5345 asked
+      # for: the configuration owns the behaviour, the definition is release content.
+      #
+      # All four are `isRuntimeState`, so these are STARTING values — an operator's change
+      # survives every re-apply. The set reproduces what tenants do today, with one
+      # deliberate difference: polling is 120 s, not 60. That matches the Microsoft 365
+      # channel (which has seeded 120 all along) and halves 1440 daily polls against a
+      # mailbox that receives invoices, not chat messages.
+      - id: Meshmakers.Accounting/EmailImportPollingSeconds
+        value: 120
+      # Kept at the node's own default. This is a memory ceiling, not a throughput dial:
+      # the whole batch is buffered with its base64 attachments before the pipeline runs
+      # (AB#5336). The settings page caps it at 100.
+      - id: Meshmakers.Accounting/EmailImportMaxMessagesPerPoll
+        value: 25
+      - id: Meshmakers.Accounting/EmailImportOnlyUnread
+        value: true
+      # The mail is flagged \Seen once an inbox item was created. Together with
+      # `EmailImportOnlyUnread` above that is also what makes a processed mail invisible
+      # to the next poll — which is the point, and now says so out loud instead of being
+      # derived from `markAsRead: true` in the definition.
+      - id: Meshmakers.Accounting/EmailImportPostProcessingMode
+        value: MarkAsRead
+
+  # ################################################################################
+  # ##  BEFORE FLIPPING ANY POLICY IN THIS FILE TO ENFORCE - INCLUDING THE FIVE   ##
+  # ##  OLDER ONES (aa...322, aa...323, aa...327, aa...328, aa...329):            ##
+  # ##                                                                            ##
+  # ##  The pipeline service account (ServiceAccountConfiguration, clientId       ##
+  # ##  `accounting-ai-prompt`) MUST hold the AccountingManagement role.          ##
+  # ##                                                                            ##
+  # ##  PipelineIdentityResolver is fail-closed: once a service account is        ##
+  # ##  configured there is NO system fallback left. Every cron pipeline and      ##
+  # ##  every channel pipeline runs as that client and nothing else. If the       ##
+  # ##  client does not hold the role, enforcing ANY policy here stops all of     ##
+  # ##  them - imports, document analysis, matching, reminders - and they stop    ##
+  # ##  QUIETLY: reads come back as empty result sets, writes are refused, and    ##
+  # ##  a pipeline that finds nothing to do reports success.                      ##
+  # ##                                                                            ##
+  # ##  The role assignment lives in the IDENTITY SERVICE, not in this repo. A    ##
+  # ##  blueprint re-apply neither creates nor repairs it. Verify it per tenant,  ##
+  # ##  by hand, before every single Enforce flip.                                ##
+  # ################################################################################
+
+  # === Document import channels (AB#5012): seeded but DISABLED by default ===
+  # Teams bot, IMAP e-mail assistant, Signal assistant and the Microsoft 365
+  # Graph document import all ship with System/Enabled=false and
+  # DeploymentState=0. They are activated per tenant from Settings -> Import,
+  # which fills in the connection/credentials and deploys the DataFlow.
+  # Connection + credential entities carry TODO placeholders (reset on
+  # blueprint re-apply, same contract as MicrosoftGraphConfiguration).
+  - rtId: 67d4a2f0b2e4d8c3a1f000d0
+    ckTypeId: System.Communication/EMailReceiverConfiguration
+    rtWellKnownName: EmailAccountingAssistant
+    attributes:
+    - id: System.Communication/Host
+      value: outlook.office365.com
+    - id: System.Communication/Port
+      value: 993
+    - id: System.Communication/Username
+      value: TODO_SET_EMAIL_ADDRESS
+    - id: System.Communication/Password
+      value: TODO_SET_PASSWORD
+    - id: System.Communication/IsSslEnabled
+      value: true
+    - id: System.Communication/Folder
+      value: INBOX
+  # SMTP sender configuration. NOT used by any document import channel: AB#5344
+  # removed both `SendEMail@1` acknowledgement nodes from the IMAP import (the
+  # mailbox is a vendor invoice inbox - answering Transgourmet or a `no-reply@`
+  # address is wrong in every case), and the Microsoft 365 import never had one.
+  # Neither mail channel sends anything outbound any more.
+  #
+  # It stays seeded for a DIFFERENT consumer: the Identity Notification Mailer
+  # (data/_pipelines/rt-pipeline-identity-notification-mailer.yaml, AB#5136),
+  # which delivers identity-services' OTP, welcome and password-reset mails. That
+  # pipeline carries a `Uses` edge to THIS rtId and a `SendEMail@1` with
+  # `serverConfiguration: EmailSender`, and the node resolves the name through the
+  # pipeline's GlobalConfiguration, which is built from those Uses edges - without
+  # the entity it fails with "'EmailSender' not found". The standalone template
+  # data/_general/rt-config-email-sender.yaml does NOT cover this: its ImportRt
+  # line in scripts/om_importrt.ps1 is commented out, so nothing in the repo
+  # imports it and a fresh tenant would have no configuration for exactly the
+  # security-relevant deliveries. Deleting it here would have been optional
+  # tidying with a real failure behind it.
+  - rtId: 67d4a2f0b2e4d8c3a1f000c0
+    ckTypeId: System.Communication/EMailSenderConfiguration
+    rtWellKnownName: EmailSender
+    attributes:
+    - id: System.Communication/Host
+      value: smtp.office365.com
+    - id: System.Communication/Port
+      value: 587
+    - id: System.Communication/Username
+      value: TODO_SET_EMAIL_ADDRESS
+    - id: System.Communication/Password
+      value: TODO_SET_PASSWORD
+    - id: System.Communication/IsSslEnabled
+      value: true
+    - id: System.Communication/SenderEmail
+      value: TODO_SET_SENDER_EMAIL
+
+  # Seeded empty so its rtId exists for the Signal AND Teams pipelines' Uses edge.
+  # Its only attribute (AppUrl, isRuntimeState - renamed from SignalAppUrl in
+  # AB#5155) is written by the app and survives a blueprint re-apply.
+  # Number/bridge URL/activation live on the tenant's
+  # System.Communication/SignalChannel (Refinery Studio, AB#5145).
+  - rtId: aa0000000000000000000331
+    ckTypeId: Meshmakers.Accounting/SignalImportSettings
+    rtWellKnownName: SignalImportSettings
