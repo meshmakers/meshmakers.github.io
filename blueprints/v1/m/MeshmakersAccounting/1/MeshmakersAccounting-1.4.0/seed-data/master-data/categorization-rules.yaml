@@ -1,0 +1,217 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[2.2.0,3.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Categorization rules ---
+  # Auto-assign a cost category to bank transactions during the match pipeline.
+  # Each rule matches on exactly ONE field (like a Dauerbeleg's match type) and
+  # optionally resolves the transaction (MATCHED for receiptless costs such as
+  # bank fees, IGNORED for private spending). The target category is resolved
+  # per fiscal year from the transaction's booking date, so a rule works across
+  # years. Users maintain further rules in Settings → Categorization Rules.
+  - rtId: aa0000000000000000000500
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Bank fees
+      - id: Meshmakers.Accounting/RulePriority
+        value: 100
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      # "Einbehaltene KESt" + "Zinsen HABEN/SOLL" cover the bank's periodic
+      # interest-settlement bookings (credit interest, withheld capital-gains
+      # tax, overdraft interest) — receiptless like the fees themselves.
+      # "[Kk]ostenbeitrag" catches "Kostenbeitrag Digital Banking" AND the
+      # embedded-lowercase "Buchungskostenbeitrag"; "Bereitstellung …karte" is
+      # the card provisioning fee ("Bereitstellung Debitkarte", "Bereitstellung
+      # s Kreditkarte"). NOTE: the pipeline uses the MatchRegEx field-filter
+      # operator, which is CASE-SENSITIVE (unlike Contains/Like) — match tokens
+      # to the bank's exact casing. This is deliberate: the bare "Spesen" token
+      # matches title-case fee bookings ("Spesen Einschreiben") but NOT the
+      # all-caps "SPESEN:" foreign-transaction surcharge appended to every
+      # foreign-currency card purchase ("E-COMM … OPENAI … 840 SPESEN: 2,05"),
+      # so those IT card charges are NOT mis-booked as bank fees. Do not make
+      # this regex case-insensitive (e.g. a global "(?i)") without re-checking
+      # that E-COMM/SPESEN card purchases stay out.
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: Entgelt|Geb(ü|ue)hr|Kontoführung|Buchungspost|Kartengebühr|Servicepauschale|Auslandseinsatzentgelt|Kontopreis|Spesen|[Kk]ostenbeitrag|Bereitstellung.{0,6}(Kredit|Debit)karte|Einbehaltene KESt|Zinsen (HABEN|SOLL)
+      # ANY so bank-fee debits AND Kontoführungs-Gutschriften (credits, e.g.
+      # "Vergütung für Kontoführung") both land under Kosten des Geldverkehrs.
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: ANY
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: BANKFEES
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Bank fee (auto)
+  # --- AB#4539/AB#4583: payroll categorization rules ---
+  # Payroll transactions (net salaries incl. the BMD collective transfers, ÖGK
+  # social insurance incl. the BV fund, Finanzamt wage taxes L/DB/DZ, municipal
+  # tax) are categorized Personnel. Individual payslips are never uploaded
+  # (per-employee personal data; the tax advisor runs payroll and holds the
+  # records). The rules are TERMINAL (RuleTerminalState MATCHED): a matching
+  # transaction is set Matched + Personnel with a "Categorized as payroll
+  # (auto)" comment. Payroll is documented externally (the tax advisor's
+  # payroll records), so the completeness check (AB#4393, isExceptedTransaction)
+  # treats Matched + category + no-document as resolved — payroll transactions
+  # never flag as unassigned, and no per-tenant monthly journal is required
+  # (AB#4583). Historic journals stay linked; they were matched before this.
+  - rtId: aa0000000000000000000501
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - salaries
+      - id: Meshmakers.Accounting/RulePriority
+        value: 110
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      # Word-start match covers Gehalt/Gehälter/Gehaltszahlung and
+      # Lohn/Lohnzahlung/Lohn+Gehalt; Belohnung etc. is not a word start.
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: '\b(Geh(a|ä)lt|Lohn)'
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
+  - rtId: aa0000000000000000000502
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - social insurance (ÖGK)
+      - id: Meshmakers.Accounting/RulePriority
+        value: 111
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: COUNTERPARTNAME
+      # "Österreichische Gesundheitskasse" and abbreviated/ASCII spellings.
+      # The monthly ÖGK debit also collects the BV fund contribution
+      # (Mitarbeitervorsorge), so no separate BV rule is needed.
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: Gesundheitskasse|OEGK|ÖGK
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
+  - rtId: aa0000000000000000000503
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - wage taxes (Finanzamt)
+      - id: Meshmakers.Accounting/RulePriority
+        value: 112
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      # FinanzOnline payment purposes carry the levy codes either with a period
+      # ("L 06/2026 DB 06/2026 DZ 06/2026") or in the compact bank-statement
+      # format "2601+537564L+145749DB+13787DZ..." (amount digits followed by
+      # the levy code, AB#4539). Deliberately does NOT match "U"/"...U" — VAT
+      # payments to the Finanzamt are not payroll.
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: '\b(L|DB|DZ)\s?\d{2}/\d{2,4}|\+\d+(L|DB|DZ)'
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
+  - rtId: aa0000000000000000000504
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - municipal tax
+      - id: Meshmakers.Accounting/RulePriority
+        value: 113
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: Kommunalsteuer|KommSt
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
+  - rtId: aa0000000000000000000505
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: Payroll - collective transfer (BMD)
+      - id: Meshmakers.Accounting/RulePriority
+        value: 114
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      # When payroll is run through BMD (the tax advisor's software), the net
+      # salaries are paid as ONE collective SEPA transfer per run instead of
+      # individual per-employee payments, purpose "DT: <run>M|K BMDLOHN". The
+      # salaries rule's "\b(Gehalt|Lohn)" does not match "…MBMDLOHN" (no word
+      # boundary, upper-case), so this rule assigns Personnel to the BMD
+      # collective transfers (AB#4581).
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: BMDLOHN
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: DEBIT
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: PERSONNEL
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as payroll (auto)
+  # --- AB#4584: VAT (Umsatzsteuer) rule ---
+  # Categorizes VAT payments to the tax office as Umsatzsteuer, kept separate
+  # from Personnel. Priority 115 runs AFTER the payroll rules (110-114), so an
+  # unsplit mixed Finanzamt payment is claimed by the terminal wage-tax rule
+  # first; this rule then only catches what stays open — pure-VAT payments and
+  # the VAT part of a split (label "U MM/YY", AB#4545). MatchValue covers both
+  # the split-part label and the FinanzOnline period format (e.g. "U 06/2026").
+  - rtId: aa0000000000000000000506
+    ckTypeId: Meshmakers.Accounting/CategorizationRule
+    attributes:
+      - id: Meshmakers.Accounting/Name
+        value: VAT (Umsatzsteuer)
+      - id: Meshmakers.Accounting/RulePriority
+        value: 115
+      - id: Meshmakers.Accounting/RuleEnabled
+        value: true
+      - id: Meshmakers.Accounting/RuleMatchField
+        value: PURPOSE
+      - id: Meshmakers.Accounting/RuleMatchValue
+        value: '\bU\s?\d{2}/\d{2,4}'
+      # ANY: VAT is a payment (debit) most months but a refund (credit) in the
+      # Saldo months where the tax office nets a VAT credit against the wage
+      # levies (AB#4576); both belong to Umsatzsteuer.
+      - id: Meshmakers.Accounting/RuleDirectionFilter
+        value: ANY
+      - id: Meshmakers.Accounting/RuleTargetCategoryType
+        value: VAT
+      - id: Meshmakers.Accounting/RuleTerminalState
+        value: MATCHED
+      - id: Meshmakers.Accounting/RuleCommentTemplate
+        value: Categorized as VAT (auto)
