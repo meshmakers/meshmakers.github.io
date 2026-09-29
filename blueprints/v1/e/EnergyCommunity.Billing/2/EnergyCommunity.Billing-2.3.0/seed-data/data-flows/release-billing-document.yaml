@@ -1,0 +1,147 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.1,5.0)
+- Basic.Energy-[1.3,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _calculation/energy-release-billing-document.yaml
+- rtId: 68487d1da77ca34c4ee57b23
+  rtCreationDateTime: 2025-06-10T18:44:45.9230000Z
+  rtChangedDateTime: 2025-08-14T19:27:26.5110000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68487d1da77ca34c4ee57b22
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4554: Uses → EnergyCommunityConfiguration so GetPipelineConfigByWellKnownName@1
+  # can resolve billingReportName / billingReportFilePrefix (config-driven report).
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >
+      triggers:
+        - type: FromHttpRequest@1
+          path: /releaseBillingDocument
+          method: POST
+
+      transformations:
+        # AB#4554: load billing report config (report name + file prefix) config-driven.
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        # getRtEntitybyId to get the billing document and verify its in the staus "DRAFT"
+        - type: GetRtEntitiesById@1
+          description: Get the billing document and filter by status draft
+          targetPath: $.billingDocuments
+          rtIdsPath: $.body.billingDocumentRtIds  # Billing document RT ID from payload
+          ckTypeId: EnergyCommunity/BillingDocument
+          skip: 0
+          take: 1
+          fieldFilters:
+            - attributePath: billingDocumentState
+              operator: Equals
+              comparisonValue: 0
+              # hier weiter ....
+        - type: ForEach@1
+          description: iterate billing documents
+          iterationPath: $.billingDocuments.Items
+          mergePath: $.updates
+          targetPath: $.updates
+          transformations:
+            - type: If@1
+              description: Check if billing document was found and is in status DRAFT
+              operator: Equals
+              path: $.key.Attributes.BillingDocumentState
+              value: 0
+              valueType: Integer
+              transformations:
+                # When we didn't find a billing document we return (IfNode?)
+                - type: MakeHttpRequest@1
+                  description: Call the reporting API to generate and store the Billing Document
+                  targetPath: $.reportDetails
+                  method: POST
+                  urlPath: $.full.body.reportUrlTemplate # https://localhost:5007/{tenantId}/v1/reports/generateAndStoreWithRelatedEntity?reportUri={reportUri}&fileSystemFolderUri={fileSystemFolderUri}&reportFileNamePrefix={reportFileNamePrefix}&billingDocumentRtId={billingDocumentRtId}&relatedEntityId=EnergyCommunity/BillingDocument@{relatedEntityId}
+                  pathParameters:
+                    # AB#4554: report name + prefix resolve config-driven from
+                    # EnergyCommunityConfiguration (loaded into $.full.config above).
+                    - name: reportUri
+                      valuePath: $.full.config.billingReportName
+                    - name: fileSystemFolderUri
+                      value: /
+                    - name: reportFileNamePrefix
+                      valuePath: $.full.config.billingReportFilePrefix
+                    - name: billingDocumentRtId
+                      valuePath: $.key.RtId  # Billing document RT ID from payload
+                    - name: relatedEntityId
+                      valuePath: $.key.RtId  # Billing document RT ID from payload
+                  headerParameters:
+                    - name: Accept
+                      value: "application/json"
+                    - name: User-Agent
+                      value: "OctoMesh-Pipeline/1.0"
+                - type: CreateUpdateInfo@1
+                  targetPath: $.updates._items
+                  targetValueKind: Array
+                  updateKind: UPDATE
+                  ckTypeId: EnergyCommunity/BillingDocument
+                  rtIdPath: $.key.RtId
+                  attributeUpdates:
+                    - attributeName: BillingDocumentState
+                      attributeValueType: Enum
+                      value: 1
+        - type: Flatten@1
+          path: $.updates[*]._items[*]
+          targetPath: $._result._items
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Project@1
+          fields:
+            - path: "$.path"
+            - path: "$.method"
+            - path: "$.body"
+            - path: "$.billingDocuments"
+            - path: "$.updates"
+        - type: ApplyChanges@2
+          entityUpdatesPath: $._result._items  # Path to the array of update info objects
+        # when the http call does not succeed the next nodes are not executed. so we can be sure, we get a path to the report.
+        # we have to get the report file information
+        # we create a association between the billing document and the report file
+        # we create a update item that sets the billing document status to "RELEASED"
+        # we apply changes
+  - id: System.Communication/StatusMessage-1
+- rtId: 68487d1da77ca34c4ee57b22
+  rtCreationDateTime: 2025-06-10T18:44:45.7520000Z
+  rtChangedDateTime: 2025-07-06T18:49:10.0070000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-release-billing-document
+  - id: System/Description-1
+    value: Releases one billing document by creating a PDF document and set the corresponding state.
