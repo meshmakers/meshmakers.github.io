@@ -1,0 +1,154 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.1,5.0)
+- Basic.Energy-[1.3,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# Generic ad-hoc member messaging (AB#4292): sends a notification template to an
+# explicit list of recipients.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Ad-hoc member messaging (AB#4292) ───────────────────────────────────
+# Generic send pipeline: sends a notification template to an explicit list of
+# recipient email addresses. The frontend (energy-community app) resolves the
+# audience (manual addresses / a single customer / all active members) and posts
+# { notificationTemplateRtWellKnownName, toAddresses[] } to /sendMessage.
+- rtId: ec000000000000000000d001
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-send-message
+  - id: System/Description-1
+    value: Sends a notification template to an explicit list of recipient email addresses (ad-hoc member messaging).
+- rtId: ec000000000000000000d002
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec000000000000000000d001
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4554: Uses → EnergyCommunityConfiguration so the BCC address resolves
+  # config-driven (notificationEmailContact) via GetPipelineConfigByWellKnownName@1.
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromHttpRequest@1
+          path: /sendMessage
+          method: POST
+      transformations:
+        # AB#4554: load config so the BCC address resolves config-driven.
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        # AB#2569: the community bank details are read from the runtime entity, not from
+        # $.config above. GetPipelineConfigByWellKnownName@1 hands the pipeline a DTO the
+        # communication controller serialises through the CK model compiled into its own
+        # binary, so an attribute added to the tenant model is silently dropped until the
+        # service itself ships that CK version. Verified against a tenant with System.Communication
+        # 3.31.0 imported: the typed config had no BankAccount* keys at all, while this lookup
+        # returned both with their values.
+        - type: GetRtEntitiesByType@1
+          description: read the community configuration as a runtime entity
+          ckTypeId: System.Communication/EnergyCommunityConfiguration
+          targetPath: $.communityConfig
+          take: 1
+        - type: GetNotificationTemplate@1
+          notificationTemplateNamePath: $.body.notificationTemplateRtWellKnownName
+          targetPath: $.emailBody
+          subjectTargetPath: $.emailSubject
+          # AB#2570: the editor lets an author declare PLAIN or HTML, and until this path
+          # existed that choice reached nobody - every body was run through Markdig.
+          renderingTypeTargetPath: $.emailRenderingType
+        - type: ForEach@1
+          description: iterate recipient addresses and send emails sequentially
+          iterationPath: $.body.toAddresses
+          mergePath: $.results
+          targetPath: $.results
+          maxDegreeOfParallelism: 1
+          transformations:
+            # AB#2569: resolve the recipient address to a customer, so the customer.* placeholders
+            # mean the same thing here as in the billing dispatch. Without this a bulk mail would
+            # render "Liebe / lieber ," - the token would be removed rather than filled.
+            # An address matching no customer yields no items, and the resolver below then has no
+            # customer source at all: it refuses the send rather than blanking the tokens. That is
+            # deliberate - a manually typed address is the one case where nothing else would notice.
+            - type: GetRtEntitiesByType@1
+              description: find the customer behind this recipient address
+              ckTypeId: EnergyCommunity/Customer
+              targetPath: $.customer
+              take: 1
+              fieldFilters:
+                - attributePath: Contact.Email
+                  operator: Equals
+                  comparisonValuePath: $.key
+            # AB#2569: one resolver for every send path. Replaced two PlaceholderReplace@1 rule
+            # blocks generated per pipeline plus hand-written converter nodes - a fourth send path
+            # meant a fourth copy, and a token wired here but not there produced different mail
+            # from one template. A token whose source this path does not supply fails the node
+            # rather than rendering blank. ForEach@1 leaves ContinueOnError unset here, so the first
+            # refusal aborts the whole batch - the loud end of the choice, on purpose.
+            #
+            # What aborting does NOT do is undo the recipients already served. A refusal the template
+            # causes trips on the first iteration and nothing goes out, but one a single recipient
+            # causes - a typed address matching no customer - trips mid-run, and everybody ahead of it
+            # already has their mail. The response carries the failure, not the count, so re-running
+            # the same batch mails those recipients twice. Fix the offending recipient and send the
+            # remainder, rather than repeating the batch.
+            - type: ResolveNotificationPlaceholders@1
+              subjectPath: $.full.emailSubject
+              subjectTargetPath: $.renderedSubject
+              bodyPath: $.full.emailBody
+              bodyTargetPath: $.renderedBody
+              communityConfigPath: $.full.communityConfig.Items[0]
+              renderingTypePath: $.full.emailRenderingType
+              customerPath: $.customer.Items[0]
+              # Must equal the contentId on the SendEMail@2 attachment below. They are two halves of
+              # one reference and nothing checks them: rename one and the body keeps an <img> pointing
+              # at a cid nobody attached, which the node cannot report because it only strips a
+              # reference whose own attachment went missing.
+              logoContentId: community-footer
+            - type: SendEMail@2
+              # AB#4554: literal-only serverConfiguration → tenant-neutral name.
+              serverConfiguration: billing-smtp
+              subjectPath: $.renderedSubject
+              path: $.renderedBody
+              bodyFormatPath: $.full.emailRenderingType
+              toPath: $.key
+              # BCC resolves config-driven from notificationEmailContact.
+              bccPath: $.full.config.notificationEmailContact
+              attachments:
+                # AB#2570: the community's footer image, addressable as cid:community-footer.
+                # Optional - a community without one still gets its message.
+                - binaryIdPath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.BinaryId
+                  fileNamePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.Filename
+                  contentTypePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.ContentType
+                  fileName: footer.png
+                  contentType: image/png
+                  contentId: community-footer
+                  optional: true
+  - id: System.Communication/StatusMessage-1
