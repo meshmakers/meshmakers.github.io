@@ -1,0 +1,541 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.1,5.0)
+- Basic.Energy-[1.3,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _calculation/energy-create-all-billing-items.yaml
+# EC v2 (ADR 0001 decision 4 / AB#4552): settlement is computed from STREAM DATA.
+# Per metering point the raw energy-measurements archive (ec0000000000000000000a01)
+# is aggregated (SUM + COUNT of amount.value, grouped by dataQuality) over the
+# billing period, scoped to the metering point's EnergyMeasurement anchor rtIds
+# via the persisted GroupingAggregationSdQuery billing-energy-by-quality
+# (ec000000000000000000e001) invoked by GetQueryById@1 with node fieldFilters
+# (rtId IN anchors, window_start/window_end within the document period). The
+# billed quantity sums L1 (1) + L2 (2) only; the per-quality COUNTs populate the
+# LineItem intervalCount snapshot; billedTimeRange = the document period. The
+# removed EnergyQuantity + its AssignedBilling associations are gone. dataQuality
+# comes back as an INTEGER enum key (Unknown 0, L1 1, L2 2, L3 3).
+- rtId: 689e0d78c55441bd624d04cf
+  rtCreationDateTime: 2025-08-14T16:23:20.1660000Z
+  rtChangedDateTime: 2026-07-27T00:00:00.0000000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 689e0d65c55441bd624d04ce
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4633: GetPipelineConfigByWellKnownName@1 builds the GlobalConfiguration
+  # from the pipeline's Uses associations — without this the settlement fails
+  # (HTTP 500, "'EnergyCommunityConfiguration' not found in GlobalConfiguration")
+  # on a fresh tenant. Target = the Base-seeded EnergyCommunityConfiguration.
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@1
+          path: /createAllBillingItemsForPeriod
+          method: POST
+      transformations:
+        # Load pricing/tax configuration
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.taxRate
+          valuePath: $.config.taxRate
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.farmerTaxRate
+          valuePath: $.config.farmerTaxRate
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.consumerPrice
+          valuePath: $.config.consumerPrice
+          valueType: Double
+        - type: SetPrimitiveValue@1
+          targetPath: $.Configuration.producerPrice
+          valuePath: $.config.producerPrice
+          valueType: Double
+        - type: Project@1
+          fields:
+            - path: $.config
+
+        # Draft billing documents in the period with grossTotal still 0.
+        # Values: [0]=doc rtId, [1]=doc ckTypeId, [2]=customer rtId,
+        #         [3]=customer taxId, [4]=state, [5]=from, [6]=to, [7]=taxProcedure
+        - type: GetQueryById@1
+          description: get customer/billingdocuments in range
+          queryRtId: "683177dcb90d979b8ae558a1"
+          targetPath: $.documents
+          fieldFilters:
+            - attributePath: billingDocumentState
+              operator: Equals
+              comparisonValue: 0
+            - attributePath: timeRange.from
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.from
+            - attributePath: timeRange.to
+              operator: Equals
+              comparisonValuePath: $.body.timeRange.to
+            - attributePath: grossTotal
+              operator: Equals
+              comparisonValue: 0.0
+
+        # Metering points of those customers (Basic.Energy/MeteringPoint; the row
+        # carries the concrete Consumer/Producer subtype via $.RtId / $.CkTypeId).
+        # Values: [0]=meteringPointNumber, [1]=customer rtId
+        - type: GetQueryById@1
+          description: get metering points
+          queryRtId: "693996d37a64d9a8f73b3832"
+          targetPath: $.meteringPoints
+          fieldFilters:
+            - attributePath: parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->rtId
+              operator: In
+              comparisonValuePath: $.documents.Rows[*].Values[2]
+
+        # EnergyMeasurement anchors of those metering points (one per OBIS code).
+        # anchors[*] = { OriginRtId: <metering point rtId>, Items: [ anchor... ] }
+        - type: GetAssociationTargets@1
+          description: get measurement anchors per metering point
+          associationRoleId: System/ParentChild
+          graphDirection: Inbound
+          originCkTypeId: Basic.Energy/MeteringPoint
+          targetCkTypeId: Basic.Energy/EnergyMeasurement
+          originRtIdPath: $.meteringPoints.Rows[*].RtId
+          targetPath: $.anchors
+
+        - type: Join@1
+          description: attach the anchor group to each metering point
+          path: $.meteringPoints.Rows[*]
+          keyPath: $.RtId
+          joinPath: $.anchors[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.anchorGroup
+
+        - type: Join@1
+          description: attach the metering points to their billing document (by customer)
+          path: $.documents.Rows[*]
+          keyPath: $.Values[2]
+          joinPath: $.meteringPoints.Rows[*]
+          joinKeyPath: $.Values[1]
+          itemPath: $.meteringPoints
+
+        - type: Project@1
+          fields:
+            - path: $.meteringPoints
+            - path: $.anchors
+            - path: $.path
+            - path: $.method
+            - path: $.body
+
+        # process data
+        - type: ForEach@1
+          description: iterate billing documents
+          maxDegreeOfParallelism: 1
+          iterationPath: $.documents.Rows
+          mergePath: $._updateItems
+          targetPath: $._updateItems
+          transformations:
+            - type: ForEach@1
+              description: iterate metering points of the document
+              maxDegreeOfParallelism: 1
+              iterationPath: $.key.meteringPoints
+              mergePath: $.updates
+              targetPath: $.updates
+              transformations:
+                # Stream-data settlement for this metering point over the document
+                # period, scoped to its anchor rtIds. Rows: one per (dataQuality,
+                # amount.unit); Values [0]=dataQuality(int) [1]=unit(int)
+                # [2]=SUM(amount.value) [3]=COUNT(amount.value).
+                - type: GetQueryById@1
+                  description: stream-data settlement (sum + count per quality)
+                  queryRtId: "ec000000000000000000e001"
+                  targetPath: $.key.sd
+                  fieldFilters:
+                    - attributePath: rtId
+                      operator: In
+                      comparisonValuePath: $.key.anchorGroup[0].Items[*].RtId
+                    - attributePath: window_start
+                      operator: GreaterEqualThan
+                      comparisonValuePath: $.full.full.body.timeRange.from
+                    - attributePath: window_end
+                      operator: LessEqualThan
+                      comparisonValuePath: $.full.full.body.timeRange.to
+
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.sum
+                  value: 0
+                  valueType: Double
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntTotal
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntL1
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntL2
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntL3
+                  value: 0
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key.data.cntUnknown
+                  value: 0
+                  valueType: Int
+
+                - type: If@1
+                  description: settlement rows present for this metering point (count > 0)
+                  path: $.key.sd.Rows[0].Values[3]
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    # billed quantity = SUM(amount.value) over L1 (1) + L2 (2)
+                    - type: SumAggregation@1
+                      description: sum L1/L2 quantity
+                      targetPath: $.key.data.sum
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 1
+                          aggregationPath: $.Values[2]
+                          value: 1
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 2
+                          aggregationPath: $.Values[2]
+                          value: 1
+                    # per-quality interval counts (COUNT is Values[3])
+                    - type: SumAggregation@1
+                      description: interval count total
+                      targetPath: $.key.data.cntTotal
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count L1
+                      targetPath: $.key.data.cntL1
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 1
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count L2
+                      targetPath: $.key.data.cntL2
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 2
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count L3
+                      targetPath: $.key.data.cntL3
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 3
+                          aggregationPath: $.Values[3]
+                          value: 1
+                    - type: SumAggregation@1
+                      description: interval count Unknown
+                      targetPath: $.key.data.cntUnknown
+                      aggregations:
+                        - path: $.key.sd.Rows[*]
+                          filterPath: $.Values[0]
+                          comparisonValue: 0
+                          aggregationPath: $.Values[3]
+                          value: 1
+
+                    # tax rate by metering point type (Producer feed-in is tax-free)
+                    - type: Switch@1
+                      description: Define tax rate
+                      path: $.key.CkTypeId
+                      valueType: String
+                      cases:
+                        - value: "EnergyCommunity/Consumer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.taxRate
+                              valuePath: $.full.full.Configuration.taxRate
+                              valueType: Double
+                        - value: "EnergyCommunity/Producer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.taxRate
+                              value: 0
+                              valueType: Double
+                    - type: If@1
+                      description: Reduce tax rate for farmers (FarmerTaxProcedure)
+                      path: $.full.key.Values[7]
+                      operator: Equals
+                      value: 3
+                      valueType: Enum
+                      transformations:
+                        - type: If@1
+                          description: Ensure producer
+                          path: $.key.CkTypeId
+                          operator: Equals
+                          value: EnergyCommunity/Producer
+                          valueType: String
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              valuePath: $.full.full.Configuration.farmerTaxRate
+                              valueType: Int
+                              targetPath: $.key.data.taxRate
+
+                    # unit price by metering point type
+                    - type: Switch@1
+                      description: Define unit price
+                      path: $.key.CkTypeId
+                      valueType: String
+                      cases:
+                        - value: "EnergyCommunity/Consumer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.unitPrice
+                              valuePath: $.full.full.Configuration.consumerPrice
+                              valueType: Double
+                        - value: "EnergyCommunity/Producer"
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.key.data.unitPrice
+                              valuePath: $.full.full.Configuration.producerPrice
+                              valueType: Double
+                    - type: DataMapping@1
+                      description: Define billingType
+                      path: $.key.CkTypeId
+                      targetPath: $.key.data.billingType
+                      sourceValueType: String
+                      targetValueType: String
+                      mappings:
+                        - sourceValue: EnergyCommunity/Consumer
+                          targetValue: "Debit"
+                          description: "consumer"
+                        - sourceValue: EnergyCommunity/Producer
+                          targetValue: "Credit"
+                          description: "producer"
+
+                    # calculations
+                    - type: Math@1
+                      description: calc net amount (unit price * quantity)
+                      path: $.key.data
+                      itemPath: $.sum
+                      operation: Multiply
+                      valuePath: $.key.data.unitPrice
+                      itemTargetPath: $.netAmount
+                    - type: Math@1
+                      description: calc tax factor (tax rate / 100)
+                      path: $.key.data
+                      itemPath: $.taxRate
+                      operation: Divide
+                      value: 100
+                      itemTargetPath: $.taxFactor
+                    - type: Math@1
+                      description: calc tax amount (tax factor * netAmount)
+                      path: $.key.data
+                      itemPath: $.netAmount
+                      operation: Multiply
+                      valuePath: $.key.data.taxFactor
+                      itemTargetPath: $.taxAmount
+                    - type: Math@1
+                      description: calc gross amount (netAmount + taxAmount)
+                      path: $.key.data
+                      itemPath: $.netAmount
+                      operation: Add
+                      valuePath: $.key.data.taxAmount
+                      itemTargetPath: $.grossAmount
+
+                    - type: CreateUpdateInfo@1
+                      description: create billing document line item
+                      targetPath: $.updates._items
+                      updateKind: INSERT
+                      ckTypeId: EnergyCommunity/BillingDocumentLineItem
+                      rtIdPath: $.rtId
+                      generateRtId: true
+                      attributeUpdates:
+                        - attributeName: GrossAmount
+                          attributeValueType: Double
+                          valuePath: $.key.data.grossAmount
+                        - attributeName: UnitPrice
+                          attributeValueType: Double
+                          valuePath: $.key.data.unitPrice
+                        - attributeName: BillingType
+                          attributeValueType: Enum
+                          valuePath: $.key.data.billingType
+                        - attributeName: TaxRate
+                          attributeValueType: Double
+                          valuePath: $.key.data.taxRate
+                        - attributeName: TaxAmount
+                          attributeValueType: Double
+                          valuePath: $.key.data.taxAmount
+                        - attributeName: NetAmount
+                          attributeValueType: Double
+                          valuePath: $.key.data.netAmount
+                        - attributeName: Quantity
+                          attributeValueType: Double
+                          valuePath: $.key.data.sum
+                        - attributeName: BilledTimeRange.From
+                          attributeValueType: DateTime
+                          valuePath: $.full.key.Values[5]
+                        - attributeName: BilledTimeRange.To
+                          attributeValueType: DateTime
+                          valuePath: $.full.key.Values[6]
+                        - attributeName: IntervalCount
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntTotal
+                        - attributeName: IntervalCountL1
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntL1
+                        - attributeName: IntervalCountL2
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntL2
+                        - attributeName: IntervalCountL3
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntL3
+                        - attributeName: IntervalCountUnknown
+                          attributeValueType: Integer
+                          valuePath: $.key.data.cntUnknown
+                    - type: CreateAssociationUpdate@1
+                      description: Assign line item to its billing document (parent)
+                      targetPath: $.updates._assocUpdateItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: CREATE
+                      originRtIdPath: $.updates._items.RtId
+                      originCkTypeIdPath: $.updates._items.CkTypeId
+                      targetRtIdPath: $.full.key.Values[0]
+                      targetCkTypeIdPath: $.full.key.CkTypeId
+                      associationRoleId: System/ParentChild
+                    - type: CreateAssociationUpdate@1
+                      description: Assign the billed metering point
+                      targetPath: $.updates._assocUpdateItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: CREATE
+                      originRtIdPath: $.updates._items.RtId
+                      originCkTypeIdPath: $.updates._items.CkTypeId
+                      targetRtIdPath: $.key.RtId
+                      targetCkTypeIdPath: $.key.CkTypeId
+                      associationRoleId: EnergyCommunity/BilledMeteringPoint
+
+            - type: Flatten@1
+              path: $.updates[*]._items
+              targetPath: $._updateItems._items
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Flatten@1
+              path: $.updates[*]._assocUpdateItems[*]
+              targetPath: $._updateItems._assocUpdateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Project@1
+              fields:
+                - path: $.updates
+
+            - type: SumAggregation@1
+              description: billing sum (debit positive, credit negative)
+              targetPath: $.key._billing.sum
+              aggregations:
+                - path: $._updateItems._items[*]
+                  filterPath: $.RtEntity.Attributes.BillingType
+                  comparisonValue: 0
+                  aggregationPath: $.RtEntity.Attributes.GrossAmount
+                  value: 1
+                - path: $._updateItems._items[*]
+                  filterPath: $.RtEntity.Attributes.BillingType
+                  comparisonValue: 1
+                  aggregationPath: $.RtEntity.Attributes.GrossAmount
+                  value: -1
+
+            - type: SetPrimitiveValue@1
+              value: "Debit"
+              targetPath: $.key._billing.billingType
+            - type: If@1
+              description: credit
+              path: $.key._billing.sum
+              operator: LessEqualsThan
+              value: 0
+              valueType: Double
+              transformations:
+                - type: SetPrimitiveValue@1
+                  value: "Credit"
+                  targetPath: $.key._billing.billingType
+            - type: CreateUpdateInfo@1
+              description: update billing document
+              targetPath: $._updateItems._items
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: UPDATE
+              ckTypeId: EnergyCommunity/BillingDocument
+              rtIdPath: $.key.Values[0]
+              attributeUpdates:
+                - attributeName: GrossTotal
+                  attributeValueType: Double
+                  valuePath: $.key._billing.sum
+                - attributeName: BillingType
+                  attributeValueType: Enum
+                  valuePath: $.key._billing.billingType
+
+        - type: Flatten@1
+          path: $._updateItems[*]._items[*]
+          targetPath: $._result.billingItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Flatten@1
+          path: $._updateItems[*]._assocUpdateItems[*]
+          targetPath: $._result.assocUpdateItems
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+        - type: Project@1
+          fields:
+            - path: "$.documents"
+            - path: "$._updateItems"
+
+        - type: ApplyChanges@2
+          entityUpdatesPath: $._result.billingItems
+          associationUpdatesPath: $._result.assocUpdateItems
+- rtId: 689e0d65c55441bd624d04ce
+  rtCreationDateTime: 2025-08-14T16:23:01.3630000Z
+  rtChangedDateTime: 2026-02-10T14:38:56.0330000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-create-all-billing-items
+  - id: System/Description-1
