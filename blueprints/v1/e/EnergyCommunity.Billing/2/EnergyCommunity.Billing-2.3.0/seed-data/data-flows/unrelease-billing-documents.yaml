@@ -1,0 +1,204 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.1,5.0)
+- Basic.Energy-[1.3,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _calculation/energy-unrelease-billing-document.yaml
+- rtId: 686e4d8a196fcd3c42ed8c7b
+  rtCreationDateTime: 2025-07-09T11:07:54.1760000Z
+  rtChangedDateTime: 2025-07-16T16:31:52.4680000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 686e4d6c196fcd3c42ed8c7a
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >+
+      triggers:
+        - type: FromHttpRequest@1
+          description: Trigger pipeline to unrelease billing documents
+          path: /unreleaseBillingDocument
+          method: POST
+
+      transformations:
+        # Get billing documents to undo
+        - type: GetRtEntitiesById@1
+          description: Get billing documents to undo by their RtIds
+          rtIdsPath: $.body.documentRtIds
+          ckTypeId: EnergyCommunity/BillingDocument
+          targetPath: $.billingDocuments
+
+        # Process each billing document
+        - type: ForEach@1
+          description: Process each billing document individually
+          iterationPath: $.billingDocuments.Items
+          targetPath: $.processedDocuments
+          transformations:
+            # Get FileSystemItem
+            - type: GetAssociationTargets@1
+              description: Get FileSystemItem for this billing document
+              associationRoleId: System/Related
+              graphDirection: Inbound
+              originCkTypeId: EnergyCommunity/BillingDocument
+              targetCkTypeId: System.Reporting/FileSystemItem
+              originRtIdPath: $.key.RtId
+              targetPath: $.key.fileSystemItems
+
+            # DELETE FileSystemItem association (immediate)
+            - type: CreateAssociationUpdate@1
+              description: Delete BillingDocument <-> FileSystemItem association
+              targetPath: $.key._assocUpdates
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: Delete
+              targetRtIdPath: $.key.RtId
+              targetCkTypeId: EnergyCommunity/BillingDocument
+              originRtIdPath: $.key.fileSystemItems[0].Items[0].RtId
+              originCkTypeId: System.Reporting/FileSystemItem
+              associationRoleId: System/Related
+
+            # DELETE FileSystemItem entity (immediate)
+            - type: CreateUpdateInfo@1
+              description: Delete FileSystemItem entity
+              targetPath: $.key._entityUpdates
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: Delete
+              ckTypeId: System.Reporting/FileSystemItem
+              rtIdPath: $.key.fileSystemItems[0].Items[0].RtId
+
+            # Get LineItems
+            - type: GetAssociationTargets@1
+              description: Get LineItems for this billing document
+              associationRoleId: System/ParentChild
+              graphDirection: Inbound
+              originCkTypeId: EnergyCommunity/BillingDocument
+              targetCkTypeId: EnergyCommunity/BillingDocumentLineItem
+              originRtIdPath: $.key.RtId
+              targetPath: $.key.lineItems
+
+            # Process each LineItem
+            - type: ForEach@1
+              description: Process each LineItem - ALL operations in one loop
+              iterationPath: $.key.lineItems[0].Items
+              targetPath: $.key.processedLineItems
+              transformations:
+                # EC v2 (ADR 0001 / AB#4552): there is no LineItem -> EnergyQuantity
+                # (AssignedBilling) association any more — the settlement is a
+                # reproducible stream-data query over the line item's stored
+                # billedTimeRange, so unrelease just deletes the line items and
+                # their ParentChild link to the document. The BilledMeteringPoint
+                # association is removed together with the line item entity.
+
+                # DELETE BillingDocument <-> LineItem association (immediate)
+                - type: CreateAssociationUpdate@1
+                  description: Delete BillingDocument <-> LineItem association
+                  targetPath: $.key._assocUpdates
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Delete
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: EnergyCommunity/BillingDocumentLineItem
+                  targetRtIdPath: $.full.key.RtId
+                  targetCkTypeId: EnergyCommunity/BillingDocument
+                  associationRoleId: System/ParentChild
+
+                # DELETE LineItem entity (immediate)
+                - type: CreateUpdateInfo@1
+                  description: Delete LineItem entity
+                  targetPath: $.key._entityUpdates
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Delete
+                  ckTypeId: EnergyCommunity/BillingDocumentLineItem
+                  rtIdPath: $.key.RtId
+
+            # UPDATE BillingDocument to Draft state
+            - type: CreateUpdateInfo@1
+              description: Reset BillingDocument to Draft state
+              targetPath: $.key._entityUpdates
+              targetValueKind: Array
+              targetValueWriteMode: Append
+              updateKind: Update
+              ckTypeId: EnergyCommunity/BillingDocument
+              rtIdPath: $.key.RtId
+              attributeUpdates:
+                - attributeName: BillingDocumentState
+                  attributeValueType: Enum
+                  value: 0
+                - attributeName: GrossTotal
+                  attributeValueType: Double
+                  value: 0.0
+                - attributeName: BillingType
+                  attributeValueType: Enum
+                  value: 'Debit'
+
+        # Flatten all updates from all billing documents AND line items
+        - type: Flatten@1
+          description: Flatten entity updates from billing document level
+          path: $.processedDocuments[*]._entityUpdates[*]
+          targetPath: $._entityUpdates
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+
+        - type: Flatten@1
+          description: Flatten entity updates from line item level
+          path: $.processedDocuments[*].processedLineItems[*]._entityUpdates[*]
+          targetPath: $._entityUpdates
+          targetValueKind: Simple
+          targetValueWriteMode: Append
+
+        - type: Flatten@1
+          description: Flatten association updates from billing document level
+          path: $.processedDocuments[*]._assocUpdates[*]
+          targetPath: $._assocUpdates
+          targetValueKind: Simple
+          targetValueWriteMode: Overwrite
+
+        - type: Flatten@1
+          description: Flatten association updates from line item level
+          path: $.processedDocuments[*].processedLineItems[*]._assocUpdates[*]
+          targetPath: $._assocUpdates
+          targetValueKind: Simple
+          targetValueWriteMode: Append
+
+        # Apply all changes
+        - type: ApplyChanges@2
+          description: Apply all deletion and update operations
+          entityUpdatesPath: $._entityUpdates
+          associationUpdatesPath: $._assocUpdates
+  - id: System.Communication/StatusMessage-1
+- rtId: 686e4d6c196fcd3c42ed8c7a
+  rtCreationDateTime: 2025-07-09T11:07:24.3390000Z
+  rtChangedDateTime: 2025-07-09T11:07:54.0370000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-unrelease-billing-documents
+  - id: System/Description-1
