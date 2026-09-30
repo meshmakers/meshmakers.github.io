@@ -1,14 +1,14 @@
 {
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [
-    "Basic-2.0.3",
-    "System-2.2.2"
+    "Basic-2.1.0",
+    "System-2.3.0"
   ],
   "types": [
     {
       "isCollectionRoot": false,
       "typeId": "BankAccount-1",
-      "derivedFromCkTypeId": "Basic-2.0.3/NamedEntity-1",
+      "derivedFromCkTypeId": "Basic-2.1.0/NamedEntity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -37,17 +37,17 @@
       "description": "A bank account with balance and account details",
       "attributes": [
         {
-          "id": "Basic-2.0.3/Iban-1",
+          "id": "Basic-2.1.0/Iban-1",
           "name": "Iban",
           "isOptional": true
         },
         {
-          "id": "Basic-2.0.3/BankName-1",
+          "id": "Basic-2.1.0/BankName-1",
           "name": "BankName",
           "isOptional": true
         },
         {
-          "id": "Basic-2.0.3/AccountHolder-1",
+          "id": "Basic-2.1.0/AccountHolder-1",
           "name": "AccountHolder",
           "isOptional": true
         },
@@ -96,7 +96,7 @@
     {
       "isCollectionRoot": false,
       "typeId": "BankConnection-1",
-      "derivedFromCkTypeId": "Basic-2.0.3/NamedEntity-1",
+      "derivedFromCkTypeId": "Basic-2.1.0/NamedEntity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
@@ -109,7 +109,7 @@
       "description": "A connection to a bank institution used for synchronizing accounts and transactions",
       "attributes": [
         {
-          "id": "Basic-2.0.3/BankName-1",
+          "id": "Basic-2.1.0/BankName-1",
           "name": "BankName",
           "isOptional": true
         },
@@ -153,7 +153,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "BankTransaction-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -230,7 +230,7 @@
       ],
       "associations": [
         {
-          "id": "System-2.2.2/ParentChild-1",
+          "id": "System-2.3.0/ParentChild-1",
           "targetCkTypeId": "Basic.Accounting-1.7.0/BankAccount-1"
         }
       ],
@@ -367,7 +367,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "PaymentOrder-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -384,7 +384,7 @@
       ],
       "associations": [
         {
-          "id": "System-2.2.2/ParentChild-1",
+          "id": "System-2.3.0/ParentChild-1",
           "targetCkTypeId": "Basic.Accounting-1.7.0/BankAccount-1"
         }
       ],
