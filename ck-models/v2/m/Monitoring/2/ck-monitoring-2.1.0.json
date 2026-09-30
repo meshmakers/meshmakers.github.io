@@ -1,0 +1,269 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.2.2"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "BlueprintHealthMonitorConfig-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Configuration for the blueprint installation health pipeline. Keep exactly one entity per tenant that is monitored - unlike the CK health monitor, this one runs INSIDE the tenant it watches, because System/BlueprintInstallation entities live in the tenant\u0027s own runtime repository and a client-credentials token cannot cross a tenant boundary (AB#5032/AB#5077). AssetServicesBaseUrl/TokenUrl/ClientId/ClientSecret/Scope are used only for the catalog drift check, which calls {base}/{tenantId}/v1/blueprints/updates for THIS tenant - no client mirroring and no acr_values tenant selection are involved.",
+      "displayNameRule": "${Name}",
+      "attributes": [
+        {
+          "id": "System-2.2.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "Monitoring-2.1.0/TenantId-1",
+          "name": "TenantId",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/TokenUrl-1",
+          "name": "TokenUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/AssetServicesBaseUrl-1",
+          "name": "AssetServicesBaseUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/Scope-1",
+          "name": "Scope",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/Dash0IngressUrl-1",
+          "name": "Dash0IngressUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/Dash0AuthToken-1",
+          "name": "Dash0AuthToken",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/Dash0Dataset-1",
+          "name": "Dash0Dataset",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "CkHealthMonitorConfig-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Configuration for the CK health monitoring pipeline (endpoints, credentials, Dash0 ingress). Keep exactly one entity per monitoring tenant.",
+      "displayNameRule": "${Name}",
+      "attributes": [
+        {
+          "id": "System-2.2.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "Monitoring-2.1.0/TokenUrl-1",
+          "name": "TokenUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/AssetServicesBaseUrl-1",
+          "name": "AssetServicesBaseUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/ClientId-1",
+          "name": "ClientId",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/ClientSecret-1",
+          "name": "ClientSecret",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/Scope-1",
+          "name": "Scope",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/Dash0IngressUrl-1",
+          "name": "Dash0IngressUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/Dash0AuthToken-1",
+          "name": "Dash0AuthToken",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/Dash0Dataset-1",
+          "name": "Dash0Dataset",
+          "isOptional": false
+        },
+        {
+          "id": "Monitoring-2.1.0/TeamsWebhookUrl-1",
+          "name": "TeamsWebhookUrl",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ExpectedBlueprint-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A blueprint this tenant is meant to be running. One entity per blueprint. The list is the ONLY way a failed installation becomes observable: a failed apply writes no installation row, no history entry and no error entity anywhere in the tenant, so \u0022should be here and is not\u0022 is the only detectable shadow it casts. An empty list is valid and simply disables that check; the catalog drift check needs no entries at all.",
+      "displayNameRule": "${Name}",
+      "attributes": [
+        {
+          "id": "System-2.2.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "Monitoring-2.1.0/BlueprintName-1",
+          "name": "BlueprintName",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "MonitoredTenant-1",
+      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A tenant watched by monitoring pipelines (e.g. the CK health check). Create one entity per tenant to monitor.",
+      "displayNameRule": "${Name}",
+      "attributes": [
+        {
+          "id": "System-2.2.2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System-2.2.2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "Monitoring-2.1.0/TenantId-1",
+          "name": "TenantId",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "AssetServicesBaseUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Base URL of the asset repository services WITHOUT a trailing slash (e.g. https://asset.example.com). The CK health check calls {base}/{tenantId}/v1/Models/LibraryStatus."
+    },
+    {
+      "id": "BlueprintName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of a blueprint WITHOUT the version suffix, as it appears in System/BlueprintInstallation.BlueprintName and in the {tenantId}/v1/blueprints REST routes (e.g. \u0022MeshmakersAccounting\u0022, not \u0022MeshmakersAccounting-1.8.2\u0022)."
+    },
+    {
+      "id": "ClientId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Client id of the service client used to authenticate (client_credentials grant)."
+    },
+    {
+      "id": "ClientSecret-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Client secret of the service client. Stored as a plain attribute - restrict access to the monitoring tenant accordingly."
+    },
+    {
+      "id": "Dash0AuthToken-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Dash0 auth token used as \u0022Authorization: Bearer \u003Ctoken\u003E\u0022. An ingest-only token is enough. Stored as a plain attribute - restrict access to the monitoring tenant accordingly. Note that Dash0 exposes the token\u0027s first characters as a dash0_auth_token label on every ingested series."
+    },
+    {
+      "id": "Dash0Dataset-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Dash0 dataset the measurements are written to, sent as the Dash0-Dataset header (e.g. test-2)."
+    },
+    {
+      "id": "Dash0IngressUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Base URL of the Dash0 OTLP/HTTP ingress WITHOUT a path, e.g. https://ingress.europe-west4.gcp.dash0.com - the monitor appends /v1/metrics itself."
+    },
+    {
+      "id": "Scope-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "OAuth scope requested for the token (typically octo_api)."
+    },
+    {
+      "id": "TeamsWebhookUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "DEPRECATED and unused since Monitoring 2.0.0 - the monitor reports to Dash0 instead, so every alert shares one channel, one history and the resolve-on-fix behaviour of the other check rules. Kept as an optional attribute so an existing configuration entity does not become invalid. Note that classic Teams incoming webhooks (Office 365 connectors) were retired in May 2026 anyway; only a Power Automate workflow URL ever worked here."
+    },
+    {
+      "id": "TenantId-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Id of a tenant that is monitored."
+    },
+    {
+      "id": "TokenUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Absolute URL of the identity service token endpoint (e.g. https://identity.example.com/connect/token)."
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "Monitoring-2.1.0",
+  "description": "Platform monitoring model. Holds configuration entities for operational watchdog pipelines (CK model health and blueprint installation health, both reporting to Dash0; designed to grow with further monitors)."
+}
