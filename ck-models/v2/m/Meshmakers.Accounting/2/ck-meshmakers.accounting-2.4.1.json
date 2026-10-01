@@ -1,15 +1,15 @@
 {
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [
-    "Basic-2.0.3",
+    "Basic-2.1.0",
     "Basic.Accounting-1.7.0",
-    "System-2.2.2"
+    "System-2.3.0"
   ],
   "types": [
     {
       "isCollectionRoot": true,
       "typeId": "AccountingDocument-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -212,7 +212,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "CategorizationRule-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -269,7 +269,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "ChatMessage-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -302,7 +302,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "ChatSession-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -325,7 +325,7 @@
     {
       "isCollectionRoot": false,
       "typeId": "CompanyProfile-1",
-      "derivedFromCkTypeId": "System-2.2.2/Configuration-1",
+      "derivedFromCkTypeId": "System-2.3.0/Configuration-1",
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -387,7 +387,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "Contact-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -492,12 +492,12 @@
     {
       "isCollectionRoot": true,
       "typeId": "CostCategory-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.2.2/ParentChild-1",
+          "id": "System-2.3.0/ParentChild-1",
           "targetCkTypeId": "Meshmakers.Accounting-2.4.1/FiscalYear-1"
         },
         {
@@ -559,7 +559,7 @@
     {
       "isCollectionRoot": false,
       "typeId": "EmailImportSettings-1",
-      "derivedFromCkTypeId": "System-2.2.2/Configuration-1",
+      "derivedFromCkTypeId": "System-2.3.0/Configuration-1",
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -651,7 +651,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "FiscalYear-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
@@ -694,7 +694,7 @@
     {
       "isCollectionRoot": false,
       "typeId": "SignalImportSettings-1",
-      "derivedFromCkTypeId": "System-2.2.2/Configuration-1",
+      "derivedFromCkTypeId": "System-2.3.0/Configuration-1",
       "isFinal": true,
       "isAbstract": false,
       "enableChangeStreamPreAndPostImages": false,
@@ -711,7 +711,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "Todo-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -806,12 +806,12 @@
     {
       "isCollectionRoot": true,
       "typeId": "TodoActivity-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
-          "id": "System-2.2.2/ParentChild-1",
+          "id": "System-2.3.0/ParentChild-1",
           "targetCkTypeId": "Meshmakers.Accounting-2.4.1/Todo-1"
         }
       ],
@@ -854,7 +854,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "UploadedDocument-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -1986,7 +1986,7 @@
   "records": [
     {
       "recordId": "AccountingContact-1",
-      "derivedFromCkRecordId": "Basic-2.0.3/Contact-1",
+      "derivedFromCkRecordId": "Basic-2.1.0/Contact-1",
       "isFinal": false,
       "isAbstract": false,
       "description": "Extended contact for accounting documents, adds IBAN and bank account holder name",
