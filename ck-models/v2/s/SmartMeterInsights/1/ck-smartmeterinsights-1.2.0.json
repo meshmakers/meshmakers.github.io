@@ -1,28 +1,28 @@
 {
   "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
   "dependencies": [
-    "Basic-2.0.3",
-    "Basic.Energy-1.4.0",
-    "System-2.2.2"
+    "Basic-2.1.0",
+    "Basic.Energy-1.6.0",
+    "System-2.3.0"
   ],
   "types": [
     {
       "isCollectionRoot": false,
       "typeId": "Customer-1",
-      "derivedFromCkTypeId": "Basic-2.0.3/NamedEntity-1",
+      "derivedFromCkTypeId": "Basic-2.1.0/NamedEntity-1",
       "isFinal": false,
       "isAbstract": false,
       "associations": [
         {
           "id": "SmartMeterInsights-1.2.0/AssociatedFacilities-1",
-          "targetCkTypeId": "Basic.Energy-1.4.0/OperatingFacility-1"
+          "targetCkTypeId": "Basic.Energy-1.6.0/OperatingFacility-1"
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
       "description": "An end customer of the consulting firm. End customers are runtime entities inside the firm tenant, never tenants (AB#4059).",
       "attributes": [
         {
-          "id": "Basic-2.0.3/Contact-1",
+          "id": "Basic-2.1.0/Contact-1",
           "name": "Contact",
           "isOptional": true
         },
@@ -36,7 +36,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "DetectionResult-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -54,7 +54,7 @@
       "associations": [
         {
           "id": "SmartMeterInsights-1.2.0/DetectedMeteringPoint-1",
-          "targetCkTypeId": "Basic.Energy-1.4.0/MeteringPoint-1"
+          "targetCkTypeId": "Basic.Energy-1.6.0/MeteringPoint-1"
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
@@ -95,7 +95,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "ImportSession-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -124,7 +124,7 @@
       "associations": [
         {
           "id": "SmartMeterInsights-1.2.0/ImportedMeteringPoint-1",
-          "targetCkTypeId": "Basic.Energy-1.4.0/MeteringPoint-1"
+          "targetCkTypeId": "Basic.Energy-1.6.0/MeteringPoint-1"
         }
       ],
       "enableChangeStreamPreAndPostImages": false,
@@ -195,7 +195,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "Recommendation-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
@@ -255,7 +255,7 @@
     {
       "isCollectionRoot": true,
       "typeId": "ShareLink-1",
-      "derivedFromCkTypeId": "System-2.2.2/Entity-1",
+      "derivedFromCkTypeId": "System-2.3.0/Entity-1",
       "isFinal": false,
       "isAbstract": false,
       "indexes": [
