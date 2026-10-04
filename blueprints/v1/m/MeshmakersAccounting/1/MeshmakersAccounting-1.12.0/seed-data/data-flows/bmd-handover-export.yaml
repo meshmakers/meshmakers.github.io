@@ -1,0 +1,1694 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.0.0,4.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipeline: BMD handover export (AB#4392) ---
+  # On-demand outbound export triggered via POST /exportHandover?fiscalYearId&scope
+  # [&from&to for a month/quarter]. Renders a cover sheet per document (parsed data
+  # + tax-advisor note + one row per linked payment), merges it with the original
+  # PDF, and returns a ZIP as a FileSystemItem. Post-install: DeployDataFlow for
+  # this DataFlow. Requires documents assigned to the fiscal year.
+  - rtId: aa0000000000000000000600
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: BMD Handover Export
+      - id: System/Description
+        value: Exports a tax-advisor handover package (cover sheet + merged original + ZIP) per fiscal year, month or quarter
+  - rtId: aa0000000000000000000601
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000600
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: BMD Handover Export Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |
+          # =============================================================================
+          # BMD handover export pipeline (AB#4392) — pipeline DEFINITION only
+          # (triggers + transformations). This is the `PipelineDefinition` body; it is
+          # deployed to the managed Mesh Adapter (670000000000000000000002).
+          #
+          # Trigger:  POST /exportHandover?fiscalYearId=<rtId>&scope=AP|AR|all
+          #   scope AP  = INCOMING documents (supplier invoices, Eingangsrechnungen)
+          #   scope AR  = OUTGOING documents (Ausgangsrechnungen)
+          #   scope all = both
+          # Returns (HTTP JSON body = final data context): { "fileSystemItem": "<rtId>" }
+          #   The frontend resolves the download URL via the existing GetFileSystemItem
+          #   query on that rtId and bearer-fetches the ZIP blob (see inbox-detail.ts).
+          #
+          # New nodes used (octo-mesh-adapter): RenderDataSheetPdf@1, MergePdf@1,
+          #   CreateZipArchive@1.
+          #
+          # ---------------------------------------------------------------------------
+          # LIVE-VALIDATED end-to-end on salzburgdev (2026-07-16): 5 docs linked to
+          # FiscalYear 2026 -> HTTP 200, flat {"fileSystemItem":"<rtId>"}, ZIP with cover
+          # sheet prepended (page counts 1 for no-original / 2..6 for merged), unique
+          # AP/-grouped names, stored FileSystemItem downloadable. Confirmed:
+          #  [1] FiscalYear -> Documents via DocumentToFiscalYear is graphDirection
+          #      Inbound (documents link OUT to the fiscal year). Original PDF
+          #      (System/Related) and transactions (TransactionToDocument) are OUTBOUND.
+          #  [2] DocumentType is the INT enum key (0=INCOMING/AP, 1=OUTGOING/AR) — the
+          #      prefix/scope Ifs compare as Int.
+          #  [4] Documents without a stored original get a cover-sheet-only entry.
+          #  Content length: the ZIP node emits its byte length (contentLengthTargetPath)
+          #      for CreateFileSystemUpdate; empty DocumentNumber falls back to RtId so
+          #      ZIP entry names stay unique.
+          #  [OPT] DONE: optional/nested cover fields (Vendor/Customer, Net/Tax/Rate,
+          #      DueDate, payment proof, TaxAdvisorNote) are populated via SelectByPath@1,
+          #      which skips missing/null/nested-under-null sources (leaving the "" default)
+          #      instead of throwing. Verified live: Brutto + payment proof render, empty
+          #      fields stay blank.
+          #  [3] DONE: values are copied as JSON nodes (not string-interpolated), so they
+          #      are auto-escaped — a note/name with a quote or newline can't break the JSON.
+          #  [DATE] DONE: date/time values are trimmed to yyyy-MM-dd via TransformString.
+          #  [PERIOD] DONE (AB#4535): optional query from/to (ISO) narrow the export to a
+          #      month or quarter — a DocumentDate range gate flips $.key.include back to
+          #      "no" outside [from, to]; omitting the params exports the whole fiscal
+          #      year (bounds default to an all-inclusive range because the params are
+          #      absent then, and a missing path would make FormatString throw — seeded
+          #      via SetPrimitiveValue + SelectByPath, same pattern as the AB#4395
+          #      PeriodBasis read). The frontend Handover page computes from/to from the
+          #      period picker. AB#5263 reversed the earlier "rendering is cheap, skip
+          #      early is not worth it" call: out-of-period and scope-excluded documents
+          #      used to be rendered, file-loaded and merged in full and only dropped
+          #      from the ZIP, so a one-month export cost exactly as much as the whole
+          #      fiscal year. They are now gated out before any of that work.
+          #  [5] DONE: the Zahlungsnachweis section lists ONE row per linked transaction
+          #      (inner ForEach over $.key.txGroups[0].Items -> Flatten -> inject). Verified
+          #      live with a document linked to two transactions.
+          #  [DATA] Assigning documents to a FiscalYear (DocumentToFiscalYear) is a
+          #      precondition; on salzburgdev this was done manually for the test.
+          #  [STRUCT] ZIP layout v2: entries are grouped as
+          #      {fiscal year name}/{month yyyy-MM}/{type} where type is "Verträge" for
+          #      recurring master documents (DocumentState RECURRING=4 - reachable only
+          #      since AB#5282 loaded them by type; they carry no DocumentToFiscalYear) and
+          #      "Eingangsrechnungen"/"Ausgangsrechnungen" by DocumentType otherwise.
+          #      File names are {document date}_{vendor or customer}_{NNN}.pdf — the
+          #      running number and per-segment sanitizing come from CreateZipArchive@1
+          #      (appendSequenceNumber; pathSegments entries). A belege.csv index
+          #      (semicolon CSV, UTF-8 BOM) in the ZIP root lists every document's
+          #      parsed data (Datum/Belegnummer/BelegId/Typ/LieferantKunde/Netto/USt/
+          #      Brutto/Waehrung) plus its final path — usable as a BMD-import starting
+          #      point (no Kontierung/account mapping by design).
+          #  [PAY] zahlungen.csv (AB#5085) is the PAYMENT-side index beside it: one row
+          #      per bank transaction booked in the delivered period — including the ones
+          #      with no document at all, which appear nowhere else in the package. Gated
+          #      on BookingDate while the documents stay gated on DocumentDate, carries
+          #      the transaction comments (MatchComment/ClarificationNote), the linked
+          #      document's TaxAdvisorNote, the cost category (AB#5389: the
+          #      transaction's own, else the linked document's — belege.csv carries no
+          #      category column) and the exclusion reason of an Ignored row
+          #      (AB#5390: Ausschlussgrund, enum name, empty when none), and joins to
+          #      belege.csv on BelegId. Payment
+          #      method is derived from the Purpose text (E-COMM / POS / PAYPAL / …) —
+          #      BankTransaction has no payment-method attribute and finAPI leaves
+          #      bankTransactionCode and transactionText empty.
+          #  [CHK] pruefprotokoll.txt (AB#5088) is the READINESS statement of the package,
+          #      computed BEFORE the ZIP is assembled and always shipped with it (also when
+          #      it finds nothing — an absent protocol could not be told apart from an
+          #      unchecked export). Plain German text for Gerald and the tax advisor, four
+          #      sections with a count and the rows: payments of the period without a
+          #      document, payments whose linked documents cover clearly LESS than the
+          #      payment (1b — section 1 cannot see those, it only looks for a payment with
+          #      no document at all; reported from 15,- uncovered AND more than 2 % of the
+          #      payment, which is 15 payments and 6272,- unbacked on prod-1/meshmakers),
+          #      documents of the period without a stored original (they would go
+          #      out as an empty cover sheet), the cross-period cases in both directions, and
+          #      the documents of the period that were only captured after the period end.
+          #      It reads the data the two CSVs already collected — no extra entity load —
+          #      and excludes the three legitimate outlier shapes, without which the check
+          #      reports hundreds of correct links as findings: receiptless payments
+          #      (category type PERSONNEL/BANKFEES/VAT/TAXES, MatchState Ignored, PayPal
+          #      funding legs), Dauerbelege, and collective documents with 3+ payments.
+          # =============================================================================
+
+          triggers:
+            - type: FromHttpRequest@2
+              path: /exportHandover
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+
+          transformations:
+            # -- 0) Resolve the fiscal-year name (top-level ZIP folder, AB#4392 v2) -----
+            - type: SetPrimitiveValue@1
+              description: Wrap the fiscal-year id into an array for GetRtEntitiesById
+              targetPath: $.fyIds
+              valuePath: $.query.fiscalYearId
+              valueType: String
+              targetValueKind: Array
+            - type: GetRtEntitiesById@1
+              description: Load the fiscal year (folder name)
+              ckTypeId: Meshmakers.Accounting/FiscalYear
+              rtIdsPath: $.fyIds
+              targetPath: $.fy
+            - type: SetPrimitiveValue@1
+              description: Default top-level folder when the fiscal year has no name
+              targetPath: $.fyName
+              value: Geschaeftsjahr
+              valueType: String
+            - type: SelectByPath@1
+              description: Copy the fiscal-year name when present (skips missing/null)
+              selectPath:
+                - path: $.fy.Items[0].Attributes.Name
+                  targetPath: $.fyName
+
+            # -- 1) Load the fiscal year's documents via DocumentToFiscalYear -----------
+            - type: GetAssociationTargets@1
+              description: Documents assigned to the requested fiscal year
+              originRtIdPath: $.query.fiscalYearId
+              originCkTypeId: Meshmakers.Accounting/FiscalYear
+              targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+              associationRoleId: Meshmakers.Accounting/DocumentToFiscalYear
+              graphDirection: Inbound          # [1] validate
+              targetPath: $.docGroups
+
+            # AB#5282: the window a recurring master must fall into to ship with THIS
+            # package - the fiscal year INTERSECTED with the optional from/to, computed
+            # once here rather than per document. Recurring masters bypass
+            # DocumentToFiscalYear (see 1b below), so nothing else keeps them inside the
+            # requested year: with the raw from/to alone, "fiscalYearId=2026&from=2025-01-01"
+            # would pull a 2025 contract into the 2026 package. Intersecting means neither
+            # side can ever widen the other. Absent/unparseable inputs fall back to the open
+            # bound, so a tenant whose fiscal year carries no dates behaves as before.
+            # AdjustToUniversal|AssumeUniversal is mandatory: a plain TryParse turns
+            # "2026-08-01T00:00:00Z" into the HOST's local time, and emitting that without
+            # an offset shifts the window by the adapter's UTC offset - on a CEST host the
+            # August window started at 02:00 and dropped every document dated on the 1st.
+            # Parse to UTC, emit with the Z, and the result is host-independent.
+            - type: ExecuteCSharp@1
+              description: Recurring-document window start (fiscal year intersected with from)
+              code: 'var st = System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal; DateTime a; var hasA = DateTime.TryParse(fyStart, System.Globalization.CultureInfo.InvariantCulture, st, out a); DateTime b; var hasB = DateTime.TryParse(qFrom, System.Globalization.CultureInfo.InvariantCulture, st, out b); var r = hasA && hasB ? (a > b ? a : b) : hasA ? a : hasB ? b : DateTime.MinValue; return r.ToString("yyyy-MM-ddTHH:mm:ss") + "Z";'
+              usings:
+                - System
+              returnType: String
+              arguments:
+                - name: fyStart
+                  valuePath: $.fy.Items[0].Attributes.StartDate
+                  dataType: String
+                - name: qFrom
+                  valuePath: $.query.from
+                  dataType: String
+              targetPath: $.recPeriodFrom
+            - type: ExecuteCSharp@1
+              description: Recurring-document window end (fiscal year intersected with to)
+              code: 'var st = System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal; DateTime a; var hasA = DateTime.TryParse(fyEnd, System.Globalization.CultureInfo.InvariantCulture, st, out a); DateTime b; var hasB = DateTime.TryParse(qTo, System.Globalization.CultureInfo.InvariantCulture, st, out b); var r = hasA && hasB ? (a < b ? a : b) : hasA ? a : hasB ? b : DateTime.MaxValue; return r.ToString("yyyy-MM-ddTHH:mm:ss") + "Z";'
+              usings:
+                - System
+              returnType: String
+              arguments:
+                - name: fyEnd
+                  valuePath: $.fy.Items[0].Attributes.EndDate
+                  dataType: String
+                - name: qTo
+                  valuePath: $.query.to
+                  dataType: String
+              targetPath: $.recPeriodTo
+
+            # -- 1b) Recurring master documents (Dauerbelege, DocumentState 4) ----------
+            #     AB#5282: a Dauerbeleg is NEVER assigned to a fiscal year: the FY assignment pass
+            #     in match-transactions-to-documents excludes DocumentState 4 by design
+            #     (a standing contract is a template, not a receipt of one year). So the
+            #     association load above can never see one, and every payment settled by
+            #     a leasing, insurance or rent Dauerbeleg reported "BelegVorhanden=Nein"
+            #     with an empty Belegnummer and NotizStB - 9 of 43 such rows in the
+            #     2026-08 handover. The "Verträge" type folder below was dead code for the
+            #     same reason. Load them by type and merge them into the document set;
+            #     the period gate still decides whether the contract PDF itself ships with
+            #     a given month, while the payment lookup above now always resolves it.
+            #     Distinct on RtId because a Dauerbeleg MAY also carry a manual
+            #     DocumentToFiscalYear and would otherwise be exported twice.
+            - type: GetRtEntitiesByType@1
+              description: Recurring master documents (never fiscal-year assigned)
+              ckTypeId: Meshmakers.Accounting/AccountingDocument
+              targetPath: $.recDocs
+              take: 500
+              fieldFilters:
+                - attributePath: DocumentState
+                  operator: Equals
+                  comparisonValue: 4
+            # take is a hard cap, not a page size, and there is no continuation loop
+            # here. 500 standing contracts per tenant is far beyond anything real (the
+            # busiest tenant has 13), but a silent truncation would drop payments back
+            # to "BelegVorhanden=Nein" with no way to tell why - the exact failure this
+            # work item is about. Same treatment as the AB#4702 cap in the fiscal-year
+            # assignment pass: never skip quietly.
+            - type: If@1
+              description: Recurring-document cap exceeded — never truncate silently (AB#5282)
+              path: $.recDocs.TotalCount
+              operator: GreaterThan
+              value: 500
+              valueType: Int64
+              transformations:
+                - type: Logger@1
+                  message: "Handover export - more than 500 recurring master documents (Dauerbelege); the ones beyond the 500 loaded are MISSING from this package and their payments will report BelegVorhanden=Nein. Raise the take cap or add paging (AB#5282)."
+            - type: Flatten@1
+              description: Start the export document set with the fiscal year's documents
+              path: $.docGroups[0].Items[*]
+              targetPath: $.mergedDocs
+            - type: Flatten@1
+              description: Append the recurring master documents
+              path: $.recDocs.Items[*]
+              targetPath: $.mergedDocs
+              targetValueWriteMode: Append
+            # Distinct@1 passes straight through when its path is not an array, so it
+            # must point at the array itself ($.mergedDocs), never at $.mergedDocs[*] -
+            # $.exportDocs would silently never be written and the ForEach below would
+            # fail with PathMustBeArray.
+            - type: Distinct@1
+              description: Drop a Dauerbeleg that is also fiscal-year assigned
+              path: $.mergedDocs
+              distinctValuePath: $.RtId
+              targetPath: $.exportDocs
+            - type: SetPrimitiveValue@1
+              description: Release the intermediate document lists
+              targetPath: $.mergedDocs
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the fiscal-year association result
+              targetPath: $.docGroups
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the recurring-document load
+              targetPath: $.recDocs
+              value: ""
+              valueType: String
+
+            # -- 2) Per document: resolve original, render cover, merge, collect entry --
+            - type: ForEach@1
+              description: Build one merged PDF per document
+              iterationPath: $.exportDocs
+              targetPath: $.docResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                # scope guard: AP => INCOMING, AR => OUTGOING, all => process everything.
+                # Implemented as "process when scope=all OR DocumentType matches scope".
+                # We normalise scope -> expected DocumentType into $.key.wantType, then
+                # only emit an entry when it matches (or scope=all).
+                - type: FormatString@1
+                  description: Echo requested scope into the item context
+                  format: "{$.full.query.scope}"
+                  nullValue: all
+                  targetPath: $.key.scope
+
+                # AP/AR label + folder prefix derived from DocumentType. Verified on
+                # salzburgdev: DocumentType comes back as the INT enum key (0=INCOMING,
+                # 1=OUTGOING), not the name — compare as Int. Default first so the path
+                # always exists (the scope-match If references it via valuePath).
+                - type: SetPrimitiveValue@1
+                  description: Default prefix
+                  targetPath: $.key.prefix
+                  value: ""
+                  valueType: String
+                - type: If@1
+                  description: Incoming => AP
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 0
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.prefix
+                      value: AP
+                      valueType: String
+                - type: If@1
+                  description: Outgoing => AR
+                  path: $.key.Attributes.DocumentType
+                  operator: Equal
+                  value: 1
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.prefix
+                      value: AR
+                      valueType: String
+
+                # scope gate: include this document when scope=all OR scope matches the
+                # document's AP/AR prefix. Default excluded; two Ifs flip it to "yes".
+                - type: SetPrimitiveValue@1
+                  description: Default exclude
+                  targetPath: $.key.include
+                  value: "no"
+                  valueType: String
+                - type: If@1
+                  description: scope=all includes everything
+                  path: $.key.scope
+                  operator: Equal
+                  value: all
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "yes"
+                      valueType: String
+                - type: If@1
+                  description: scope matches AP/AR prefix
+                  path: $.key.scope
+                  operator: Equal
+                  valuePath: $.key.prefix
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "yes"
+                      valueType: String
+
+                # cancelled gate (AB#4704): cancelled receipts (DocumentState 3)
+                # are never handed over to the tax advisor. The If does not fire
+                # for documents without a state (missing path), which stay in.
+                - type: If@1
+                  description: Cancelled document — exclude from the handover
+                  path: $.key.Attributes.DocumentState
+                  operator: Equal
+                  value: 3
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "no"
+                      valueType: String
+
+                # AB#5282: snapshot the include decision HERE, between the
+                # scope/cancelled gates and the period gate. The payment lookup below
+                # runs before the render gate, so without this a document excluded by
+                # SCOPE (an AR invoice in an AP-only export) or CANCELLED (AB#4704:
+                # a storno is never handed over) would still emit a lookup line and
+                # surface in zahlungen.csv as "BelegVorhanden=Ja" with its number and
+                # tax-advisor note. Those two exclusions must hold for the payment
+                # side too. The PERIOD gate below must NOT touch this flag - resolving
+                # an out-of-period document is the whole point of the lookup.
+                - type: SetPrimitiveValue@1
+                  description: Payment-lookup eligibility = the scope/cancelled decision
+                  targetPath: $.key.payEligible
+                  valuePath: $.key.include
+                  valueType: String
+
+                # period gate (AB#4535): optional query from/to narrow the export
+                # to a month or quarter — a document dated outside [from, to] is
+                # flipped back to include=no. Date tests run as If@1 valueType
+                # DateTime — date field filters on dynamic CK attributes do not
+                # coerce (AB#4389).
+                #
+                # The params are ABSENT for a full-year export and a missing path makes
+                # FormatString throw, so all-inclusive bounds are seeded first and
+                # SelectByPath only copies the params when present (AB#4395 pattern).
+                - type: SetPrimitiveValue@1
+                  description: Default period lower bound (open)
+                  targetPath: $.key.periodFrom
+                  value: "0001-01-01T00:00:00Z"
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  description: Default period upper bound (open)
+                  targetPath: $.key.periodTo
+                  value: "9999-12-31T23:59:59Z"
+                  valueType: String
+                - type: SelectByPath@1
+                  description: Copy the optional from/to query params when present
+                  selectPath:
+                    - path: $.full.query.from
+                      targetPath: $.key.periodFrom
+                    - path: $.full.query.to
+                      targetPath: $.key.periodTo
+                # AB#5282: a recurring master is bounded by the precomputed fiscal-year
+                # window instead. LAST, so it overrides the raw params - they may not
+                # widen a Dauerbeleg out of the requested year. Deliberately scoped to
+                # DocumentState 4: association-sourced documents keep the open default,
+                # because they are in the year by construction and a MANUAL
+                # DocumentToFiscalYear outside the year's range is a deliberate act that
+                # must not be silently overridden.
+                - type: If@1
+                  description: Recurring master — bound to the fiscal-year window
+                  path: $.key.Attributes.DocumentState
+                  operator: Equal
+                  value: 4
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.periodFrom
+                      valuePath: $.full.recPeriodFrom
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.periodTo
+                      valuePath: $.full.recPeriodTo
+                      valueType: String
+                - type: If@1
+                  description: Document date before the period start — exclude
+                  path: $.key.Attributes.DocumentDate
+                  operator: LessThan
+                  valuePath: $.key.periodFrom
+                  valueType: DateTime
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "no"
+                      valueType: String
+                - type: If@1
+                  description: Document date after the period end — exclude
+                  path: $.key.Attributes.DocumentDate
+                  operator: GreaterThan
+                  valuePath: $.key.periodTo
+                  valueType: DateTime
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.include
+                      value: "no"
+                      valueType: String
+
+                # AB#5282: scope- and cancellation-excluded documents stay out of the
+                # payment index too - see the payEligible snapshot above.
+                - type: If@1
+                  description: Document is eligible for the payment index
+                  path: $.key.payEligible
+                  operator: Equal
+                  value: "yes"
+                  valueType: String
+                  transformations:
+                  # AB#5282: the payment-side lookup runs for EVERY document of the fiscal
+                  # year, OUTSIDE the AB#5263 render gate below. It was nested inside that
+                  # gate, which made zahlungen.csv report "BelegVorhanden=Nein" for every
+                  # payment whose document is dated outside the requested period - 23 of 43
+                  # such rows in the 2026-08 handover, all of them actually linked. The two
+                  # nodes here are cheap (one association read, no file load, no render); the
+                  # transactions are released again below for documents the gate excludes, so
+                  # the memory profile of a one-month export is unchanged.
+                  # 2b) linked bank transactions (payment proof + payment lookup)
+                  - type: GetAssociationTargets@1
+                    description: Linked bank transactions (payment proof)
+                    originRtIdPath: $.key.RtId
+                    originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                    targetCkTypeId: Basic.Accounting/BankTransaction
+                    associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                    graphDirection: Outbound        # [1] validate
+                    targetPath: $.key.txGroups
+
+                  # AB#5085: payment-side lookup. Emits one compact JSON line per
+                  # document: [docId, docNumber, docDate, taxAdvisorNote, txId...], which
+                  # zahlungen.csv inverts into txId -> documents. It reuses the txGroups
+                  # the cover sheet needs anyway for in-scope documents - no second
+                  # association call there and no second copy of the document entities.
+                  # Returns null when the document settles no transaction, so Flatten
+                  # drops it.
+                  - type: ExecuteCSharp@1
+                    description: Payment lookup line (document + the transactions it settles)
+                    code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; var ids = new List<string>(); object txObj = txs; var txEls = new List<JsonElement>(); if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) txEls.Add(el); } else if (txObj is System.Collections.IEnumerable tseq) { foreach (var o in tseq) { if (o is JsonElement oe) txEls.Add(oe); else if (o != null) { try { txEls.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(o))); } catch { } } } } { foreach (var t in txEls) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement p; if (t.TryGetProperty("RtId", out p)) { var s = S(p); if (!string.IsNullOrWhiteSpace(s)) ids.Add(s); } } } if (ids.Count == 0) return null; var head = new List<string> { S(docId), S(docNumber), S(docDate), S(taxNote) }; head.AddRange(ids); return JsonSerializer.Serialize(head.ToArray());'
+                    usings:
+                      - System
+                      - System.Linq
+                      - System.Text.Json
+                      - System.Collections.Generic
+                    returnType: String
+                    arguments:
+                      - name: docId
+                        valuePath: $.key.RtId
+                        dataType: String
+                      - name: docNumber
+                        valuePath: $.key.Attributes.DocumentNumber
+                        dataType: String
+                      - name: docDate
+                        valuePath: $.key.Attributes.DocumentDate
+                        dataType: String
+                      - name: taxNote
+                        valuePath: $.key.Attributes.TaxAdvisorNote
+                        dataType: String
+                      - name: txs
+                        valuePath: $.key.txGroups[0].Items
+                        dataType: RecordArray
+                    targetPath: $.key.payLink
+
+                  # AB#5088: readiness meta line, one per payment-eligible document -
+                  # {"i":rtId,"n":number,"d":date,"s":state,"y":type,"p":party,"g":gross,
+                  #  "c":created,"u":currency,"t":[txId..]}. It is a SECOND line beside
+                  # payLink instead of extra fields on it, because zahlungen.csv reads
+                  # payLink positionally (head = a[0..3], transaction ids = a[4..]) and any
+                  # inserted field would silently shift that. Deliberately emitted here,
+                  # OUTSIDE the render gate: sections 3a/3b need the documents whose date
+                  # falls outside the requested period too - that is the whole point of the
+                  # cross-period check. Reuses the txGroups the lookup line already loaded,
+                  # so it costs no extra association read; the party is resolved from the
+                  # Vendor/Customer record directly (the $.key.party computed further down
+                  # only exists inside the render gate). One short string per document -
+                  # ~200 bytes, the same order as payLink, which is what AB#5263 allows.
+                  - type: ExecuteCSharp@1
+                    description: Readiness meta line for the pruefprotokoll (AB#5088)
+                    code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<object,int> I = o => { if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.Number) return e.GetInt32(); if (e.ValueKind == JsonValueKind.String) { int v; return int.TryParse(e.GetString(), out v) ? v : -1; } } return -1; }; Func<object,double> Dbl = o => { if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.Number) return e.GetDouble(); if (e.ValueKind == JsonValueKind.String) { double v; return double.TryParse(e.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out v) ? v : 0d; } } return 0d; }; Func<object,List<JsonElement>> Els = o => { var els = new List<JsonElement>(); if (o is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) els.Add(el); } else if (o is System.Collections.IEnumerable seq) { foreach (var x in seq) { if (x is JsonElement xe) els.Add(xe); else if (x != null) { try { els.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(x))); } catch { } } } } return els; }; var ids = new List<string>(); foreach (var t in Els(txs)) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement p; if (t.TryGetProperty("RtId", out p)) { var s = S(p); if (s.Length > 0) ids.Add(s); } } var dt = I(docType); var party = dt == 1 ? S(customerName).Trim() : S(vendorName).Trim(); if (party.Length == 0) party = S(vendorName).Trim(); if (party.Length == 0) party = S(customerName).Trim(); var m = new Dictionary<string, object>(); m["i"] = S(docId); m["n"] = S(docNumber).Trim(); m["d"] = S(docDate); m["s"] = I(docState); m["y"] = dt; m["p"] = party; m["g"] = Dbl(gross); m["c"] = S(created); m["u"] = S(currency).Trim(); m["t"] = ids; return JsonSerializer.Serialize(m);'
+                    usings:
+                      - System
+                      - System.Linq
+                      - System.Globalization
+                      - System.Text.Json
+                      - System.Collections.Generic
+                    returnType: String
+                    arguments:
+                      - name: docId
+                        valuePath: $.key.RtId
+                        dataType: String
+                      - name: docNumber
+                        valuePath: $.key.Attributes.DocumentNumber
+                        dataType: String
+                      - name: docDate
+                        valuePath: $.key.Attributes.DocumentDate
+                        dataType: String
+                      - name: docState
+                        valuePath: $.key.Attributes.DocumentState
+                        dataType: Record
+                      - name: docType
+                        valuePath: $.key.Attributes.DocumentType
+                        dataType: Record
+                      - name: gross
+                        valuePath: $.key.Attributes.GrossTotal
+                        dataType: Record
+                      # The document's capture time is the ENTITY's creation timestamp
+                      # (RtEntity.RtCreationDateTime) - AccountingDocument has no CreatedAt
+                      # attribute of its own, and the UploadedDocument's UploadedAt would
+                      # cost one association read per document. An absent path resolves to
+                      # null (logged as a warning), and the protocol then simply reports
+                      # nothing in section 4 instead of failing the export.
+                      - name: created
+                        valuePath: $.key.RtCreationDateTime
+                        dataType: String
+                      - name: currency
+                        valuePath: $.key.Attributes.Currency
+                        dataType: Record
+                      - name: vendorName
+                        valuePath: $.key.Attributes.Vendor.Attributes.CompanyName
+                        dataType: Record
+                      - name: customerName
+                        valuePath: $.key.Attributes.Customer.Attributes.CompanyName
+                        dataType: Record
+                      - name: txs
+                        valuePath: $.key.txGroups[0].Items
+                        dataType: RecordArray
+                    targetPath: $.key.payMeta
+
+                # Release the transactions again for documents the render gate excludes -
+                # they were loaded only to build the lookup line above. Without this the
+                # context would hold every fiscal-year document's transactions at once,
+                # which is exactly the AB#5263 regression.
+                - type: If@1
+                  description: Out-of-scope document — release the loaded transactions
+                  path: $.key.include
+                  operator: NotEqual
+                  value: "yes"
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.key.txGroups
+                      value: ""
+                      valueType: String
+
+                # AB#5263: everything below is per-document work that costs a file load, a
+                # cover render and a PDF merge. It used to run for EVERY document of the
+                # fiscal year even when a month or quarter was requested, because only the
+                # ZIP entry was gated - so a one-month export cost exactly as much memory
+                # as the full year and hit the adapter's 3 GiB limit just the same. Gate
+                # the whole block, not just its result.
+                - type: If@1
+                  description: Only in-scope documents are rendered, merged and costed
+                  path: $.key.include
+                  operator: Equal
+                  value: "yes"
+                  valueType: String
+                  transformations:
+                  # Folder + file-name building blocks (AB#4392 v2): the ZIP is grouped
+                  # as {fiscal year}/{month yyyy-MM}/{type} and files are named
+                  # {document date}_{vendor or customer}_{sequence}.pdf. The sequence
+                  # number is appended by CreateZipArchive@1 (appendSequenceNumber) and
+                  # all segments are sanitized there, so vendor names with slashes or
+                  # other invalid characters cannot break the archive structure.
+                  - type: SetPrimitiveValue@1
+                    description: Default document date (documents without a date)
+                    targetPath: $.key.docDate
+                    value: "0000-00-00"
+                    valueType: String
+                  - type: SelectByPath@1
+                    description: Copy the document date when present
+                    selectPath:
+                      - path: $.key.Attributes.DocumentDate
+                        targetPath: $.key.docDate
+                  - type: TransformString@1
+                    description: Trim to the date (yyyy-MM-dd)
+                    sourcePath: $.key.docDate
+                    targetPath: $.key.docDate
+                    operation: SubstringFromStart
+                    length: 10
+                  - type: TransformString@1
+                    description: Month folder (yyyy-MM)
+                    sourcePath: $.key.docDate
+                    targetPath: $.key.monthFolder
+                    operation: SubstringFromStart
+                    length: 7
+                  # Type folder: recurring master documents (Dauerbelege — contracts,
+                  # insurance, subscriptions; DocumentState RECURRING=4) go to
+                  # "Verträge", the rest split by DocumentType into incoming/outgoing
+                  # invoices. Defaults to incoming (DocumentType 0).
+                  - type: SetPrimitiveValue@1
+                    description: Default type folder (incoming invoices)
+                    targetPath: $.key.typeFolder
+                    value: Eingangsrechnungen
+                    valueType: String
+                  - type: If@1
+                    description: Outgoing invoice folder
+                    path: $.key.Attributes.DocumentType
+                    operator: Equal
+                    value: 1
+                    valueType: Int
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key.typeFolder
+                        value: Ausgangsrechnungen
+                        valueType: String
+                  - type: If@1
+                    description: Recurring master document (Dauerbeleg) -> contracts folder
+                    path: $.key.Attributes.DocumentState
+                    operator: Equal
+                    value: 4
+                    valueType: Int
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key.typeFolder
+                        value: Verträge
+                        valueType: String
+                  # Party for the file name: vendor for incoming, customer for outgoing
+                  # documents; falls back to "Unbekannt" when no name is present.
+                  - type: SetPrimitiveValue@1
+                    description: Default party (no vendor/customer name)
+                    targetPath: $.key.party
+                    value: Unbekannt
+                    valueType: String
+                  - type: If@1
+                    description: Incoming -> vendor name
+                    path: $.key.Attributes.DocumentType
+                    operator: Equal
+                    value: 0
+                    valueType: Int
+                    transformations:
+                      - type: SelectByPath@1
+                        selectPath:
+                          - path: $.key.Attributes.Vendor.Attributes.CompanyName
+                            targetPath: $.key.party
+                  - type: If@1
+                    description: Outgoing -> customer name
+                    path: $.key.Attributes.DocumentType
+                    operator: Equal
+                    value: 1
+                    valueType: Int
+                    transformations:
+                      - type: SelectByPath@1
+                        selectPath:
+                          - path: $.key.Attributes.Customer.Attributes.CompanyName
+                            targetPath: $.key.party
+                  - type: If@1
+                    description: Empty party name -> Unbekannt
+                    path: $.key.party
+                    operator: Equal
+                    value: ""
+                    valueType: String
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key.party
+                        value: Unbekannt
+                        valueType: String
+
+                  # 2a) original stored PDF via System/Related
+                  - type: GetAssociationTargets@1
+                    description: Original stored PDF (FileSystemItem)
+                    originRtIdPath: $.key.RtId
+                    originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                    targetCkTypeId: System.Reporting/FileSystemItem
+                    associationRoleId: System/Related
+                    graphDirection: Outbound        # [1] validate
+                    targetPath: $.key.fileGroups
+
+                  # 2c) assemble the cover-sheet model — escaping-safe and null-safe.
+                  #     We seed a full skeleton (labels set, values ""), then SelectByPath@1
+                  #     copies each source attribute into its row VALUE by JSON node (not by
+                  #     string interpolation) — so values are auto-escaped ([3] fixed) and
+                  #     missing / null / nested-under-null sources are simply skipped, leaving
+                  #     the "" default ([OPT] fixed). Payment proof uses the first linked
+                  #     transaction only ([5] multi-payment is a follow-up).
+                  - type: WriteJson@1
+                    description: Cover-sheet skeleton (labels + empty values)
+                    # Amounts carry format N2 with explicit Austrian separators so the
+                    # cover sheet shows "1.186,96 EUR" — BMD document recognition does
+                    # not accept the raw JSON number ("1186.96") as an amount. The
+                    # separators are explicit (not culture-derived) because containers
+                    # without ICU fall back to invariant globalization. The currency
+                    # suffix defaults to EUR (Currency attribute missing = EUR) and is
+                    # overridden below.
+                    jsonString: '{"title":"Belegübergabe an den Steuerberater","subtitle":"","culture":"de-AT","numberDecimalSeparator":",","numberGroupSeparator":".","sections":[{"heading":"Beleg","rows":[{"label":"Belegnummer","value":""},{"label":"Belegdatum","value":""},{"label":"Fälligkeit","value":""},{"label":"Belegart","value":""},{"label":"Brutto","value":"","format":"N2","suffix":"EUR"},{"label":"Ersatzbeleg","value":"Nein"}]},{"heading":"Kontakt","rows":[{"label":"Lieferant","value":""},{"label":"UID","value":""},{"label":"IBAN","value":""},{"label":"Kunde","value":""}]},{"heading":"Beträge","rows":[{"label":"Netto","value":"","format":"N2","suffix":"EUR"},{"label":"USt","value":"","format":"N2","suffix":"EUR"},{"label":"Steuersatz","value":""},{"label":"Währung","value":"EUR"}]},{"heading":"Zahlungsnachweis","rows":[]}],"footerHeading":"Notiz an den Steuerberater","footerText":""}'
+                    targetPath: $.key.sheet
+                  # BMD keys on the Belegnummer, and numbers extracted from scans often
+                  # carry (inner) whitespace ("26-7010 / 6554") — strip ALL whitespace for
+                  # the handover package (cover sheet + belege.csv). The stored document
+                  # keeps its original number. Null-safe: a missing DocumentNumber stays
+                  # null and SelectByPath skips it (defaults remain "").
+                  - type: ExecuteCSharp@1
+                    description: Document number without whitespace for the tax-advisor package
+                    code: 'docNumber == null ? null : string.Concat(docNumber.Where(ch => !char.IsWhiteSpace(ch)))'
+                    usings:
+                      - System.Linq
+                    returnType: String
+                    arguments:
+                      - name: docNumber
+                        valuePath: $.key.Attributes.DocumentNumber
+                        dataType: String
+                    targetPath: $.key.docNumberClean
+                  # AB#5403 / Meshmakers.Accounting 3.0: per-rate VAT breakdown, computed
+                  # ONCE per document here (inside the render gate) and consumed twice: the
+                  # cover sheet's Steuersatz row just below, and the belege.csv Netto_NN/
+                  # USt_NN columns in step 2e (sibling If@1 on the same $.key.include == yes,
+                  # so whatever 2e copies was written here). The model carries no flat
+                  # TaxRate any more; TaxBreakdown (one TaxBreakdownEntry per rate, exactly
+                  # one row on a single-rate invoice) is written for EVERY new document. It
+                  # is still absent on a document created before 3.0 and not backfilled, and
+                  # an absent path throws in SetPrimitiveValue@1 and in ExecuteCSharp@1's
+                  # RecordArray binding (If@1 has no RecordArray operator, ForEach@1 throws
+                  # PathMustBeArray) - so seed an empty array and let SelectByPath@1, which
+                  # skips a missing source, copy the real rows over; every later read targets
+                  # the ALWAYS-defined scratch copy instead of the attribute path itself.
+                  - type: WriteJson@1
+                    description: Default empty tax-breakdown array (a pre-3.0 document carries none)
+                    jsonString: '[]'
+                    targetPath: $.key.taxBreakdownArr
+                  - type: SelectByPath@1
+                    description: Copy the stored TaxBreakdown rows (skips a pre-3.0 document without them)
+                    selectPath:
+                      - path: $.key.Attributes.TaxBreakdown
+                        targetPath: $.key.taxBreakdownArr
+                  # Bucket each row into the fixed 20/13/10/0 columns (nearest rate within
+                  # 0.5 pp; rows of the same rate summed - defensive, CK writes one row per
+                  # rate) and route every row that matches NO fixed bucket (19 %, 7 %, ...)
+                  # into Netto_Sonstige/USt_Sonstige instead of dropping it - no rate is
+                  # ever silently lost here, whichever rates a document carries. The
+                  # columns therefore always sum to the STORED breakdown. That equals
+                  # Netto/USt whenever the breakdown is complete, which is the normal
+                  # case: document-analysis.yaml (AB#5403) writes a row only when rate,
+                  # net and tax are all present, and drops an incomplete rate block
+                  # rather than failing the whole document create. When it had to drop
+                  # one, the stored rows legitimately sum to LESS than Netto/USt; the
+                  # extraction check report records it as breakdown.blocks vs .rows, and
+                  # ExtractionCheckTier carries the demotion. Do not "repair" the gap
+                  # here - this export reports what is stored. Each bucket's sum is rounded
+                  # to 2 decimals (AwayFromZero, same as the cover sheet's N2 format) so a
+                  # file a human reads never shows a raw double artifact like
+                  # 0.6000000000000001 - Netto/USt/Brutto never need this because they are
+                  # copied straight from the stored attribute, never summed, here.
+                  # Steuersaetze is the cover-sheet text: the distinct rates the document
+                  # ACTUALLY carries, ascending, decimal comma ("20 %" on a plain invoice,
+                  # "10 %, 20 %" on a restaurant bill, "19 %" on a German supplier even
+                  # though the CSV files that one under Sonstige) - a cover sheet with one
+                  # rate on a two-rate document would misstate the document, and dropping
+                  # the row would take from every plain invoice a figure the tax advisor
+                  # had so far. An empty array (pre-3.0 document) yields "" for all eleven
+                  # fields: blank per-rate columns and a blank Steuersatz row (the flat
+                  # TaxRate such a document used to show is gone with the attribute; a
+                  # backfill of TaxBreakdown brings the row back).
+                  - type: ExecuteCSharp@1
+                    description: Map TaxBreakdown rows to the fixed per-rate manifest columns (plus a Sonstige catch-all) and the cover-sheet rates text
+                    code: 'Func<object,List<JsonElement>> Els = o => { var els = new List<JsonElement>(); if (o is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) els.Add(el); } else if (o is System.Collections.IEnumerable seq) { foreach (var x in seq) { if (x is JsonElement xe) els.Add(xe); else if (x != null) { try { els.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(x))); } catch { } } } } return els; }; Func<JsonElement,string,double> Num = (e, n) => { JsonElement v; if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty(n, out v) && v.ValueKind == JsonValueKind.Number) return v.GetDouble(); return 0d; }; Func<double,double> R2 = v => Math.Round(v, 2, MidpointRounding.AwayFromZero); var fixedBuckets = new int[] { 20, 13, 10, 0 }; var keys = new string[] { "20", "13", "10", "0", "Sonstige" }; var net = new Dictionary<string, double>(); var tax = new Dictionary<string, double>(); var seen = new HashSet<string>(); var rates = new SortedSet<double>(); foreach (var row in Els(rows)) { if (row.ValueKind != JsonValueKind.Object) continue; var rate = Num(row, "TaxRate"); rates.Add(R2(rate)); var bestDist = double.MaxValue; var bucket = 0; foreach (var b in fixedBuckets) { var d = Math.Abs(b - rate); if (d < bestDist) { bestDist = d; bucket = b; } } var key = bestDist <= 0.5 ? bucket.ToString() : "Sonstige"; double n0; net[key] = (net.TryGetValue(key, out n0) ? n0 : 0d) + Num(row, "NetAmount"); double t0; tax[key] = (tax.TryGetValue(key, out t0) ? t0 : 0d) + Num(row, "TaxAmount"); seen.Add(key); } var result = new Dictionary<string, object>(); foreach (var k in keys) { result["Netto_" + k] = seen.Contains(k) ? (object)R2(net[k]) : ""; result["USt_" + k] = seen.Contains(k) ? (object)R2(tax[k]) : ""; } result["Steuersaetze"] = string.Join(", ", rates.Select(r => r.ToString("0.##", CultureInfo.InvariantCulture).Replace(".", ",") + " %")); return JsonSerializer.Serialize(result);'
+                    usings:
+                      - System
+                      - System.Linq
+                      - System.Globalization
+                      - System.Text.Json
+                      - System.Collections.Generic
+                    returnType: String
+                    arguments:
+                      - name: rows
+                        valuePath: $.key.taxBreakdownArr
+                        dataType: RecordArray
+                    targetPath: $.key.taxBreakdownColsJson
+                  - type: WriteJson@1
+                    description: Parse the computed per-rate columns and rates text
+                    jsonStringPath: $.key.taxBreakdownColsJson
+                    targetPath: $.key.taxBreakdownCols
+                  - type: SelectByPath@1
+                    description: Copy present document values into the skeleton (skips missing/null)
+                    selectPath:
+                      - path: $.key.docNumberClean
+                        targetPath: $.key.sheet.subtitle
+                      - path: $.key.docNumberClean
+                        targetPath: $.key.sheet.sections[0].rows[0].value
+                      - path: $.key.Attributes.DocumentDate
+                        targetPath: $.key.sheet.sections[0].rows[1].value
+                      - path: $.key.Attributes.DueDate
+                        targetPath: $.key.sheet.sections[0].rows[2].value
+                      - path: $.key.prefix
+                        targetPath: $.key.sheet.sections[0].rows[3].value
+                      - path: $.key.Attributes.GrossTotal
+                        targetPath: $.key.sheet.sections[0].rows[4].value
+                      - path: $.key.Attributes.Vendor.Attributes.CompanyName
+                        targetPath: $.key.sheet.sections[1].rows[0].value
+                      - path: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
+                        targetPath: $.key.sheet.sections[1].rows[1].value
+                      - path: $.key.Attributes.Vendor.Attributes.IBAN
+                        targetPath: $.key.sheet.sections[1].rows[2].value
+                      - path: $.key.Attributes.Customer.Attributes.CompanyName
+                        targetPath: $.key.sheet.sections[1].rows[3].value
+                      - path: $.key.Attributes.NetTotal
+                        targetPath: $.key.sheet.sections[2].rows[0].value
+                      - path: $.key.Attributes.TaxTotal
+                        targetPath: $.key.sheet.sections[2].rows[1].value
+                      # Rates text from the breakdown computed above (never the removed
+                      # flat TaxRate): "20 %" / "10 %, 20 %"; "" on a pre-3.0 document.
+                      - path: $.key.taxBreakdownCols.Steuersaetze
+                        targetPath: $.key.sheet.sections[2].rows[2].value
+                      # Currency (missing = EUR, then the skeleton defaults stay): explicit
+                      # Währung row + suffix on the amount rows (Brutto/Netto/USt).
+                      - path: $.key.Attributes.Currency
+                        targetPath: $.key.sheet.sections[2].rows[3].value
+                      - path: $.key.Attributes.Currency
+                        targetPath: $.key.sheet.sections[0].rows[4].suffix
+                      - path: $.key.Attributes.Currency
+                        targetPath: $.key.sheet.sections[2].rows[0].suffix
+                      - path: $.key.Attributes.Currency
+                        targetPath: $.key.sheet.sections[2].rows[1].suffix
+                      - path: $.key.txGroups[0].Items[0].Attributes.BookingDate
+                        targetPath: $.key.sheet.sections[3].rows[0].value
+                      - path: $.key.txGroups[0].Items[0].Attributes.Amount
+                        targetPath: $.key.sheet.sections[3].rows[1].value
+                      - path: $.key.txGroups[0].Items[0].Attributes.CounterpartIban
+                        targetPath: $.key.sheet.sections[3].rows[2].value
+                      - path: $.key.Attributes.TaxAdvisorNote
+                        targetPath: $.key.sheet.footerText
+                  # Ersatzbeleg (substitute voucher) marker: skeleton defaults the row to
+                  # "Nein"; flip to "Ja" only when the document carries IsSubstitute=true.
+                  # Missing/absent attribute (pre-migration documents) stays "Nein".
+                  - type: If@1
+                    description: Substitute voucher => mark Ersatzbeleg row as Ja
+                    path: $.key.Attributes.IsSubstitute
+                    operator: Equals
+                    value: true
+                    valueType: Boolean
+                    transformations:
+                      - type: SetPrimitiveValue@1
+                        targetPath: $.key.sheet.sections[0].rows[5].value
+                        value: Ja
+                        valueType: String
+                  # Trim ISO date/time values to the date only (yyyy-MM-dd). SubstringFromStart
+                  # is null-safe and clamps to the string length, so blank values stay blank.
+                  - type: TransformString@1
+                    description: Trim document date
+                    sourcePath: $.key.sheet.sections[0].rows[1].value
+                    targetPath: $.key.sheet.sections[0].rows[1].value
+                    operation: SubstringFromStart
+                    length: 10
+                  - type: TransformString@1
+                    description: Trim due date
+                    sourcePath: $.key.sheet.sections[0].rows[2].value
+                    targetPath: $.key.sheet.sections[0].rows[2].value
+                    operation: SubstringFromStart
+                    length: 10
+
+                  # Payment proof: one row per linked transaction ([5]). The inner ForEach
+                  # iterates the linked transactions (inside it $.key = the transaction),
+                  # builds a {label,value} row per payment, and collects each whole iteration
+                  # into $.key.payItems; Flatten then lifts just the .row of each into
+                  # $.key.payRows, which replaces the (empty) Zahlungsnachweis rows. Zero
+                  # transactions -> payRows empty -> the section shows just its heading.
+                  - type: ForEach@1
+                    description: Build one payment row per linked transaction
+                    iterationPath: $.key.txGroups[0].Items
+                    targetPath: $.key.payItems
+                    targetValueKind: Simple
+                    targetValueWriteMode: Overwrite
+                    maxDegreeOfParallelism: 1
+                    transformations:
+                      - type: WriteJson@1
+                        jsonString: '{"d":"","a":"","i":""}'
+                        targetPath: $.key.f
+                      - type: WriteJson@1
+                        jsonString: '{"label":"","value":""}'
+                        targetPath: $.key.row
+                      - type: SelectByPath@1
+                        selectPath:
+                          - path: $.key.Attributes.BookingDate
+                            targetPath: $.key.f.d
+                          - path: $.key.Attributes.Amount
+                            targetPath: $.key.f.a
+                          - path: $.key.Attributes.CounterpartIban
+                            targetPath: $.key.f.i
+                      - type: TransformString@1
+                        description: Trim booking date
+                        sourcePath: $.key.f.d
+                        targetPath: $.key.f.d
+                        operation: SubstringFromStart
+                        length: 10
+                      # amounts / IBANs contain no JSON-special chars, so FormatString here is
+                      # safe; f.* are always present (defaulted) so no undefined lookups.
+                      - type: FormatString@1
+                        format: "Zahlung {$.key.f.d}"
+                        targetPath: $.key.row.label
+                      - type: FormatString@1
+                        format: "{$.key.f.a} · {$.key.f.i}"
+                        targetPath: $.key.row.value
+                  - type: Flatten@1
+                    description: Lift each payment row out of the collected iterations
+                    path: $.key.payItems[*].row
+                    targetPath: $.key.payRows
+                  - type: SelectByPath@1
+                    description: Inject payment rows into the cover sheet
+                    selectPath:
+                      - path: $.key.payRows
+                        targetPath: $.key.sheet.sections[3].rows
+
+                  - type: RenderDataSheetPdf@1
+                    description: Render the cover sheet PDF
+                    path: $.key.sheet
+                    targetPath: $.key.coverPdf
+
+                  # 2d) merge cover + original (when an original exists), else cover only.
+                  - type: If@1
+                    description: Has an original PDF
+                    path: $.key.fileGroups[0].TotalCount
+                    operator: GreaterThan
+                    value: 0
+                    valueType: Int
+                    transformations:
+                      - type: GetFileSystemContent@1
+                        description: Load original PDF bytes
+                        rtIdPath: $.key.fileGroups[0].Items[0].RtId   # [4] validate
+                        targetPath: $.key.originalPdf
+                      # AB#5263: build the array by copying the JSON nodes, NOT by
+                      # interpolating them into a string. FormatString + WriteJson held a
+                      # third and fourth copy of both PDFs (the joined string, then its
+                      # re-parsed node) on top of coverPdf and originalPdf.
+                      - type: WriteJson@1
+                        description: Empty merge-input array
+                        jsonString: '[]'
+                        targetPath: $.key.mergeInputs
+                      - type: SelectByPath@1
+                        description: Reference cover and original without copying them twice
+                        selectPath:
+                          - path: $.key.coverPdf
+                            targetPath: $.key.mergeInputs[0]
+                          - path: $.key.originalPdf
+                            targetPath: $.key.mergeInputs[1]
+                      - type: MergePdf@1
+                        description: Prepend cover sheet to the original
+                        path: $.key.mergeInputs
+                        targetPath: $.key.finalPdf
+                        # Write the merged PDF to the per-execution scratch space and emit a
+                        # small reference instead of a base64 string, so a full fiscal-year
+                        # export never accumulates every merged PDF (or the ZIP) on the heap
+                        # (AB#4642). CreateZipArchive streams it from scratch into the archive.
+                        outputAsScratchFile: true
+                      # AB#5263: release the base64 blobs as soon as the merge has them.
+                      # Each PDF lives in the context as a base64 string, which is 1.33x the
+                      # bytes and UTF-16 on top - roughly 2.7x the file per copy. The ForEach
+                      # collects every iteration into $.docResults, so anything still hanging
+                      # off $.key here is retained for the WHOLE run: on a 715-document
+                      # fiscal year that is gigabytes, and the adapter is OOMKilled against
+                      # its 3 GiB limit. $.key.finalPdf is a scratch reference and stays.
+                      - type: SetPrimitiveValue@1
+                        description: Release the cover-sheet base64
+                        targetPath: $.key.coverPdf
+                        value: ""
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        description: Release the merge input array
+                        targetPath: $.key.mergeInputs
+                        value: ""
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        description: Release the original-PDF base64
+                        targetPath: $.key.originalPdf
+                        value: ""
+                        valueType: String
+                  - type: If@1
+                    description: No original PDF -> cover sheet only
+                    path: $.key.fileGroups[0].TotalCount
+                    operator: Equal
+                    value: 0
+                    valueType: Int
+                    transformations:
+                      # Route the cover-only case through MergePdf too, so $.key.finalPdf is
+                      # always a scratch reference (uniform entry building below).
+                      - type: WriteJson@1
+                        description: Empty merge-input array
+                        jsonString: '[]'
+                        targetPath: $.key.mergeInputs
+                      - type: SelectByPath@1
+                        description: Reference the cover sheet without copying it twice
+                        selectPath:
+                          - path: $.key.coverPdf
+                            targetPath: $.key.mergeInputs[0]
+                      - type: MergePdf@1
+                        description: Cover sheet only, written to the scratch space
+                        path: $.key.mergeInputs
+                        targetPath: $.key.finalPdf
+                        outputAsScratchFile: true
+                      # AB#5263: release the base64 blobs as soon as the merge has them.
+                      # Each PDF lives in the context as a base64 string, which is 1.33x the
+                      # bytes and UTF-16 on top - roughly 2.7x the file per copy. The ForEach
+                      # collects every iteration into $.docResults, so anything still hanging
+                      # off $.key here is retained for the WHOLE run: on a 715-document
+                      # fiscal year that is gigabytes, and the adapter is OOMKilled against
+                      # its 3 GiB limit. $.key.finalPdf is a scratch reference and stays.
+                      - type: SetPrimitiveValue@1
+                        description: Release the cover-sheet base64
+                        targetPath: $.key.coverPdf
+                        value: ""
+                        valueType: String
+                      - type: SetPrimitiveValue@1
+                        description: Release the merge input array
+                        targetPath: $.key.mergeInputs
+                        value: ""
+                        valueType: String
+
+                  # AB#5088: a document whose original is missing ships as a cover sheet
+                  # with nothing behind it - on prod-1 the AMAR DESIGN HOTEL SOFIA receipt
+                  # went out that way and nothing said so. "Attached file" is exactly what
+                  # the export resolves two steps up: the System/Related edge to a
+                  # FileSystemItem ($.key.fileGroups). DocumentPath and FileHash are
+                  # metadata the analysis pipeline writes and are NOT what gets merged -
+                  # a document can carry both and still have no stored original - so the
+                  # association count is the only honest test. Emitted inside the render
+                  # gate, which is the in-period, in-scope set the package is built from.
+                  - type: If@1
+                    description: No stored original - the entry would be a cover sheet only (AB#5088)
+                    path: $.key.fileGroups[0].TotalCount
+                    operator: Equal
+                    value: 0
+                    valueType: Int
+                    transformations:
+                      - type: ExecuteCSharp@1
+                        description: Readiness line for a document without a stored original
+                        code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<object,double> Dbl = o => { if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.Number) return e.GetDouble(); if (e.ValueKind == JsonValueKind.String) { double v; return double.TryParse(e.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out v) ? v : 0d; } } return 0d; }; var m = new Dictionary<string, object>(); m["i"] = S(docId); m["n"] = S(docNumber).Trim(); m["d"] = S(docDate); m["p"] = S(party).Trim(); m["g"] = Dbl(gross); m["u"] = S(currency).Trim(); return JsonSerializer.Serialize(m);'
+                        usings:
+                          - System
+                          - System.Globalization
+                          - System.Text.Json
+                          - System.Collections.Generic
+                        returnType: String
+                        arguments:
+                          - name: docId
+                            valuePath: $.key.RtId
+                            dataType: String
+                          - name: docNumber
+                            valuePath: $.key.docNumberClean
+                            dataType: String
+                          - name: docDate
+                            valuePath: $.key.docDate
+                            dataType: String
+                          - name: party
+                            valuePath: $.key.party
+                            dataType: String
+                          - name: gross
+                            valuePath: $.key.Attributes.GrossTotal
+                            dataType: Record
+                          - name: currency
+                            valuePath: $.key.Attributes.Currency
+                            dataType: Record
+                        targetPath: $.key.noFileLine
+
+                # 2e) zip entry { pathSegments, scratchFileToken, length, manifest } —
+                #     only in-scope docs. Documents excluded by scope never get
+                #     $.key.entry, so the Flatten over $.docResults[*].entry drops them
+                #     from the ZIP. Values are copied as JSON nodes (SelectByPath), so
+                #     quotes/newlines in vendor names cannot break the entry; the ZIP
+                #     node sanitizes each path segment and appends the running number.
+                - type: If@1
+                  description: Emit entry only when in scope
+                  path: $.key.include
+                  operator: Equal
+                  value: "yes"
+                  valueType: String
+                  transformations:
+                    - type: FormatString@1
+                      description: File name (sequence number appended by the ZIP node)
+                      format: '{$.key.docDate}_{$.key.party}.pdf'
+                      targetPath: $.key.baseFileName
+                    # AB#5403: fixed EXTRA COLUMNS per Austrian VAT rate (20/13/10/0), not
+                    # extra rows. belege.csv is one line per document and other readers
+                    # (the tax advisor's BMD import, lieferanten.csv/zahlungen.csv join on
+                    # BelegId) depend on that shape; turning TaxBreakdown into extra rows
+                    # would silently redefine what a row of this file means for everyone who
+                    # already imports it. Austria has a small, closed set of VAT rates, but
+                    # it is not exhaustive for every document that can land here (a German
+                    # supplier invoice at 19 % or 7 %, Jungholz/Mittelberg at 19 %), so a
+                    # fifth, catch-all pair Netto_Sonstige/USt_Sonstige carries anything that
+                    # is not within 0.5 pp of 20/13/10/0 — nothing is ever dropped. INVARIANT:
+                    # for any document, Netto_20+Netto_13+Netto_10+Netto_0+Netto_Sonstige ==
+                    # Netto, and the same for USt_*/USt (both sides rounded to 2 decimals).
+                    # Since Meshmakers.Accounting 3.0 the breakdown is stored for EVERY new
+                    # document (a single-rate invoice carries exactly one row), so these
+                    # columns are POPULATED on essentially every row: a plain 20 % invoice
+                    # exports Netto_20 == Netto and USt_20 == USt with the other four pairs
+                    # "". The earlier guarantee that a single-rate row stays byte-identical
+                    # to the pre-AB#5403 export apart from blank trailing columns was
+                    # WITHDRAWN on purpose with that decision (product owner, major revision)
+                    # and is no longer true - a reader diffing against an older export must
+                    # expect the per-rate values. Only a document created before 3.0 and not
+                    # backfilled still exports the ten columns blank. Columns default to ""
+                    # here and are filled from $.key.taxBreakdownCols, computed once per
+                    # document in step 2c (same $.key.include gate as this entry).
+                    - type: WriteJson@1
+                      description: Entry skeleton (path segments + belege.csv manifest columns)
+                      jsonString: '{"pathSegments":["","","",""],"scratchFileToken":"","length":0,"manifest":{"Datum":"","Belegnummer":"","BelegId":"","Typ":"","LieferantKunde":"","UID":"","Netto":"","USt":"","Brutto":"","Waehrung":"","Netto_20":"","USt_20":"","Netto_13":"","USt_13":"","Netto_10":"","USt_10":"","Netto_0":"","USt_0":"","Netto_Sonstige":"","USt_Sonstige":""}}'
+                      targetPath: $.key.entry
+                    - type: SelectByPath@1
+                      description: Fill path, content reference and manifest (skips missing)
+                      selectPath:
+                        - path: $.full.fyName
+                          targetPath: $.key.entry.pathSegments[0]
+                        - path: $.key.monthFolder
+                          targetPath: $.key.entry.pathSegments[1]
+                        - path: $.key.typeFolder
+                          targetPath: $.key.entry.pathSegments[2]
+                        - path: $.key.baseFileName
+                          targetPath: $.key.entry.pathSegments[3]
+                        - path: $.key.finalPdf.scratchFileToken
+                          targetPath: $.key.entry.scratchFileToken
+                        - path: $.key.finalPdf.length
+                          targetPath: $.key.entry.length
+                        - path: $.key.docDate
+                          targetPath: $.key.entry.manifest.Datum
+                        - path: $.key.docNumberClean
+                          targetPath: $.key.entry.manifest.Belegnummer
+                        # AB#5085: join key into zahlungen.csv. Document numbers are
+                        # frequently missing or mis-OCRed on scans, so the rtId is the
+                        # only reliable way to tie a payment row to its document row.
+                        - path: $.key.RtId
+                          targetPath: $.key.entry.manifest.BelegId
+                        - path: $.key.typeFolder
+                          targetPath: $.key.entry.manifest.Typ
+                        - path: $.key.party
+                          targetPath: $.key.entry.manifest.LieferantKunde
+                        - path: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
+                          targetPath: $.key.entry.manifest.UID
+                        - path: $.key.Attributes.NetTotal
+                          targetPath: $.key.entry.manifest.Netto
+                        - path: $.key.Attributes.TaxTotal
+                          targetPath: $.key.entry.manifest.USt
+                        - path: $.key.Attributes.GrossTotal
+                          targetPath: $.key.entry.manifest.Brutto
+                        - path: $.key.Attributes.Currency
+                          targetPath: $.key.entry.manifest.Waehrung
+
+                    # AB#5403: per-rate columns from the breakdown computed in step 2c
+                    # ($.key.taxBreakdownCols - always defined inside this gate: a number per
+                    # bucket the document carries, "" otherwise). Only the ten CSV columns
+                    # are copied; the Steuersaetze text belongs to the cover sheet alone.
+                    - type: SelectByPath@1
+                      description: Copy the per-rate columns into the manifest (always present, numeric or "")
+                      selectPath:
+                        - path: $.key.taxBreakdownCols.Netto_20
+                          targetPath: $.key.entry.manifest.Netto_20
+                        - path: $.key.taxBreakdownCols.USt_20
+                          targetPath: $.key.entry.manifest.USt_20
+                        - path: $.key.taxBreakdownCols.Netto_13
+                          targetPath: $.key.entry.manifest.Netto_13
+                        - path: $.key.taxBreakdownCols.USt_13
+                          targetPath: $.key.entry.manifest.USt_13
+                        - path: $.key.taxBreakdownCols.Netto_10
+                          targetPath: $.key.entry.manifest.Netto_10
+                        - path: $.key.taxBreakdownCols.USt_10
+                          targetPath: $.key.entry.manifest.USt_10
+                        - path: $.key.taxBreakdownCols.Netto_0
+                          targetPath: $.key.entry.manifest.Netto_0
+                        - path: $.key.taxBreakdownCols.USt_0
+                          targetPath: $.key.entry.manifest.USt_0
+                        - path: $.key.taxBreakdownCols.Netto_Sonstige
+                          targetPath: $.key.entry.manifest.Netto_Sonstige
+                        - path: $.key.taxBreakdownCols.USt_Sonstige
+                          targetPath: $.key.entry.manifest.USt_Sonstige
+
+                    # Vendor row for the lieferanten.csv index — incoming documents only
+                    # (on outgoing invoices the vendor is our own company). Built in C#
+                    # so names with semicolons/quotes are CSV-quoted correctly; returns
+                    # null (no row) when no vendor name is present.
+                    - type: If@1
+                      description: Vendor list row only for incoming documents
+                      path: $.key.Attributes.DocumentType
+                      operator: Equals
+                      value: 0
+                      valueType: Int
+                      transformations:
+                        - type: ExecuteCSharp@1
+                          description: Vendor row as JSON (merged + CSV-encoded later in one pass over all docs)
+                          code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is System.Text.Json.JsonElement e) { if (e.ValueKind == System.Text.Json.JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == System.Text.Json.JsonValueKind.Null || e.ValueKind == System.Text.Json.JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; var nm = S(name).Trim(); if (string.IsNullOrWhiteSpace(nm)) return null; return System.Text.Json.JsonSerializer.Serialize(new string[] { nm, S(uid).Trim(), S(iban).Trim(), S(accountName).Trim(), S(street).Trim(), S(zip).Trim(), S(city).Trim(), S(country).Trim() });'
+                          returnType: String
+                          arguments:
+                            - name: name
+                              valuePath: $.key.Attributes.Vendor.Attributes.CompanyName
+                              dataType: Record
+                            - name: uid
+                              valuePath: $.key.Attributes.Vendor.Attributes.TaxIdentificationNumber
+                              dataType: Record
+                            - name: iban
+                              valuePath: $.key.Attributes.Vendor.Attributes.IBAN
+                              dataType: Record
+                            - name: accountName
+                              valuePath: $.key.Attributes.Vendor.Attributes.AccountName
+                              dataType: Record
+                            - name: street
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.Street
+                              dataType: Record
+                            - name: zip
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.Zipcode
+                              dataType: Record
+                            - name: city
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.CityTown
+                              dataType: Record
+                            - name: country
+                              valuePath: $.key.Attributes.Vendor.Attributes.Address.Attributes.NationalCode
+                              dataType: Record
+                          targetPath: $.key.vendorLine
+
+            # -- 3) Collect entries, build ZIP, store as FileSystemItem -----------------
+            - type: Flatten@1
+              description: Collect per-document zip entries into one array
+              path: $.docResults[*].entry
+              targetPath: $.zipEntries
+            # -- 3b) lieferanten.csv: distinct vendors of the exported incoming docs ----
+            # BMD users key vendors on the UID; a deduplicated vendor list beside the
+            # belege.csv saves re-typing master data. Shipped as a VERBATIM zip entry
+            # (exact name, no sequence number, no belege.csv row).
+            - type: Flatten@1
+              description: Collect per-document vendor rows
+              path: $.docResults[*].vendorLine
+              targetPath: $.vendorLines
+            - type: ExecuteCSharp@1
+              description: Merge vendor rows by normalized name (one row per vendor), emit base64 CSV (UTF-8 BOM)
+              code: 'var list = new System.Collections.Generic.List<string>(); object linesObj = lines; if (linesObj is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array) { foreach (var el in je.EnumerateArray()) { if (el.ValueKind == System.Text.Json.JsonValueKind.String) { var s = el.GetString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } } else if (linesObj is System.Collections.IEnumerable seq) { foreach (var o in seq) { var s = o == null ? null : o.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s); } } var parsed = new System.Collections.Generic.List<string[]>(); foreach (var s in list) { try { var a = System.Text.Json.JsonSerializer.Deserialize<string[]>(s); if (a != null && a.Length == 8 && !string.IsNullOrWhiteSpace(a[0])) parsed.Add(a); } catch { } } if (parsed.Count == 0) return null; Func<string,string> norm = n => { var t = (n ?? "").ToLowerInvariant().Replace("\u00E4", "a").Replace("\u00F6", "o").Replace("\u00FC", "u").Replace("\u00DF", "ss").Normalize(System.Text.NormalizationForm.FormD); var sb = new System.Text.StringBuilder(); foreach (var c in t) { if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark) sb.Append(c); } t = System.Text.RegularExpressions.Regex.Replace(sb.ToString(), @"\b(gmbh|mbh|ag|se|kg|ohg|ug|ltd|limited|inc|llc|plc|pbc|bv|nv|sa|sas|sarl|spa|srl|oy|ab|as|aps|jawna|spolka|gesellschaft|co|kgaa|partg|ek)\b", " "); return System.Text.RegularExpressions.Regex.Replace(t, "[^a-z0-9]", ""); }; Func<System.Collections.Generic.IEnumerable<string>,string> pick = vals => { var vv = vals.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).ToList(); return vv.Count == 0 ? "" : vv.GroupBy(v => v).OrderByDescending(g => g.Count()).ThenByDescending(g => g.Key.Length).ThenByDescending(g => g.Key, StringComparer.Ordinal).First().Key; }; var merged = parsed.GroupBy(r => norm(r[0])).Select(g => { var m = new string[8]; for (var i = 0; i < 8; i++) { m[i] = pick(g.Select(r => r[i])); } var ib = System.Text.RegularExpressions.Regex.Replace(m[2], @"\s+", "").ToUpperInvariant(); m[2] = ib.Contains("*") ? "" : ib; return m; }).OrderBy(m => m[0], StringComparer.OrdinalIgnoreCase).ToList(); Func<string,string> q = v => (v.Contains(";") || v.Contains("\"") || v.Contains("\n") || v.Contains("\r")) ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; var rows = merged.Select(m => string.Join(";", m.Select(q))); var csv = "\uFEFF" + "Lieferant;UID;IBAN;Kontoinhaber;Strasse;PLZ;Ort;Land\r\n" + string.Join("\r\n", rows) + "\r\n"; return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(csv));'
+              usings:
+                - System.Linq
+              returnType: String
+              arguments:
+                - name: lines
+                  valuePath: $.vendorLines
+                  dataType: StringArray
+              targetPath: $.lieferantenB64
+            - type: If@1
+              description: Append the vendor list only when there is at least one row
+              path: $.lieferantenB64
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: FormatString@1
+                  description: Verbatim zip entry for the vendor list (base64 is JSON-safe)
+                  format: '{"fileName":"lieferanten.csv","contentBase64":"{$.lieferantenB64}","verbatim":true}'
+                  targetPath: $.lieferantenEntryJson
+                - type: WriteJson@1
+                  description: Append the entry to the zip entries
+                  jsonStringPath: $.lieferantenEntryJson
+                  targetPath: $.zipEntries
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+            # -- 3c) zahlungen.csv: the payment-side index (AB#5085) --------------------
+            # Everything above is document-axis: a payment shows up only inside the cover
+            # sheet of ITS document, and a payment without a document does not show up at
+            # all. The tax advisor reconciles the bank statement, so she needs the payment
+            # axis too - one row per transaction booked in the delivered period, the
+            # receiptless ones included, carrying the comments kept on the transaction
+            # (MatchComment / ClarificationNote), the note on the linked document
+            # (TaxAdvisorNote), since AB#5389 the cost category (Kategorie: the
+            # transaction's own, else the linked document's) and, since AB#5390, the
+            # exclusion reason of an Ignored row (Ausschlussgrund: the
+            # TransactionExclusionReason enum NAME — TRANSFER, SETTLEMENTDUPLICATE,
+            # SPLITPARENT, FINANCING, PRIVATE, REVERSAL, OTHER — empty when none; read
+            # straight off the loaded transaction, no extra lookup). Joins to
+            # belege.csv on BelegId.
+            #
+            # The two axes stay deliberately different: documents are gated on
+            # DocumentDate, this file on BookingDate. That is the decision from the
+            # 03.09.2026 root-cause analysis - PeriodBasis stays DOCUMENTDATE (GmbH,
+            # section 189 UGB accrual accounting + section 17 UStG Soll-Besteuerung) and
+            # the payment axis ships as an ADDITIONAL index rather than moving the cut.
+            #
+            # Field filters on BookingDate were verified against prod-1 (109 hits for
+            # August 2026), so the transactions are narrowed server-side instead of
+            # loading the whole history - AB#4389 (dynamic date attributes do not coerce)
+            # does not bite here.
+            #
+            # Amounts use the de-AT decimal comma: this file is read in Excel by the tax
+            # advisor, not imported into BMD.
+            - type: SetPrimitiveValue@1
+              description: Default payment period lower bound (open)
+              targetPath: $.txFrom
+              value: "0001-01-01T00:00:00Z"
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Default payment period upper bound (open)
+              targetPath: $.txTo
+              value: "9999-12-31T23:59:59Z"
+              valueType: String
+            # Default to the FISCAL YEAR's own bounds, not to open bounds: the frontend
+            # omits from/to for a full-year export (handover.ts computeRange returns
+            # undefined), and with open bounds the payment axis would list every
+            # transaction the tenant ever had - on prod-1 meshmakers that is 2962 rows
+            # back to 2024 in a package for 2026, plus one association call each.
+            # The document axis is already bounded by DocumentToFiscalYear; this gives
+            # the payment axis the matching bound. A fiscal year without dates keeps the
+            # open fallback (SelectByPath skips missing paths).
+            - type: SelectByPath@1
+              description: Bound the payment axis to the fiscal year
+              selectPath:
+                - path: $.fy.Items[0].Attributes.StartDate
+                  targetPath: $.txFrom
+                - path: $.fy.Items[0].Attributes.EndDate
+                  targetPath: $.txTo
+            # An explicit period narrows it further, so this must stay LAST.
+            - type: SelectByPath@1
+              description: Copy the optional from/to query params when present
+              selectPath:
+                - path: $.query.from
+                  targetPath: $.txFrom
+                - path: $.query.to
+                  targetPath: $.txTo
+            - type: GetRtEntitiesByType@1
+              # AB#5263: NO date fieldFilters here. A field filter's comparison value
+              # is handed to the query layer as the raw JSON scalar - a string - and
+              # Mongo never matches a string against a BSON date, so this query
+              # silently returned nothing and zahlungen.csv was never written since
+              # the day it shipped. Same trap as AB#4389, which is why the in-loop
+              # period gate uses If@1 valueType DateTime instead of a field filter.
+              # The period is applied in the C# node below, which parses BookingDate
+              # anyway; transactions are small flat records, so loading the tenant's
+              # set and filtering in memory is the cheaper of the two honest options.
+              description: Bank transactions (the period is applied in the CSV node)
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.payTx
+            # Collect the per-document lookup lines emitted inside the document loop.
+            - type: Flatten@1
+              description: Collect the payment lookup lines
+              path: $.docResults[*].payLink
+              targetPath: $.payLinkLines
+            # AB#5389: Kategorie column. The category of a transaction is the
+            # TransactionToCategory edge, the category of a document the
+            # DocumentToCategory edge (CK 2.4.0) — both declared on CostCategory, so
+            # ONE association call per category in each direction lists every
+            # assignment (a few dozen calls), instead of one call per transaction
+            # (the AB#5263 shape). Each category emits one compact JSON line
+            # {"n":name,"t":[txId…],"d":[docId…]}; the CSV node inverts it into
+            # id -> name and falls back from the transaction's category to the
+            # category of the first linked document that has one — a transaction
+            # matched to a categorized receipt is categorized for the tax advisor
+            # even before the matching pipeline has propagated the edge.
+            - type: GetRtEntitiesByType@1
+              description: Cost categories (assignment lists for the Kategorie column)
+              ckTypeId: Meshmakers.Accounting/CostCategory
+              targetPath: $.payCats
+              take: 500
+            - type: ForEach@1
+              description: Per category, its transactions and documents as one lookup line
+              iterationPath: $.payCats.Items
+              targetPath: $.payCatResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: WriteJson@1
+                  targetPath: $.key._pcTxs
+                  jsonString: '[{"Items":[],"TotalCount":0}]'
+                - type: WriteJson@1
+                  targetPath: $.key._pcDocs
+                  jsonString: '[{"Items":[],"TotalCount":0}]'
+                - type: GetAssociationTargets@1
+                  description: Transactions assigned to this category
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/CostCategory
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: Meshmakers.Accounting/TransactionToCategory
+                  graphDirection: Outbound
+                  targetPath: $.key._pcTxs
+                - type: GetAssociationTargets@1
+                  description: Documents assigned to this category
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/CostCategory
+                  targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  associationRoleId: Meshmakers.Accounting/DocumentToCategory
+                  graphDirection: Outbound
+                  targetPath: $.key._pcDocs
+                - type: ExecuteCSharp@1
+                  description: Category lookup line (name + type + the ids it is assigned to); null when unused
+                  code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<object,List<string>> Ids = obj => { var ids = new List<string>(); var els = new List<JsonElement>(); if (obj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) els.Add(el); } else if (obj is System.Collections.IEnumerable seq) { foreach (var o in seq) { if (o is JsonElement oe) els.Add(oe); else if (o != null) { try { els.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(o))); } catch { } } } } foreach (var t in els) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement p; if (t.TryGetProperty("RtId", out p)) { var s = S(p); if (!string.IsNullOrWhiteSpace(s)) ids.Add(s); } } return ids; }; var nm = S(name).Trim(); var t1 = Ids(txs); var d1 = Ids(docs); if (nm.Length == 0 || (t1.Count == 0 && d1.Count == 0)) return null; var ctNames = new string[] { "IT", "RENT", "PERSONNEL", "TRAVEL", "OFFICE", "MARKETING", "CONSULTING", "INSURANCE", "OTHER", "BANKFEES", "ITOPERATION", "FACILITY", "REVENUE", "INTEREST", "OTHERINCOME", "VAT", "TAXES", "GRANTS", "INTERESTEXPENSE" }; var ct = -1; if (catType is JsonElement ce) { if (ce.ValueKind == JsonValueKind.Number) ct = ce.GetInt32(); else if (ce.ValueKind == JsonValueKind.String) { var cs = (ce.GetString() ?? "").Trim().ToUpperInvariant(); var ix = Array.IndexOf(ctNames, cs); if (ix >= 0) ct = ix; else { int pn; if (int.TryParse(cs, out pn)) ct = pn; } } } return JsonSerializer.Serialize(new Dictionary<string, object> { { "n", nm }, { "ct", ct }, { "t", t1 }, { "d", d1 } });'
+                  usings:
+                    - System
+                    - System.Linq
+                    - System.Text.Json
+                    - System.Collections.Generic
+                  returnType: String
+                  arguments:
+                    - name: name
+                      valuePath: $.key.Attributes.Name
+                      dataType: String
+                    # AB#5088: the readiness protocol exempts a payment whose category is a
+                    # receiptless TYPE (PERSONNEL, BANKFEES, VAT, TAXES), so the line carries
+                    # the CategoryType next to the name. Read as Record, not Int/String: an
+                    # enum attribute arrives as the int KEY here, a name-resolving query shape
+                    # would hand over the NAME, and Get<int>/Get<string> throws on the other
+                    # one - a JsonElement accepts both and the snippet maps the name back.
+                    # zahlungen.csv reads only n/t/d and is unaffected by the extra key.
+                    - name: catType
+                      valuePath: $.key.Attributes.CategoryType
+                      dataType: Record
+                    - name: txs
+                      valuePath: $.key._pcTxs[0].Items
+                      dataType: RecordArray
+                    - name: docs
+                      valuePath: $.key._pcDocs[0].Items
+                      dataType: RecordArray
+                  targetPath: $.key.catLine
+                # Release the loaded entities before the iteration is merged into
+                # $.payCatResults — only the line is needed (AB#5263 discipline).
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key._pcTxs
+                  value: ""
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key._pcDocs
+                  value: ""
+                  valueType: String
+            - type: Flatten@1
+              description: Collect the category lookup lines
+              path: $.payCatResults[*].catLine
+              targetPath: $.payCatLines
+            - type: SetPrimitiveValue@1
+              description: Release the category pass results
+              targetPath: $.payCatResults
+              value: ""
+              valueType: String
+            # ONE node builds the whole file. Deliberately not a ForEach over the
+            # transactions: that accumulated the full transaction entity AND the full
+            # linked document entities per iteration on top of the document loop, and
+            # took the mesh adapter down on prod-1 meshmakers (orphaned by adapter
+            # restart at 67s and 94s on an export that renders ~800 documents). Here the
+            # context holds the transactions plus a few hundred short strings.
+            - type: ExecuteCSharp@1
+              description: Build zahlungen.csv (classification + document + category + exclusion-reason columns) as base64
+              code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<string,string> D10 = v => (v ?? "").Length >= 10 ? v.Substring(0, 10) : (v ?? ""); Func<string,string> W = v => Regex.Replace(v ?? "", @"\s+", " ").Trim(); var map = new Dictionary<string, List<string[]>>(StringComparer.Ordinal); object linksObj = links; var lst = new List<string>(); if (linksObj is JsonElement lj && lj.ValueKind == JsonValueKind.Array) { foreach (var el in lj.EnumerateArray()) { if (el.ValueKind == JsonValueKind.String) { var s0 = el.GetString(); if (!string.IsNullOrWhiteSpace(s0)) lst.Add(s0); } } } else if (linksObj is System.Collections.IEnumerable lseq) { foreach (var o in lseq) { var s0 = o == null ? null : (o is JsonElement je2 ? (je2.ValueKind == JsonValueKind.String ? je2.GetString() : je2.ToString()) : o.ToString()); if (!string.IsNullOrWhiteSpace(s0)) lst.Add(s0); } } foreach (var s1 in lst) { try { var a = JsonSerializer.Deserialize<string[]>(s1); if (a == null || a.Length < 5) continue; var head = new string[] { a[0], a[1], a[2], a[3] }; for (var i = 4; i < a.Length; i++) { var k = a[i]; if (string.IsNullOrWhiteSpace(k)) continue; List<string[]> l; if (!map.TryGetValue(k, out l)) { l = new List<string[]>(); map[k] = l; } l.Add(head); } } catch { } } var txCat = new Dictionary<string, string>(StringComparer.Ordinal); var docCat = new Dictionary<string, string>(StringComparer.Ordinal); object catsObj = cats; var catLst = new List<string>(); if (catsObj is JsonElement cj && cj.ValueKind == JsonValueKind.Array) { foreach (var el in cj.EnumerateArray()) { if (el.ValueKind == JsonValueKind.String) { var c0 = el.GetString(); if (!string.IsNullOrWhiteSpace(c0)) catLst.Add(c0); } } } else if (catsObj is System.Collections.IEnumerable cseq) { foreach (var o in cseq) { var c0 = o == null ? null : (o is JsonElement cje ? (cje.ValueKind == JsonValueKind.String ? cje.GetString() : cje.ToString()) : o.ToString()); if (!string.IsNullOrWhiteSpace(c0)) catLst.Add(c0); } } foreach (var c1 in catLst) { try { using (var cd = JsonDocument.Parse(c1)) { var ro = cd.RootElement; JsonElement pn; if (!ro.TryGetProperty("n", out pn)) continue; var cn = S(pn); if (cn.Length == 0) continue; JsonElement pt; if (ro.TryGetProperty("t", out pt) && pt.ValueKind == JsonValueKind.Array) { foreach (var el in pt.EnumerateArray()) { var id0 = S(el); if (id0.Length > 0 && !txCat.ContainsKey(id0)) txCat[id0] = cn; } } JsonElement pd; if (ro.TryGetProperty("d", out pd) && pd.ValueKind == JsonValueKind.Array) { foreach (var el in pd.EnumerateArray()) { var id0 = S(el); if (id0.Length > 0 && !docCat.ContainsKey(id0)) docCat[id0] = cn; } } } } catch { } } object fromObj = pFrom; object toObj = pTo; var dFrom = D10(fromObj as string ?? ""); var dTo = D10(toObj as string ?? ""); var rows = new List<string[]>(); object txObj = tx; var txEls = new List<JsonElement>(); if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) txEls.Add(el); } else if (txObj is System.Collections.IEnumerable tseq) { foreach (var o in tseq) { if (o is JsonElement oe) txEls.Add(oe); else if (o != null) { try { txEls.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(o))); } catch { } } } } { foreach (var t in txEls) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement pid; var rtid = t.TryGetProperty("RtId", out pid) ? S(pid) : ""; JsonElement at; if (!t.TryGetProperty("Attributes", out at) || at.ValueKind != JsonValueKind.Object) continue; Func<string,string> A = n => { JsonElement v; return at.TryGetProperty(n, out v) ? S(v) : ""; }; var bd = D10(A("BookingDate")); if (dFrom.Length > 0 && string.CompareOrdinal(bd, dFrom) < 0) continue; if (dTo.Length > 0 && string.CompareOrdinal(bd, dTo) > 0) continue; double amount = 0; JsonElement pa; if (at.TryGetProperty("Amount", out pa) && pa.ValueKind == JsonValueKind.Number) amount = pa.GetDouble(); int ms = 0; JsonElement pm; if (at.TryGetProperty("MatchState", out pm) && pm.ValueKind == JsonValueKind.Number) ms = pm.GetInt32(); JsonElement pc; var incl = at.TryGetProperty("InClarification", out pc) && pc.ValueKind == JsonValueKind.True; var pur = W(A("Purpose")); var up = pur.ToUpperInvariant(); string art; if (up.Contains("E-COMM")) art = "Kartenzahlung online"; else if (Regex.IsMatch(up, @"\bPOS\b")) art = "Kartenzahlung POS"; else if (up.Contains("PAYPAL")) art = "PayPal"; else if (up.Contains("SEPA-LASTSCHRIFT") || up.StartsWith("EINZUG")) art = "SEPA-Lastschrift"; else if (up.StartsWith("GEHALT") || up.Contains("LOHN")) art = "Gehalt/Lohn"; else art = "Ueberweisung"; var mk = Regex.Match(pur, @"\bK(\d)\b"); var karte = mk.Success ? "K" + mk.Groups[1].Value : ""; var md = Regex.Match(pur, @"\bK\d\s+(\d{2}\.\d{2}\.)"); if (!md.Success) md = Regex.Match(pur, @"(\d{2}\.\d{2}\.\d{2})\s+\d{2}:\d{2}\s+K\d"); var kartendatum = md.Success ? md.Groups[1].Value : ""; var status = ms == 1 ? "Zugeordnet" : ms == 2 ? "Ohne Beleg" : ms == 3 ? "Ignoriert" : "Offen"; var erNames = new string[] { "", "TRANSFER", "SETTLEMENTDUPLICATE", "SPLITPARENT", "FINANCING", "PRIVATE", "REVERSAL", "OTHER" }; var ausschluss = ""; JsonElement per; if (at.TryGetProperty("ExclusionReason", out per)) { if (per.ValueKind == JsonValueKind.Number) { var er = per.GetInt32(); if (er > 0 && er < erNames.Length) ausschluss = erNames[er]; } else if (per.ValueKind == JsonValueKind.String) { var ers = (per.GetString() ?? "").Trim().ToUpperInvariant(); if (ers.Length > 0 && ers != "NONE" && Array.IndexOf(erNames, ers) > 0) ausschluss = ers; } } List<string[]> docs; if (!map.TryGetValue(rtid, out docs)) docs = new List<string[]>(); var nums = docs.Select(x => x[1]).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var ids = docs.Select(x => x[0]).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var dates = docs.Select(x => D10(x[2])).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); var months = dates.Select(x => x.Length >= 7 ? x.Substring(0, 7) : "").Where(x => x.Length > 0).Distinct().ToList(); var notes = docs.Select(x => W(x[3])).Where(x => !string.IsNullOrWhiteSpace(x)).ToList(); string kat; if (!txCat.TryGetValue(rtid, out kat)) kat = ""; if (kat.Length == 0) { foreach (var x in docs) { string dk; if (docCat.TryGetValue(x[0], out dk)) { kat = dk; break; } } } rows.Add(new string[] { bd, D10(A("ValueDate")), amount.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("de-AT")), A("Currency"), amount < 0 ? "Ausgang" : "Eingang", art, karte, kartendatum, A("CounterpartName").Trim(), Regex.Replace(A("CounterpartIban"), @"\s+", "").ToUpperInvariant(), pur, status, ids.Count > 0 ? "Ja" : "Nein", string.Join("|", nums), string.Join("|", ids), string.Join("|", dates), string.Join("|", months), W(A("MatchComment")), incl ? "Ja" : "Nein", W(A("ClarificationNote")), string.Join(" | ", notes), kat, ausschluss }); } } if (rows.Count == 0) return null; rows = rows.OrderBy(r => r[0], StringComparer.Ordinal).ThenBy(r => r[8], StringComparer.OrdinalIgnoreCase).ToList(); Func<string,string> q = v => { v = v ?? ""; return (v.Contains(";") || v.Contains("\"") || v.Contains("\n") || v.Contains("\r")) ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; }; var header = "Buchungsdatum;Valutadatum;Betrag;Waehrung;Richtung;Zahlungsart;Karte;Kartendatum;Gegenpartei;GegenIBAN;Verwendungszweck;Status;BelegVorhanden;Belegnummer;BelegId;Belegdatum;Belegmonat;Kommentar;Klaerung;Klaerungsnotiz;NotizStB;Kategorie;Ausschlussgrund"; var csv = "﻿" + header + "\r\n" + string.Join("\r\n", rows.Select(r => string.Join(";", r.Select(q)))) + "\r\n"; return Convert.ToBase64String(Encoding.UTF8.GetBytes(csv));'
+              usings:
+                - System
+                - System.Linq
+                - System.Text
+                - System.Text.Json
+                - System.Text.RegularExpressions
+                - System.Collections.Generic
+              returnType: String
+              arguments:
+                - name: tx
+                  valuePath: $.payTx.Items
+                  dataType: RecordArray
+                - name: links
+                  valuePath: $.payLinkLines
+                  dataType: StringArray
+                - name: pFrom
+                  valuePath: $.txFrom
+                  dataType: String
+                - name: pTo
+                  valuePath: $.txTo
+                  dataType: String
+                - name: cats
+                  valuePath: $.payCatLines
+                  dataType: StringArray
+              targetPath: $.zahlungenB64
+            - type: If@1
+              description: Append the payment index only when there is at least one row
+              path: $.zahlungenB64
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: FormatString@1
+                  description: Verbatim zip entry for the payment index (base64 is JSON-safe)
+                  format: '{"fileName":"zahlungen.csv","contentBase64":"{$.zahlungenB64}","verbatim":true}'
+                  targetPath: $.zahlungenEntryJson
+                - type: WriteJson@1
+                  description: Append the entry to the zip entries
+                  jsonStringPath: $.zahlungenEntryJson
+                  targetPath: $.zipEntries
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+            # -- 3d) pruefprotokoll.txt: the readiness protocol (AB#5088) ---------------
+            # The June 2026 package was exported on 4.8.; four documents of that period
+            # were only captured on 16./26./27.8., six June/July payments had no document
+            # at all and one document existed as a record with no file behind it. Nothing
+            # warned. This protocol is computed from the data the two CSVs already collected
+            # - no extra entity load - and ships INSIDE the package, so the tax advisor sees
+            # the same picture as Gerald. It always ships, also when it finds nothing: an
+            # absent protocol would be indistinguishable from an unchecked export.
+            #
+            # Six sections, each count + rows (date, counterparty/vendor, amount, number):
+            #   1) payments of the period without a linked document
+            #   1b) payments whose linked documents cover clearly less than the payment —
+            #       gap > 15,- AND gap > 2 % of the payment. Section 1 is blind to these:
+            #       a 4218,85 "Dienstreise Australien" backed by one 118,79 taxi receipt
+            #       passed as fully documented. Its own two exemptions on top of Ignored
+            #       and the receiptless category types: a Dauerbeleg among the linked
+            #       documents (GrossTotal 0 covers nothing by design) and a document shared
+            #       with 3+ payments (the payroll journal's gross is the whole month, not a
+            #       cover for one salary payment).
+            #   2) documents of the period without a stored original (cover sheet only)
+            #   3a/3b) cross-period cases (document outside / payment outside)
+            #   4) documents of the period captured after the period end
+            #
+            # The three legitimate outlier shapes are excluded, verified against all 1657
+            # matched-with-document rows on prod-1/meshmakers (28.9.2026) - without them the
+            # check reports hundreds of CORRECT links and is noise instead of signal:
+            #   - receiptless payments: a cost category of type PERSONNEL(2), BANKFEES(9),
+            #     VAT(15) or TAXES(16), MatchState Ignored (any ExclusionReason), and PayPal
+            #     funding legs (the EUR leg PayPal collects from the giro account, and the
+            #     card marker "PAYPAL *<merchant>" - the receipt sits on the ledger leg,
+            #     AB#4509/AB#4596)
+            #   - Dauerbelege (DocumentState RECURRING=4): GrossTotal 0 and a DocumentDate at
+            #     the end of the validity, deliberately far from the debits they settle
+            #   - collective documents / executed payment orders: one document with 3 or more
+            #     linked payments (the payroll journal of AB#4539 is this shape)
+            - type: Flatten@1
+              description: Collect the readiness meta lines
+              path: $.docResults[*].payMeta
+              targetPath: $.payMetaLines
+            - type: Flatten@1
+              description: Collect the lines of documents without a stored original
+              path: $.docResults[*].noFileLine
+              targetPath: $.noFileLines
+            # ONE node again, for the AB#5263 reason the zahlungen.csv node states: the
+            # context holds the transactions it already loaded plus a few hundred short
+            # strings, and no entity is re-read.
+            - type: ExecuteCSharp@1
+              description: Build pruefprotokoll.txt (readiness of the requested period) as base64
+              code: 'Func<object,string> S = o => { if (o == null) return ""; if (o is JsonElement e) { if (e.ValueKind == JsonValueKind.String) return e.GetString() ?? ""; if (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) return ""; return e.ToString(); } return o.ToString() ?? ""; }; Func<object,List<string>> Lines = o => { var l = new List<string>(); if (o is JsonElement je && je.ValueKind == JsonValueKind.Array) { foreach (var el in je.EnumerateArray()) { var s = el.ValueKind == JsonValueKind.String ? el.GetString() : el.ToString(); if (!string.IsNullOrWhiteSpace(s)) l.Add(s); } } else if (o is System.Collections.IEnumerable sq) { foreach (var x in sq) { var s = x == null ? null : (x is JsonElement xe ? (xe.ValueKind == JsonValueKind.String ? xe.GetString() : xe.ToString()) : x.ToString()); if (!string.IsNullOrWhiteSpace(s)) l.Add(s); } } return l; }; Func<object,List<JsonElement>> Els = o => { var els = new List<JsonElement>(); if (o is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) els.Add(el); } else if (o is System.Collections.IEnumerable seq) { foreach (var x in seq) { if (x is JsonElement xe) els.Add(xe); else if (x != null) { try { els.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(x))); } catch { } } } } return els; }; Func<string,string> D10 = v => (v ?? "").Length >= 10 ? v.Substring(0, 10) : (v ?? ""); Func<string,string> W = v => Regex.Replace(v ?? "", @"\s+", " ").Trim(); var at2 = CultureInfo.GetCultureInfo("de-AT"); Func<double,string,string> Money = (v, cur) => v.ToString("0.00", at2) + (string.IsNullOrWhiteSpace(cur) ? "" : " " + cur); Func<string,int,string> Pad = (v, n) => { v = v ?? ""; return v.Length > n ? v.Substring(0, n - 2) + ".." : v.PadRight(n); }; Func<string,int,string> RPad = (v, n) => { v = v ?? ""; return v.Length > n ? v.Substring(0, n) : v.PadLeft(n); }; Func<string,int,string> Head = (t, n) => { var s = t + " "; while (s.Length < 68) s = s + "."; return s + " " + n.ToString(CultureInfo.InvariantCulture); }; var line = new string("-"[0], 80); var dFrom = D10(pFrom); var dTo = D10(pTo); var catExempt = new HashSet<int> { 2, 9, 15, 16 }; var partialGap = 15.0d; var partialRatio = 0.02d; var txCatType = new Dictionary<string, int>(StringComparer.Ordinal); var txCatName = new Dictionary<string, string>(StringComparer.Ordinal); foreach (var c in Lines(cats)) { try { using (var cd = JsonDocument.Parse(c)) { var ro = cd.RootElement; JsonElement p; var cn = ro.TryGetProperty("n", out p) ? S(p) : ""; var ct = -1; if (ro.TryGetProperty("ct", out p) && p.ValueKind == JsonValueKind.Number) ct = p.GetInt32(); if (ro.TryGetProperty("t", out p) && p.ValueKind == JsonValueKind.Array) { foreach (var el in p.EnumerateArray()) { var id = S(el); if (id.Length == 0 || txCatType.ContainsKey(id)) continue; txCatType[id] = ct; txCatName[id] = cn; } } } } catch { } } var dNum = new Dictionary<string, string>(StringComparer.Ordinal); var dDate = new Dictionary<string, string>(StringComparer.Ordinal); var dState = new Dictionary<string, int>(StringComparer.Ordinal); var dParty = new Dictionary<string, string>(StringComparer.Ordinal); var dGross = new Dictionary<string, double>(StringComparer.Ordinal); var dCreated = new Dictionary<string, string>(StringComparer.Ordinal); var dCur = new Dictionary<string, string>(StringComparer.Ordinal); var dTxs = new Dictionary<string, List<string>>(StringComparer.Ordinal); var txDocs = new Dictionary<string, List<string>>(StringComparer.Ordinal); var covSum = new Dictionary<string, double>(StringComparer.Ordinal); var covCount = new Dictionary<string, int>(StringComparer.Ordinal); var covRec = new HashSet<string>(StringComparer.Ordinal); var covShared = new HashSet<string>(StringComparer.Ordinal); foreach (var l in Lines(meta)) { try { using (var jd = JsonDocument.Parse(l)) { var ro = jd.RootElement; JsonElement p; var id = ro.TryGetProperty("i", out p) ? S(p) : ""; if (id.Length == 0 || dNum.ContainsKey(id)) continue; dNum[id] = ro.TryGetProperty("n", out p) ? S(p) : ""; dDate[id] = D10(ro.TryGetProperty("d", out p) ? S(p) : ""); dState[id] = ro.TryGetProperty("s", out p) && p.ValueKind == JsonValueKind.Number ? p.GetInt32() : -1; dParty[id] = ro.TryGetProperty("p", out p) ? S(p) : ""; dGross[id] = ro.TryGetProperty("g", out p) && p.ValueKind == JsonValueKind.Number ? p.GetDouble() : 0d; dCreated[id] = ro.TryGetProperty("c", out p) ? S(p) : ""; dCur[id] = ro.TryGetProperty("u", out p) ? S(p) : ""; var tl = new List<string>(); if (ro.TryGetProperty("t", out p) && p.ValueKind == JsonValueKind.Array) { foreach (var el in p.EnumerateArray()) { var tid = S(el); if (tid.Length == 0) continue; tl.Add(tid); List<string> dl; if (!txDocs.TryGetValue(tid, out dl)) { dl = new List<string>(); txDocs[tid] = dl; } dl.Add(id); } } dTxs[id] = tl; var absG = Math.Abs(dGross[id]); var recG = dState[id] == 4; var sharedG = tl.Count >= 3; foreach (var tid in tl) { double cs; covSum[tid] = (covSum.TryGetValue(tid, out cs) ? cs : 0d) + absG; int cc; covCount[tid] = (covCount.TryGetValue(tid, out cc) ? cc : 0) + 1; if (recG) covRec.Add(tid); if (sharedG) covShared.Add(tid); } } } catch { } } var txDate = new Dictionary<string, string>(StringComparer.Ordinal); var sec1 = new List<string>(); var exIgnored = 0; var exCat = 0; var exPayPal = 0; var sec1bRows = new List<string[]>(); var exCovRec = 0; var exCovShared = 0; var gapTotal = 0d; foreach (var t in Els(tx)) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement pid; var rtid = t.TryGetProperty("RtId", out pid) ? S(pid) : ""; if (rtid.Length == 0) continue; JsonElement ats; if (!t.TryGetProperty("Attributes", out ats) || ats.ValueKind != JsonValueKind.Object) continue; Func<string,string> A = n => { JsonElement v; return ats.TryGetProperty(n, out v) ? S(v) : ""; }; var bd = D10(A("BookingDate")); txDate[rtid] = bd; var inPeriod = (dFrom.Length == 0 || string.CompareOrdinal(bd, dFrom) >= 0) && (dTo.Length == 0 || string.CompareOrdinal(bd, dTo) <= 0); if (!inPeriod) continue; double amount = 0; JsonElement pa; if (ats.TryGetProperty("Amount", out pa) && pa.ValueKind == JsonValueKind.Number) amount = pa.GetDouble(); var ms = -1; JsonElement pm; if (ats.TryGetProperty("MatchState", out pm) && pm.ValueKind == JsonValueKind.Number) ms = pm.GetInt32(); var cp = W(A("CounterpartName")); var pur = W(A("Purpose")); var cur = A("Currency"); int ct2; var catExempted = txCatType.TryGetValue(rtid, out ct2) && catExempt.Contains(ct2); List<string> dl2; var hasDocs = txDocs.TryGetValue(rtid, out dl2) && dl2.Count > 0; if (hasDocs) { if (ms == 3) continue; if (catExempted) continue; int cCnt; if (!covCount.TryGetValue(rtid, out cCnt) || cCnt == 0) continue; if (covRec.Contains(rtid)) { exCovRec = exCovRec + 1; continue; } if (covShared.Contains(rtid)) { exCovShared = exCovShared + 1; continue; } double cSum; if (!covSum.TryGetValue(rtid, out cSum)) cSum = 0d; var pay = Math.Abs(amount); var gap = pay - Math.Abs(cSum); if (!(gap > partialGap) || !(gap > pay * partialRatio)) continue; gapTotal = gapTotal + gap; sec1bRows.Add(new string[] { gap.ToString("0000000000.000000", CultureInfo.InvariantCulture), Pad(bd, 13) + Pad(cp.Length > 0 ? cp : W(pur), 30) + RPad(Money(gap, cur), 15) + RPad(Money(amount, ""), 14) + RPad(Money(cSum, ""), 14) + "  " + Pad(cCnt.ToString(CultureInfo.InvariantCulture), 7) + W(pur) }); continue; } if (ms == 3) { exIgnored = exIgnored + 1; continue; } if (catExempted) { exCat = exCat + 1; continue; } if (amount < 0 && (Regex.IsMatch(cp, "(?i)paypal") || Regex.IsMatch(pur, "(?i)paypal\\s*\\*"))) { exPayPal = exPayPal + 1; continue; } string kn; if (!txCatName.TryGetValue(rtid, out kn)) kn = ""; sec1.Add(Pad(bd, 13) + Pad(cp.Length > 0 ? cp : "(ohne Gegenpartei)", 34) + RPad(Money(amount, cur), 16) + "  " + Pad("-", 20) + W(kn.Length > 0 ? kn : pur)); } sec1.Sort(StringComparer.Ordinal); sec1bRows.Sort((x, y) => string.CompareOrdinal(y[0], x[0])); var sec1b = sec1bRows.Select(r => r[1]).ToList(); var sec2 = new List<string>(); foreach (var l in Lines(noFile)) { try { using (var jd = JsonDocument.Parse(l)) { var ro = jd.RootElement; JsonElement p; var dd = D10(ro.TryGetProperty("d", out p) ? S(p) : ""); var pp = ro.TryGetProperty("p", out p) ? S(p) : ""; var gg = ro.TryGetProperty("g", out p) && p.ValueKind == JsonValueKind.Number ? p.GetDouble() : 0d; var uu = ro.TryGetProperty("u", out p) ? S(p) : ""; var nn = ro.TryGetProperty("n", out p) ? S(p) : ""; sec2.Add(Pad(dd, 13) + Pad(pp.Length > 0 ? pp : "(ohne Namen)", 34) + RPad(Money(gg, uu), 16) + "  " + Pad(nn.Length > 0 ? nn : "-", 20) + "nur Deckblatt, keine Datei hinterlegt"); } } catch { } } sec2.Sort(StringComparer.Ordinal); var sec3a = new List<string>(); var sec3b = new List<string>(); var exJournal = 0; foreach (var kv in dTxs) { var id = kv.Key; if (dState[id] == 4) continue; if (kv.Value.Count == 0) continue; if (kv.Value.Count >= 3) { exJournal = exJournal + 1; continue; } var dd = dDate[id]; var docIn = dd.Length > 0 && (dFrom.Length == 0 || string.CompareOrdinal(dd, dFrom) >= 0) && (dTo.Length == 0 || string.CompareOrdinal(dd, dTo) <= 0); var payIn = new List<string>(); var payOut = new List<string>(); foreach (var tid in kv.Value) { string bd2; if (!txDate.TryGetValue(tid, out bd2) || bd2.Length == 0) continue; var pIn = (dFrom.Length == 0 || string.CompareOrdinal(bd2, dFrom) >= 0) && (dTo.Length == 0 || string.CompareOrdinal(bd2, dTo) <= 0); if (pIn) payIn.Add(bd2); else payOut.Add(bd2); } if (payIn.Count == 0 && payOut.Count == 0) continue; var row = Pad(dd.Length > 0 ? dd : "(ohne Datum)", 13) + Pad(dParty[id].Length > 0 ? dParty[id] : "(ohne Namen)", 34) + RPad(Money(dGross[id], dCur[id]), 16) + "  " + Pad(dNum[id].Length > 0 ? dNum[id] : "-", 20); if (!docIn && payIn.Count > 0) { payIn.Sort(StringComparer.Ordinal); sec3a.Add(row + "Zahlung: " + string.Join(", ", payIn)); } else if (docIn && payIn.Count == 0) { payOut.Sort(StringComparer.Ordinal); sec3b.Add(row + "Zahlung: " + string.Join(", ", payOut)); } } sec3a.Sort(StringComparer.Ordinal); sec3b.Sort(StringComparer.Ordinal); var sec4 = new List<string>(); foreach (var kv in dDate) { var id = kv.Key; var dd = kv.Value; if (dState[id] == 4) continue; if (dd.Length == 0) continue; var docIn = (dFrom.Length == 0 || string.CompareOrdinal(dd, dFrom) >= 0) && (dTo.Length == 0 || string.CompareOrdinal(dd, dTo) <= 0); if (!docIn) continue; var cc = D10(dCreated[id]); if (cc.Length == 0) continue; if (dTo.Length > 0 && string.CompareOrdinal(cc, dTo) <= 0) continue; sec4.Add(Pad(dd, 13) + Pad(dParty[id].Length > 0 ? dParty[id] : "(ohne Namen)", 34) + RPad(Money(dGross[id], dCur[id]), 16) + "  " + Pad(dNum[id].Length > 0 ? dNum[id] : "-", 20) + "erfasst " + cc); } sec4.Sort(StringComparer.Ordinal); var sb = new StringBuilder(); Action<string> P = s => sb.Append(s).Append("\r\n"); var colHead = Pad("Datum", 13) + Pad("Gegenpartei/Lieferant", 34) + RPad("Betrag", 16) + "  " + Pad("Belegnr.", 20) + "Hinweis"; var colHeadCov = Pad("Datum", 13) + Pad("Gegenpartei/Zweck", 30) + RPad("Offen", 15) + RPad("Zahlung", 14) + RPad("Belege", 14) + "  " + Pad("Anzahl", 7) + "Verwendungszweck"; P("PRÜFPROTOKOLL ZUR BELEGÜBERGABE (AB#5088)"); P(new string("="[0], 80)); P("Geschäftsjahr  : " + (string.IsNullOrWhiteSpace(fyName) ? "-" : fyName)); P("Periode        : " + (dFrom.Length > 0 ? dFrom : "offen") + " bis " + (dTo.Length > 0 ? dTo : "offen")); P("Umfang         : " + (string.IsNullOrWhiteSpace(scope) ? "all" : scope) + "  (AP = Eingangsrechnungen, AR = Ausgangsrechnungen)"); P("Erstellt       : " + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC"); P(""); P("Dieses Protokoll wird VOR dem Zusammenstellen des Pakets berechnet und liegt"); P("dem Paket bei. Es nennt nur Fälle, die eine Nacharbeit erfordern."); P(""); P("Bewusst NICHT gemeldet werden die drei legitimen Ausnahmen (AB#5088):"); P("  - Zahlungen ohne Belegpflicht: Kostenart PERSONNEL, BANKFEES, VAT oder TAXES,"); P("    auf \"ignoriert\" gesetzte Zahlungen (mit Ausschlussgrund) und"); P("    PayPal-Deckungsbuchungen (Abschnitt 1)."); P("  - Dauerbelege: Bruttobetrag 0, Belegdatum am Laufzeitende (Abschnitte 3 und 4)."); P("  - Sammelbelege und Sammelzahlungen: ein Beleg mit 3 oder mehr Zahlungen,"); P("    z. B. das Lohnjournal oder ein ausgeführter Sammelauftrag (Abschnitte 1b und 3)."); P("Abschnitt 1b nennt Zahlungen, die einen Beleg HABEN, deren Belege die Zahlung"); P("aber deutlich nicht abdecken – Abschnitt 1 sieht diese Faelle nicht."); P("Übergangen in Abschnitt 1: " + exCat.ToString(CultureInfo.InvariantCulture) + " x belegfreie Kostenart, " + exIgnored.ToString(CultureInfo.InvariantCulture) + " x ignoriert, " + exPayPal.ToString(CultureInfo.InvariantCulture) + " x PayPal-Deckung."); P("Übergangen in Abschnitt 1b: " + exCovRec.ToString(CultureInfo.InvariantCulture) + " x Dauerbeleg als Deckung, " + exCovShared.ToString(CultureInfo.InvariantCulture) + " x Sammelbeleg als Deckung."); P("Übergangen in Abschnitt 3: " + exJournal.ToString(CultureInfo.InvariantCulture) + " x Sammelbeleg/Sammelzahlung."); P(""); Action<string,List<string>,string> Sec = (title, rows, empty) => { P(Head(title, rows.Count)); P(line); if (rows.Count == 0) { P(empty); } else { P(colHead); foreach (var r in rows) P(r); } P(""); }; Sec("1) ZAHLUNGEN IN DER PERIODE OHNE BELEG", sec1, "Keine – jede belegpflichtige Zahlung der Periode hat einen Beleg."); P(Head("1b) ZAHLUNGEN NUR TEILWEISE BELEGT", sec1b.Count)); P(line); if (sec1b.Count == 0) { P("Keine – jede belegte Zahlung ist durch ihre Belege gedeckt."); } else { P("Gemeldet ab " + Money(partialGap, "") + " offen UND mehr als " + (partialRatio * 100d).ToString("0.##", CultureInfo.InvariantCulture) + " % der Zahlung."); P(colHeadCov); foreach (var r in sec1b) P(r); P("Summe offen: " + Money(gapTotal, "")); } P(""); Sec("2) BELEGE DER PERIODE OHNE HINTERLEGTE DATEI", sec2, "Keine – zu jedem Beleg des Pakets liegt die Originaldatei."); Sec("3a) BELEG AUSSERHALB DER PERIODE, ZAHLUNG INNERHALB", sec3a, "Keine."); Sec("3b) BELEG IN DER PERIODE, ZAHLUNG AUSSERHALB", sec3b, "Keine."); Sec("4) BELEGE DER PERIODE, ERST NACH PERIODENENDE ERFASST", sec4, "Keine – alle Belege der Periode waren vor Periodenende erfasst."); var total = sec1.Count + sec1b.Count + sec2.Count + sec3a.Count + sec3b.Count + sec4.Count; P(line); P(total == 0 ? "ERGEBNIS: keine Auffälligkeiten." : "ERGEBNIS: " + total.ToString(CultureInfo.InvariantCulture) + " Fälle zur Nacharbeit (siehe oben)."); return Convert.ToBase64String(Encoding.UTF8.GetBytes("\uFEFF" + sb.ToString()));'
+              usings:
+                - System
+                - System.Linq
+                - System.Globalization
+                - System.Text
+                - System.Text.Json
+                - System.Text.RegularExpressions
+                - System.Collections.Generic
+              returnType: String
+              arguments:
+                - name: tx
+                  valuePath: $.payTx.Items
+                  dataType: RecordArray
+                - name: meta
+                  valuePath: $.payMetaLines
+                  dataType: StringArray
+                - name: noFile
+                  valuePath: $.noFileLines
+                  dataType: StringArray
+                - name: cats
+                  valuePath: $.payCatLines
+                  dataType: StringArray
+                - name: pFrom
+                  valuePath: $.txFrom
+                  dataType: String
+                - name: pTo
+                  valuePath: $.txTo
+                  dataType: String
+                - name: fyName
+                  valuePath: $.fyName
+                  dataType: String
+                # Absent for a full-year export - ExecuteCSharp coalesces an unresolved
+                # argument to null and the snippet reads that as "all".
+                - name: scope
+                  valuePath: $.query.scope
+                  dataType: String
+              targetPath: $.pruefB64
+            # No If guard here, unlike the two CSVs: the protocol is the statement that the
+            # period WAS checked, so it ships even when every section is empty.
+            - type: FormatString@1
+              description: Verbatim zip entry for the readiness protocol (base64 is JSON-safe)
+              format: '{"fileName":"pruefprotokoll.txt","contentBase64":"{$.pruefB64}","verbatim":true}'
+              targetPath: $.pruefEntryJson
+            - type: WriteJson@1
+              description: Append the readiness protocol to the zip entries
+              jsonStringPath: $.pruefEntryJson
+              targetPath: $.zipEntries
+              targetValueKind: Array
+              targetValueWriteMode: Append
+            - type: SetPrimitiveValue@1
+              description: Release the readiness protocol base64
+              targetPath: $.pruefB64
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the readiness meta lines
+              targetPath: $.payMetaLines
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the no-file lines
+              targetPath: $.noFileLines
+              value: ""
+              valueType: String
+            - type: FormatString@1
+              description: ZIP file name
+              nullValue: handover
+              format: 'handover-{$.query.fiscalYearId}.zip'
+              targetPath: $.zip.fileName
+            # Stream each entry's merged PDF from the scratch space into the ZIP (also on the
+            # scratch space) and persist it directly as a FileSystemItem — no whole-ZIP byte[]
+            # or base64 on the heap, and no separate CreateFileSystemUpdate round-trip (AB#4642).
+            - type: CreateZipArchive@1
+              description: Stream merged PDFs into the handover ZIP and persist it as a FileSystemItem
+              path: $.zipEntries
+              persistAsFileSystemItem: true
+              rootFolderWellKnownName: Documents
+              fileNamePath: $.zip.fileName
+              contentType: application/zip
+              generateRtId: true
+              # Unique file names ({date}_{party}_{NNN}.pdf) + belege.csv index in the
+              # ZIP root listing every document's parsed data and its final path.
+              appendSequenceNumber: true
+              manifestFileName: belege.csv
+              manifestFileNameColumn: Dateiname
+              targetPath: $.zip.itemRtId
+
+            # -- 4) Return { fileSystemItem: <rtId> } -----------------------------------
+            # The HTTP response body is the final data context. Put the id at the root so
+            # the body is a flat { "fileSystemItem": "<rtId>" } (the frontend reads
+            # response.fileSystemItem directly).
+            - type: SetPrimitiveValue@1
+              description: Response id at root
+              targetPath: $.fileSystemItem
+              valuePath: $.zip.itemRtId
+              valueType: String
+            - type: SetPipelineExecutionResult@1
+              path: $.fileSystemItem
+            # Project the context down to just the id so the HTTP body is clean.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.fileSystemItem
+                  inclusion: true
