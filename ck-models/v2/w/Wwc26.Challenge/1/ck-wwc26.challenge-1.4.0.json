@@ -1,0 +1,147 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.5.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "Submission-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A coding-challenge submission \u2014 a public git repo link plus team and project metadata.",
+      "attributes": [
+        {
+          "id": "Wwc26.Challenge-1.4.0/TeamName-1",
+          "name": "TeamName",
+          "isOptional": false
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/RepositoryUrl-1",
+          "name": "RepositoryUrl",
+          "isOptional": false
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/ContactEmail-1",
+          "name": "ContactEmail",
+          "isOptional": false
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/ProjectTitle-1",
+          "name": "ProjectTitle",
+          "isOptional": false
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/ProjectDescription-1",
+          "name": "ProjectDescription",
+          "isOptional": true
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/Remarks-1",
+          "name": "Remarks",
+          "isOptional": true
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/SecretKey-1",
+          "name": "SecretKey",
+          "isOptional": true
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/SubmittedAt-1",
+          "name": "SubmittedAt",
+          "isOptional": false
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/AcceptedTerms-1",
+          "name": "AcceptedTerms",
+          "isOptional": false
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/ConsentNewsletter-1",
+          "name": "ConsentNewsletter",
+          "isOptional": false
+        },
+        {
+          "id": "Wwc26.Challenge-1.4.0/ConsentVersion-1",
+          "name": "ConsentVersion",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "AcceptedTerms-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Participant accepted the participation terms \u0026 privacy notice, which include public publication of the entry. Mandatory condition of participation (GDPR Art. 6(1)(b)); the pipeline rejects submissions without it."
+    },
+    {
+      "id": "ConsentNewsletter-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Optional opt-in consent to receive newsletter / marketing e-mails (GDPR Art. 6(1)(a) \u002B \u00A7174 TKG / \u00A77 UWG). Not a condition of participation."
+    },
+    {
+      "id": "ConsentVersion-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Version label of the participation terms \u0026 privacy notice shown to the participant at submission time (proof of what was consented to)."
+    },
+    {
+      "id": "ContactEmail-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Contact e-mail address for feedback to the team."
+    },
+    {
+      "id": "ProjectDescription-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Short description of the submitted project."
+    },
+    {
+      "id": "ProjectTitle-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Title of the submitted project."
+    },
+    {
+      "id": "Remarks-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional additional remarks from the participant."
+    },
+    {
+      "id": "RepositoryUrl-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Publicly reachable git repository URL of the submission."
+    },
+    {
+      "id": "SecretKey-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The treasure-hunt secret key the participant\u0027s solution produced (e.g. OCTO-2025-XXXXXXXX). Stored verbatim for the jury \u2014 never validated or graded automatically."
+    },
+    {
+      "id": "SubmittedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Server-side timestamp of the submission."
+    },
+    {
+      "id": "TeamName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Name of the participating team or individual."
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "Wwc26.Challenge-1.4.0",
+  "description": "WWC26 coding-challenge submissions (public git repo links)."
+}
