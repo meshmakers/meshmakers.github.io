@@ -1,0 +1,4257 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.4.0",
+    "Basic.Energy-1.9.0",
+    "System-2.5.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Actuator-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/BuildingElement-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "associations": [
+        {
+          "id": "EnergyIQ-2.12.0/SpaceActuators-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/Space-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/EquipmentActuators-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/BuildingElement-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/EquipmentActuators-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/TechnicalSystem-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TerminalActuators-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/RoomTerminal-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base class for actuators (IFC: IfcActuator). Concrete subtypes: Valve, Damper, Dimmer, Motor.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/ActuatorManufacturer-1",
+          "name": "Manufacturer",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ActuatorModel-1",
+          "name": "Model",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/LastValueUpdate-1",
+          "name": "LastUpdate",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsFaulty-1",
+          "name": "IsFaulty",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "AirHandlingUnit-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/TechnicalSystem-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Air handling unit - HVAC ventilation system (IFC: IfcUnitaryEquipment, VDI 3814)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/SupplyAirTemp-1",
+          "name": "SupplyAirTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ReturnAirTemp-1",
+          "name": "ReturnAirTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/OutdoorAirTemp-1",
+          "name": "OutdoorAirTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ExhaustAirTemp-1",
+          "name": "ExhaustAirTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SupplyAirTempSetpoint-1",
+          "name": "SupplyAirTempSetpoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SupplyAirFlow-1",
+          "name": "SupplyAirFlow",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FanSpeedSupply-1",
+          "name": "FanSpeedSupply",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FanSpeedReturn-1",
+          "name": "FanSpeedReturn",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FilterDifferentialPressure-1",
+          "name": "FilterDifferentialPressure",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/HeatRecoveryEfficiency-1",
+          "name": "HeatRecoveryEfficiency",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/HeatingCoilPosition-1",
+          "name": "HeatingCoilPosition",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/CoolingCoilPosition-1",
+          "name": "CoolingCoilPosition",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "AirTerminal-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/RoomTerminal-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Air terminal - VAV/CAV box, diffuser, grille (IFC: IfcAirTerminal / IfcAirTerminalBox).",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/AirTerminalBoxType-1",
+          "name": "BoxType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/AirflowRate-1",
+          "name": "AirflowRate",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/AirflowSetpoint-1",
+          "name": "AirflowSetpoint",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Appliance-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Meter-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Individually metered household appliance (washing machine, dryer, dishwasher, ...). Inherits energy-flow attributes from Meter; adds category \u002B nameplate info.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/ApplianceCategoryValue-1",
+          "name": "Category",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ApplianceRatedPower-1",
+          "name": "RatedPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ApplianceManufacturer-1",
+          "name": "Manufacturer",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ApplianceModelName-1",
+          "name": "ModelName",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "BatteryStorage-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Battery storage system (IFC: IfcElectricFlowStorageDevice)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/Identifier-1",
+          "name": "Identifier",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RatedCapacityKWh-1",
+          "name": "RatedCapacity",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/MaxChargePower-1",
+          "name": "MaxChargePower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/MaxDischargePower-1",
+          "name": "MaxDischargePower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/StateOfCharge-1",
+          "name": "StateOfCharge",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ChargingPower-1",
+          "name": "ChargingPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/DischargingPower-1",
+          "name": "DischargingPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/BatteryTemperature-1",
+          "name": "Temperature",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/CycleCount-1",
+          "name": "CycleCount",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsCharging-1",
+          "name": "IsCharging",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsDischarging-1",
+          "name": "IsDischarging",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsRunning-1",
+          "name": "IsRunning",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FaultState-1",
+          "name": "FaultState",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Boiler-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/TechnicalSystem-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Heating boiler (IFC: IfcBoiler, VDI 3814)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/SupplyTemp-1",
+          "name": "SupplyTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ReturnTemp-1",
+          "name": "ReturnTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SupplyTempSetpoint-1",
+          "name": "SupplyTempSetpoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ModulationLevel-1",
+          "name": "ModulationLevel",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FuelConsumption-1",
+          "name": "FuelConsumption",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Efficiency-1",
+          "name": "Efficiency",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Building-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Building (IFC: IfcBuilding)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/GlobalId-1",
+          "name": "GlobalId",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/LongName-1",
+          "name": "LongName",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ElevationOfRefHeight-1",
+          "name": "ElevationOfRefHeight",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/AddressValue-1",
+          "name": "BuildingAddress",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/YearOfConstruction-1",
+          "name": "YearOfConstruction",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/GrossFloorArea-1",
+          "name": "GrossFloorArea",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "BuildingElement-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base class for building elements (IFC: IfcBuildingElement)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/GlobalId-1",
+          "name": "GlobalId",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ObjectType-1",
+          "name": "ObjectType",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "BuildingStorey-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Building storey/floor (IFC: IfcBuildingStorey)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/GlobalId-1",
+          "name": "GlobalId",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/LongName-1",
+          "name": "LongName",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Elevation-1",
+          "name": "Elevation",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/AboveGround-1",
+          "name": "AboveGround",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/GrossFloorArea-1",
+          "name": "GrossFloorArea",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/NetFloorArea-1",
+          "name": "NetFloorArea",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/StoreyNumber-1",
+          "name": "StoreyNumber",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FloorDesignation-1",
+          "name": "FloorDesignation",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "CO2Sensor-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Sensor-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "CO2 concentration sensor (IFC: IfcSensor/CO2SENSOR). Unit: ppm.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/CO2Level-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ChargingStation-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Meter-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "EV charging station / wallbox. Inherits energy-flow attributes from Meter; adds connector type, session telemetry.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/ChargingConnectorTypeValue-1",
+          "name": "ConnectorType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/MaxChargingPower-1",
+          "name": "MaxChargingPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/CurrentSessionEnergy-1",
+          "name": "CurrentSessionEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SessionActive-1",
+          "name": "SessionActive",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ChilledBeam-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/HydronicTerminal-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Chilled beam terminal (IFC: IfcCooledBeam). Passive or active cooling beam; some installations also support heating - set IsReversible=true in that case."
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Chiller-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/TechnicalSystem-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Cooling chiller (IFC: IfcChiller, VDI 3814)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/SupplyTemp-1",
+          "name": "SupplyTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ReturnTemp-1",
+          "name": "ReturnTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SupplyTempSetpoint-1",
+          "name": "SupplyTempSetpoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ModulationLevel-1",
+          "name": "ModulationLevel",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/PowerConsumption-1",
+          "name": "PowerConsumption",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Efficiency-1",
+          "name": "Efficiency",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Damper-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Actuator-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Damper actuator (IFC: IfcDamper).",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/DamperPosition-1",
+          "name": "Position",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/DamperPositionSetpoint-1",
+          "name": "PositionSetpoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/AirflowRate-1",
+          "name": "AirflowRate",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/AirflowSetpoint-1",
+          "name": "AirflowSetpoint",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Dimmer-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Actuator-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Lighting dimmer / electronic ballast (IFC: IfcActuator/ELECTRICACTUATOR). Standalone dimmer entity; for building-element luminaires use Luminaire.DimmingLevel directly.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/DimmingLevel-1",
+          "name": "Level",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/DimmingLevelSetpoint-1",
+          "name": "LevelSetpoint",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "DistributionSystem-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyIQ-2.12.0/SystemMembers-1",
+          "targetCkTypeId": "Basic-2.4.0/NamedEntity-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SystemSpaces-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/Space-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SystemSpaces-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/BuildingStorey-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Logical grouping of equipment that belong to one distribution system - heating circuit, cooling circuit, ventilation system, electrical circuit, etc. (IFC: IfcDistributionSystem).",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/DistributionSystemTypeValue-1",
+          "name": "SystemType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TotalEnergyConsumed-1",
+          "name": "TotalEnergyConsumed",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TotalEnergyDelivered-1",
+          "name": "TotalEnergyDelivered",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SystemEfficiency-1",
+          "name": "SystemEfficiency",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/LastEnergyUpdate-1",
+          "name": "LastEnergyUpdate",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Door-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/PassiveBuildingElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Door with state attributes (IFC: IfcDoor)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/OverallHeight-1",
+          "name": "OverallHeight",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/OverallWidth-1",
+          "name": "OverallWidth",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsExternal-1",
+          "name": "IsExternal",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsOpen-1",
+          "name": "IsOpen",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsLocked-1",
+          "name": "IsLocked",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ElectricHeater-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/RoomTerminal-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Electric room heater - convector, IR panel, towel rail (IFC: IfcSpaceHeater/CONVECTOR with ELECTRIC USERDEFINED).",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/PowerConsumption-1",
+          "name": "PowerConsumption",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ModulationLevel-1",
+          "name": "PowerLevel",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ExternalSpace-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "External spatial element - terrace, balcony, garden, driveway (IFC: IfcExternalSpatialElement). Distinct from Space - typically no indoor sensors, no thermal/lighting requirements.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/GlobalId-1",
+          "name": "GlobalId",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/LongName-1",
+          "name": "LongName",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpaceTypeValue-1",
+          "name": "SpaceType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/PredefinedType-1",
+          "name": "PredefinedType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/NetFloorArea-1",
+          "name": "Area",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RoomNumber-1",
+          "name": "RoomNumber",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RoomIdentifier-1",
+          "name": "RoomIdentifier",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "FanCoilUnit-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/HydronicTerminal-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Fan coil unit (IFC: IfcUnitaryEquipment \u002B IfcFan). Forced-air \u002B hydronic coil(s); 2-pipe uses one valve \u002B IsReversible, 4-pipe has separate heating and cooling valves.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/FanCoilHeatingValvePosition-1",
+          "name": "HeatingValvePosition",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FanCoilCoolingValvePosition-1",
+          "name": "CoolingValvePosition",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FanCoilFanSpeed-1",
+          "name": "FanSpeed",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FanCoilFanStage-1",
+          "name": "FanStage",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FanCoilFanSpeedSetpoint-1",
+          "name": "FanSpeedSetpoint",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "GenericSensor-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Sensor-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Fallback sensor type for proprietary / vendor-specific or unclassified measurements. CurrentValue is String to carry any payload (numeric, enum, custom).",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/GenericStringValue-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "GridConnection-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Meter-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyIQ-2.12.0/FormalMeteringPoint-1",
+          "targetCkTypeId": "Basic.Energy-1.9.0/MeteringPoint-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Grid coupling point \u2014 the formal point where the installation meets the public utility grid. Carries Direction (Import/Export/Bidirectional) plus optionally an association to a Basic.Energy/MeteringPoint for formal Z\u00E4hlpunkt linkage.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/GridConnectionDirectionValue-1",
+          "name": "Direction",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsMainConnection-1",
+          "name": "IsMainConnection",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "HeatPump-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/TechnicalSystem-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Heat pump (IFC: IfcUnitaryEquipment/HEATPUMP, VDI 3814). Reversible aggregate capable of heating, active cooling and/or passive cooling depending on capabilities.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/HeatSourceValue-1",
+          "name": "HeatSource",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsReversibleAggregate-1",
+          "name": "IsReversible",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/HeatingCapacity-1",
+          "name": "HeatingCapacity",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/CoolingCapacity-1",
+          "name": "CoolingCapacity",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/HeatPumpOperatingModeValue-1",
+          "name": "OperatingMode",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SupplyTemp-1",
+          "name": "SupplyTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ReturnTemp-1",
+          "name": "ReturnTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SupplyTempSetpoint-1",
+          "name": "SupplyTempSetpoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/CoolingSupplyTemp-1",
+          "name": "CoolingSupplyTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/CoolingSupplyTempSetpoint-1",
+          "name": "CoolingSupplyTempSetpoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/HeatingCurve-1",
+          "name": "HeatingCurve",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/HeatingCurveOffset-1",
+          "name": "HeatingCurveOffset",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ModulationLevel-1",
+          "name": "ModulationLevel",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/PowerConsumption-1",
+          "name": "PowerConsumption",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SourceInletTemp-1",
+          "name": "SourceInletTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SourceOutletTemp-1",
+          "name": "SourceOutletTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/HotGasTemp-1",
+          "name": "HotGasTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/COP-1",
+          "name": "COP",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SCOP-1",
+          "name": "SCOP",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/EER-1",
+          "name": "EER",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SEER-1",
+          "name": "SEER",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "HumiditySensor-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Sensor-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Relative humidity sensor (IFC: IfcSensor/HUMIDITYSENSOR). Unit: %RH.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/Humidity-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "HydronicTerminal-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/RoomTerminal-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract water-based room terminal. Concrete subtypes: Radiator, RadiantSurface, ChilledBeam, FanCoilUnit.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/TerminalSupplyTemp-1",
+          "name": "SupplyTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TerminalReturnTemp-1",
+          "name": "ReturnTemp",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TerminalFlowRate-1",
+          "name": "FlowRate",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsReversibleTerminal-1",
+          "name": "IsReversible",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "IlluminanceSensor-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Sensor-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Illuminance / light level sensor (IFC: IfcSensor/LIGHTSENSOR). Unit: lux.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/Illuminance-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Inverter-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Inverter - converts DC to AC power (IFC: IfcUnitaryEquipment)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/Identifier-1",
+          "name": "Identifier",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RatedPowerKVA-1",
+          "name": "RatedPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/DcPower-1",
+          "name": "DcPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/AcPower-1",
+          "name": "AcPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/DcVoltage-1",
+          "name": "DcVoltage",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/AcVoltage-1",
+          "name": "AcVoltage",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Frequency-1",
+          "name": "Frequency",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/InverterEfficiency-1",
+          "name": "Efficiency",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Temperature-1",
+          "name": "Temperature",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsRunning-1",
+          "name": "IsRunning",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FaultState-1",
+          "name": "FaultState",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Luminaire-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/PassiveBuildingElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Light fixture (IFC: IfcLightFixture, VDI 3814)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/LuminaireTypeValue-1",
+          "name": "LuminaireType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RatedPower-1",
+          "name": "RatedPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsOn-1",
+          "name": "IsOn",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/DimmingLevel-1",
+          "name": "DimmingLevel",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/DimmingLevelSetpoint-1",
+          "name": "DimmingLevelSetpoint",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Meter-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/BuildingElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyIQ-2.12.0/SpaceElements-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/Space-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpaceElements-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/ExternalSpace-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/StoreyElements-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/BuildingStorey-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Energy/utility meter (electricity, gas, heat, water). Concrete \u2014 use directly for generic sub-meters (e.g. per-floor electricity meters fed via Loxone), or extend via GridConnection / ChargingStation / Appliance for shape-specific semantics. For Loxone-fed meters, MeterIdentifier holds the Loxone control reference.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/MeterIdentifier-1",
+          "name": "MeterIdentifier",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/MeterCarrierTypeValue-1",
+          "name": "CarrierType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/MeteringPointReference-1",
+          "name": "MeteringPointReference",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ImportedEnergy-1",
+          "name": "ImportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ExportedEnergy-1",
+          "name": "ExportedEnergy",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ActivePower-1",
+          "name": "ActivePower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ApparentPower-1",
+          "name": "ApparentPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ReactivePower-1",
+          "name": "ReactivePower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Voltage-1",
+          "name": "Voltage",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Ampere-1",
+          "name": "Ampere",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/MeterFrequency-1",
+          "name": "Frequency",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Motor-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Actuator-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Motor / variable-speed drive (IFC: IfcMotorConnection / IfcActuator). Use for shading drives, pump VSDs, fan motors.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/MotorState-1",
+          "name": "State",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/MotorSpeed-1",
+          "name": "Speed",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/MotorSpeedSetpoint-1",
+          "name": "SpeedSetpoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/PowerConsumption-1",
+          "name": "PowerConsumption",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "PVString-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "PV string - group of connected PV modules (IFC: IfcSolarDevice)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/Identifier-1",
+          "name": "Identifier",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RatedPowerKWp-1",
+          "name": "RatedPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Orientation-1",
+          "name": "Orientation",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Tilt-1",
+          "name": "Tilt",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ModuleCount-1",
+          "name": "ModuleCount",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ModuleType-1",
+          "name": "ModuleType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/CurrentPowerKW-1",
+          "name": "CurrentPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/EnergyProducedKWh-1",
+          "name": "EnergyProduced",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/DcVoltage-1",
+          "name": "DcVoltage",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsRunning-1",
+          "name": "IsRunning",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FaultState-1",
+          "name": "FaultState",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "PassiveBuildingElement-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/BuildingElement-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "associations": [
+        {
+          "id": "EnergyIQ-2.12.0/SpaceElements-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/Space-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base for passive building/fabric elements that are located in a space but not actively controlled as a device (Wall, Door, Window, Luminaire, ShadingDevice). Separating these from Sensor/Actuator/RoomTerminal lets the Space.SpaceElements association target only fabric elements, removing the overlap with SpaceSensors/SpaceActuators/SpaceTerminals."
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "PhotovoltaicSystem-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyIQ-2.12.0/SystemMembers-1",
+          "targetCkTypeId": "Basic-2.4.0/NamedEntity-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Photovoltaic system - logical grouping of PV strings, inverters and battery (IFC: IfcSystem). A pure logical aggregate (NamedEntity, NOT a spatial TreeNode): it lives in the Systems view only. Its physical components (PVString/Inverter/BatteryStorage) are anchored in the spatial tree where they actually sit (roofs, Technikraum) and are grouped here via the outbound SystemMembers association. The PhotovoltaicSystem is itself a member of the electrical DistributionSystem via inbound MemberOfSystem (nested IfcSystem).",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/Identifier-1",
+          "name": "Identifier",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TotalRatedPowerKWp-1",
+          "name": "TotalRatedPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TotalCurrentPowerKW-1",
+          "name": "TotalCurrentPower",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TotalEnergyProducedKWh-1",
+          "name": "TotalEnergyProduced",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/GridFeedIn-1",
+          "name": "GridFeedIn",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SelfConsumption-1",
+          "name": "SelfConsumption",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsRunning-1",
+          "name": "IsRunning",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FaultState-1",
+          "name": "FaultState",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "PresenceSensor-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Sensor-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Occupancy / presence sensor / PIR (IFC: IfcSensor/MOVEMENTSENSOR). Boolean.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/PresenceDetected-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Pump-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/TechnicalSystem-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Pump (IFC: IfcPump, VDI 3814)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/FlowRate-1",
+          "name": "FlowRate",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Pressure-1",
+          "name": "Pressure",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpeedSetpoint-1",
+          "name": "SpeedSetpoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Speed-1",
+          "name": "Speed",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/PowerConsumption-1",
+          "name": "PowerConsumption",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "RadiantSurface-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/HydronicTerminal-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Radiant surface terminal - underfloor, ceiling or wall (IFC: IfcSpaceHeater/RADIATOR USERDEFINED). Can be reversible (heating \u002B passive cooling) when IsReversible=true.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/RadiantSurfaceArea-1",
+          "name": "ActiveArea",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RadiantSurfaceMaxSupplyTemp-1",
+          "name": "MaxSupplyTemp",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Radiator-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/HydronicTerminal-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Conventional water-based radiator (IFC: IfcSpaceHeater/RADIATOR). Single heating valve."
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "RoomTerminal-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/BuildingElement-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "associations": [
+        {
+          "id": "EnergyIQ-2.12.0/SpaceTerminals-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/Space-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TerminalServedBy-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/TechnicalSystem-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base class for room-level terminal units (VDI 3814: Raumterminal). Concrete subtypes are HydronicTerminal, AirTerminal, ElectricHeater.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/TerminalOperatingModeValue-1",
+          "name": "OperatingMode",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/TerminalNominalPower-1",
+          "name": "NominalPower",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Schedule-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyIQ-2.12.0/SpaceSchedules-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/Space-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Operational schedule (occupancy, heating, cooling, lighting, etc.) that can be shared across multiple spaces via M:N association. IFC analog: IfcWorkSchedule.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/ScheduleTypeValue-1",
+          "name": "ScheduleType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ScheduleEntries-1",
+          "name": "Entries",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ScheduleActive-1",
+          "name": "IsActive",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ScheduleValidFrom-1",
+          "name": "ValidFrom",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ScheduleValidTo-1",
+          "name": "ValidTo",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Sensor-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/BuildingElement-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "associations": [
+        {
+          "id": "EnergyIQ-2.12.0/SpaceSensors-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/Space-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpaceSensors-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/ExternalSpace-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/EquipmentSensors-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/BuildingElement-1"
+        },
+        {
+          "id": "EnergyIQ-2.12.0/EquipmentSensors-1",
+          "targetCkTypeId": "EnergyIQ-2.12.0/TechnicalSystem-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base class for sensors (IFC: IfcSensor). Concrete subtypes carry a typed CurrentValue attribute.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/SensorManufacturer-1",
+          "name": "Manufacturer",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SensorModel-1",
+          "name": "Model",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SensorSerialNumber-1",
+          "name": "SerialNumber",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SensorAccuracy-1",
+          "name": "Accuracy",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/LastValueUpdate-1",
+          "name": "LastUpdate",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsFaulty-1",
+          "name": "IsFaulty",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ShadingDevice-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/PassiveBuildingElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Shading device - blind, shutter, awning (IFC: IfcShadingDevice, VDI 3814)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/ShadingTypeValue-1",
+          "name": "ShadingType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Position-1",
+          "name": "Position",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SlatAngle-1",
+          "name": "SlatAngle",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/PositionSetpoint-1",
+          "name": "PositionSetpoint",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SlatAngleSetpoint-1",
+          "name": "SlatAngleSetpoint",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Site-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/Tree-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Site/location - root of spatial hierarchy (IFC: IfcSite)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/GlobalId-1",
+          "name": "GlobalId",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/LongName-1",
+          "name": "LongName",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RefLatitude-1",
+          "name": "RefLatitude",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RefLongitude-1",
+          "name": "RefLongitude",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RefElevation-1",
+          "name": "RefElevation",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Space-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Room - central object for energy optimization (IFC: IfcSpace \u002B VDI 3814 Raumautomation). Sensors/Actuators/Terminals are modeled as separate entities and linked via SpaceSensors/SpaceActuators/SpaceTerminals.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/GlobalId-1",
+          "name": "GlobalId",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/LongName-1",
+          "name": "LongName",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RoomNumber-1",
+          "name": "RoomNumber",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/RoomIdentifier-1",
+          "name": "RoomIdentifier",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpaceTypeValue-1",
+          "name": "SpaceType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/PredefinedType-1",
+          "name": "PredefinedType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/NetFloorArea-1",
+          "name": "NetFloorArea",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/GrossFloorArea-1",
+          "name": "GrossFloorArea",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/CeilingHeight-1",
+          "name": "CeilingHeight",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ThermalRequirementsRecord-1",
+          "name": "ThermalRequirements",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/LightingRequirementsRecord-1",
+          "name": "LightingRequirements",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/OccupancyRequirementsRecord-1",
+          "name": "OccupancyRequirements",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/OperatingModeValue-1",
+          "name": "OperatingMode",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "TechnicalSystem-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/TreeNode-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base class for technical building systems (VDI 3814: Anlagenautomation)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/Identifier-1",
+          "name": "Identifier",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SystemTypeValue-1",
+          "name": "SystemType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsRunning-1",
+          "name": "IsRunning",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/FaultState-1",
+          "name": "FaultState",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "TemperatureSensor-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Sensor-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Temperature sensor (IFC: IfcSensor/TEMPERATURESENSOR). Unit: \u00B0C.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/Temperature-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "ThermalEnergyStorage-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/TechnicalSystem-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Thermal energy storage / buffer tank (IFC: IfcTank/THERMALTANK). Stores heating or cooling energy for time-shift operation.",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/StorageCapacity-1",
+          "name": "StorageCapacity",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/StorageVolume-1",
+          "name": "StorageVolume",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/StorageTempTop-1",
+          "name": "StorageTempTop",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/StorageTempMiddle-1",
+          "name": "StorageTempMiddle",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/StorageTempBottom-1",
+          "name": "StorageTempBottom",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/StorageChargeLevel-1",
+          "name": "ChargeLevel",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Valve-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Actuator-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Valve actuator (IFC: IfcValve).",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/ValveTypeValue-1",
+          "name": "ValveType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ValvePosition-1",
+          "name": "Position",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ValvePositionSetpoint-1",
+          "name": "PositionSetpoint",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Wall-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/PassiveBuildingElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Wall element (IFC: IfcWall)"
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Window-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/PassiveBuildingElement-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Window with state attributes (IFC: IfcWindow)",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/OverallHeight-1",
+          "name": "OverallHeight",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/OverallWidth-1",
+          "name": "OverallWidth",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IsOpen-1",
+          "name": "IsOpen",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/OpeningPosition-1",
+          "name": "OpeningPosition",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "WindowContactSensor-1",
+      "derivedFromCkTypeId": "EnergyIQ-2.12.0/Sensor-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Window / door contact sensor (IFC: IfcSensor/CONTACTSENSOR). Boolean (true = closed/normal, false = open/triggered).",
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/ContactState-1",
+          "name": "CurrentValue",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "EquipmentActuators-1",
+      "inboundName": "AttachedActuators",
+      "outboundName": "AttachedToEquipment",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Actuators physically attached to a plant equipment item (e.g. heat pump changeover valve, pump VSD)"
+    },
+    {
+      "id": "EquipmentSensors-1",
+      "inboundName": "AttachedSensors",
+      "outboundName": "AttachedToEquipment",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Sensors physically attached to a plant equipment item (e.g. boiler supply temperature sensor, AHU filter pressure sensor)"
+    },
+    {
+      "id": "FormalMeteringPoint-1",
+      "inboundName": "LinkedMeters",
+      "outboundName": "FormalAnchor",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Optional link from an EnergyIQ Meter (typically GridConnection) to a formal Basic.Energy/MeteringPoint carrying the Z\u00E4hlpunktnummer (Austrian/German grid identifier) and EDA state."
+    },
+    {
+      "id": "SpaceActuators-1",
+      "inboundName": "ContainedActuators",
+      "outboundName": "ActuatorInSpace",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Actuators physically located in this space (room-level valves, dampers, dimmers not attached to a specific terminal/equipment)"
+    },
+    {
+      "id": "SpaceElements-1",
+      "inboundName": "ContainedElements",
+      "outboundName": "ContainedInSpace",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne"
+    },
+    {
+      "id": "SpaceSchedules-1",
+      "inboundName": "SchedulesAppliedTo",
+      "outboundName": "UsedSchedules",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Schedules applied to spaces (M:N - one schedule can cover many rooms, one room can have multiple schedules)"
+    },
+    {
+      "id": "SpaceSensors-1",
+      "inboundName": "ContainedSensors",
+      "outboundName": "LocatedInSpace",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Sensors physically located in this space (room thermostats, CO2 sensors, presence sensors, etc.)"
+    },
+    {
+      "id": "SpaceTerminals-1",
+      "inboundName": "ContainedTerminals",
+      "outboundName": "ContainedInSpace",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Room terminals (Radiator, RadiantSurface, FanCoilUnit, AirTerminal, etc.) located in this space"
+    },
+    {
+      "id": "StoreyElements-1",
+      "inboundName": "ContainedStoreyElements",
+      "outboundName": "ContainedInStorey",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Floor-level spatial containment: a BuildingElement (e.g. a per-storey sub-meter that measures a whole floor) contained directly in a BuildingStorey rather than in a single Space. Storey-level counterpart of SpaceElements (IFC IfcRelContainedInSpatialStructure at the IfcBuildingStorey level). Use for equipment that serves an entire floor instead of one room."
+    },
+    {
+      "id": "SystemMembers-1",
+      "inboundName": "MemberOfSystem",
+      "outboundName": "SystemMembers",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Members of a logical DistributionSystem (e.g. heat pump, buffer tank, distribution pumps, all radiant surfaces belonging to one heating circuit). N:N \u2014 a reversible aggregate can belong to both a heating and a cooling circuit."
+    },
+    {
+      "id": "SystemSpaces-1",
+      "inboundName": "ServedBySystem",
+      "outboundName": "ServesSpaces",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "IfcRelServicesBuildings \u2014 the spatial structure (Space / BuildingStorey) a DistributionSystem serves. N:N: a storey is served by several systems (heating, passive cooling, ventilation), and a system serves several storeys/spaces."
+    },
+    {
+      "id": "TerminalActuators-1",
+      "inboundName": "TerminalActuators",
+      "outboundName": "AttachedToTerminal",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "Actuators attached to a room terminal (e.g. radiator thermostat valve, FCU coil valves, VAV damper actuator)"
+    },
+    {
+      "id": "TerminalServedBy-1",
+      "inboundName": "ServesTerminals",
+      "outboundName": "ServedBy",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "N",
+      "description": "Plant-equipment that supplies energy/medium to a terminal (e.g. heat pump or AHU serving multiple terminals)"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AboveGround-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "True if storey is above ground level"
+    },
+    {
+      "id": "AcPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "AC output power in kW"
+    },
+    {
+      "id": "AcVoltage-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "AC voltage in V"
+    },
+    {
+      "id": "ActivePower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Instantaneous active power (kW). Positive = import/consumption, negative = export/production"
+    },
+    {
+      "id": "ActuatorManufacturer-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Manufacturer of the actuator device"
+    },
+    {
+      "id": "ActuatorModel-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Model designation of the actuator device"
+    },
+    {
+      "id": "AddressValue-1",
+      "valueType": "Record",
+      "valueCkRecordId": "EnergyIQ-2.12.0/Address-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "AirTerminalBoxType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Type of air terminal (VAV, CAV, Diffuser, Grille, etc.)"
+    },
+    {
+      "id": "AirflowRate-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Measured airflow (m\u00B3/h)"
+    },
+    {
+      "id": "AirflowSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Commanded airflow (m\u00B3/h)"
+    },
+    {
+      "id": "Ampere-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Instantaneous current (A)"
+    },
+    {
+      "id": "ApparentPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Instantaneous apparent power (kVA)"
+    },
+    {
+      "id": "ApplianceCategoryValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/ApplianceCategory-1",
+      "isRuntimeState": false,
+      "description": "Functional category of the appliance"
+    },
+    {
+      "id": "ApplianceManufacturer-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Manufacturer name (e.g. Miele, Bosch)"
+    },
+    {
+      "id": "ApplianceModelName-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Model identifier (e.g. W1 ClassicEco)"
+    },
+    {
+      "id": "ApplianceRatedPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Nameplate rated power draw (kW). Named distinctly from the existing W-scaled Luminaire/RatedPower to keep units unambiguous."
+    },
+    {
+      "id": "Area-1",
+      "valueType": "Double",
+      "isRuntimeState": false
+    },
+    {
+      "id": "AreaPerOccupant-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Area per occupant (m\u00B2/person)"
+    },
+    {
+      "id": "ArtificialLighting-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Artificial lighting required/available in this space"
+    },
+    {
+      "id": "BatteryTemperature-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Battery temperature in \u00B0C"
+    },
+    {
+      "id": "BooleanValue-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false
+    },
+    {
+      "id": "CO2Level-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "CO2 concentration (ppm)"
+    },
+    {
+      "id": "CO2Setpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "CO2 concentration setpoint (ppm)"
+    },
+    {
+      "id": "CO2SetpointMax-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Maximum acceptable CO2 concentration (ppm)"
+    },
+    {
+      "id": "COP-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Coefficient of Performance (instantaneous, dimensionless)"
+    },
+    {
+      "id": "CeilingHeight-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Room ceiling height (m)"
+    },
+    {
+      "id": "ChargingConnectorTypeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/ChargingConnectorType-1",
+      "isRuntimeState": false,
+      "description": "Physical connector type of the EV charger"
+    },
+    {
+      "id": "ChargingPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Current charging power in kW"
+    },
+    {
+      "id": "City-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ContactState-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Binary contact state (true = closed/active, false = open/inactive)"
+    },
+    {
+      "id": "CoolingCapacity-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Rated cooling capacity (kW)"
+    },
+    {
+      "id": "CoolingCoilPosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Cooling coil valve position (0-100%)"
+    },
+    {
+      "id": "CoolingSupplyTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Cooling-mode supply temperature (\u00B0C, TimeSeries; separate sensor from the heating supply)"
+    },
+    {
+      "id": "CoolingSupplyTempSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Cooling-mode supply temperature setpoint (\u00B0C)"
+    },
+    {
+      "id": "CoolingValvePosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Cooling valve position (0-100%)"
+    },
+    {
+      "id": "Country-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "CurrentPowerKW-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Current power output in kW"
+    },
+    {
+      "id": "CurrentSessionEnergy-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Energy delivered in the current/last charging session (kWh)"
+    },
+    {
+      "id": "CycleCount-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of charge/discharge cycles"
+    },
+    {
+      "id": "DamperPosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Current damper position (0-100%, 0=closed, 100=fully open)"
+    },
+    {
+      "id": "DamperPositionSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Commanded damper position (0-100%)"
+    },
+    {
+      "id": "DaysOfWeek-1",
+      "valueType": "IntArray",
+      "isRuntimeState": false
+    },
+    {
+      "id": "DcPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "DC input power in kW"
+    },
+    {
+      "id": "DcVoltage-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "DC voltage in V"
+    },
+    {
+      "id": "DesignOccupancy-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Planned occupancy count"
+    },
+    {
+      "id": "DimmingLevel-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Dimming level (0-100%)"
+    },
+    {
+      "id": "DimmingLevelSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Dimming level setpoint (0-100%)"
+    },
+    {
+      "id": "DischargingPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Current discharging power in kW"
+    },
+    {
+      "id": "DistributionSystemTypeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/DistributionSystemType-1",
+      "isRuntimeState": false,
+      "description": "Type of distribution system (Heating/Cooling/Ventilation/Electrical/Sanitary/DomesticHotWater/etc.)"
+    },
+    {
+      "id": "EER-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Energy Efficiency Ratio (cooling mode, dimensionless)"
+    },
+    {
+      "id": "Efficiency-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Efficiency (0-100%)"
+    },
+    {
+      "id": "Elevation-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Elevation above building reference (m)"
+    },
+    {
+      "id": "ElevationOfRefHeight-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Reference height elevation (m)"
+    },
+    {
+      "id": "EndTime-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "Energy-1",
+      "valueType": "Double",
+      "isRuntimeState": false
+    },
+    {
+      "id": "EnergyConsumptionCooling-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Cooling energy consumption (kWh)"
+    },
+    {
+      "id": "EnergyConsumptionHeating-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Heating energy consumption (kWh)"
+    },
+    {
+      "id": "EnergyConsumptionLighting-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Lighting energy consumption (kWh)"
+    },
+    {
+      "id": "EnergyConsumptionTotal-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Total energy consumption (kWh)"
+    },
+    {
+      "id": "EnergyProducedKWh-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Total energy produced in kWh"
+    },
+    {
+      "id": "ExhaustAirTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Exhaust air temperature after heat recovery (Fortluft, \u00B0C)"
+    },
+    {
+      "id": "ExportedEnergy-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Cumulative exported/produced energy (kWh) \u2014 typically zero except for bidirectional meters"
+    },
+    {
+      "id": "FanCoilCoolingValvePosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Cooling coil valve position for 4-pipe fan coil unit (0-100%)"
+    },
+    {
+      "id": "FanCoilFanSpeed-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Fan speed of the fan coil unit (0-100%)"
+    },
+    {
+      "id": "FanCoilFanSpeedSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Commanded fan speed of the fan coil unit (0-100%)"
+    },
+    {
+      "id": "FanCoilFanStage-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Fan stage of the fan coil unit (typically 0-3 or 0-5)"
+    },
+    {
+      "id": "FanCoilHeatingValvePosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Heating coil valve position for 4-pipe fan coil unit (0-100%)"
+    },
+    {
+      "id": "FanSpeedReturn-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Return fan speed (0-100%)"
+    },
+    {
+      "id": "FanSpeedSupply-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Supply fan speed (0-100%)"
+    },
+    {
+      "id": "FaultState-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Fault/alarm state (TimeSeries)"
+    },
+    {
+      "id": "FilterDifferentialPressure-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Filter differential pressure (Pa)"
+    },
+    {
+      "id": "FloorDesignation-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "National floor designation (e.g., EG, 1.OG, UG, DG)"
+    },
+    {
+      "id": "FlowRate-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Flow rate (m\u00B3/h)"
+    },
+    {
+      "id": "Frequency-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "AC frequency in Hz"
+    },
+    {
+      "id": "FuelConsumption-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Fuel consumption (kWh)"
+    },
+    {
+      "id": "GenericStringValue-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Generic sensor value as string (for GenericSensor or proprietary measurements)"
+    },
+    {
+      "id": "GlobalId-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "GridConnectionDirectionValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/GridConnectionDirection-1",
+      "isRuntimeState": false,
+      "description": "Direction of energy flow at this grid coupling point"
+    },
+    {
+      "id": "GridFeedIn-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Power fed into grid in kW"
+    },
+    {
+      "id": "GrossFloorArea-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Gross floor area (m\u00B2)"
+    },
+    {
+      "id": "HeatPumpOperatingModeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/HeatPumpOperatingMode-1",
+      "isRuntimeState": false,
+      "description": "Current operating mode of the heat pump (Off/Standby/Heating/ActiveCooling/PassiveCooling/DomesticHotWater/Defrost/Fault)"
+    },
+    {
+      "id": "HeatRecoveryEfficiency-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Heat recovery efficiency (0-100%)"
+    },
+    {
+      "id": "HeatSourceValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/HeatSource-1",
+      "isRuntimeState": false,
+      "description": "Type of heat source (Air/Ground/Water/Exhaust/Hybrid)"
+    },
+    {
+      "id": "HeatingCapacity-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Rated heating capacity (kW)"
+    },
+    {
+      "id": "HeatingCoilPosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Heating coil valve position (0-100%)"
+    },
+    {
+      "id": "HeatingCurve-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Heating curve number/slope as configured on the unit"
+    },
+    {
+      "id": "HeatingCurveOffset-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Heating curve parallel offset / room temperature shift (K)"
+    },
+    {
+      "id": "HeatingValvePosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Heating valve position (0-100%)"
+    },
+    {
+      "id": "HotGasTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Refrigerant hot-gas (compressor discharge) temperature (\u00B0C, TimeSeries)"
+    },
+    {
+      "id": "Humidity-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Relative humidity (%)"
+    },
+    {
+      "id": "Identifier-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "System identifier/tag"
+    },
+    {
+      "id": "Illuminance-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Illuminance level (lux)"
+    },
+    {
+      "id": "IlluminanceMin-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Minimum acceptable illuminance level (lux)"
+    },
+    {
+      "id": "IlluminanceSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Illuminance setpoint (lux)"
+    },
+    {
+      "id": "IlluminanceTarget-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Design target illuminance level (lux)"
+    },
+    {
+      "id": "ImportedEnergy-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Cumulative imported/consumed energy (kWh)"
+    },
+    {
+      "id": "IntegerValue-1",
+      "valueType": "Int",
+      "isRuntimeState": false
+    },
+    {
+      "id": "InverterEfficiency-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Inverter efficiency in %"
+    },
+    {
+      "id": "IsCharging-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Battery is currently charging"
+    },
+    {
+      "id": "IsDischarging-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Battery is currently discharging"
+    },
+    {
+      "id": "IsExternal-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "True if external door/window"
+    },
+    {
+      "id": "IsFaulty-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "True if the sensor is in a fault state"
+    },
+    {
+      "id": "IsLocked-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Locked state (TimeSeries)"
+    },
+    {
+      "id": "IsMainConnection-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "True for the primary grid feed of the installation; false for sub-coupling points"
+    },
+    {
+      "id": "IsOn-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "On/Off state (TimeSeries)"
+    },
+    {
+      "id": "IsOpen-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Open state (TimeSeries)"
+    },
+    {
+      "id": "IsReversibleAggregate-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "True if the unit can switch between heating and cooling"
+    },
+    {
+      "id": "IsReversibleTerminal-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "True if the terminal can switch between heating and cooling (e.g. reversible underfloor radiant surface)"
+    },
+    {
+      "id": "IsRunning-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Running state (TimeSeries)"
+    },
+    {
+      "id": "LastEnergyUpdate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Timestamp of the most recent energy aggregation"
+    },
+    {
+      "id": "LastValueUpdate-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Timestamp of the most recent measurement update"
+    },
+    {
+      "id": "Length-1",
+      "valueType": "Double",
+      "isRuntimeState": false
+    },
+    {
+      "id": "LightingLevel-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Lighting level (0-100%)"
+    },
+    {
+      "id": "LightingRequirementsRecord-1",
+      "valueType": "Record",
+      "valueCkRecordId": "EnergyIQ-2.12.0/PsetSpaceLightingRequirements-1",
+      "isRuntimeState": false,
+      "description": "IFC Pset_SpaceLightingRequirements - design lighting targets"
+    },
+    {
+      "id": "LongName-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "LuminaireTypeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/LuminaireType-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "MaxChargePower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Maximum charging power in kW"
+    },
+    {
+      "id": "MaxChargingPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Maximum power the station can deliver to a vehicle (kW)"
+    },
+    {
+      "id": "MaxDischargePower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Maximum discharging power in kW"
+    },
+    {
+      "id": "MeterCarrierTypeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/MeterCarrierType-1",
+      "isRuntimeState": false,
+      "description": "Energy carrier measured by this meter (Electricity/Gas/Heat/Water/etc.)"
+    },
+    {
+      "id": "MeterFrequency-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "AC frequency (Hz)"
+    },
+    {
+      "id": "MeterIdentifier-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Local meter identifier (e.g. Loxone control name, serial number, or sub-meter ID)"
+    },
+    {
+      "id": "MeteringPointReference-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Optional formal Z\u00E4hlpunktnummer (Austrian/German energy-industry identifier, 33 digits) for grid-coupled meters"
+    },
+    {
+      "id": "ModulationLevel-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Modulation level (0-100%)"
+    },
+    {
+      "id": "ModuleCount-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of PV modules in string"
+    },
+    {
+      "id": "ModuleType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Module type description (e.g. \u0027Mono-Si 400W\u0027)"
+    },
+    {
+      "id": "MotorSpeed-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Motor speed (0-100% or rpm depending on context)"
+    },
+    {
+      "id": "MotorSpeedSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Commanded motor speed (0-100% or rpm)"
+    },
+    {
+      "id": "MotorState-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Motor on/off state"
+    },
+    {
+      "id": "NaturalLighting-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Natural lighting available in this space"
+    },
+    {
+      "id": "NetFloorArea-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Net floor area (m\u00B2)"
+    },
+    {
+      "id": "ObjectType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Type description of the element"
+    },
+    {
+      "id": "OccupancyNumberPeak-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Peak occupancy number (persons)"
+    },
+    {
+      "id": "OccupancyRequirementsRecord-1",
+      "valueType": "Record",
+      "valueCkRecordId": "EnergyIQ-2.12.0/PsetSpaceOccupancyRequirements-1",
+      "isRuntimeState": false,
+      "description": "IFC Pset_SpaceOccupancyRequirements - design occupancy parameters"
+    },
+    {
+      "id": "OccupancyTimePerDay-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Typical occupancy hours per day"
+    },
+    {
+      "id": "OccupancyTypeValue-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Occupancy type (free text, e.g. \u0027living\u0027, \u0027sleeping\u0027, \u0027office\u0027, \u0027transient\u0027)"
+    },
+    {
+      "id": "OpeningPosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Opening position (0-100%)"
+    },
+    {
+      "id": "OperatingModeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/OperatingMode-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "Orientation-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Panel orientation in degrees (0=North, 90=East, 180=South, 270=West)"
+    },
+    {
+      "id": "OutdoorAirTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Outdoor air temperature (\u00B0C)"
+    },
+    {
+      "id": "OverallHeight-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Overall height (mm)"
+    },
+    {
+      "id": "OverallWidth-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Overall width (mm)"
+    },
+    {
+      "id": "Percentage-1",
+      "valueType": "Double",
+      "isRuntimeState": false
+    },
+    {
+      "id": "Position-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Current position (0-100%)"
+    },
+    {
+      "id": "PositionSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Position setpoint (0-100%)"
+    },
+    {
+      "id": "PostalCode-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PowerConsumption-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Power consumption (kW)"
+    },
+    {
+      "id": "PredefinedType-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "IFC-style predefined type override (free-text, optional, complements SpaceType enum)"
+    },
+    {
+      "id": "PresenceDetected-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Presence detected by sensor"
+    },
+    {
+      "id": "Pressure-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Pressure (bar)"
+    },
+    {
+      "id": "RadiantSurfaceArea-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Active surface area of the radiant terminal (m\u00B2)"
+    },
+    {
+      "id": "RadiantSurfaceMaxSupplyTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Maximum allowed supply temperature for the radiant surface (\u00B0C, dew-point safety for cooling)"
+    },
+    {
+      "id": "RatedCapacityKWh-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Rated battery capacity in kWh"
+    },
+    {
+      "id": "RatedPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Rated power (W)"
+    },
+    {
+      "id": "RatedPowerKVA-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Rated power in kVA"
+    },
+    {
+      "id": "RatedPowerKWp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Rated power in kWp (kilowatt peak)"
+    },
+    {
+      "id": "ReactivePower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Instantaneous reactive power (kVAR)"
+    },
+    {
+      "id": "RefElevation-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Elevation above sea level (m)"
+    },
+    {
+      "id": "RefLatitude-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Latitude coordinate (WGS84)"
+    },
+    {
+      "id": "RefLongitude-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Longitude coordinate (WGS84)"
+    },
+    {
+      "id": "ReturnAirTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Return air temperature (\u00B0C)"
+    },
+    {
+      "id": "ReturnTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Return temperature (\u00B0C)"
+    },
+    {
+      "id": "RoomIdentifier-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "ISO 4157-3 room identifier (format: I#n001, immutable throughout building lifecycle)"
+    },
+    {
+      "id": "RoomNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "ISO 4157-2 room number (floor prefix \u002B 2-digit number, e.g., G01, 101, UG03)"
+    },
+    {
+      "id": "SCOP-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Seasonal Coefficient of Performance (dimensionless)"
+    },
+    {
+      "id": "SEER-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Seasonal Energy Efficiency Ratio (cooling mode, dimensionless)"
+    },
+    {
+      "id": "ScheduleActive-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Whether the schedule is currently active"
+    },
+    {
+      "id": "ScheduleEntries-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "EnergyIQ-2.12.0/ScheduleEntry-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ScheduleTypeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/ScheduleType-1",
+      "isRuntimeState": false,
+      "description": "Purpose of the schedule (Occupancy/Heating/Cooling/Ventilation/Lighting/Shading/Custom)"
+    },
+    {
+      "id": "ScheduleValidFrom-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Start of schedule validity (optional, for seasonal or temporary schedules)"
+    },
+    {
+      "id": "ScheduleValidTo-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "End of schedule validity (optional)"
+    },
+    {
+      "id": "SelfConsumption-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Self-consumption power in kW"
+    },
+    {
+      "id": "SensorAccuracy-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Sensor accuracy (\u00B1, in the sensor\u0027s measurement unit)"
+    },
+    {
+      "id": "SensorManufacturer-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Manufacturer of the sensor device"
+    },
+    {
+      "id": "SensorModel-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Model designation of the sensor device"
+    },
+    {
+      "id": "SensorSerialNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Serial number of the sensor device"
+    },
+    {
+      "id": "SessionActive-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "True if a vehicle is currently charging"
+    },
+    {
+      "id": "ShadingPosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Shading position (0-100%)"
+    },
+    {
+      "id": "ShadingTypeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/ShadingType-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "SlatAngle-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Slat angle (degrees)"
+    },
+    {
+      "id": "SlatAngleSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Slat angle setpoint (degrees)"
+    },
+    {
+      "id": "SourceInletTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Source-side inlet temperature (\u00B0C, e.g. outdoor air, brine, water)"
+    },
+    {
+      "id": "SourceOutletTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Source-side outlet temperature (\u00B0C)"
+    },
+    {
+      "id": "SpaceHumidity-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Design target relative humidity (%)"
+    },
+    {
+      "id": "SpaceHumidityMax-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Upper bound of acceptable relative humidity (%)"
+    },
+    {
+      "id": "SpaceHumidityMin-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Lower bound of acceptable relative humidity (%)"
+    },
+    {
+      "id": "SpaceTemperature-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Design target indoor temperature (\u00B0C)"
+    },
+    {
+      "id": "SpaceTemperatureMax-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Upper bound of acceptable indoor temperature (cooling limit, \u00B0C)"
+    },
+    {
+      "id": "SpaceTemperatureMin-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Lower bound of acceptable indoor temperature (heating limit, \u00B0C)"
+    },
+    {
+      "id": "SpaceTypeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/SpaceType-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "Speed-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Actual speed (0-100%, TimeSeries)"
+    },
+    {
+      "id": "SpeedSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Speed setpoint (0-100%)"
+    },
+    {
+      "id": "StartTime-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "StateOfCharge-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "State of charge in % (0-100)"
+    },
+    {
+      "id": "StorageCapacity-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Thermal storage capacity (litres of water-equivalent or kWh)"
+    },
+    {
+      "id": "StorageChargeLevel-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Stratification charge level (0-100%, derived from temperatures)"
+    },
+    {
+      "id": "StorageTempBottom-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Temperature at the bottom of the buffer tank (\u00B0C)"
+    },
+    {
+      "id": "StorageTempMiddle-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Temperature in the middle of the buffer tank (\u00B0C)"
+    },
+    {
+      "id": "StorageTempTop-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Temperature at the top of the buffer tank (\u00B0C)"
+    },
+    {
+      "id": "StorageVolume-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Storage tank volume (litres)"
+    },
+    {
+      "id": "StoreyNumber-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "ISO 4157-1 storey number (consecutively from bottom, starting with 1)"
+    },
+    {
+      "id": "Street-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    },
+    {
+      "id": "SupplyAirFlow-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Supply air flow rate (m\u00B3/h)"
+    },
+    {
+      "id": "SupplyAirTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Supply air temperature (\u00B0C)"
+    },
+    {
+      "id": "SupplyAirTempSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Supply air temperature setpoint (\u00B0C)"
+    },
+    {
+      "id": "SupplyTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Supply/flow temperature (\u00B0C)"
+    },
+    {
+      "id": "SupplyTempSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Supply temperature setpoint (\u00B0C)"
+    },
+    {
+      "id": "SystemEfficiency-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Average system efficiency (dimensionless or %)"
+    },
+    {
+      "id": "SystemTypeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/SystemType-1",
+      "isRuntimeState": false
+    },
+    {
+      "id": "Temperature-1",
+      "valueType": "Double",
+      "isRuntimeState": false
+    },
+    {
+      "id": "TemperatureSetpointCooling-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Cooling temperature setpoint (\u00B0C)"
+    },
+    {
+      "id": "TemperatureSetpointHeating-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Heating temperature setpoint (\u00B0C)"
+    },
+    {
+      "id": "TerminalFlowRate-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Local flow rate through the terminal (l/min or m\u00B3/h)"
+    },
+    {
+      "id": "TerminalNominalPower-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Nominal thermal power of the terminal (kW)"
+    },
+    {
+      "id": "TerminalOperatingModeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/TerminalOperatingMode-1",
+      "isRuntimeState": false,
+      "description": "Current operating mode of the terminal (Off/Heating/Cooling/Ventilating/Standby)"
+    },
+    {
+      "id": "TerminalReturnTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Local return temperature at the terminal outlet (\u00B0C)"
+    },
+    {
+      "id": "TerminalSupplyTemp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Local supply temperature at the terminal inlet (\u00B0C)"
+    },
+    {
+      "id": "ThermalRequirementsRecord-1",
+      "valueType": "Record",
+      "valueCkRecordId": "EnergyIQ-2.12.0/PsetSpaceThermalRequirements-1",
+      "isRuntimeState": false,
+      "description": "IFC Pset_SpaceThermalRequirements - design thermal targets"
+    },
+    {
+      "id": "Tilt-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Panel tilt angle in degrees (0=horizontal, 90=vertical)"
+    },
+    {
+      "id": "TotalCurrentPowerKW-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Total current power output in kW"
+    },
+    {
+      "id": "TotalEnergyConsumed-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Total energy consumed by this distribution system (kWh)"
+    },
+    {
+      "id": "TotalEnergyDelivered-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Total energy delivered by this distribution system (kWh)"
+    },
+    {
+      "id": "TotalEnergyProducedKWh-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Total energy produced by all strings in kWh"
+    },
+    {
+      "id": "TotalRatedPowerKWp-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Total rated power of all strings in kWp"
+    },
+    {
+      "id": "ValvePosition-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Current valve position (0-100%, 0=closed, 100=fully open)"
+    },
+    {
+      "id": "ValvePositionSetpoint-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Commanded valve position (0-100%)"
+    },
+    {
+      "id": "ValveTypeValue-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyIQ-2.12.0/ValveType-1",
+      "isRuntimeState": false,
+      "description": "Type of valve (Heating, Cooling, Reversible, Changeover, Mixing, Bypass, Isolation)"
+    },
+    {
+      "id": "VentilationLevel-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Ventilation level (0-100%)"
+    },
+    {
+      "id": "Voltage-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Nominal/measured voltage (V)"
+    },
+    {
+      "id": "WindowOpen-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Window open state"
+    },
+    {
+      "id": "YearOfConstruction-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Year the building was constructed"
+    }
+  ],
+  "records": [
+    {
+      "recordId": "Address-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/Street-1",
+          "name": "Street",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/PostalCode-1",
+          "name": "PostalCode",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/City-1",
+          "name": "City",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/Country-1",
+          "name": "Country",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "recordId": "PsetSpaceLightingRequirements-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/IlluminanceTarget-1",
+          "name": "IlluminanceTarget",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/IlluminanceMin-1",
+          "name": "IlluminanceMin",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/ArtificialLighting-1",
+          "name": "ArtificialLighting",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/NaturalLighting-1",
+          "name": "NaturalLighting",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "PsetSpaceOccupancyRequirements-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/OccupancyTypeValue-1",
+          "name": "OccupancyType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/OccupancyNumberPeak-1",
+          "name": "OccupancyNumberPeak",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/AreaPerOccupant-1",
+          "name": "AreaPerOccupant",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/OccupancyTimePerDay-1",
+          "name": "OccupancyTimePerDay",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "PsetSpaceThermalRequirements-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/SpaceTemperature-1",
+          "name": "SpaceTemperature",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpaceTemperatureMin-1",
+          "name": "SpaceTemperatureMin",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpaceTemperatureMax-1",
+          "name": "SpaceTemperatureMax",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpaceHumidity-1",
+          "name": "SpaceHumidity",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpaceHumidityMin-1",
+          "name": "SpaceHumidityMin",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/SpaceHumidityMax-1",
+          "name": "SpaceHumidityMax",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyIQ-2.12.0/CO2SetpointMax-1",
+          "name": "CO2SetpointMax",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "recordId": "ScheduleEntry-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "attributes": [
+        {
+          "id": "EnergyIQ-2.12.0/DaysOfWeek-1",
+          "name": "DaysOfWeek",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/StartTime-1",
+          "name": "StartTime",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/EndTime-1",
+          "name": "EndTime",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyIQ-2.12.0/OperatingModeValue-1",
+          "name": "Mode",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "ApplianceCategory-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "LaundryAndCleaning",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "KitchenMajor",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "KitchenSmall",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Cooking",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Refrigeration",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "HVAC",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "WaterHeating",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "Lighting",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "Entertainment",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "Office",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "Other",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ChargingConnectorType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Schuko",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Type1",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Type2",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "CCS",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "CHAdeMO",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Tesla",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Other",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "DayOfWeek-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Monday",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Tuesday",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Wednesday",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Thursday",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Friday",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Saturday",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Sunday",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "DistributionSystemType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Heating",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Cooling",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Ventilation",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Electrical",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Sanitary",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "DomesticHotWater",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "DomesticColdWater",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "Drainage",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "Communication",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "Solar",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "Other",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "GridConnectionDirection-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Import",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Export",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Bidirectional",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "HeatPumpOperatingMode-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Off",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Standby",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Heating",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "ActiveCooling",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "PassiveCooling",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "DomesticHotWater",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Defrost",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "Fault",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "HeatSource-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Air",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Ground",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Water",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Exhaust",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Hybrid",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "LuminaireType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Ceiling",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Pendant",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Recessed",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Wall",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Floor",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Desk",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Emergency",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "MeterCarrierType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Electricity",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Gas",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Heat",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Water",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "DistrictHeating",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "DistrictCooling",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Other",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "OperatingMode-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Comfort",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Economy",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Standby",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Protection",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Off",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Auto",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ScheduleType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Occupancy",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Heating",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Cooling",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Ventilation",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Lighting",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Shading",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Custom",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ShadingType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Blind",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Shutter",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Awning",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Screen",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Curtain",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "SpaceType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Office",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "MeetingRoom",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Corridor",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Toilet",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Kitchen",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "TechnicalRoom",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Storage",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "Parking",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "Lobby",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "Staircase",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "Elevator",
+          "isExtension": false
+        },
+        {
+          "key": 11,
+          "name": "ServerRoom",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "Laboratory",
+          "isExtension": false
+        },
+        {
+          "key": 13,
+          "name": "Workshop",
+          "isExtension": false
+        },
+        {
+          "key": 14,
+          "name": "Other",
+          "isExtension": false
+        },
+        {
+          "key": 15,
+          "name": "LivingRoom",
+          "isExtension": false
+        },
+        {
+          "key": 16,
+          "name": "Bedroom",
+          "isExtension": false
+        },
+        {
+          "key": 17,
+          "name": "Bathroom",
+          "isExtension": false
+        },
+        {
+          "key": 18,
+          "name": "DiningRoom",
+          "isExtension": false
+        },
+        {
+          "key": 19,
+          "name": "Lounge",
+          "isExtension": false
+        },
+        {
+          "key": 20,
+          "name": "ChildrensRoom",
+          "isExtension": false
+        },
+        {
+          "key": 21,
+          "name": "GuestRoom",
+          "isExtension": false
+        },
+        {
+          "key": 22,
+          "name": "Laundry",
+          "isExtension": false
+        },
+        {
+          "key": 23,
+          "name": "Garage",
+          "isExtension": false
+        },
+        {
+          "key": 24,
+          "name": "WalkInCloset",
+          "isExtension": false
+        },
+        {
+          "key": 25,
+          "name": "Anteroom",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "SystemType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Heating",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Cooling",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Ventilation",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Combined",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Lighting",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Shading",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "TerminalOperatingMode-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Off",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Heating",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Cooling",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Ventilating",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Standby",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "ValveType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Heating",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Cooling",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Reversible",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "ChangeoverHeatingCooling",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Mixing",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Bypass",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "Isolation",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "EnergyIQ-2.12.0"
+}
