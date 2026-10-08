@@ -1,0 +1,733 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.1.0,4.0)
+  - System.Communication-[3.0,4.0)
+  - System.Reporting-[2.0,3.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: transaction maintenance (bulk match-state updates) ---
+  - rtId: aa0000000000000000000400
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Transaction Maintenance
+      - id: System/Description
+        value: Bulk maintenance of bank transactions — set the match state (e.g. Ignored with an exclusion reason) for a booking-date range, and keep every transaction assigned to the fiscal year of its booking date (AB#5624)
+  - rtId: aa0000000000000000000401
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000400
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Bulk Update Transactions Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /bulkUpdateTransactions
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            # FromHttpRequest is synchronous and cannot return a 202, so a large
+            # booking-date range used to exceed the nginx 60s gateway timeout (504)
+            # while the whole update ran inline. Hand the request body to the worker
+            # pipeline fire-and-forget (awaitResult:false) and return immediately;
+            # the frontend polls the worker's PipelineExecution (Status/OutputData)
+            # for progress and the affected count.
+            - type: ToPipelineDataEvent@1
+              description: Kick off the async worker (same DataFlow)
+              path: $.body
+              targetPath: $.input
+              targetPipelineRtId: aa0000000000000000000402
+              awaitResult: false
+            # The HTTP response is the whole DataContext — reduce it to a small ack.
+            - type: SetPrimitiveValue@1
+              targetPath: $.accepted
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              description: Return a minimal accepted acknowledgement
+              clear: true
+              fields:
+                - path: $.accepted
+                  inclusion: true
+  # Async worker for the bulk transaction update. Triggered fire-and-forget by the
+  # Bulk Update Transactions Pipeline (ToPipelineDataEvent → $.input), so the HTTP
+  # caller never blocks and the nginx 60s gateway timeout can no longer fire. Its
+  # own PipelineExecution carries Status + OutputData (affected count), which the
+  # frontend polls via GraphQL. Same DataFlow (aa..0400) as the trigger — required
+  # for the shared topic exchange. Post-install: DeployDataFlow for this DataFlow.
+  - rtId: aa0000000000000000000402
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000400
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Bulk Update Transactions Worker Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            # Fired fire-and-forget by the Bulk Update Transactions Pipeline. The
+            # request body arrives at $.input (the sender's targetPath).
+            - type: FromPipelineDataEvent@1
+          transformations:
+            # AB#5390: the request carries the ExclusionReason key to write with
+            # the state (the app sends the picked reason for Ignored, NONE = 0 for
+            # every other target, so an un-ignore clears it). Default it first —
+            # CreateUpdateInfo reads the path unguarded and an older caller may
+            # omit the field; SelectByPath skips a missing source.
+            - type: SetPrimitiveValue@1
+              description: Default exclusion reason NONE
+              targetPath: $.exclusionReason
+              value: 0
+              valueType: Int
+            - type: SelectByPath@1
+              description: Take the caller's exclusion reason when present
+              selectPath:
+                - path: $.input.exclusionReason
+                  targetPath: $.exclusionReason
+            # The Mongo field-filter resolver only coerces comparison values for
+            # CLR properties, not for dynamic CK attributes — an ISO date string
+            # never matches the stored BSON date. Filter the state in Mongo and
+            # compare the booking date typed (DateTime) inside the loop instead.
+            - type: GetRtEntitiesByType@1
+              description: Transactions with one of the source states
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.txs
+              take: 10000
+              fieldFilters:
+                - attributePath: MatchState
+                  operator: In
+                  comparisonValuePath: $.input.statesToChange
+            - type: ForEach@1
+              description: Build one state update per transaction in the date range
+              iterationPath: $.txs.Items
+              targetPath: $.result
+              documentMode: Extend
+              mergePath: $._updates
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: If@1
+                  description: BookingDate on or after the range start
+                  path: $.key.Attributes.BookingDate
+                  operator: GreaterEqualsThan
+                  valuePath: $.full.input.from
+                  valueType: DateTime
+                  transformations:
+                    - type: If@1
+                      description: BookingDate on or before the range end
+                      path: $.key.Attributes.BookingDate
+                      operator: LessEqualsThan
+                      valuePath: $.full.input.to
+                      valueType: DateTime
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          targetPath: $._updates._u
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankTransaction
+                          rtIdPath: $.key.RtId
+                          attributeUpdates:
+                            - attributeName: MatchState
+                              attributeValueType: Enum
+                              valuePath: $.full.input.targetState
+                            - attributeName: ExclusionReason
+                              attributeValueType: Enum
+                              valuePath: $.full.exclusionReason
+                            - attributeName: MatchComment
+                              attributeValueType: String
+                              valuePath: $.full.input.comment
+            - type: Flatten@1
+              path: $.result[*]._u
+              targetPath: $._updateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: ApplyChanges@2
+              description: Persist the bulk state change
+              entityUpdatesPath: $._updateItems
+            # Reduce the context to the affected count and persist it as
+            # PipelineExecution.OutputData so the frontend can read it on completion.
+            - type: Project@1
+              description: Keep only the affected count
+              clear: true
+              fields:
+                - path: $.txs.TotalCount
+                  inclusion: true
+            - type: SetPipelineExecutionResult@1
+              description: Persist {txs:{TotalCount}} as OutputData
+              path: $
+  # ===================================================================================
+  # Assign Fiscal Years (AB#5624)
+  # ===================================================================================
+  # Keeps the TransactionToFiscalYear association in step with the data: every bank
+  # transaction belongs to the fiscal year whose [StartDate, EndDate] contains its
+  # BookingDate (both ends inclusive; fiscal years ascending by StartDate, first match
+  # wins when two overlap). A transaction outside every fiscal year carries NO edge.
+  #
+  # Before this, nothing assigned transactions: none of the writers (finAPI sync, CSV and
+  # PayPal CSV import, camt.053 import, the split dialog) wrote the association, and the
+  # only writer was the transaction detail page on save, which defaults its picker to the
+  # booking-date year. prod-1 2026-10-07: 140 of 3048 transactions on meshmakers carried
+  # an edge, 0 of 332 on tecob.
+  #
+  # ONE central reconcile instead of a hook in each writer, deliberately:
+  #   - every path that creates or changes a transaction is covered, including ones that
+  #     do not exist yet, and the rule lives in exactly one place;
+  #   - it is a FULL reconcile, so the same run is the backfill, the re-assignment after a
+  #     fiscal year is created or its range changes, and the repair of a booking date
+  #     corrected on re-import. It writes only the difference (stale edges deleted, missing
+  #     ones created) and is idempotent: a second run plans nothing - and since AB#5651
+  #     also under CONCURRENT runs (backlogged cron ticks after an adapter outage run in
+  #     parallel): an edge another run already wrote or removed counts as done, see the
+  #     write phase below;
+  #   - the writers live in four DataFlows, and ToPipelineDataEvent@1 only reaches a
+  #     pipeline of the SAME DataFlow, so a shared callee is not reachable from them.
+  # Not a FromWatchRtEntity@1 trigger on purpose: that node is process-bound, so it makes
+  # the whole DataFlow undeployable on an OnDemand (scale-to-zero) Mesh Adapter
+  # (AB#4984 guard), and a per-transaction event would run the full reconcile once per
+  # row of an import. The cron below (every 15 min, off the matcher's quarter hours to
+  # avoid its write conflicts) is the guarantee; the app calls the route after saving a
+  # fiscal year so a range change shows at once.
+  #
+  # The assignment is authoritative: a manual pick on the transaction detail page that
+  # disagrees with the booking date is put back on the next run (prod-1 had no such case:
+  # all 140 existing edges matched the booking-date year).
+  #
+  # Route: POST /assignFiscalYears (AccountingManagement), body { "dryRun": true } plans
+  # and reports without writing; no body / dryRun false applies. The response and the
+  # execution's OutputData carry the summary plus up to 50 sample changes, and writeMode
+  # (none / bulk / perEdge - perEdge means a concurrent run was first, AB#5651).
+  - rtId: aa0000000000000000000403
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000400
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Assign Fiscal Years
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            # Cron PipelineTrigger aa0000000000000000000404 (scheduled by the bot service,
+            # survives adapter hibernation) and the management route for the app, the
+            # backfill and a dry run.
+            - type: FromPipelineTriggerEvent@1
+            - type: FromHttpRequest@2
+              path: /assignFiscalYears
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            # --- 0. Mode: apply unless the caller asks for a dry run ---------------------
+            - type: SetPrimitiveValue@1
+              description: Default mode applies the plan
+              targetPath: $.dryRun
+              value: false
+              valueType: Boolean
+            - type: SelectByPath@1
+              description: Take the caller's dryRun flag when present (cron runs have no body)
+              selectPath:
+                - path: $.body.dryRun
+                  targetPath: $.dryRun
+
+            # --- 1. Load fiscal years, transactions and the edges as they stand -----------
+            - type: GetRtEntitiesByType@1
+              description: Fiscal years ascending by start date (first match wins)
+              ckTypeId: Meshmakers.Accounting/FiscalYear
+              targetPath: $.fyYears
+              take: 50
+              sortOrders:
+                - sortOrder: Ascending
+                  attributeName: StartDate
+            # Date filters on dynamic CK attributes do not coerce in Mongo (AB#4389), so the
+            # range test runs in the script below and the load is unfiltered. Newest first:
+            # if the cap is ever hit, only the oldest tail is skipped - and the script never
+            # touches an edge of a transaction it did not load.
+            - type: GetRtEntitiesByType@1
+              description: All bank transactions, newest first
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.fyTxs
+              take: 50000
+              sortOrders:
+                - sortOrder: Descending
+                  attributeName: RtId
+            - type: If@1
+              description: Transaction count exceeds the load cap - never skip silently
+              path: $.fyTxs.TotalCount
+              operator: GreaterThan
+              value: 50000
+              valueType: Int64
+              transformations:
+                - type: Logger@1
+                  message: Assign Fiscal Years cap exceeded - more than 50000 bank transactions; the oldest beyond the cap are NOT reconciled this run (AB#5624).
+            - type: WriteJson@1
+              description: No fiscal year, no edges
+              targetPath: $.fyCurrent
+              jsonString: '[]'
+            # One batched lookup over every fiscal year (wildcard origin path): a list of
+            # { OriginRtId, TotalCount, Items } per fiscal year that has edges. The
+            # association is declared on FiscalYear, so the transactions are OUTBOUND.
+            - type: If@1
+              description: At least one fiscal year - load its current transactions
+              path: $.fyYears.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int64
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: Transactions currently assigned, per fiscal year
+                  originRtIdPath: $.fyYears.Items[*].RtId
+                  originCkTypeId: Meshmakers.Accounting/FiscalYear
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: Meshmakers.Accounting/TransactionToFiscalYear
+                  graphDirection: Outbound
+                  targetPath: $.fyCurrent
+
+            # --- 2. Plan: the difference between "should" and "is" ------------------------
+            # AB#5624: tested by scripts/fiscal_year_assignment_test.py through
+            # scripts/extraction-check-harness (the node is located by this description).
+            - type: ExecuteCSharp@1
+              description: AB#5624 plan fiscal-year assignment by booking date
+              timeoutMs: 30000
+              usings:
+                - System
+                - System.Linq
+                - System.Text.Json
+                - System.Collections.Generic
+                - System.Globalization
+              returnType: String
+              arguments:
+                - name: years
+                  valuePath: $.fyYears.Items
+                  dataType: RecordArray
+                - name: txs
+                  valuePath: $.fyTxs.Items
+                  dataType: RecordArray
+                - name: current
+                  valuePath: $.fyCurrent
+                  dataType: RecordArray
+              targetPath: $.planJson
+              code: |
+                var styles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal;
+                Func<object, JsonElement> El = o => o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                Func<JsonElement, string, JsonElement> Prop = (e, n) => {
+                  if (e.ValueKind == JsonValueKind.Object)
+                    foreach (var p in e.EnumerateObject())
+                      if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                  return default(JsonElement);
+                };
+                Func<JsonElement, string> Str = e =>
+                  e.ValueKind == JsonValueKind.String ? e.GetString()
+                  : (e.ValueKind == JsonValueKind.Undefined || e.ValueKind == JsonValueKind.Null) ? null
+                  : e.ToString();
+                Func<JsonElement, DateTime?> Day = e => {
+                  DateTime d; var s = Str(e);
+                  if (s != null && DateTime.TryParse(s, CultureInfo.InvariantCulture, styles, out d)) return d;
+                  return null;
+                };
+
+                // Fiscal years with a usable range, ascending by start (ties by id, stable).
+                var fy = new List<Tuple<string, string, DateTime, DateTime>>();
+                var invalid = new List<string>();
+                foreach (var o in years ?? new object[0]) {
+                  var e = El(o); var id = Str(Prop(e, "RtId")); if (id == null) continue;
+                  var a = Prop(e, "Attributes"); var name = Str(Prop(a, "Name")) ?? id;
+                  var s = Day(Prop(a, "StartDate")); var en = Day(Prop(a, "EndDate"));
+                  if (s == null || en == null || s.Value > en.Value) { invalid.Add(name); continue; }
+                  fy.Add(Tuple.Create(id, name, s.Value, en.Value));
+                }
+                fy = fy.OrderBy(f => f.Item3).ThenBy(f => f.Item1, StringComparer.Ordinal).ToList();
+                var overlaps = new List<string>();
+                for (int i = 0; i < fy.Count; i++)
+                  for (int j = 0; j < i; j++)
+                    if (fy[i].Item3 <= fy[j].Item4) overlaps.Add(fy[j].Item2 + "/" + fy[i].Item2);
+
+                // Edges as they stand: transaction -> fiscal years.
+                var cur = new Dictionary<string, List<string>>();
+                foreach (var o in current ?? new object[0]) {
+                  var g = El(o); var fyId = Str(Prop(g, "OriginRtId")); var items = Prop(g, "Items");
+                  if (fyId == null || items.ValueKind != JsonValueKind.Array) continue;
+                  foreach (var t in items.EnumerateArray()) {
+                    var txId = Str(Prop(t, "RtId")); if (txId == null) continue;
+                    List<string> l;
+                    if (!cur.TryGetValue(txId, out l)) { l = new List<string>(); cur[txId] = l; }
+                    if (!l.Contains(fyId)) l.Add(fyId);
+                  }
+                }
+
+                var names = new Dictionary<string, string>();
+                var perFy = new Dictionary<string, int>();
+                foreach (var f in fy) { names[f.Item1] = f.Item2; perFy[f.Item1] = 0; }
+                var creates = new List<Dictionary<string, string>>();
+                var deletes = new List<Dictionary<string, string>>();
+                var sample = new List<Dictionary<string, object>>();
+                int total = 0, unchanged = 0, assigned = 0, moved = 0, unassigned = 0, dedup = 0, outside = 0, noDate = 0;
+                foreach (var o in txs ?? new object[0]) {
+                  var e = El(o); var id = Str(Prop(e, "RtId")); if (id == null) continue;
+                  total++;
+                  var bd = Day(Prop(Prop(e, "Attributes"), "BookingDate"));
+                  string want = null;
+                  if (bd == null) noDate++;
+                  else foreach (var f in fy) if (f.Item3 <= bd.Value && bd.Value <= f.Item4) { want = f.Item1; break; }
+                  if (want == null) outside++; else perFy[want]++;
+                  List<string> have;
+                  if (!cur.TryGetValue(id, out have)) have = new List<string>();
+                  var keep = want != null && have.Contains(want);
+                  foreach (var h in have)
+                    if (h != want) deletes.Add(new Dictionary<string, string> { { "fy", h }, { "tx", id } });
+                  if (want != null && !keep) creates.Add(new Dictionary<string, string> { { "fy", want }, { "tx", id } });
+                  string change = null;
+                  if (keep && have.Count == 1) unchanged++;
+                  else if (keep) { dedup++; change = "dedup"; }
+                  else if (want != null && have.Count == 0) { assigned++; change = "assign"; }
+                  else if (want != null) { moved++; change = "move"; }
+                  else if (have.Count > 0) { unassigned++; change = "unassign"; }
+                  else unchanged++;
+                  if (change != null && sample.Count < 50)
+                    sample.Add(new Dictionary<string, object> {
+                      { "tx", id }, { "bookingDate", bd == null ? null : bd.Value.ToString("yyyy-MM-dd") },
+                      { "from", string.Join(",", have.Select(h => names.ContainsKey(h) ? names[h] : h)) },
+                      { "to", want == null ? null : names[want] }, { "change", change } });
+                }
+                var perFyByName = new Dictionary<string, int>();
+                foreach (var f in fy) {
+                  var key = perFyByName.ContainsKey(f.Item2) ? f.Item2 + " (" + f.Item1 + ")" : f.Item2;
+                  perFyByName[key] = perFy[f.Item1];
+                }
+                var summary = new Dictionary<string, object> {
+                  { "transactions", total }, { "fiscalYears", fy.Count },
+                  { "unchanged", unchanged }, { "assigned", assigned }, { "moved", moved },
+                  { "unassigned", unassigned }, { "duplicatesRemoved", dedup },
+                  { "outsideAnyFiscalYear", outside }, { "withoutBookingDate", noDate },
+                  { "createCount", creates.Count }, { "deleteCount", deletes.Count },
+                  { "perFiscalYear", perFyByName },
+                  { "invalidFiscalYears", invalid }, { "overlappingFiscalYears", overlaps } };
+                return JsonSerializer.Serialize(new Dictionary<string, object> {
+                  { "summary", summary }, { "sample", sample }, { "creates", creates }, { "deletes", deletes } });
+            - type: WriteJson@1
+              description: Parse the plan
+              targetPath: $.plan
+              jsonStringPath: $.planJson
+            # Release the loads the plan was made from (up to 50000 transactions): every
+            # ForEach below snapshots the document it iterates under $.full, and the write
+            # phase needs nothing but $.plan (AB#5651).
+            - type: SetPrimitiveValue@1
+              description: Release the transaction load
+              targetPath: $.fyTxs
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the current edges
+              targetPath: $.fyCurrent
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the fiscal-year load
+              targetPath: $.fyYears
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the plan string
+              targetPath: $.planJson
+              value: ""
+              valueType: String
+
+            # --- 3. Apply (skipped on a dry run): deletes first, then creates -------------
+            # Two write phases in this order: the transaction end of the association is
+            # ZeroOrOne, so a move must free the old edge before the new one is written.
+            #
+            # AB#5651 - safe under concurrent runs. Several runs of this pipeline DO overlap:
+            # the cron trigger's messages buffer durably on the per-pipeline queue while the
+            # adapter is down or hibernated and are all delivered at once when it comes back
+            # (test-2 gastroacker/tecob 7.10.2026: 8-9 runs in parallel), and the app's
+            # /assignFiscalYears call can meet a cron run. Every run plans against the edges
+            # it read at its start, so the runs plan the SAME writes; ApplyChanges validates
+            # the whole batch before writing anything and the first run to commit makes every
+            # other batch fail ("Association ... does already exist" / "... does not exist").
+            # The platform offers neither a "no concurrent execution" switch nor coalescing of
+            # missed cron ticks, and no node lets a pipeline skip an existing edge, so the
+            # idempotence lives here, per phase:
+            #   a) the whole phase as ONE ApplyChanges (one transaction - the normal case and
+            #      the fast path for a backfill), inside a one-element ForEach whose errorsPath
+            #      captures a failure instead of failing the run;
+            #   b) only if (a) failed: edge by edge, each write again captured. An edge another
+            #      run already wrote ("does already exist" on a create) or already removed
+            #      ("does not exist" on a delete) is the planned end state and counts as done;
+            #   c) any OTHER failure of a single edge is retried once WITHOUT capture, so a
+            #      transient error heals and a real one fails the run with the engine's own
+            #      message (the per-edge loop has no continueOnError).
+            # $.writeMode in the result reports which path ran (none / bulk / perEdge).
+            # Inside the loops $.plan / $._upd are read through the ForEach child context's
+            # parent fallback; each loop's `path` names a small node because ForEach snapshots
+            # that node under $.full per loop start (default "$" = the whole document).
+            - type: SetPrimitiveValue@1
+              description: Nothing written yet
+              targetPath: $.writeMode
+              value: 'none'
+              valueType: String
+            - type: If@1
+              description: Not a dry run - write the difference
+              path: $.dryRun
+              operator: NotEquals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: SetPrimitiveValue@1
+                  description: One-element array that runs a guarded write exactly once
+                  targetPath: $._fyOnce
+                  value: 1
+                  valueType: Int
+                  targetValueKind: Array
+                - type: If@1
+                  description: Stale edges to delete
+                  path: $.plan.summary.deleteCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      description: Bulk path taken
+                      targetPath: $.writeMode
+                      value: 'bulk'
+                      valueType: String
+                    - type: ForEach@1
+                      description: All deletes as one transaction, failure captured (AB#5651 a)
+                      path: $._fyOnce
+                      iterationPath: $._fyOnce
+                      targetPath: $._fyDelBulk
+                      maxDegreeOfParallelism: 1
+                      continueOnError: true
+                      errorsPath: $._fyDelBulkErrors
+                      transformations:
+                        - type: ForEach@1
+                          description: One association delete per stale edge
+                          iterationPath: $.plan.deletes
+                          targetPath: $._fyDeletes
+                          mergePath: $.u
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              description: FiscalYear -> transaction edge to remove
+                              targetPath: $.u
+                              updateKind: Delete
+                              originRtIdPath: $.key.fy
+                              originCkTypeId: Meshmakers.Accounting/FiscalYear
+                              targetRtIdPath: $.key.tx
+                              targetCkTypeId: Basic.Accounting/BankTransaction
+                              associationRoleId: Meshmakers.Accounting/TransactionToFiscalYear
+                        - type: ApplyChanges@2
+                          description: Persist the deletes
+                          associationUpdatesPath: $._fyDeletes
+                    - type: If@1
+                      description: Bulk delete failed (a concurrent run was first) - edge by edge (AB#5651 b)
+                      path: $._fyDelBulkErrors[0].index
+                      operator: GreaterEqualsThan
+                      value: 0
+                      valueType: Int64
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          description: Per-edge path taken
+                          targetPath: $.writeMode
+                          value: 'perEdge'
+                          valueType: String
+                        - type: ForEach@1
+                          description: Delete edge by edge; a real failure aborts the run
+                          iterationPath: $.plan.deletes
+                          targetPath: $._fyDelEach
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              description: This edge as a one-element update list
+                              targetPath: $._upd
+                              targetValueKind: Array
+                              updateKind: Delete
+                              originRtIdPath: $.key.fy
+                              originCkTypeId: Meshmakers.Accounting/FiscalYear
+                              targetRtIdPath: $.key.tx
+                              targetCkTypeId: Basic.Accounting/BankTransaction
+                              associationRoleId: Meshmakers.Accounting/TransactionToFiscalYear
+                            - type: ForEach@1
+                              description: Delete this edge, failure captured
+                              path: $._upd
+                              iterationPath: $._upd
+                              targetPath: $._try
+                              maxDegreeOfParallelism: 1
+                              continueOnError: true
+                              errorsPath: $._err
+                              transformations:
+                                - type: ApplyChanges@2
+                                  description: Persist this delete
+                                  associationUpdatesPath: $._upd
+                            - type: If@1
+                              description: Failed for another reason than "already deleted" - retry once, uncaptured (AB#5651 c)
+                              path: $._err[0].message
+                              operator: RegexMatch
+                              value: '(?s)^(?!.*Association .* does not exist[.])'
+                              valueType: String
+                              transformations:
+                                - type: ApplyChanges@2
+                                  description: Retry this delete - a persistent error fails the run
+                                  associationUpdatesPath: $._upd
+                - type: If@1
+                  description: Missing edges to create
+                  path: $.plan.summary.createCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: If@1
+                      description: Keep "perEdge" when the delete phase already fell back
+                      path: $.writeMode
+                      operator: NotEquals
+                      value: 'perEdge'
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          description: Bulk path taken
+                          targetPath: $.writeMode
+                          value: 'bulk'
+                          valueType: String
+                    - type: ForEach@1
+                      description: All creates as one transaction, failure captured (AB#5651 a)
+                      path: $._fyOnce
+                      iterationPath: $._fyOnce
+                      targetPath: $._fyCreBulk
+                      maxDegreeOfParallelism: 1
+                      continueOnError: true
+                      errorsPath: $._fyCreBulkErrors
+                      transformations:
+                        - type: ForEach@1
+                          description: One association create per missing edge
+                          iterationPath: $.plan.creates
+                          targetPath: $._fyCreates
+                          mergePath: $.u
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              description: FiscalYear -> transaction by booking date
+                              targetPath: $.u
+                              updateKind: Create
+                              originRtIdPath: $.key.fy
+                              originCkTypeId: Meshmakers.Accounting/FiscalYear
+                              targetRtIdPath: $.key.tx
+                              targetCkTypeId: Basic.Accounting/BankTransaction
+                              associationRoleId: Meshmakers.Accounting/TransactionToFiscalYear
+                        - type: ApplyChanges@2
+                          description: Persist the creates
+                          associationUpdatesPath: $._fyCreates
+                    - type: If@1
+                      description: Bulk create failed (a concurrent run was first) - edge by edge (AB#5651 b)
+                      path: $._fyCreBulkErrors[0].index
+                      operator: GreaterEqualsThan
+                      value: 0
+                      valueType: Int64
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          description: Per-edge path taken
+                          targetPath: $.writeMode
+                          value: 'perEdge'
+                          valueType: String
+                        - type: ForEach@1
+                          description: Create edge by edge; a real failure aborts the run
+                          iterationPath: $.plan.creates
+                          targetPath: $._fyCreEach
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              description: This edge as a one-element update list
+                              targetPath: $._upd
+                              targetValueKind: Array
+                              updateKind: Create
+                              originRtIdPath: $.key.fy
+                              originCkTypeId: Meshmakers.Accounting/FiscalYear
+                              targetRtIdPath: $.key.tx
+                              targetCkTypeId: Basic.Accounting/BankTransaction
+                              associationRoleId: Meshmakers.Accounting/TransactionToFiscalYear
+                            - type: ForEach@1
+                              description: Create this edge, failure captured
+                              path: $._upd
+                              iterationPath: $._upd
+                              targetPath: $._try
+                              maxDegreeOfParallelism: 1
+                              continueOnError: true
+                              errorsPath: $._err
+                              transformations:
+                                - type: ApplyChanges@2
+                                  description: Persist this create
+                                  associationUpdatesPath: $._upd
+                            - type: If@1
+                              description: Failed for another reason than "already there" - retry once, uncaptured (AB#5651 c)
+                              path: $._err[0].message
+                              operator: RegexMatch
+                              value: '(?s)^(?!.*Association .* does already exist[.])'
+                              valueType: String
+                              transformations:
+                                - type: ApplyChanges@2
+                                  description: Retry this create - a persistent error fails the run
+                                  associationUpdatesPath: $._upd
+
+            # --- 4. Result: the HTTP response is the whole data context - reduce it ------
+            - type: Project@1
+              description: Keep the mode, the write path, the summary and the sample only
+              clear: true
+              fields:
+                - path: $.dryRun
+                  inclusion: true
+                - path: $.writeMode
+                  inclusion: true
+                - path: $.plan.summary
+                  inclusion: true
+                - path: $.plan.sample
+                  inclusion: true
+            - type: SetPipelineExecutionResult@1
+              description: Persist the summary as OutputData (visible per cron run)
+              path: $
+  - rtId: aa0000000000000000000404
+    ckTypeId: System.Communication/PipelineTrigger
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000400
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Triggers
+        targetRtId: aa0000000000000000000403
+        targetCkTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: Assign Fiscal Years Schedule
+      - id: System/Description
+        value: Reconciles TransactionToFiscalYear every 15 minutes, off the matcher's quarter hours (AB#5624).
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System.Bot/CronExpression
+        value: '7,22,37,52 * * * *'
