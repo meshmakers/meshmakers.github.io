@@ -1,0 +1,291 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.8,5.0)
+- Basic.Energy-[1.9,2.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its two pipelines — the HTTP trigger and the worker it hands the
+# request to. The seed carries the pipeline definitions inline.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _calculation/energy-send-all-released-bills.yaml
+- rtId: 689f3368ae5c4c800f3f6a41
+  rtCreationDateTime: 2025-08-15T13:17:28.9110000Z
+  rtChangedDateTime: 2025-08-15T14:37:56.8910000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-send-all-released-bills
+  - id: System/Description-1
+    value: Sends ALL released billing documents based on a time range to customers.
+- rtId: 689f3398ae5c4c800f3f6a42
+  rtCreationDateTime: 2025-08-15T13:18:16.1370000Z
+  rtChangedDateTime: 2025-08-15T14:52:27.7240000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 689f3368ae5c4c800f3f6a41
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >
+      triggers:
+        - type: FromHttpRequest@2
+          path: /sendAllBillingDocumentsForPeriod
+          method: POST
+          # AB#5627 phase A: a valid token of this tenant is required. Phase B adds the
+          # required role once the roles are assigned in every productive tenant.
+          allowAnonymous: false
+          requiredRoles: []
+      transformations:
+        # FromHttpRequest is synchronous and cannot answer 202, so a large batch sent inline
+        # outlives the gateway's 60 s and the caller sees a 504 while the mails still go out.
+        # The request body is therefore handed to the worker pipeline of this data flow
+        # (awaitResult: false) and the call returns at once; the app polls the worker's
+        # PipelineExecution for status and count (AB#4508). Trigger and worker must live in
+        # the same data flow - they share its topic exchange - and the worker's rtId is the
+        # one the app polls (SEND_ALL_BILLS_WORKER_RT_ID).
+        - type: ToPipelineDataEvent@1
+          description: Kick off the async worker (same DataFlow), do not block the HTTP call
+          path: $.body
+          targetPath: $.input
+          targetPipelineRtId: 6a61b2a10238868d3c2bfa5c
+          awaitResult: false
+        # The HTTP response is the whole data context - reduce it to a small acknowledgement.
+        - type: SetPrimitiveValue@1
+          targetPath: $.accepted
+          value: true
+          valueType: Boolean
+        - type: Project@1
+          description: Return a minimal accepted acknowledgement
+          clear: true
+          fields:
+            - path: $.accepted
+              inclusion: true
+  - id: System.Communication/StatusMessage-1
+# The worker of the data flow above (AB#4508). The app polls the executions of exactly this
+# pipeline (SEND_ALL_BILLS_WORKER_RT_ID in send-billing-documents-dialog.component.ts), so
+# the rtId is part of the contract with the frontend. It sends through `billing-smtp`: link
+# the tenant's EMailSenderConfiguration of that name to it, as for every sending pipeline.
+- rtId: 6a61b2a10238868d3c2bfa5c
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 689f3368ae5c4c800f3f6a41
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#4554: Uses → EnergyCommunityConfiguration so the BCC address resolves
+  # config-driven (notificationEmailContact) via GetPipelineConfigByWellKnownName@1.
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: energy-send-all-released-bills-worker
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        # Fired fire-and-forget by the trigger pipeline of this data flow
+        # (/sendAllBillingDocumentsForPeriod). The request body arrives at $.input.
+        - type: FromPipelineDataEvent@1
+      transformations:
+        # AB#4554: load config so the BCC address resolves config-driven.
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.config
+        # AB#2569: the community bank details are read from the runtime entity, not from
+        # $.config above. GetPipelineConfigByWellKnownName@1 hands the pipeline a DTO the
+        # communication controller serialises through the CK model compiled into its own
+        # binary, so an attribute added to the tenant model is silently dropped until the
+        # service itself ships that CK version. Verified against a tenant with System.Communication
+        # 3.31.0 imported: the typed config had no BankAccount* keys at all, while this lookup
+        # returned both with their values.
+        - type: GetRtEntitiesByType@1
+          description: read the community configuration as a runtime entity
+          ckTypeId: System.Communication/EnergyCommunityConfiguration
+          targetPath: $.communityConfig
+          take: 1
+        - type: GetRtEntitiesByType@1
+          description: Get the billing document and filter by status draft
+          targetPath: $.billingItems
+          ckTypeId: EnergyCommunity/BillingDocument
+          fieldFilters:
+            - attributePath: billingDocumentState
+              operator: Equals
+              comparisonValue: 1
+            - attributePath: timeRange.from
+              operator: Equals
+              comparisonValuePath: $.input.timeRange.from
+            - attributePath: timeRange.to
+              operator: Equals
+              comparisonValuePath: $.input.timeRange.to
+        - type: GetAssociationTargets@1
+          description: get file system items for download
+          associationRoleId: System/Related
+          graphDirection: Inbound
+          originCkTypeId: EnergyCommunity/BillingDocument
+          targetCkTypeId: System.Reporting/FileSystemItem
+          originRtIdPath: $.billingItems.Items[*].RtId
+          targetPath: $.fileSystemItems
+        - type: GetAssociationTargets@1
+          description: get customers for billing items
+          associationRoleId: EnergyCommunity/AssignedBilling
+          graphDirection: Outbound
+          originCkTypeId: EnergyCommunity/BillingDocument
+          targetCkTypeId: EnergyCommunity/Customer
+          originRtIdPath: $.billingItems.Items[*].RtId
+          targetPath: $.customers
+        - type: Join@1
+          description: Join billing items with file system items
+          path: $.billingItems.Items[*]
+          keyPath: $.RtId
+          joinPath: $.fileSystemItems[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.fileSystemItem
+        - type: Join@1
+          description: Join billing items with customers
+          path: $.billingItems.Items[*]
+          keyPath: $.RtId
+          joinPath: $.customers[*]
+          joinKeyPath: $.OriginRtId
+          itemPath: $.customer
+        # The joins copied what each document needs onto it; the two lookup branches are dead
+        # weight in every iteration from here on.
+        - type: Project@1
+          fields:
+            - path: $.fileSystemItems
+            - path: $.customers
+        - type: ForEach@1
+          description: iterate billing items and send emails sequentially
+          iterationPath: $.billingItems.Items
+          mergePath: $.results
+          targetPath: $.results
+          maxDegreeOfParallelism: 1
+          transformations:
+            - type: If@1
+              description: check if file system item exists
+              path: $.key.fileSystemItem[0].Items[0].RtId
+              operator: NotEquals
+              valueType: String
+              value: null
+              transformations:
+                - type: If@1
+                  description: check if cusomer exists
+                  path: $.key.customer[0].Items[0].RtId
+                  operator: NotEquals
+                  valueType: String
+                  value: null
+                  transformations:
+                    - type: GetNotificationTemplate@1
+                      # The template the operator chose in the send dialog; the request body
+                      # arrives at $.input (the trigger pipeline's targetPath).
+                      notificationTemplateNamePath: $.full.input.notificationTemplateRtWellKnownName
+                      targetPath: $.key.emailBody
+                      subjectTargetPath: $.key.emailSubject
+                      # AB#2570: the editor lets an author declare PLAIN or HTML, and until this
+                      # path existed that choice reached nobody - every body went through Markdig.
+                      renderingTypeTargetPath: $.key.emailRenderingType
+                    # AB#2569: one resolver for every send path. Replaced two PlaceholderReplace@1 rule
+                    # blocks generated per pipeline plus hand-written converter nodes - a fourth send path
+                    # meant a fourth copy, and a token wired here but not there produced different mail
+                    # from one template. A token whose source this path does not supply fails the node
+                    # rather than rendering blank. ForEach@1 leaves ContinueOnError unset here, so the first
+                    # refusal aborts the whole batch - the loud end of the choice, on purpose.
+                    #
+                    # What aborting does NOT do is undo the recipients already served. A refusal the template
+                    # causes trips on the first iteration and nothing goes out, but one a single recipient
+                    # causes - a typed address matching no customer - trips mid-run, and everybody ahead of it
+                    # already has their mail. The response carries the failure, not the count, so re-running
+                    # the same batch mails those recipients twice. Fix the offending recipient and send the
+                    # remainder, rather than repeating the batch.
+                    - type: ResolveNotificationPlaceholders@1
+                      subjectPath: $.key.emailSubject
+                      subjectTargetPath: $.renderedSubject
+                      bodyPath: $.key.emailBody
+                      bodyTargetPath: $.renderedBody
+                      communityConfigPath: $.full.communityConfig.Items[0]
+                      renderingTypePath: $.key.emailRenderingType
+                      customerPath: $.key
+                      billingDocumentPath: $.key
+                      # Must equal the contentId on the SendEMail@2 attachment below. They are two halves of
+                      # one reference and nothing checks them: rename one and the body keeps an <img> pointing
+                      # at a cid nobody attached, which the node cannot report because it only strips a
+                      # reference whose own attachment went missing.
+                      logoContentId: community-footer
+                    - type: SendEMail@2
+                      # AB#4554: literal-only serverConfiguration → tenant-neutral name.
+                      serverConfiguration: billing-smtp
+                      subjectPath: $.renderedSubject
+                      path: $.renderedBody
+                      bodyFormatPath: $.key.emailRenderingType
+                      toPath: $.key.customer[0].Items[0].Attributes.Contact.Attributes.Email
+                      # BCC resolves config-driven from notificationEmailContact.
+                      bccPath: $.full.config.notificationEmailContact
+                      attachments:
+                        - binaryIdPath: $.key.fileSystemItem[0].Items[0].Attributes.Content.BinaryId
+                          fileName: Abrechnung.pdf
+                          contentType: application/pdf
+                        # AB#2570: the community's footer image, addressable as cid:community-footer.
+                        # Optional - a community without one still gets its billing mail.
+                        - binaryIdPath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.BinaryId
+                          fileNamePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.Filename
+                          contentTypePath: $.full.communityConfig.Items[0].Attributes.EmailFooterImage.ContentType
+                          fileName: footer.png
+                          contentType: image/png
+                          contentId: community-footer
+                          optional: true
+                    - type: CreateUpdateInfo@1
+                      targetPath: $.updates._items
+                      updateKind: UPDATE
+                      targetValueKind: Array
+                      ckTypeId: EnergyCommunity/BillingDocument
+                      rtIdPath: $.key.RtId
+                      attributeUpdates:
+                        - attributeName: BillingDocumentState
+                          attributeValueType: Enum
+                          value: "SENT"
+                    - type: ApplyChanges@2
+                      description: apply state change immediately after email sent
+                      entityUpdatesPath: $.updates._items
+        # Reduce the context to the affected count and persist it as
+        # PipelineExecution.OutputData, where the app reads it once the run has ended.
+        - type: Project@1
+          description: Keep only the affected count
+          clear: true
+          fields:
+            - path: $.billingItems.TotalCount
+              inclusion: true
+        - type: SetPipelineExecutionResult@1
+          description: Persist {billingItems:{TotalCount}} as OutputData
+          path: $
+  - id: System.Communication/StatusMessage-1
