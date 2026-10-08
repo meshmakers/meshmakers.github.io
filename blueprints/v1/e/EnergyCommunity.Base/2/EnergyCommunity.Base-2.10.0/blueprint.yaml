@@ -1,0 +1,283 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: EnergyCommunity.Base-2.10.0
+description: |
+  Base blueprint for Energy Community deployments (EnergyCommunity v2,
+  stream-data storage for metering values — see ADR 0001, AB#4549).
+
+  Installs the foundation every Energy Community v2 tenant needs:
+  - Energy Community runtime configuration entity (neutral defaults; fill via Refinery Studio).
+    Includes the billing report / notification config the Billing pipelines read
+    config-driven (billingReportName, billingReportFilePrefix,
+    billingMailServerConfiguration, notificationEmailContact) — AB#4554 de-SBEG-ing.
+  - Auto-increment counters for customer numbers and billing document numbers
+  - Excel import pipeline (master data import via OctoMesh Office Add-In)
+  - Shared queries used by EDA and Billing pipelines, plus Excel-import queries
+  - Stream-data archives for Basic.Energy/EnergyMeasurement:
+    - energy-measurements (raw TimeRangeArchive, 15-min windows) with the cascaded
+      rollup ladder raw -> hourly -> daily -> {weekly, monthly} -> yearly
+      (calendar-aligned, Europe/Vienna; SUM amountvalue_sum + MAX dataquality_max)
+    - energy-measurements-legacy-daily (TimeRangeArchive, 1-day windows) with its
+      own monthly + yearly rollup sub-ladder — migration tenants only, carries
+      over pre-cutover daily EnergyQuantity history (ADR 0001 decision 3)
+  - Persisted stream-data queries over the raw archive (SimpleSdQuery + two
+    GroupingAggregationSdQuery: by ObisCode and by DataQuality)
+  - Energy-statistics MeshBoard (System.UI/Dashboard
+    `energy-community-energy-quantities` + widgets, AB#4578) bound to the SD
+    queries above — Verbrauch/Erzeugung/Überschuss KPIs plus the formula KPI
+    Erzeugung in EEG, by-OBIS pie, by-data-quality
+    donut, 15-min time-series line chart. Requires the service-managed
+    System.UI CK model (octo-platform-services running).
+  - manual-metering-entry pipeline (AB#4558): a deployed HTTP endpoint
+    (POST /manualMeteringEntry) that upserts manual/corrected 15-min windows into
+    the raw energy-measurements archive (ec0000000000000000000a01) for an existing
+    EnergyMeasurement anchor, tagged dataQuality = Manual (Basic.Energy DataQuality
+    key 4). CrateDB upsert on (window_start, window_end, rtId, ckTypeId) means a
+    re-written window corrects it; retroactive writes auto-schedule rollup recompute.
+    2.1.4 (AB#4558 fix): the pipeline now resolves the anchor EnergyMeasurement
+    (GetRtEntitiesById@1) and carries its ObisCode into every write — ObisCode is a
+    required non-null archive column, so omitting it made every write fail with a
+    CrateDB XX000 "obiscode must not be null" 500. An orphan anchorRtId now returns
+    status=error (HTTP 200) instead of a 500.
+  - aggregated-energy-report pipeline (AB#4710, 2.2.0): a deployed HTTP endpoint
+    (POST /aggregatedEnergyReport) that returns the aggregated measured energy per
+    metering point x OBIS anchor over a caller-supplied time range as JSON, with
+    hard completeness, quality (no L3 intervals; Manual is a corrected value
+    and OK) and overlap gates.
+    2.4.1 reads the measurements through the stream-data nodes instead of the
+    persisted SD query, and in that order: ONE GetStreamData@1 with gapsOnly
+    for the whole request, then — only if it reports no gap at all — ONE
+    AggregateStreamData@1 (SUM + COUNT of Amount.Value grouped by rtId +
+    DataQuality, with Amount.Unit pinned to kWh by a field filter rather than
+    grouped). Both are scoped by the resolved anchor rtIds and re-attached per
+    anchor with Join@1. Measurements are never read over an incomplete range,
+    so one gap anywhere means every entry comes back without figures. That
+    replaces the per-anchor GetQueryById@1 against ec0000000000000000000a24
+    (the query stays in the seed for external consumers) and turns the interval
+    arithmetic into a real coverage report that names where the hole is.
+    REQUIRES Mesh Adapter
+    >= r3.4.119 (GetStreamData@1 r3.4.85, AggregateStreamData@1 r3.4.89,
+    ExecuteCSharp@1 typed array arguments r3.4.119) — an
+    adapter version is not expressible as a blueprint dependency, since
+    System.Communication-[3.26,4.0) pins the CK model, not the adapter; an older
+    adapter fails the pipeline with an unknown node type.
+
+  - allocate-community-energy pipeline (AB#5635, 2.10.0): the D+1 allocation of the
+    community energy per 15-min slot (DataFlow ec0000000000000000000a51, pipeline …a52,
+    cron trigger …a53 at 05:30 UTC). Reads the raw channels 1-1:1.9.0 G.01 / 1-1:2.9.0 G.01
+    of metering points with MeteringDataSource Simulated or SelfReported, allocates the
+    production dynamically (proportional to consumption, capped by PartitionFactor) and
+    upserts the EDA register set into the raw archive: consumers 1-1:2.9.0 G.03, producers
+    1-1:2.9.0 G.01T and 1-1:2.9.0 P.01T, each slot carrying the worst input data quality.
+    Metering points with MeteringDataSource Eda are never written (the day aborts). The
+    cut-off time of day comes from EnergyCommunity/CommunitySettings.AllocationCutOffTime
+    (empty or no entity = 06:00 Europe/Vienna). Seeded Enabled=false; manual window via
+    ExecutePipeline { startDay, numDays <= 31 }.
+    REQUIRES Mesh Adapter with AllocateCommunityEnergy@1 (AB#5634) - an older adapter fails
+    the pipeline with an unknown node type; the adapter version is not expressible as a
+    blueprint dependency.
+
+  All archives are seeded Disabled (Archive.Status = 2). Activation is NOT part
+  of the blueprint install — run install-tenant.ps1 (ActivateArchive phase,
+  bottom-up) or activate manually via octo-cli -c ActivateArchive. Legacy
+  archives are only activated on migration tenants (-IncludeLegacyArchives).
+
+  2.4.3 (AB#3717): the Basic / Basic.Energy / EnergyCommunity floors move together to the
+  set EnergyCommunity 4.3.0 resolves (Basic 2.0.3, Basic.Energy 1.4.0). They are one set, not
+  three independent pins - see the note on ckModelDependencies. Existing tenants are unaffected:
+  a higher installed version already satisfies the old floors, and the new ones are what the
+  catalog offers anyway. 2.4.3 and not 2.4.2: these floors were written for 2.4.0 while this
+  branch was open, and 2.4.0 through 2.4.2 were published from main in the meantime carrying
+  the OLD floors. A published version is never overwritten, so a tenant installing 2.4.2 from
+  the catalog gets EnergyCommunity 4.2 and fails the registration seed dependency check.
+
+  2.4.5: the energy-statistics MeshBoard takes over the layout edited in Studio on eegroider -
+  four 1x1 KPIs (Verbrauch G.03, Erzeugung G.01T, Überschuss P.01T and the formula KPI
+  Erzeugung in EEG = creation - surplus), the by-OBIS pie filtered to those three series and
+  the data-quality donut filtered to G.03. The two new widgets keep their eegroider rtIds so
+  that tenant adopts them. 2.4.5 and not 2.4.4: 2.4.4 is already in the catalog.
+
+  Prerequisites:
+  - System.Communication blueprint installed on the tenant (provides default
+    Pool 670…001, Mesh Adapter 670…002 and the meshmakers-apps Helm repo
+    670…005 the app's HelmRepository association pins — seeded by BOTH
+    variants since Release-1.5.0 / MainLatest-1.5.0 with the
+    environment-correct URL (dev channel on dev/test, /apps on
+    staging/production), AB#4706. On dev/test clusters the controller must
+    carry MainLatest >= 1.5.0 or the app association targets a missing
+    entity.
+  - Stream data enabled on the tenant (octo-cli -c EnableStreamData; CrateDB
+    reachable) before activating the archives.
+
+  Post-install:
+  - Fill EnergyCommunityConfiguration values in Refinery Studio
+  - Activate the archives (see above)
+  - octo-cli -c DeployDataFlow --identifier <excelDataFlowRtId>
+
+  2.4.0 splits the seed across one file per topic (AB#4758 `seedDataPaths`) —
+  identical entities, no data change. It therefore requires an engine that knows
+  `seedDataPaths`: an older engine drops the unknown property, finds no
+  `seedDataPath` and installs an EMPTY seed while still reporting success.
+  Install 2.3.1 on such tenants.
+
+  2.4.5 -> 2.5.0: the raw archive ec0000000000000000000a01 opts in to conflict
+  resolution. Every archive write is an upsert on (window_start, window_end,
+  rtid, ckTypeId) and the update used to be unconditional, so the LAST delivery
+  won regardless of which document was newer — a re-sent or out-of-order
+  DATEN_CRMSG silently replaced a correction, and the stored value reflected
+  arrival order rather than source order. Measured on a real replay of this
+  archive: 16 of 565 consumer days kept a superseded value. The archive now
+  carries a SourceDocumentDate column (the source document's own timestamp, not
+  the ingest time) and names it as Archive.ConflictVersionColumn, so an incoming
+  point only replaces a stored one when it is at least as new. NOTE: that
+  single-column attribute was superseded by the ordered Archive.ConflictPrecedence
+  before either reached a published CK model — see 2.5.0 -> 2.6.0 below. 2.5.0 was
+  never published; a tenant that never saw it goes straight from 2.4.5 to 2.6.0.
+
+  2.5.0 -> 2.6.0: the raw archive's conflict resolution becomes TWO-KEY. Ordering by the
+  source document date alone was wrong for metering data, and a full replay proved it: 22
+  of 805 days came out different from the legacy values because a later L3 ESTIMATE
+  overwrote an earlier L1 MEASUREMENT. Since billing sums L1+L2 only, such a day then
+  bills as zero — 80.885 kWh over 3,375 windows on billed registers on the tenant this was
+  measured on.
+
+  ConflictPrecedence now declares [{DataQuality, LowerWins}, {SourceDocumentDate,
+  HigherWins}]: quality dominates, the document date breaks the tie. The keys are compared
+  lexicographically, which is what makes the result independent of arrival order — a
+  conjunction ("better quality AND newer") would still let a newer estimate beat an older
+  measurement whenever the estimate arrived first.
+
+  Raises two floors, and BOTH are load-bearing rather than housekeeping:
+  System.StreamData-[1.13,2.0) declares Archive.ConflictPrecedence (on a lower floor —
+  including 1.11.0 and 1.12.0, which were published for the System 2.3.0 cascade without
+  it — the attribute does not exist and the opt-in is silently ignored: the archive keeps
+  last-write-wins while the seed says otherwise), and Basic.Energy-[1.7,2.0)
+  declares EnergyMeasurement.SourceDocumentDate (without it the archive column
+  cannot resolve its type and activation fails). EnergyCommunity moves to
+  [4.6,5.0), the version built against that Basic.Energy. Requires all three models
+  to be published to the catalog.
+
+  2.6.0 -> 2.7.0 (AB#5359): CK floors only - Basic 2.2, Basic.Energy 1.8 and EnergyCommunity
+  4.7, the versions rebuilt against System 2.4.0. No entity changed. A compiled model carries
+  exact dependency versions, so the 2.6.0 set (built against System 2.3.0) does not resolve on
+  a platform that ships System 2.4.0; this version is what moves a tenant to the new set.
+  Install it only on an environment whose platform release carries System 2.4.0 - on an older
+  platform the three models cannot be imported.
+
+  2.7.0 -> 2.8.0 (AB#5528): CK floors only - Basic 2.3, Basic.Energy 1.9 and EnergyCommunity 4.8,
+  the versions rebuilt against System 2.5.0. No entity changed. Same reason as 2.7.0: the 2.7.0
+  set (built against System 2.4.0) does not resolve on a platform that ships System 2.5.0.
+  Install it only on an environment whose platform release carries System 2.5.0.
+
+  2.8.0 -> 2.9.0 (AB#5627): route security, phase A. /import/tree and /manualMeteringEntry move
+  from FromHttpRequest@1, which always registered its route anonymously, to FromHttpRequest@2
+  with allowAnonymous: false and requiredRoles: [] - a valid access token of this tenant is
+  required, any role will do. The EC app, the voest-app and the Office add-in already send one.
+  @2 would run the pipeline as the verified caller; every data node that supports it carries
+  identity: ServiceAccount, so the pipelines see and write exactly what they did before. Seeds the
+  roles EnergyCommunityManagement and EnergyCommunityReporting and the group
+  EnergyCommunityOperators (seed-data/identity/roles-groups.yaml), which phase B will require
+  on the routes - assign them first (docs/runbooks/ec-route-security-roles.md). CK floors unchanged.
+
+  2.9.0 -> 2.9.1 (AB#5627): the routes answer with a result, not with their data context.
+  The adapter returns the final data context of a FromHttpRequest pipeline verbatim - request
+  headers (all but Authorization/Cookie), the caller's principal and roles, the request body and
+  every intermediate result. /manualMeteringEntry now answers { status, message } at the top
+  level, where the EC app reads them (under $.response it never saw status=error);
+  /import/tree answers {} (the Office add-in reads only the HTTP status). CK floors unchanged.
+
+  2.9.1 -> 2.10.0 (AB#5635): the allocate-community-energy pipeline (see above). CK floors:
+  EnergyCommunity 4.9 (MeteringDataSource on Consumer/Producer, CommunitySettings with
+  AllocationCutOffTime) and System.Bot 3.1 (CronExpression on the daily PipelineTrigger, same
+  range as EdaIntegration). EnergyCommunity 4.9.0 is a minor over 4.8.0 on the same Basic 2.4 /
+  Basic.Energy 1.9 set, so Basic and Basic.Energy floors stay. Billing, EdaIntegration and
+  Simulation install on top unchanged. A tenant that carries EnergyCommunity.Registration needs
+  Registration 2.7.0 (compiled against EnergyCommunity 4.9.0, AB#5653) imported right after this
+  upgrade: 2.6.0 pins 4.8.0 exactly and goes ResolveFailed (docs/DEPLOYMENT.md, "Upgrading Base
+  when the tenant carries Registration").
+ckModelDependencies:
+  # Pin to the minimum versions that share the System-2.2.0 baseline — the
+  # older Basic-2.0.0 in the catalog pins System-2.0.2 and would conflict with
+  # System.Communication-3.22's System-2.2.0 pin. EnergyCommunity 4.x builds on
+  # Basic.Energy (ADR 0001 decision 1). The System.StreamData floor carries three
+  # requirements, each of which moved it: (a) calendar-aligned rollups with
+  # RollupArchive.ReferenceTimeZone (>= 1.6.4), (b) the AB#4582 fix that marks
+  # Archive.Status runtime-state so a bare InstallBlueprint -f re-apply no longer
+  # deactivates already-activated archives (>= 1.7.0 — the runtime-state flip is a
+  # MINOR CK bump), and (c) Archive.ConflictPrecedence, without which this
+  # blueprint's opt-in on the raw archive is silently ignored (>= 1.13.0 — 1.11.0 and
+  # 1.12.0 were published for the System 2.3.0 cascade WITHOUT it, so a lower floor
+  # would accept a model that does not know the attribute). The pin below carries the
+  # highest of the three.
+  # 2.2 (AB#5359): the rebuild against System 2.4.0. It moves with the two floors below.
+  # 2.3 (AB#5528): the rebuild against System 2.5.0, moves with the two floors below.
+  - Basic-[2.4,3.0)
+  # 1.7 floor: adds EnergyMeasurement.SourceDocumentDate, the second conflict
+  # precedence key of the raw archive. Without it the declared archive column
+  # cannot resolve its type and activation fails. (1.5.0 is the AB#5293
+  # ConsentPeriod change and 1.6.0 the rebuild against System 2.3.0, AB#5432;
+  # neither carries the attribute.)
+  # 1.8 (AB#5359): the rebuild against System 2.4.0, no new attribute - the floor moves for
+  # the set, not for a feature.
+  # 1.9 (AB#5528): the rebuild against System 2.5.0, no new attribute.
+  - Basic.Energy-[1.9,2.0)
+  # History, and the mechanism to keep in mind: the blueprint engine installs the FLOOR of a
+  # ckModelDependencies range (catalog/compiler resolution picks the highest — see
+  # octo-documentation constructionKits/versioningRules.md). EnergyCommunity 4.0.0 in the
+  # catalog was built against Basic.Energy 1.2.x, which a [1.3,2.0) Basic.Energy floor could
+  # not satisfy, and a fresh install failed with "CK model 'EnergyCommunity-4.0.0' could not be
+  # installed; required CK model dependencies may be missing or still importing". 4.1.0 is the
+  # version rebuilt against Basic.Energy 1.3.0 (octo-construction-kit e4c0b04, AB#4558).
+  # Rule of thumb: whenever a Basic.Energy floor moves, the EnergyCommunity floor moves too.
+  #
+  # 4.3, and the three floors above move WITH it (AB#3717). The three are one set, because a
+  # compiled CK model carries EXACT dependency versions and the importer hard-resolves each one
+  # as "[<version>]" (DatabaseCkModelRepository: "a minor version mismatch will cause the import
+  # to fail"). EnergyCommunity 4.2.0 resolves to Basic 2.0.2 + Basic.Energy 1.3.0, and 4.3.0
+  # resolves to Basic 2.0.3 + Basic.Energy 1.4.0; mixing the two sets means every app-owned model
+  # compiled against one of them cannot be imported into a tenant carrying the other. That is
+  # exactly what bit EnergyCommunity.Registration, which compiles against the 4.3.0 set.
+  # 4.3.0 itself is a pure version bump over 4.2.0 (octo-construction-kit caee798 changed only
+  # modelId), so nothing in the app depends on 4.3 over 4.2 — the floor moves for the set, not
+  # for a feature. Still >= 4.2 for AB#4718 (AssociatedFacilities ZeroOrOne), without which a
+  # customer-less tenant cannot create an operating facility at all.
+  # The System.* floors below need no such care: those models are service-managed, so the
+  # services install a current version and EnsureCkModelInstalledAsync skips the floor whenever a
+  # satisfying-or-higher version is already there.
+  # 4.6 (AB#5249): Basic.Energy moved to 1.7 for SourceDocumentDate, and EnergyCommunity 4.6.0
+  # is the version built against it - the set moves as one, for the reason above. (1.6.0 and
+  # 4.5.0 are the rebuilds against System 2.3.0, AB#5432, without the attribute.)
+  # 4.7 (AB#5359): the rebuild against System 2.4.0 with Basic 2.2.0 and Basic.Energy 1.8.0.
+  # No feature depends on it; the set moves as one, for the reason above.
+  # 4.8 (AB#5528): the rebuild against System 2.5.0 with Basic 2.4.0 and Basic.Energy 1.9.0.
+  # 4.9 (AB#5630/AB#5635): MeteringDataSource and CommunitySettings.AllocationCutOffTime for the
+  # allocation pipeline; same Basic 2.4 / Basic.Energy 1.9 set as 4.8.
+  - EnergyCommunity-[4.9,5.0)
+  # 3.26 floor: adds BillingReportFilePrefix + BillingMailServerConfiguration on
+  # EnergyCommunityConfiguration (AB#4554 — de-SBEG-ing config-driven billing).
+  - System.Communication-[3.26,4.0)
+  - System.StreamData-[1.13,2.0)
+  # System.UI is service-managed (octo-platform-services seeds it on tenant
+  # create/enable/startup) — required for the energy-statistics MeshBoard
+  # (Dashboard + widgets, AB#4578). platform-services must be running for the
+  # board seed entities to resolve.
+  - System.UI-[2.4,3.0)
+  # System.Identity is service-managed; 2.11 is the floor EnergyCommunity.App already requires.
+  # Needed for the role and group seed (AB#5627).
+  - System.Identity-[2.11,3.0)
+  # System.Bot is service-managed; 3.1 carries CronExpression for the allocation PipelineTrigger
+  # (same range as the EdaIntegration cron triggers).
+  - System.Bot-[3.1,4.0)
+# All files below are merged into ONE runtime model before the import runs, so the
+# order is presentation only and associations may cross files.
+seedDataPaths:
+  - seed-data/configurations/energy-community.yaml
+  - seed-data/data-flows/excel-import.yaml
+  - seed-data/queries/master-data.yaml
+  - seed-data/archives/energy-measurements.yaml
+  - seed-data/archives/legacy.yaml
+  - seed-data/queries/stream-data.yaml
+  - seed-data/ui/energy-statistics.yaml
+  - seed-data/data-flows/manual-metering-entry.yaml
+  - seed-data/data-flows/aggregated-energy-report.yaml
+  - seed-data/identity/roles-groups.yaml
+  - seed-data/data-flows/allocate-community-energy.yaml
