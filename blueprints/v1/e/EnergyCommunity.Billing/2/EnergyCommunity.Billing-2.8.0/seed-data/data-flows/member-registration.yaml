@@ -1,0 +1,1080 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.9,5.0)
+- Basic-[2.4,3.0)
+- Basic.Energy-[1.9,2.0)
+- EnergyCommunity.Registration-[2.7,3.0)
+- System.Communication-[3.31,4.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+entities:
+
+- rtId: 'ec0000000000000000000901'
+  ckTypeId: System.Communication/DataFlow-1
+  attributes:
+  - id: System/Name-1
+    value: "Member Registration API"
+  - id: System/Description-1
+    value: "HTTP API on the Mesh Adapter: POST /member-registration - store a public membership application (AB#3717)."
+
+- rtId: 'ec0000000000000000000902'
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 'ec0000000000000000000901'
+    targetCkTypeId: System.Communication/DataFlow-1
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'   # System.Communication Mesh Adapter seed (same on every tenant)
+    targetCkTypeId: System.Communication/Adapter-1
+  attributes:
+  - id: System/Name-1
+    value: "member-registration"
+  - id: System/Description-1
+    value: "POST /member-registration - store a public membership application"
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromHttpRequest@2
+          path: /member-registration
+          method: Post
+          allowAnonymous: true
+          requiredRoles: []
+      transformations:
+        - type: Logger@1
+          message: "Member registration (AB#3717): application received on /member-registration"
+
+        - type: SetPrimitiveValue@1
+          targetPath: $.response.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.response.message
+          value: "The application could not be accepted: a valid 'email', a known 'applicantType', a name and an accepted consent are required."
+          valueType: String
+
+        - type: DataMapping@1
+          description: Applicant type name to its Basic/LegalEntityType key
+          path: $.body.applicantType
+          sourceValueType: String
+          targetPath: $.applicant.applicantTypeKey
+          targetValueType: Int
+          mappings:
+            - sourceValue: NaturalPerson
+              targetValue: 0
+              description: A private applicant
+            - sourceValue: Company
+              targetValue: 2
+              description: A company applicant
+
+        - type: TransformString@1
+          description: Trim the submitted e-mail address
+          sourcePath: $.body.email
+          targetPath: $.applicant.email
+          operation: Trim
+        - type: TransformString@1
+          description: Lower-case the e-mail so one address cannot register twice
+          sourcePath: $.applicant.email
+          targetPath: $.applicant.email
+          operation: ToLower
+
+        - type: TransformString@1
+          description: Trim the first name
+          sourcePath: $.body.firstName
+          targetPath: $.applicant.firstName
+          operation: Trim
+        - type: TransformString@1
+          description: Trim the last name
+          sourcePath: $.body.lastName
+          targetPath: $.applicant.lastName
+          operation: Trim
+        - type: TransformString@1
+          description: Trim the company name
+          sourcePath: $.body.companyName
+          targetPath: $.applicant.companyName
+          operation: Trim
+        - type: TransformString@1
+          description: Trim the contact person
+          sourcePath: $.body.contactPerson
+          targetPath: $.applicant.contactPerson
+          operation: Trim
+
+        - type: SetPrimitiveValue@1
+          targetPath: $.applicant.hasName
+          value: false
+          valueType: Boolean
+        - type: If@1
+          description: a private applicant
+          path: $.applicant.applicantTypeKey
+          operator: Equals
+          value: 0
+          valueType: Int
+          transformations:
+            - type: If@1
+              description: with a last name
+              path: $.applicant.lastName
+              operator: RegexMatch
+              value: "\\S"
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.applicant.hasName
+                  value: true
+                  valueType: Boolean
+        - type: If@1
+          description: a company applicant
+          path: $.applicant.applicantTypeKey
+          operator: Equals
+          value: 2
+          valueType: Int
+          transformations:
+            - type: If@1
+              description: with a company name
+              path: $.applicant.companyName
+              operator: RegexMatch
+              value: "\\S"
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.applicant.hasName
+                  value: true
+                  valueType: Boolean
+
+        - type: TransformString@1
+          description: Trim the phone number
+          sourcePath: $.body.phoneNumber
+          targetPath: $.applicant.phoneNumber
+          operation: Trim
+        - type: If@1
+          description: a phone number was given
+          path: $.applicant.phoneNumber
+          operator: RegexMatch
+          value: "\\S"
+          valueType: String
+          transformations:
+            - type: If@1
+              description: but it is not one
+              path: $.applicant.phoneNumber
+              operator: RegexMatch
+              value: "^(?![+]*[(]?[0-9]{1,4}[)]?[-\\s\\./0-9]*$).*$"
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.applicant.hasName
+                  value: false
+                  valueType: Boolean
+                - type: SetPrimitiveValue@1
+                  targetPath: $.response.message
+                  value: "The application could not be accepted: 'phoneNumber' is not a phone number."
+                  valueType: String
+
+        # The CAPTCHA is the only thing standing between this route and a script: it is required, with
+        # no way to turn it off. `verified` therefore starts FALSE and only a token Cloudflare accepts
+        # raises it. A tenant that has not configured a secret cannot take applications at all - that is
+        # the intended outcome, and the two refusals below say which case the caller is in.
+        - type: SetPrimitiveValue@1
+          targetPath: $.captcha.verified
+          value: false
+          valueType: Boolean
+        - type: SetPrimitiveValue@1
+          targetPath: $.captcha.configured
+          value: false
+          valueType: Boolean
+
+        # Same filter the Settings card applies (getRegistrationCaptchaState.graphql), so the two
+        # cannot read different instances: without it this takes the first RegistrationConfiguration
+        # of any name, and a second one lets the card report a secret this route does not see.
+        - type: GetRtEntitiesByType@1
+          description: The endpoint configuration, for the CAPTCHA secret
+          ckTypeId: EnergyCommunity.Registration/RegistrationConfiguration
+          targetPath: $.registrationConfig
+          take: 1
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValue: RegistrationConfiguration
+
+        # RegexMatch, not NotEquals '': an absent attribute compares unequal to '', so that test would
+        # read a tenant with no secret as a tenant that has one.
+        - type: If@1
+          description: a CAPTCHA secret is configured
+          path: $.registrationConfig.Items[0].Attributes.CaptchaSecret
+          operator: RegexMatch
+          value: "\\S"
+          valueType: String
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.captcha.configured
+              value: true
+              valueType: Boolean
+
+            - type: If@1
+              description: a token was submitted
+              path: $.body.captchaToken
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.captcha.request.secret
+                  valuePath: $.registrationConfig.Items[0].Attributes.CaptchaSecret
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.captcha.request.response
+                  valuePath: $.body.captchaToken
+                  valueType: String
+
+                # Throw, not the default LogAndStop: that skips Project@1 below and the adapter
+                # then echoes the whole context back - secret included.
+                - type: MakeHttpRequest@1
+                  description: Verify the CAPTCHA token with Cloudflare Turnstile
+                  method: POST
+                  url: https://challenges.cloudflare.com/turnstile/v0/siteverify
+                  bodyPath: $.captcha.request
+                  targetPath: $.captcha.result
+                  onHttpError: Throw
+                  timeoutSeconds: 10
+
+                - type: Project@1
+                  description: Drop the verification request, and the secret in it
+                  fields:
+                    - path: $.captcha.request
+
+                - type: If@1
+                  description: Cloudflare accepted the token
+                  path: $.captcha.result.success
+                  operator: Equals
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.captcha.verified
+                      value: true
+                      valueType: Boolean
+
+        # Two different failures, and the applicant must be able to tell them apart: one they can retry,
+        # the other only the community can fix.
+        - type: If@1
+          description: the CAPTCHA was not passed
+          path: $.captcha.verified
+          operator: NotEquals
+          value: true
+          valueType: Boolean
+          transformations:
+            - type: If@1
+              description: a secret is configured, so this was a failed verification
+              path: $.captcha.configured
+              operator: Equals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.response.message
+                  value: "The application could not be accepted: the CAPTCHA could not be verified. Please reload the page and try again."
+                  valueType: String
+
+            - type: If@1
+              description: no secret, so the community has not finished setting registration up
+              path: $.captcha.configured
+              operator: NotEquals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: Logger@1
+                  message: "Member registration (AB#3717): REFUSED - no CaptchaSecret on RegistrationConfiguration. Public registration stays closed until it is set."
+                - type: SetPrimitiveValue@1
+                  targetPath: $.response.message
+                  value: "Applications cannot be accepted at the moment: this energy community has not finished setting up its registration page. Please contact the community."
+                  valueType: String
+
+        - type: If@1
+          description: the CAPTCHA is satisfied
+          path: $.captcha.verified
+          operator: Equals
+          value: true
+          valueType: Boolean
+          transformations:
+          - type: If@1
+            description: e-mail present and plausible
+            path: $.applicant.email
+            operator: RegexMatch
+            value: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+            valueType: String
+            transformations:
+              - type: If@1
+                description: consent accepted
+                path: $.body.consentAccepted
+                operator: Equals
+                value: true
+                valueType: Boolean
+                transformations:
+                  - type: If@1
+                    description: applicant type is one the form offers, and the applicant is named
+                    path: $.applicant.hasName
+                    operator: Equals
+                    value: true
+                    valueType: Boolean
+                    transformations:
+                    - type: GetRtEntitiesByType@1
+                      description: Has this e-mail address already applied?
+                      ckTypeId: EnergyCommunity.Registration/MemberRegistration
+                      targetPath: $.existing
+                      take: 1
+                      fieldFilters:
+                        - attributePath: EMail
+                          operator: Equals
+                          comparisonValuePath: $.applicant.email
+
+                    # The wizard's validators guard a form, not this route: the POST is anonymous, and
+                    # acceptance creates the domain entities with `fromStore: true`, which skips the
+                    # write validation. Whatever is stored here is what a later Accept turns into a
+                    # metering point, so the shape is checked before anything is written.
+                    #
+                    # In C# rather than If@1 nodes because ForEach@1 runs each iteration in a child
+                    # context and discards everything but MergePath - a flag raised inside the loop
+                    # never reaches the caller. Fail closed: anything this cannot read is rejected.
+                    - type: ExecuteCSharp@1
+                      description: Check every declared metering point before anything is stored
+                      targetPath: $.validation.meteringPointsRejected
+                      returnType: Boolean
+                      arguments:
+                        # One argument, and deliberately the whole body: a RecordArray argument is cast
+                        # to object[] by the generated code BEFORE the script runs, so a caller who sends
+                        # meteringPoints as an object takes the pipeline down with HTTP 500 instead of
+                        # being refused. Everything is read out of the body here instead.
+                        - name: body
+                          dataType: Record
+                          valuePath: $.body
+                      code: |
+                        // Serialize-then-parse rather than a cast: ExecuteCSharp@1 declares a non-scalar
+                        // argument as `object` in one SDK line and as `object[]` in the next, and a
+                        // pattern match against the wrong one is a COMPILE error - the whole route then
+                        // answers HTTP 500. Going through JSON text costs nothing at this size and makes
+                        // the check independent of how the node marshals its arguments.
+                        System.Text.Json.JsonElement Parse(object value)
+                        {
+                            var text = System.Text.Json.JsonSerializer.Serialize(value);
+                            using var parsed = System.Text.Json.JsonDocument.Parse(text);
+                            return parsed.RootElement.Clone();
+                        }
+
+                        System.Text.Json.JsonElement applicant;
+                        try
+                        {
+                            applicant = Parse(body);
+                        }
+                        catch
+                        {
+                            return true;
+                        }
+
+                        if (applicant.ValueKind != System.Text.Json.JsonValueKind.Object ||
+                            !applicant.TryGetProperty("meteringPoints", out var array) ||
+                            array.ValueKind != System.Text.Json.JsonValueKind.Array)
+                        {
+                            return true;
+                        }
+
+                        // An upper bound on the list, not a business rule.
+                        if (array.GetArrayLength() > 50)
+                        {
+                            return true;
+                        }
+
+                        var scheme = new System.Text.RegularExpressions.Regex(
+                            "^(AT|DE)[0-9]{11}[A-Z0-9]{20}$");
+                        var seen = new System.Collections.Generic.HashSet<string>();
+
+                        bool BoundedText(System.Text.Json.JsonElement owner, string name, bool required)
+                        {
+                            if (!owner.TryGetProperty(name, out var found) ||
+                                found.ValueKind == System.Text.Json.JsonValueKind.Null)
+                            {
+                                return !required;
+                            }
+                            if (found.ValueKind != System.Text.Json.JsonValueKind.String)
+                            {
+                                return false;
+                            }
+                            var text = found.GetString() ?? string.Empty;
+                            if (required && text.Trim().Length == 0)
+                            {
+                                return false;
+                            }
+                            return text.Length <= 200;
+                        }
+
+                        // A value of the wrong TYPE is rejected rather than ignored: it used to reach
+                        // SetPrimitiveValue as a Double and fail the whole pipeline with HTTP 500.
+                        bool NumberWithin(System.Text.Json.JsonElement owner, string name, double min, double max)
+                        {
+                            if (!owner.TryGetProperty(name, out var found) ||
+                                found.ValueKind == System.Text.Json.JsonValueKind.Null)
+                            {
+                                return true;
+                            }
+                            if (found.ValueKind != System.Text.Json.JsonValueKind.Number)
+                            {
+                                return false;
+                            }
+                            var value = found.GetDouble();
+                            return value >= min && value <= max;
+                        }
+
+                        // The applicant's own fields are unbounded public input too: the form caps
+                        // every text at 200 and requires the billing address, and this route has to
+                        // say the same or an API caller simply ignores the form.
+                        foreach (var name in new[] { "firstName", "lastName", "companyName", "contactPerson",
+                                                     "taxIdentificationNumber", "companyRegisterNumber",
+                                                     "email", "phoneNumber", "language" })
+                        {
+                            if (!BoundedText(applicant, name, false))
+                            {
+                                return true;
+                            }
+                        }
+
+                        // CreateUpdateInfo@1 writes this one as a typed DateTime further down, so a
+                        // value it cannot parse fails the whole pipeline with HTTP 500 rather than
+                        // being refused. TryParse also rejects a calendar date that does not exist,
+                        // such as the 31st of February.
+                        if (applicant.TryGetProperty("dateOfBirth", out var dateOfBirth) &&
+                            dateOfBirth.ValueKind != System.Text.Json.JsonValueKind.Null)
+                        {
+                            if (dateOfBirth.ValueKind != System.Text.Json.JsonValueKind.String ||
+                                !DateTime.TryParse(dateOfBirth.GetString(),
+                                    System.Globalization.CultureInfo.InvariantCulture,
+                                    System.Globalization.DateTimeStyles.None, out _))
+                            {
+                                return true;
+                            }
+                        }
+
+                        if (!applicant.TryGetProperty("billingAddress", out var billing) ||
+                            billing.ValueKind != System.Text.Json.JsonValueKind.Object ||
+                            !BoundedText(billing, "street", true) ||
+                            !BoundedText(billing, "postalCode", true) ||
+                            !BoundedText(billing, "city", true))
+                        {
+                            return true;
+                        }
+
+                        var productionTypes = new System.Collections.Generic.HashSet<string>
+                        {
+                            "Unknown", "Solar", "HEP", "Wind", "Other", "Biomass", "CHP"
+                        };
+
+                        foreach (var point in array.EnumerateArray())
+                        {
+                            if (point.ValueKind != System.Text.Json.JsonValueKind.Object)
+                            {
+                                return true;
+                            }
+
+                            if (!point.TryGetProperty("isProducer", out var producer) ||
+                                (producer.ValueKind != System.Text.Json.JsonValueKind.True &&
+                                 producer.ValueKind != System.Text.Json.JsonValueKind.False))
+                            {
+                                return true;
+                            }
+
+                            if (!point.TryGetProperty("meteringPointNumber", out var number) ||
+                                number.ValueKind != System.Text.Json.JsonValueKind.String ||
+                                !scheme.IsMatch(number.GetString() ?? string.Empty))
+                            {
+                                return true;
+                            }
+
+                            // One number, once. The form forbids the same number in the production and
+                            // the consumption step, and the store has no unique index to fall back on.
+                            if (!seen.Add(number.GetString()))
+                            {
+                                return true;
+                            }
+
+                            if (!BoundedText(point, "designation", false))
+                            {
+                                return true;
+                            }
+
+                            // Acceptance resolves a city per address and creates the facility from it,
+                            // so an address-less point would break the operator, not the applicant.
+                            if (!point.TryGetProperty("address", out var address) ||
+                                address.ValueKind != System.Text.Json.JsonValueKind.Object ||
+                                !BoundedText(address, "street", true) ||
+                                !BoundedText(address, "postalCode", true) ||
+                                !BoundedText(address, "city", true))
+                            {
+                                return true;
+                            }
+
+                            // A producer without a type the model knows would be stored with the
+                            // attribute unset and silently become Unknown on acceptance.
+                            if (producer.ValueKind == System.Text.Json.JsonValueKind.True)
+                            {
+                                if (!point.TryGetProperty("productionType", out var productionType) ||
+                                    productionType.ValueKind != System.Text.Json.JsonValueKind.String ||
+                                    !productionTypes.Contains(productionType.GetString() ?? string.Empty))
+                                {
+                                    return true;
+                                }
+                            }
+
+                            // Absurdity bounds rather than business limits: a negative quantity is
+                            // never meaningful, and the ceilings sit far above any member.
+                            if (!NumberWithin(point, "capacityKwPeak", 0, 1000000) ||
+                                !NumberWithin(point, "annualConsumptionKwh", 0, 100000000))
+                            {
+                                return true;
+                            }
+                        }
+
+                        return false;
+
+                    - type: If@1
+                      description: a declared metering point did not survive the check
+                      path: $.validation.meteringPointsRejected
+                      operator: Equals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                        - type: Logger@1
+                          message: "Member registration (AB#3717): REFUSED - a submitted metering point failed server-side validation."
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.response.message
+                          value: "The application could not be accepted: please check the metering point numbers and the quantities you entered."
+                          valueType: String
+
+                    - type: If@1
+                      description: the declared metering points are acceptable
+                      path: $.validation.meteringPointsRejected
+                      operator: NotEquals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                      - type: If@1
+                        description: no application for this address yet
+                        path: $.existing.Items[0].RtId
+                        operator: Equals
+                        value: null
+                        valueType: String
+                        transformations:
+                          # ForEach@1 hard-fails when iterationPath is not an array, and an absent key
+                          # is exactly that. Guard on [0].isProducer: If@1 has no notion of an empty
+                          # array and its typed Get<T?> cannot read the element itself.
+                          - type: If@1
+                            description: at least one metering point was declared
+                            path: $.body.meteringPoints[0].isProducer
+                            operator: NotEquals
+                            value: null
+                            valueType: Boolean
+                            transformations:
+                              - type: ForEach@1
+                                description: Shape each declared metering point as a MemberRegistrationMeteringPoint record
+                                maxDegreeOfParallelism: 1
+                                iterationPath: $.body.meteringPoints
+                                mergePath: $.key.record
+                                targetPath: $.meteringPointRecords
+                                transformations:
+                                  - type: SetPrimitiveValue@1
+                                    targetPath: $.key.record.CkRecordId
+                                    value: EnergyCommunity.Registration/MemberRegistrationMeteringPoint
+                                    valueType: String
+
+                                  - type: If@1
+                                    path: $.key.designation
+                                    operator: NotEquals
+                                    value: null
+                                    valueType: String
+                                    transformations:
+                                      - type: SetPrimitiveValue@1
+                                        targetPath: $.key.record.Attributes.Designation
+                                        valuePath: $.key.designation
+                                        valueType: String
+                                  - type: If@1
+                                    path: $.key.meteringPointNumber
+                                    operator: NotEquals
+                                    value: null
+                                    valueType: String
+                                    transformations:
+                                      - type: SetPrimitiveValue@1
+                                        targetPath: $.key.record.Attributes.MeteringPointNumber
+                                        valuePath: $.key.meteringPointNumber
+                                        valueType: String
+                                  - type: If@1
+                                    path: $.key.isProducer
+                                    operator: NotEquals
+                                    value: null
+                                    valueType: Boolean
+                                    transformations:
+                                      - type: SetPrimitiveValue@1
+                                        targetPath: $.key.record.Attributes.IsProducer
+                                        valuePath: $.key.isProducer
+                                        valueType: Boolean
+                                  - type: DataMapping@1
+                                    description: Production type name to its Basic.Energy/ProductionType key
+                                    path: $.key.productionType
+                                    sourceValueType: String
+                                    targetPath: $.key.record.Attributes.ProductionType
+                                    targetValueType: Int
+                                    mappings:
+                                      - sourceValue: Unknown
+                                        targetValue: 0
+                                      - sourceValue: Solar
+                                        targetValue: 1
+                                      - sourceValue: HEP
+                                        targetValue: 2
+                                      - sourceValue: Wind
+                                        targetValue: 3
+                                      - sourceValue: Other
+                                        targetValue: 4
+                                      - sourceValue: Biomass
+                                        targetValue: 5
+                                      - sourceValue: CHP
+                                        targetValue: 6
+                                  - type: If@1
+                                    path: $.key.capacityKwPeak
+                                    operator: NotEquals
+                                    value: null
+                                    valueType: Double
+                                    transformations:
+                                      - type: SetPrimitiveValue@1
+                                        targetPath: $.key.record.Attributes.CapacityKwPeak
+                                        valuePath: $.key.capacityKwPeak
+                                        valueType: Double
+                                  - type: If@1
+                                    path: $.key.annualConsumptionKwh
+                                    operator: NotEquals
+                                    value: null
+                                    valueType: Double
+                                    transformations:
+                                      - type: SetPrimitiveValue@1
+                                        targetPath: $.key.record.Attributes.AnnualConsumptionKwh
+                                        valuePath: $.key.annualConsumptionKwh
+                                        valueType: Double
+                                  - type: If@1
+                                    path: $.key.address.street
+                                    operator: NotEquals
+                                    value: null
+                                    valueType: String
+                                    transformations:
+                                      - type: SetPrimitiveValue@1
+                                        targetPath: $.key.record.Attributes.Street
+                                        valuePath: $.key.address.street
+                                        valueType: String
+                                  - type: If@1
+                                    path: $.key.address.postalCode
+                                    operator: NotEquals
+                                    value: null
+                                    valueType: String
+                                    transformations:
+                                      - type: SetPrimitiveValue@1
+                                        targetPath: $.key.record.Attributes.PostalCode
+                                        valuePath: $.key.address.postalCode
+                                        valueType: String
+                                  - type: If@1
+                                    path: $.key.address.city
+                                    operator: NotEquals
+                                    value: null
+                                    valueType: String
+                                    transformations:
+                                      - type: SetPrimitiveValue@1
+                                        targetPath: $.key.record.Attributes.City
+                                        valuePath: $.key.address.city
+                                        valueType: String
+                          - type: CreateUpdateInfo@1
+                            description: Create the MemberRegistration entity
+                            targetPath: $.updates.items
+                            targetValueKind: Array
+                            updateKind: INSERT
+                            ckTypeId: EnergyCommunity.Registration/MemberRegistration
+                            generateRtId: true
+                            attributeUpdates:
+                              - attributeName: ApplicantType
+                                attributeValueType: Enum
+                                valuePath: $.body.applicantType
+                              - attributeName: FirstName
+                                attributeValueType: String
+                                valuePath: $.applicant.firstName
+                              - attributeName: LastName
+                                attributeValueType: String
+                                valuePath: $.applicant.lastName
+                              - attributeName: DateOfBirth
+                                attributeValueType: DateTime
+                                valuePath: $.body.dateOfBirth
+                              - attributeName: CompanyName
+                                attributeValueType: String
+                                valuePath: $.applicant.companyName
+                              - attributeName: ContactPerson
+                                attributeValueType: String
+                                valuePath: $.applicant.contactPerson
+                              - attributeName: TaxIdentificationNumber
+                                attributeValueType: String
+                                valuePath: $.body.taxIdentificationNumber
+                              - attributeName: CompanyRegisterNumber
+                                attributeValueType: String
+                                valuePath: $.body.companyRegisterNumber
+                              - attributeName: BillingStreet
+                                attributeValueType: String
+                                valuePath: $.body.billingAddress.street
+                              - attributeName: BillingPostalCode
+                                attributeValueType: String
+                                valuePath: $.body.billingAddress.postalCode
+                              - attributeName: BillingCity
+                                attributeValueType: String
+                                valuePath: $.body.billingAddress.city
+                              - attributeName: EMail
+                                attributeValueType: String
+                                valuePath: $.applicant.email
+                              - attributeName: PhoneNumber
+                                attributeValueType: String
+                                valuePath: $.body.phoneNumber
+                              - attributeName: MeteringPoints
+                                attributeValueType: RecordArray
+                                valuePath: $.meteringPointRecords
+                              - attributeName: ConsentAccepted
+                                attributeValueType: Boolean
+                                value: true
+                              - attributeName: ConsentVersion
+                                attributeValueType: String
+                                value: energycommunity-2026-09-07
+                              - attributeName: SubmittedAt
+                                attributeValueType: DateTime
+                                value: "=utcNow()"
+                              - attributeName: State
+                                attributeValueType: Enum
+                                value: New
+                              - attributeName: Language
+                                attributeValueType: String
+                                valuePath: $.body.language
+
+                          - type: ApplyChanges@2
+                            description: Write the application
+                            entityUpdatesPath: $.updates.items
+                            onDuplicateKey: Report
+                            duplicateKeyTargetPath: $.duplicate
+
+                          - type: If@1
+                            description: this submission is the one that stored the application
+                            path: $.duplicate
+                            operator: NotEquals
+                            value: true
+                            valueType: Boolean
+                            transformations:
+                            - type: GetRtEntitiesByType@1
+                              description: Confirm the application was stored
+                              ckTypeId: EnergyCommunity.Registration/MemberRegistration
+                              targetPath: $.stored
+                              take: 1
+                              fieldFilters:
+                                - attributePath: EMail
+                                  operator: Equals
+                                  comparisonValuePath: $.applicant.email
+
+                            - type: If@1
+                              description: the application is really there
+                              path: $.stored.Items[0].RtId
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.response.status
+                                  value: ok
+                                  valueType: String
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.response.message
+                                  value: "Application received."
+                                  valueType: String
+
+                                - type: ToPipelineDataEvent@1
+                                  description: Hand the confirmation mail to the mail pipeline
+                                  path: $.stored.Items[0]
+                                  targetPath: $.registration
+                                  targetPipelineRtId: ec0000000000000000000905
+                                  awaitResult: false
+
+                          - type: If@1
+                            description: a concurrent submission stored this address first
+                            path: $.duplicate
+                            operator: Equals
+                            value: true
+                            valueType: Boolean
+                            transformations:
+                            - type: GetRtEntitiesByType@1
+                              description: The application the other submission stored
+                              ckTypeId: EnergyCommunity.Registration/MemberRegistration
+                              # NOT $.existing: the pre-check guard further down reads that path, and
+                              # filling it here would make it fire too - a second duplicate notice for
+                              # one submission.
+                              targetPath: $.concurrent
+                              take: 1
+                              fieldFilters:
+                                - attributePath: EMail
+                                  operator: Equals
+                                  comparisonValuePath: $.applicant.email
+
+                            - type: If@1
+                              description: it is readable, so the owner can be told
+                              path: $.concurrent.Items[0].RtId
+                              operator: NotEquals
+                              value: null
+                              valueType: String
+                              transformations:
+                                - type: SetPrimitiveValue@1
+                                  targetPath: $.concurrent.Items[0].IsDuplicateNotice
+                                  value: true
+                                  valueType: Boolean
+                                - type: ToPipelineDataEvent@1
+                                  description: Tell the address owner an application is already on file
+                                  path: $.concurrent.Items[0]
+                                  targetPath: $.registration
+                                  targetPipelineRtId: ec0000000000000000000905
+                                  awaitResult: false
+
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.response.status
+                              value: ok
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.response.message
+                              value: "Application received."
+                              valueType: String
+
+                      # The answer must not differ from the one a new address gets. This route is
+                      # anonymous, so a refusal a caller can recognise turns it into an oracle that says
+                      # which addresses belong to applicants and to members - accepted applications stay
+                      # readable here, only refused ones are archived. The address owner is told instead,
+                      # by mail, on a channel the caller cannot read.
+                      - type: If@1
+                        description: this e-mail address has already applied
+                        path: $.existing.Items[0].RtId
+                        operator: NotEquals
+                        value: null
+                        valueType: String
+                        transformations:
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.existing.Items[0].IsDuplicateNotice
+                            value: true
+                            valueType: Boolean
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.response.status
+                            value: ok
+                            valueType: String
+                          - type: SetPrimitiveValue@1
+                            targetPath: $.response.message
+                            value: "Application received."
+                            valueType: String
+
+                          - type: ToPipelineDataEvent@1
+                            description: Tell the address owner an application is already on file
+                            path: $.existing.Items[0]
+                            targetPath: $.registration
+                            targetPipelineRtId: ec0000000000000000000905
+                            awaitResult: false
+
+        - type: SetPipelineExecutionResult@1
+          path: $.response
+
+        - type: SetPrimitiveValue@1
+          targetPath: $.status
+          valuePath: $.response.status
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.message
+          valuePath: $.response.message
+          valueType: String
+
+        - type: Project@1
+          description: Reduce the response to status and message
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+
+- rtId: 'ec0000000000000000000905'
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 'ec0000000000000000000901'
+    targetCkTypeId: System.Communication/DataFlow-1
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'   # System.Communication Mesh Adapter seed
+    targetCkTypeId: System.Communication/Adapter-1
+  attributes:
+  - id: System/Name-1
+    value: "member-registration-mail"
+  - id: System/Description-1
+    value: "Send the confirmation mail for a stored membership application (AB#3717)"
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromPipelineDataEvent@1
+      transformations:
+        - type: Logger@1
+          message: "Member registration (AB#3717): sending the registration mail"
+
+        - type: GetRtEntitiesByType@1
+          description: The community configuration
+          ckTypeId: System.Communication/EnergyCommunityConfiguration
+          targetPath: $.communityConfig
+          take: 1
+
+        - type: GetRtEntitiesByType@1
+          description: The registration configuration, for the operator notification list
+          ckTypeId: EnergyCommunity.Registration/RegistrationConfiguration
+          targetPath: $.registrationConfig
+          take: 1
+          fieldFilters:
+            - attributePath: RtWellKnownName
+              operator: Equals
+              comparisonValue: RegistrationConfiguration
+
+        # A duplicate stores nothing, so there is nothing new for the operator to act on - only the
+        # address owner is written to, and with the other template.
+        - type: If@1
+          description: this is a new application, not a duplicate notice
+          path: $.registration.IsDuplicateNotice
+          operator: NotEquals
+          value: true
+          valueType: Boolean
+          transformations:
+            - type: GetNotificationTemplate@1
+              description: The confirmation template, editable in Email Templates
+              notificationTemplateName: member-registration-confirmation
+              targetPath: $.emailBody
+              subjectTargetPath: $.emailSubject
+              renderingTypeTargetPath: $.emailRenderingType
+
+        - type: If@1
+          description: this is a duplicate notice
+          path: $.registration.IsDuplicateNotice
+          operator: Equals
+          value: true
+          valueType: Boolean
+          transformations:
+            - type: GetNotificationTemplate@1
+              description: The duplicate notice, editable in Email Templates
+              notificationTemplateName: member-registration-duplicate
+              targetPath: $.emailBody
+              subjectTargetPath: $.emailSubject
+              renderingTypeTargetPath: $.emailRenderingType
+
+        - type: ResolveNotificationPlaceholders@1
+          subjectPath: $.emailSubject
+          subjectTargetPath: $.renderedSubject
+          bodyPath: $.emailBody
+          bodyTargetPath: $.renderedBody
+          renderingTypePath: $.emailRenderingType
+          registrationPath: $.registration
+          communityConfigPath: $.communityConfig.Items[0]
+
+        - type: SendEMail@2
+          description: Send the confirmation to the applicant
+          serverConfiguration: billing-smtp
+          path: $.renderedBody
+          subjectPath: $.renderedSubject
+          toPath: $.registration.Attributes.EMail
+          bodyFormatPath: $.emailRenderingType
+          attachments:
+            - binaryIdPath: $.communityConfig.Items[0].Attributes.EmailFooterImage.BinaryId
+              fileNamePath: $.communityConfig.Items[0].Attributes.EmailFooterImage.Filename
+              contentTypePath: $.communityConfig.Items[0].Attributes.EmailFooterImage.ContentType
+              fileName: footer.png
+              contentType: image/png
+              contentId: community-footer
+              optional: true
+
+        # Applicant first. SendEMail@2 throws without calling next(), so whichever send runs first
+        # can kill the other, and the two are not equal: the applicant has no other channel, while
+        # the operator sees the application on the Registration Requests page whether this mail
+        # arrives or not. The guard below reads [0] because If@1 has no notion of an empty array.
+        - type: If@1
+          description: this is a new application, not a duplicate notice
+          path: $.registration.IsDuplicateNotice
+          operator: NotEquals
+          value: true
+          valueType: Boolean
+          transformations:
+            - type: If@1
+              description: at least one operator notification address is configured
+              path: $.registrationConfig.Items[0].Attributes.NotificationRecipients[0]
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: GetNotificationTemplate@1
+                  description: The operator notification, editable in Email Templates
+                  notificationTemplateName: member-registration-operator-notification
+                  targetPath: $.operatorBody
+                  subjectTargetPath: $.operatorSubject
+                  renderingTypeTargetPath: $.operatorRenderingType
+
+                - type: ResolveNotificationPlaceholders@1
+                  subjectPath: $.operatorSubject
+                  subjectTargetPath: $.renderedOperatorSubject
+                  bodyPath: $.operatorBody
+                  bodyTargetPath: $.renderedOperatorBody
+                  renderingTypePath: $.operatorRenderingType
+                  registrationPath: $.registration
+                  communityConfigPath: $.communityConfig.Items[0]
+
+                - type: SendEMail@2
+                  description: Tell the operator an application is waiting
+                  serverConfiguration: billing-smtp
+                  path: $.renderedOperatorBody
+                  subjectPath: $.renderedOperatorSubject
+                  toPath: $.registrationConfig.Items[0].Attributes.NotificationRecipients
+                  bodyFormatPath: $.operatorRenderingType
+
+- rtId: 'ec000000000000000000090a'
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 'ec0000000000000000000901'
+    targetCkTypeId: System.Communication/DataFlow-1
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'   # System.Communication Mesh Adapter seed
+    targetCkTypeId: System.Communication/Adapter-1
+  attributes:
+  - id: System/Name-1
+    value: "member-registration-decision"
+  - id: System/Description-1
+    value: "Tell the applicant what an operator decided about their application (AB#3719)"
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/PipelineDefinition-1
+    value: "triggers:\r\n  - type: FromHttpRequest@2\r\n    path: /member-registration-decision\r\n    method: Post\r\n    allowAnonymous: false\r\n    requiredRoles: []\r\ntransformations:\r\n  - type: Logger@1\r\n    message: \"Member registration (AB#3719): sending the decision mail\"\r\n\r\n  - type: SetPrimitiveValue@1\r\n    targetPath: $.response.status\r\n    value: error\r\n    valueType: String\r\n  - type: SetPrimitiveValue@1\r\n    targetPath: $.response.message\r\n    value: \"The decision mail could not be sent: a known 'rtId' and a 'decision' of accepted or denied are required.\"\r\n    valueType: String\r\n\r\n  - type: GetRtEntitiesByType@1\r\n    description: The community configuration, for the branding tokens\r\n    ckTypeId: System.Communication/EnergyCommunityConfiguration\r\n    targetPath: $.communityConfig\r\n    take: 1\r\n\r\n  # Ask for this BEFORE archiving a refusal - GetRtEntitiesById@1 cannot see an archived entity.\r\n  - type: GetRtEntitiesById@1\r\n    description: The application the decision was taken on\r\n    ckTypeId: EnergyCommunity.Registration/MemberRegistration\r\n    rtIdsPath: $.body.rtId\r\n    targetPath: $.registration\r\n    take: 1\r\n\r\n  - type: If@1\r\n    description: the application exists\r\n    path: $.registration.Items[0].RtId\r\n    operator: NotEquals\r\n    value: null\r\n    valueType: String\r\n    transformations:\r\n      - type: If@1\r\n        description: the decision was an acceptance\r\n        path: $.body.decision\r\n        operator: Equals\r\n        value: accepted\r\n        valueType: String\r\n        transformations:\r\n          - type: GetNotificationTemplate@1\r\n            notificationTemplateName: member-registration-accepted\r\n            targetPath: $.decisionBody\r\n            subjectTargetPath: $.decisionSubject\r\n            renderingTypeTargetPath: $.decisionRenderingType\r\n\r\n      - type: If@1\r\n        description: the decision was a refusal with a reason\r\n        path: $.registration.Items[0].Attributes.RejectionReason\r\n        operator: NotEquals\r\n        value: null\r\n        valueType: String\r\n        transformations:\r\n          - type: If@1\r\n            path: $.body.decision\r\n            operator: Equals\r\n            value: denied\r\n            valueType: String\r\n            transformations:\r\n              - type: GetNotificationTemplate@1\r\n                notificationTemplateName: member-registration-denied-with-reason\r\n                targetPath: $.decisionBody\r\n                subjectTargetPath: $.decisionSubject\r\n                renderingTypeTargetPath: $.decisionRenderingType\r\n\r\n      - type: If@1\r\n        description: the decision was a refusal without a reason\r\n        path: $.registration.Items[0].Attributes.RejectionReason\r\n        operator: Equals\r\n        value: null\r\n        valueType: String\r\n        transformations:\r\n          - type: If@1\r\n            path: $.body.decision\r\n            operator: Equals\r\n            value: denied\r\n            valueType: String\r\n            transformations:\r\n              - type: GetNotificationTemplate@1\r\n                notificationTemplateName: member-registration-denied\r\n                targetPath: $.decisionBody\r\n                subjectTargetPath: $.decisionSubject\r\n                renderingTypeTargetPath: $.decisionRenderingType\r\n\r\n      - type: If@1\r\n        description: a template was selected\r\n        path: $.decisionBody\r\n        operator: NotEquals\r\n        value: null\r\n        valueType: String\r\n        transformations:\r\n          - type: ResolveNotificationPlaceholders@1\r\n            subjectPath: $.decisionSubject\r\n            subjectTargetPath: $.renderedDecisionSubject\r\n            bodyPath: $.decisionBody\r\n            bodyTargetPath: $.renderedDecisionBody\r\n            renderingTypePath: $.decisionRenderingType\r\n            registrationPath: $.registration.Items[0]\r\n            communityConfigPath: $.communityConfig.Items[0]\r\n\r\n          - type: SendEMail@2\r\n            description: Tell the applicant what was decided\r\n            serverConfiguration: billing-smtp\r\n            path: $.renderedDecisionBody\r\n            subjectPath: $.renderedDecisionSubject\r\n            toPath: $.registration.Items[0].Attributes.EMail\r\n            bodyFormatPath: $.decisionRenderingType\r\n\r\n          - type: SetPrimitiveValue@1\r\n            targetPath: $.response.status\r\n            value: ok\r\n            valueType: String\r\n          - type: SetPrimitiveValue@1\r\n            targetPath: $.response.message\r\n            value: \"Decision mail sent.\"\r\n            valueType: String\r\n\r\n  - type: SetPipelineExecutionResult@1\r\n    path: $.response\r\n\r\n  - type: SetPrimitiveValue@1\r\n    targetPath: $.status\r\n    valuePath: $.response.status\r\n    valueType: String\r\n  - type: SetPrimitiveValue@1\r\n    targetPath: $.message\r\n    valuePath: $.response.message\r\n    valueType: String\r\n\r\n  # clear + inclusion: Project@1 fields are EXCLUSIONS by default, and the context still holds\r\n  # the whole application.\r\n  - type: Project@1\r\n    description: Reduce the response to status and message\r\n    clear: true\r\n    fields:\r\n      - path: $.status\r\n        inclusion: true\r\n      - path: $.message\r\n        inclusion: true"
+
+- rtId: 'ec000000000000000000090b'
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 'ec0000000000000000000901'
+    targetCkTypeId: System.Communication/DataFlow-1
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'   # System.Communication Mesh Adapter seed
+    targetCkTypeId: System.Communication/Adapter-1
+  attributes:
+  - id: System/Name-1
+    value: "member-registration-community"
+  - id: System/Description-1
+    value: "GET /member-registration-community - the community name for the public wizard (AB#3719)"
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/PipelineDefinition-1
+    value: "triggers:\r\n  - type: FromHttpRequest@2\r\n    path: /member-registration-community\r\n    method: Get\r\n    allowAnonymous: true\r\n    requiredRoles: []\r\ntransformations:\r\n  - type: Logger@1\r\n    message: \"Member registration (AB#3719): public community name requested\"\r\n\r\n  - type: SetPrimitiveValue@1\r\n    targetPath: $.name\r\n    value: ''\r\n    valueType: String\r\n\r\n  - type: GetRtEntitiesByType@1\r\n    description: The community configuration\r\n    ckTypeId: System.Communication/EnergyCommunityConfiguration\r\n    targetPath: $.communityConfig\r\n    take: 1\r\n\r\n  - type: If@1\r\n    description: the community has a name\r\n    path: $.communityConfig.Items[0].Attributes.Name\r\n    operator: NotEquals\r\n    value: null\r\n    valueType: String\r\n    transformations:\r\n      - type: SetPrimitiveValue@1\r\n        targetPath: $.name\r\n        valuePath: $.communityConfig.Items[0].Attributes.Name\r\n        valueType: String\r\n\r\n  # clear + inclusion: Project@1 fields are EXCLUSIONS by default, and this route is anonymous.\r\n  - type: Project@1\r\n    description: Reduce the response to the community name\r\n    clear: true\r\n    fields:\r\n      - path: $.name\r\n        inclusion: true"
