@@ -1,0 +1,249 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.4,3.0)
+- Basic.Energy-[1.9,2.0)
+# 4.9: MeteringDataSource (ALC-08) and CommunitySettings.AllocationCutOffTime (V-1).
+- EnergyCommunity-[4.9,5.0)
+- System.Communication-[3.26,4.0)
+- System.StreamData-[1.13,2.0)
+- System.UI-[2.4,3.0)
+# PipelineTrigger carries System.Bot/CronExpression (same reason and range as the
+# EdaIntegration cron triggers, request-all-metering-points.yaml).
+- System.Bot-[3.1,4.0)
+
+# allocate-community-energy (AB#5635) — D+1 energy allocation inside the community:
+# the DataFlow, its pipeline and the daily cron PipelineTrigger.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Community energy allocation D+1 (AB#5635, ALC-02/03/08) ─────────────
+#
+# rtId scheme: ec0000000000000000000a5X
+#   …a51  DataFlow        allocate-community-energy
+#   …a52  Pipeline        allocate-community-energy
+#   …a53  PipelineTrigger allocate-community-energy-daily (cron 0 30 5 * * *, UTC)
+#
+# Final allocation run for day D after the reporting cut-off (D+1, time of day
+# from CommunitySettings.AllocationCutOffTime, empty = 06:00 Europe/Vienna): reads the raw 15-min values 1-1:1.9.0 G.01 (consumers) and
+# 1-1:2.9.0 G.01 (producers) from the raw archive ec0000000000000000000a01, applies
+# participation periods and partition factors (AllocateCommunityEnergy@1) and
+# upserts the EDA register set into the SAME archive:
+#   consumers  1-1:2.9.0 G.03   (covered by the community)
+#   producers  1-1:2.9.0 G.01T  (offered = partition factor x generation)
+#              1-1:2.9.0 P.01T  (offered but not allocated)
+#   both producer registers on EVERY participating slot, also when 0.
+# The raw G.01 inputs are only read, never written. Metering points whose
+# MeteringDataSource is Eda are never written: if one participates on day D the
+# run for D aborts with a warning (ALC-08), so the pipeline is safe even on a
+# tenant with real EDA data — it still ships disabled.
+#
+# Manual window (backfill, reset): ExecutePipeline with
+#   { "startDay": "yyyy-MM-dd", "numDays": n }        n <= 31
+# Longer backfills loop month by month on the caller side.
+#
+# DISABLED-BY-DEFAULT CONTRACT: Pipeline AND PipelineTrigger are seeded with
+# System/Enabled = false and DeploymentState 0. The controller only schedules
+# ENABLED triggers (CommunicationRepository.GetTriggersAndPipelinesAsync filters
+# on Enabled), so a fresh install or a reinstall never runs it. To use it:
+# enable pipeline + trigger, then DeployDataFlow ec0000000000000000000a51.
+# Enabled is TenantOwned on both types (AB#5309): the seed's false applies only
+# when the entity is created, and a blueprint update or InstallBlueprint -f keeps
+# whatever the tenant set — it neither re-enables nor re-disables the run. To
+# stop it, set Enabled = false on the trigger (and pipeline) and DeployDataFlow
+# again, or undeploy the DataFlow.
+#
+# REQUIRES the Mesh Adapter release that ships AllocateCommunityEnergy@1 (AB#5634);
+# on an older adapter the deploy fails with an unknown node type. An adapter
+# version is not expressible as a blueprint dependency.
+#
+# Executes on the default Mesh Adapter 670000000000000000000002.
+
+- rtId: ec0000000000000000000a51
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: allocate-community-energy
+  - id: System/Description-1
+    value: >-
+      D+1 allocation of community energy (AB#5635): writes 1-1:2.9.0 G.03 for
+      consumers and 1-1:2.9.0 G.01T + P.01T for producers into the raw archive
+      ec0000000000000000000a01. Simulated / self-reported metering points only;
+      aborts a day that has a participating EDA metering point.
+
+- rtId: ec0000000000000000000a52
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a51
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: allocate-community-energy
+  - id: System/Description-1
+    value: >-
+      Final D+1 allocation run after the reporting cut-off (D+1 06:00
+      Europe/Vienna). Cron trigger allocates the latest closed day;
+      ExecutePipelineCommand takes { "startDay": "yyyy-MM-dd", "numDays": n }
+      (n <= 31). Idempotent upsert into archive ec0000000000000000000a01.
+      Disabled by default; requires the Mesh Adapter release that ships
+      AllocateCommunityEnergy@1 (AB#5634).
+  - id: System/Enabled-1
+    value: false
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      # allocate-community-energy (AB#5635) — final D+1 allocation of community energy.
+      #
+      # REQUIRES the Mesh Adapter release that ships AllocateCommunityEnergy@1 (AB#5634).
+      #
+      # Run model (ALC-02): one FINAL run per day D after the reporting cut-off
+      # (D+1 <cut-off> Europe/Vienna). The cut-off time of day is the product setting
+      # EnergyCommunity/CommunitySettings.AllocationCutOffTime (HH:mm, decision V-1) of
+      # the first CommunitySettings entity of the tenant; no entity or an empty value
+      # means the node default 06:00. Reports arriving after the cut-off are rejected
+      # upstream (MTR-04), so the inputs of D are frozen when this runs.
+      #
+      # Idempotence: every row is an upsert on (window, rtId, ckTypeId) into the raw
+      # archive, whose ConflictPrecedence is [DataQuality LowerWins, SourceDocumentDate
+      # HigherWins]. SourceDocumentDate is the cut-off of D (CreationTime of each
+      # record), not the run time, so a re-run for the same day produces
+      # bit-identical rows and replaces them in place (equal keys replace).
+      #
+      # A provisional intraday run (ALC-06, quality L3) can be added later as a second
+      # pipeline / trigger with the same node; the final L1 run replaces its rows
+      # because L1 < L3 under LowerWins. Slots with a missing input value are written
+      # as 0 with quality L3 (ALC-04) and are themselves replaced by a later L1 run.
+      #
+      # Safety (ALC-08): metering points with MeteringDataSource = Eda are never
+      # written. If one participates on day D, D is aborted (no rows, warning naming
+      # the metering point numbers, summary status "aborted"); other days of the
+      # window still run.
+      triggers:
+        # Daily final run. The cron is evaluated in the communication controller's
+        # local time zone (MassTransit/Hangfire RecurringSchedule.TimeZoneId =
+        # TimeZoneInfo.Local), which is UTC in the cluster images (no TZ set).
+        # 05:30 UTC = 06:30 CET (winter) / 07:30 CEST (summer): after the 06:00
+        # Europe/Vienna cut-off in both seasons, so the automatic window (no startDay
+        # in the data context) is always yesterday. On a host whose local zone is
+        # Europe/Vienna it fires at 05:30 local, before the cut-off, and simply
+        # re-runs the day before yesterday (idempotent, one day late).
+        - type: FromPipelineTriggerEvent@1
+        # Manual window (backfill, reset): input { "startDay": "yyyy-MM-dd", "numDays": n },
+        # n <= 31 (node guard maxDays). Longer backfills: the caller loops month by month.
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: Logger@1
+          message: "allocate-community-energy (AB#5635): allocation run starting"
+
+        # Community-level product settings (EnergyCommunity CK 4.9, decision V-1): the
+        # tenant carries at most one CommunitySettings entity. None, or an empty
+        # AllocationCutOffTime, leaves the node default 06:00 in place.
+        - type: GetRtEntitiesByType@1
+          description: Load the community settings (allocation cut-off)
+          ckTypeId: EnergyCommunity/CommunitySettings
+          targetPath: $.communitySettings
+          take: 1
+
+        # Register mapping (node defaults = the EnergyCommunity / EDA register set, F-3;
+        # NOT overridden here, listed for readers):
+        #   consumerInputObis:   "1-1:1.9.0 G.01"   read   (consumer raw consumption)
+        #   producerInputObis:   "1-1:2.9.0 G.01"   read   (producer raw generation)
+        #   consumerShareObis:   "1-1:2.9.0 G.03"   write  (consumers)
+        #   producerOfferedObis: "1-1:2.9.0 G.01T"  write  (producers, every slot)
+        #   producerSurplusObis: "1-1:2.9.0 P.01T"  write  (producers, every slot)
+        # Other defaults used as-is: Europe/Vienna, cut-off day D+1 (time: see above), 15-min slots,
+        # maxDays 31, allocatable data sources [Simulated, SelfReported], resolution
+        # 0.001 kWh, missing value quality L3, EnergyCommunity/Consumer + Producer,
+        # ParticipationPeriod + PartitionFactor.
+        - type: AllocateCommunityEnergy@1
+          description: Allocate the offered generation to the participating consumers per 15-min slot
+          archiveRtId: ec0000000000000000000a01
+          startDayPath: $.startDay
+          numDaysPath: $.numDays
+          cutOffTimePath: $.communitySettings.Items[0].Attributes.AllocationCutOffTime
+          targetPath: $.allocation.records
+          summaryTargetPath: $.allocation.summary
+
+        # Persist exactly like the EDA ingest (handle-daten-crmsg.yaml): one
+        # EnergyMeasurement anchor per (metering point x OBIS code), well-known name
+        # <meteringPointRtId>_<obisCode>, one archive row per 15-min slot.
+        # DataQuality and SourceDocumentDate (= CreationTime = cut-off of D) are the
+        # archive's ConflictPrecedence keys. Keep this block identical to the one in
+        # handle-daten-crmsg.yaml.
+        - type: SaveTimeRangeSeriesInArchive@1
+          description: Persist allocation anchors and all slots
+          path: $.allocation.records
+          archiveRtId: ec0000000000000000000a01
+          ckTypeId: Basic.Energy/EnergyMeasurement
+          valuesProperty: EnergyQuantities
+          wellKnownNameFormat: "{MeteringPointRtId}_{MeterCode}"
+          fromProperty: From
+          toProperty: To
+          anchorWindowFromAttribute: TimeRange.From
+          anchorWindowToAttribute: TimeRange.To
+          parentRtIdProperty: MeteringPointRtId
+          parentCkTypeId: Basic.Energy/MeteringPoint
+          parentAssociationRoleId: System/ParentChild
+          columns:
+            - name: Amount.Value
+              valueProperty: Quantity
+            - name: Amount.Unit
+              valueProperty: QuantityUnit
+              scope: Series
+            - name: DataQuality
+              valueProperty: Quality
+            - name: ObisCode
+              valueProperty: MeterCode
+              scope: Series
+            - name: SourceDocumentDate
+              valueProperty: CreationTime
+              scope: Series
+
+        # Drop the per-slot records (up to registers x points x 100 slots per day)
+        # so the debug dump below and the execution result carry only the per-day
+        # summary. A missing path is ignored.
+        - type: Project@1
+          description: Drop the allocation records
+          path: $
+          fields:
+            - path: $.allocation.records
+
+        # Per-day summary (Day, Status allocated/aborted/empty, Reason, Slots,
+        # Consumers, Producers, kWh sums, Coverage, SurplusRatio, CutOff) to the
+        # adapter log.
+        - type: PrintDebug@1
+          severity: Information
+
+- rtId: ec0000000000000000000a53
+  ckTypeId: System.Communication/PipelineTrigger-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a51
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Triggers-1
+    targetRtId: ec0000000000000000000a52
+    targetCkTypeId: System.Communication/Pipeline-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: allocate-community-energy-daily
+  # Disabled: the controller schedules only enabled triggers. Enable it together
+  # with the pipeline, then DeployDataFlow ec0000000000000000000a51. TenantOwned:
+  # the seed value applies on create only.
+  - id: System/Enabled-1
+    value: false
+  # Six-field cron with seconds, evaluated in UTC on the cluster: 05:30 UTC is
+  # 06:30 CET / 07:30 CEST, i.e. after the D+1 06:00 Europe/Vienna cut-off all year.
+  - id: System.Bot/CronExpression-1
+    value: 0 30 5 * * *
