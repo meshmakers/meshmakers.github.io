@@ -1,0 +1,1188 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.4.0",
+    "Basic.Energy-1.9.0",
+    "System-2.5.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "BillingDocument-1",
+      "derivedFromCkTypeId": "Basic-2.4.0/Document-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyCommunity-4.9.0/AssignedBilling-1",
+          "targetCkTypeId": "EnergyCommunity-4.9.0/Customer-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A billing document entity that contains accounting information.",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-4.9.0/CustomerNumber-1",
+          "name": "CustomerNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/Contact-1",
+          "name": "Contact",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/TimeRange-1",
+          "name": "TimeRange",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/Comment-1",
+          "name": "Comment",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/TaxProcedureCreditNote-1",
+          "name": "TaxProcedureCreditNote",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/BillingType-1",
+          "name": "BillingType",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/BillingDocumentState-1",
+          "name": "BillingDocumentState",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/GrossTotal-1",
+          "name": "GrossTotal",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/BankAccount-1",
+          "name": "BankAccount",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "BillingDocumentLineItem-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System-2.5.0/ParentChild-1",
+          "targetCkTypeId": "EnergyCommunity-4.9.0/BillingDocument-1"
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/BilledMeteringPoint-1",
+          "targetCkTypeId": "Basic.Energy-1.9.0/MeteringPoint-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A billing document line item",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-4.9.0/GrossAmount-1",
+          "name": "GrossAmount",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/NetAmount-1",
+          "name": "NetAmount",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/TaxAmount-1",
+          "name": "TaxAmount",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/TaxRate-1",
+          "name": "TaxRate",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/UnitPrice-1",
+          "name": "UnitPrice",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/BillingType-1",
+          "name": "BillingType",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/Quantity-1",
+          "name": "Quantity",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/TimeRange-1",
+          "name": "BilledTimeRange",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/IntervalCount-1",
+          "name": "IntervalCount",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/IntervalCountL1-1",
+          "name": "IntervalCountL1",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/IntervalCountL2-1",
+          "name": "IntervalCountL2",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/IntervalCountL3-1",
+          "name": "IntervalCountL3",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/IntervalCountUnknown-1",
+          "name": "IntervalCountUnknown",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "CommunitySettings-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Product settings of the energy community as a whole (one entity per tenant; real and simulated communities alike). Readers take the first entity and fall back to the documented defaults when none exists or a value is empty.",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-4.9.0/AllocationCutOffTime-1",
+          "name": "AllocationCutOffTime",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/AllocationKey-1",
+          "name": "AllocationKey",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.5.0/Description-1",
+          "name": "Comment",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Consumer-1",
+      "derivedFromCkTypeId": "Basic.Energy-1.9.0/Consumer-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A consumer metering point participating in an energy community",
+      "attributes": [
+        {
+          "id": "Basic.Energy-1.9.0/PartitionFactor-1",
+          "name": "PartitionFactor",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/EnergyConsumption-1",
+          "name": "EnergyConsumption",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/MeteringDataSource-1",
+          "name": "MeteringDataSource",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/LoadProfile-1",
+          "name": "LoadProfile",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Customer-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyCommunity-4.9.0/AssociatedFacilities-1",
+          "targetCkTypeId": "Basic.Energy-1.9.0/OperatingFacility-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Represents a customer of an energy community",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-4.9.0/CustomerNumber-1",
+          "name": "CustomerNumber",
+          "autoIncrementReference": "CustomerNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/Contact-1",
+          "name": "Contact",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/Comment-1",
+          "name": "Comment",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/BillingCycle-1",
+          "name": "BillingCycle",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.9.0/State-1",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/BankAccount-1",
+          "name": "BankAccount",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/TaxProcedureCreditNote-1",
+          "name": "TaxProcedureCreditNote",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/DateOfBirth-1",
+          "name": "DateOfBirth",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "EnergyPrice-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "The price of Energy at a certain time",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-4.9.0/Price-1",
+          "name": "Price",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/Currency-1",
+          "name": "Currency",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ParticipationPeriod-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "EnergyCommunity-4.9.0/ParticipationPeriod-1",
+          "targetCkTypeId": "Basic.Energy-1.9.0/MeteringPoint-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "The participation period with a start and end date",
+      "attributes": [
+        {
+          "id": "Basic-2.4.0/TimeRange-1",
+          "name": "TimeRange",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Producer-1",
+      "derivedFromCkTypeId": "Basic.Energy-1.9.0/Producer-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A producer metering point participating in an energy community",
+      "attributes": [
+        {
+          "id": "Basic.Energy-1.9.0/PartitionFactor-1",
+          "name": "PartitionFactor",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/EnergyProductionCapacity-1",
+          "name": "EnergyProductionCapacity",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/MeteringDataSource-1",
+          "name": "MeteringDataSource",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "SimulationResetRequest-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A request to reset the simulated data of the energy community. The request is only recorded here; an operator tool executes it and writes state and report back.",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-4.9.0/SimulationResetMode-1",
+          "name": "Mode",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/BackfillDays-1",
+          "name": "Days",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/DiscardReported-1",
+          "name": "DiscardReported",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/SimulationResetState-1",
+          "name": "State",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/RequestedAt-1",
+          "name": "RequestedAt",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/RequestedBy-1",
+          "name": "RequestedBy",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/CompletedAt-1",
+          "name": "CompletedAt",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.5.0/Description-1",
+          "name": "Message",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "SimulationSettings-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One revision of the simulation settings of an energy community. For a day D the non-superseded revision with the greatest effective date \u003C= D applies; the effective date is max(EffectiveFrom, creation date), except for the base revision written by a reset. Unset values fall back to the simulation defaults.",
+      "attributes": [
+        {
+          "id": "EnergyCommunity-4.9.0/SimulationPreset-1",
+          "name": "Preset",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/EffectiveFrom-1",
+          "name": "EffectiveFrom",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/SimulationSeed-1",
+          "name": "Seed",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/ConsumptionFactor-1",
+          "name": "ConsumptionFactor",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/PvCapacityFactor-1",
+          "name": "PvCapacityFactor",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/PvSpecificYield-1",
+          "name": "PvSpecificYield",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/MemberSpread-1",
+          "name": "MemberSpread",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/SimulationNoiseLevel-1",
+          "name": "Noise",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/SimulationWeatherMode-1",
+          "name": "Weather",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/MemberScale-1",
+          "name": "MemberScale",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/BackfillDays-1",
+          "name": "BackfillDays",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/DailyRun-1",
+          "name": "DailyRun",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/NearRealTime-1",
+          "name": "NearRealTime",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/SupersededByReset-1",
+          "name": "SupersededByReset",
+          "isOptional": true
+        },
+        {
+          "id": "System-2.5.0/Description-1",
+          "name": "Comment",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "AssignedBilling-1",
+      "inboundName": "Billing",
+      "outboundName": "AssignedTo",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "A billing document or line item associated with data source."
+    },
+    {
+      "id": "AssociatedFacilities-1",
+      "inboundName": "Customer",
+      "outboundName": "Facilities",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "N",
+      "description": "The operating facilities associated with a customer. Optional: facilities may exist without a customer (data minimization for tenants without the Billing blueprint, AB#4718)."
+    },
+    {
+      "id": "BilledMeteringPoint-1",
+      "inboundName": "Billings",
+      "outboundName": "MeteringPoint",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "A metering point associated with a billing line item."
+    },
+    {
+      "id": "ParticipationPeriod-1",
+      "inboundName": "Periods",
+      "outboundName": "MeteringPoint",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Association between a metering point an a time range to get the participation period for a metering point"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AllocationCutOffTime-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Local time (HH:mm, Europe/Vienna) on day D\u002B1 after which the allocation of day D is final and frozen; empty means 06:00"
+    },
+    {
+      "id": "AllocationKey-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/AllocationKey-1",
+      "isRuntimeState": false,
+      "description": "Allocation key of the community (default Dynamic)"
+    },
+    {
+      "id": "BackfillDays-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of days a reset simulates backwards from today (default 730)"
+    },
+    {
+      "id": "BillingCycle-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/BillingCycle-1",
+      "defaultValues": [
+        "1"
+      ],
+      "isRuntimeState": false,
+      "description": "Billing cycle associated with the customer"
+    },
+    {
+      "id": "BillingDocumentState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/BillingDocumentState-1",
+      "isRuntimeState": false,
+      "description": "The state of the billing document"
+    },
+    {
+      "id": "BillingType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/BillingType-1",
+      "isRuntimeState": false,
+      "description": "The type of the billing document or billing item"
+    },
+    {
+      "id": "CompletedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When the reset runner finished the request"
+    },
+    {
+      "id": "ConsumptionFactor-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Multiplier on the annual consumption of all simulated consumers (default 1.0, sensible range 0.5-2)"
+    },
+    {
+      "id": "Currency-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The ISO 4217 representation of the used currency"
+    },
+    {
+      "id": "CustomerNumber-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Internal customer number"
+    },
+    {
+      "id": "DailyRun-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Whether the daily simulation run generates values for this community (default true)"
+    },
+    {
+      "id": "DateOfBirth-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "Date of birth of the customer (natural person)"
+    },
+    {
+      "id": "DiscardReported-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Allow a full reset to discard the values of self-reported metering points"
+    },
+    {
+      "id": "EffectiveFrom-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "First day (Europe/Vienna) the settings revision applies to; never earlier than the day the revision was created, unless it is the base revision of a reset"
+    },
+    {
+      "id": "EnergyConsumption-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Energy consumed per year in kWh",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWh"
+        }
+      ]
+    },
+    {
+      "id": "EnergyProductionCapacity-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Maximal energy production capacity in kWp",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWp"
+        }
+      ]
+    },
+    {
+      "id": "GrossAmount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The gross amount of the billing document"
+    },
+    {
+      "id": "GrossTotal-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The gross total of the billing document"
+    },
+    {
+      "id": "IntervalCount-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Total number of stream-data intervals aggregated into the billed quantity"
+    },
+    {
+      "id": "IntervalCountL1-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of billed intervals with data quality L1 (metered values)"
+    },
+    {
+      "id": "IntervalCountL2-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of billed intervals with data quality L2 (interpolated values)"
+    },
+    {
+      "id": "IntervalCountL3-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of billed intervals with data quality L3 (estimated values)"
+    },
+    {
+      "id": "IntervalCountUnknown-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Number of billed intervals with unknown data quality"
+    },
+    {
+      "id": "LoadProfile-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/LoadProfile-1",
+      "isRuntimeState": false,
+      "description": "Standard load profile used to simulate the consumption (default H0)"
+    },
+    {
+      "id": "MemberScale-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Multiplier on the number of members of the preset; takes effect only through a full reset (default 1.0)"
+    },
+    {
+      "id": "MemberSpread-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Relative seeded spread of the size of each simulated member around its nominal value (0 = none, 0.25 = \u002B/-25 %)"
+    },
+    {
+      "id": "MeteringDataSource-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/MeteringDataSource-1",
+      "isRuntimeState": false,
+      "description": "Origin of the metering values; the simulation only writes metering points marked Simulated"
+    },
+    {
+      "id": "NearRealTime-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Generate values every 15 minutes instead of once per day (planned)"
+    },
+    {
+      "id": "NetAmount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The net amount of the billing document"
+    },
+    {
+      "id": "Price-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The price of a given unit of energy"
+    },
+    {
+      "id": "PvCapacityFactor-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Multiplier on the installed capacity of all simulated PV producers (default 1.0, sensible range 0-3)"
+    },
+    {
+      "id": "PvSpecificYield-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Annual PV yield in kWh per kWp under clear sky (default 1050, Salzburg)",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kWh/kWp"
+        }
+      ]
+    },
+    {
+      "id": "RequestedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When the reset was requested"
+    },
+    {
+      "id": "RequestedBy-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Who requested the reset (user or client id)"
+    },
+    {
+      "id": "SimulationNoiseLevel-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationNoiseLevel-1",
+      "isRuntimeState": false,
+      "description": "Seeded noise on simulated values (default Off)"
+    },
+    {
+      "id": "SimulationPreset-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationPreset-1",
+      "isRuntimeState": false,
+      "description": "Composition preset of the simulated community; changing it takes effect only through a full reset"
+    },
+    {
+      "id": "SimulationResetMode-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationResetMode-1",
+      "isRuntimeState": false,
+      "description": "Requested reset mode"
+    },
+    {
+      "id": "SimulationResetState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationResetState-1",
+      "isRuntimeState": false,
+      "description": "Processing state of the reset request"
+    },
+    {
+      "id": "SimulationSeed-1",
+      "valueType": "Int",
+      "isRuntimeState": false,
+      "description": "Seed of all random values of the simulation; same settings and seed give identical data"
+    },
+    {
+      "id": "SimulationWeatherMode-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationWeatherMode-1",
+      "isRuntimeState": false,
+      "description": "Daily weather model for PV (default ClearSky)"
+    },
+    {
+      "id": "SupersededByReset-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Set by a reset on all earlier settings revisions; superseded revisions no longer apply"
+    },
+    {
+      "id": "TaxAmount-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The tax amount of the billing document"
+    },
+    {
+      "id": "TaxProcedureCreditNote-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "EnergyCommunity-4.9.0/TaxProcedureCreditNote-1",
+      "isRuntimeState": false,
+      "description": "The tax procedure credit notes associated with the billing document"
+    },
+    {
+      "id": "TaxRate-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The tax rate of the billing document"
+    },
+    {
+      "id": "UnitPrice-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "The unit price of the billing document"
+    }
+  ],
+  "records": [],
+  "enums": [
+    {
+      "enumId": "AllocationKey-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Dynamic",
+          "description": "Proportional to consumption, capped at the participant\u0027s own consumption",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Static",
+          "description": "Fixed shares per participant",
+          "isExtension": false
+        }
+      ],
+      "description": "Key used to allocate the community production to the participants per 15-minute slot"
+    },
+    {
+      "enumId": "BillingCycle-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Monthly",
+          "description": "The billing cycle is one month",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Quarterly",
+          "description": "The billing cycle is one quarter",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "SemiAnnually",
+          "description": "The billing cycle is six months",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Annually",
+          "description": "The billing cycle is one year",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the billing cycle"
+    },
+    {
+      "enumId": "BillingDocumentState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Draft",
+          "description": "The billing document is a draft",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Released",
+          "description": "The billing document is released",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Sent",
+          "description": "The billing document has been sent",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Paid",
+          "description": "The billing document has been paid",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Canceled",
+          "description": "The billing document has been canceled",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the billing state"
+    },
+    {
+      "enumId": "BillingType-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Debit",
+          "description": "The document is an invoice or the item is a debit note",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Credit",
+          "description": "The document or item is an credit note or credit",
+          "isExtension": false
+        }
+      ],
+      "description": "The type a billing document or item"
+    },
+    {
+      "enumId": "LoadProfile-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "H0",
+          "description": "Household",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "G0",
+          "description": "Commercial, general",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "L0",
+          "description": "Agriculture, general",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "HeatPump",
+          "description": "Heat pump (simulation support planned)",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Ev",
+          "description": "Electric vehicle charging (simulation support planned)",
+          "isExtension": false
+        }
+      ],
+      "description": "Standard load profile used to shape the consumption of a consumer metering point"
+    },
+    {
+      "enumId": "MeteringDataSource-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Eda",
+          "description": "Values come from the grid operator via EDA (default for productive metering points)",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Simulated",
+          "description": "Values are generated by the energy simulation",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "SelfReported",
+          "description": "Values are reported by the participant itself (non-EDA meter)",
+          "isExtension": false
+        }
+      ],
+      "description": "Origin of the metering values of a metering point"
+    },
+    {
+      "enumId": "SimulationNoiseLevel-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Off",
+          "description": "No noise, deterministic profile values",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Low",
+          "description": "Low noise",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Medium",
+          "description": "Medium noise",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "High",
+          "description": "High noise",
+          "isExtension": false
+        }
+      ],
+      "description": "Strength of the seeded random noise added to simulated values"
+    },
+    {
+      "enumId": "SimulationPreset-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Legacy",
+          "description": "The historic demo community: 14 household consumers and 3 PV producers",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "PvDorf",
+          "description": "PV-heavy village: households, two small businesses, many rooftop PV systems (seller at noon)",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Gewerbepark",
+          "description": "Business park: commercial load with large rooftop PV (buyer, high coverage)",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Landwirtschaft",
+          "description": "Farming community: agricultural load profile, households and barn-roof PV (seller at noon)",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Stadtblock",
+          "description": "City block: many small households and one small PV system (pure buyer)",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "WasserkraftTal",
+          "description": "Valley with a small run-of-river hydro plant (night-time seller; hydro profile from M3)",
+          "isExtension": false
+        }
+      ],
+      "description": "Community composition preset of the energy simulation (members, mix and sizes)"
+    },
+    {
+      "enumId": "SimulationResetMode-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Values",
+          "description": "Overwrite the simulated values in place; structure and self-reported values stay",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Full",
+          "description": "Delete simulated master data and archives and rebuild everything",
+          "isExtension": false
+        }
+      ],
+      "description": "Mode of a simulation reset"
+    },
+    {
+      "enumId": "SimulationResetState-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Requested",
+          "description": "The request waits for the reset runner",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Running",
+          "description": "The reset is running",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Done",
+          "description": "The reset finished successfully",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Rejected",
+          "description": "The request was rejected (e.g. full reset not allowed any more)",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Failed",
+          "description": "The reset failed; see the message",
+          "isExtension": false
+        }
+      ],
+      "description": "Processing state of a simulation reset request"
+    },
+    {
+      "enumId": "SimulationWeatherMode-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "ClearSky",
+          "description": "Every day is a clear-sky day",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Mixed",
+          "description": "Seeded mix of sunny, changeable and overcast days",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Variable",
+          "description": "Mixed weather with bad-weather periods",
+          "isExtension": false
+        }
+      ],
+      "description": "Daily weather model applied to simulated PV production"
+    },
+    {
+      "enumId": "TaxProcedureCreditNote-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "SmallBusinessOwners",
+          "description": "No tax procedure is applied for small business owners",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "ReverseCharge",
+          "description": "The reverse charge procedure is applied",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "NoTaxProcedure",
+          "description": "No tax procedure is applied",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "FarmerTaxProcedure",
+          "description": "The farmer tax procedure is applied, which is a reduced tax amount for farmers",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the tax procedure credit notes for a billing document or customer"
+    }
+  ],
+  "modelId": "EnergyCommunity-4.9.0"
+}
