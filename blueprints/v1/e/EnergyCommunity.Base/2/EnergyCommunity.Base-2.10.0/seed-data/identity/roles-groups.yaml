@@ -1,0 +1,65 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Identity-[2.11,3.0)
+
+# Roles and the operator group of an Energy Community tenant (AB#5627, requirement SEC-02).
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+#
+# The HTTP routes of Base, Billing and EdaIntegration are moving to FromHttpRequest@2 in two
+# phases: phase A (Base 2.9.0, Billing 2.7.0, EdaIntegration 2.10.0) requires a valid token of
+# the tenant, phase B additionally requires one of these roles. The roles are seeded one release
+# AHEAD of phase B so the assignment runbook (docs/runbooks/ec-route-security-roles.md) can run on
+# every productive tenant before any route starts answering 403.
+#
+#   EnergyCommunityManagement  operations: Excel import (/import/tree), manual metering values,
+#                              the billing routes, EDA processes, the registration decision mail.
+#   EnergyCommunityReporting   read-only reports (/aggregatedEnergyReport, later /communityBalance),
+#                              typically held by the client-credentials client of a business DB.
+#
+# User administration is group membership: EnergyCommunityOperators carries
+# EnergyCommunityManagement via AssignedRole (same pattern as MeshmakersAccounting, AB#4677 /
+# AB#4685). Tenant owners get it automatically: the runbook makes this group a CHILD of TenantOwners
+# (AddGroupToGroup -id <TenantOwners> -cgid <EnergyCommunityOperators>) - identity resolves a
+# member's roles from its groups DOWNWARDS through ChildGroup, so that direction hands owners the
+# operator role and nothing else. The reverse (TenantOwners as a child of this group) would hand
+# every operator all tenant-owner roles. Not seeded here on purpose: the ChildGroup association
+# originates on TenantOwners, an entity of the System.Identity.Bootstrap blueprint; seeding it
+# from Base would make Base co-own that group, and uninstalling Base could take it with it.
+# Further operators are assigned one by one by the runbook script.
+# AB#4685). Service clients get their role directly (AddClientToRole). Role SubjectIds and
+# IdentityRoleIds are runtime state and preserved on blueprint re-apply, so an UpdateBlueprint does
+# not drop assignments made by the runbook.
+#
+# rtIds: the ec…05xx block is reserved for identity entities of the EC blueprints. MeterReporter
+# and SimulationOperator (SEC-02, simulation lanes) take ec…0503 / ec…0504 when they are added.
+entities:
+  - rtId: ec0000000000000000000501
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: EnergyCommunityManagement
+    attributes:
+      - id: System/Name
+        value: EnergyCommunityManagement
+      - id: System.Identity/NormalizedName
+        value: ENERGYCOMMUNITYMANAGEMENT
+  - rtId: ec0000000000000000000502
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: EnergyCommunityReporting
+    attributes:
+      - id: System/Name
+        value: EnergyCommunityReporting
+      - id: System.Identity/NormalizedName
+        value: ENERGYCOMMUNITYREPORTING
+  - rtId: ec0000000000000000000511
+    ckTypeId: System.Identity/Group
+    rtWellKnownName: EnergyCommunityOperators
+    attributes:
+      - id: System.Identity/GroupName
+        value: EnergyCommunityOperators
+      - id: System.Identity/NormalizedGroupName
+        value: ENERGYCOMMUNITYOPERATORS
+      - id: System.Identity/GroupDescription
+        value: Energy Community operators — Excel import, manual metering values, billing and EDA processes.
+    associations:
+      - roleId: System.Identity/AssignedRole
+        targetRtId: ec0000000000000000000501
+        targetCkTypeId: System.Identity/Role
