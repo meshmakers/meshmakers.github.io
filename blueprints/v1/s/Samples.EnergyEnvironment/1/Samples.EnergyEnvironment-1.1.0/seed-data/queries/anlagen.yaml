@@ -1,0 +1,29 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System-[2.2.0,3.0)
+
+# Saved query "installations" - a System/SimpleRtQuery the dashboard widgets bind to.
+entities:
+- rtId: ee00000000000000000a0001
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.Columns-1
+    value:
+    - name
+    - machineState
+    - power
+    - loadPercent
+    - importedEnergy
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_energyenvironment_anlagen
+  - id: System/Description-1
+    value: 'Anlagen und Verbraucher - EnergyMeter Uebersicht'
+  - id: System/Query.CkTypeId-1
+    value: Industry.Energy/EnergyConsumer
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
