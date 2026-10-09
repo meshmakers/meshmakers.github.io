@@ -1,0 +1,84 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.StreamData-[1.2,2.0)
+  - Industry.Energy-[3.2.0,4.0)
+
+# Stream-data archives for the PV mesh pipeline (AB#5642).
+#
+# An archive is bound to one CK type: the stream-data repository drops every
+# row whose CkTypeId differs from the archive's TargetCkTypeId. The pipeline
+# writes three types, so there is one RawArchive per type, and the mesh
+# pipeline runs one SaveStreamDataInArchive@1 per archive over the same
+# update list.
+#
+# Imported with Status=Created. Blueprints do not activate archives: run
+# ActivateArchive once per archive after installing, before deploying the
+# DataFlow - writes into an archive that is not activated fail.
+entities:
+  # PeakPower of the two module strings (main and outer building)
+  - rtId: 5fc8fda18b2fc75f925e21d1
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: PvModuleArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: Industry.Energy/PhotovoltaicSystem.Module
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: PeakPower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # Power and state of charge of the battery storage
+  - rtId: 5fc8fda18b2fc75f925e21d2
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: PvEnergyStorageArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: Industry.Energy/EnergyStorage
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: Power
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: SoC
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # Power of the two energy meters (net and consumption)
+  - rtId: 5fc8fda18b2fc75f925e21d3
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: PvEnergyMeterArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: Industry.Energy/EnergyMeter
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: Power
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
