@@ -1,0 +1,98 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Basic-[2.0.3,3.0)
+  - Industry.Basic-[2.2.0,3.0)
+
+# Maintenance demo master data: a Basic/Tree with one location and one
+# production line, carrying three Industry.Basic/Machine entities with their
+# Basic/NamePlate record (manufacturer, product designation, serial number).
+#
+# Pure master data - the machines carry no live signals. The former companion
+# file rt-adapters-edge.yaml is NOT part of this blueprint: it seeded three
+# adapters for plugs that no longer exist (Meshmakers.Plugs.IsPro-Ng) or have
+# been replaced by a configuration type (Meshmakers.Sockets.Grafana ->
+# System.Communication/GrafanaConfiguration).
+entities:
+  - rtId: 64a2b2e4e1ee56e262e83d98
+    ckTypeId: Basic/Tree
+    attributes:
+      - id: System/Name
+        value: Maintenance
+      - id: System/Description
+        value: Sample Data for maintenance demo
+  - rtId: 64a2b2ff83f510d627206cfe
+    ckTypeId: Basic/TreeNode
+    attributes:
+      - id: System/Name
+        value: Location 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 64a2b2e4e1ee56e262e83d98
+        targetCkTypeId: Basic/Tree
+
+  - rtId: 64a2b55a84c7869c60270d1a
+    ckTypeId: Basic/TreeNode
+    attributes:
+      - id: System/Name
+        value: Line 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 64a2b2ff83f510d627206cfe
+        targetCkTypeId: Basic/TreeNode
+  - rtId: 64a2b64c3da56d342f1c3880
+    ckTypeId: Industry.Basic/Machine
+    attributes:
+      - id: System/Name
+        value: Spritzguss 1
+      - id: Basic/NamePlate
+        value: 
+          ckRecordId: Basic/NamePlate
+          attributes:
+            - id: Basic/NamePlate.ManufacturerName
+              value: ENGEL Austria GmbH
+            - id: Basic/NamePlate.ManufacturerProductDesignation
+              value: CC300
+            - id: Basic/NamePlate.SerialNumber
+              value: 12345
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 64a2b55a84c7869c60270d1a
+        targetCkTypeId: Basic/TreeNode
+  - rtId: 64a2b66286eb404602d82503
+    ckTypeId: Industry.Basic/Machine
+    attributes:
+      - id: System/Name
+        value: Fräsmaschine 1
+      - id: Basic/NamePlate
+        value:
+          ckRecordId: Basic/NamePlate
+          attributes:
+            - id: Basic/NamePlate.ManufacturerName
+              value: DR. JOHANNES HEIDENHAIN GmbH
+            - id: Basic/NamePlate.ManufacturerProductDesignation
+              value: TNC 640
+            - id: Basic/NamePlate.SerialNumber
+              value: 12345
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 64a2b55a84c7869c60270d1a
+        targetCkTypeId: Basic/TreeNode
+  - rtId: 64a2b6c3bbf4aa537f812b62
+    ckTypeId: Industry.Basic/Machine
+    attributes:
+      - id: System/Name
+        value: Fräsmaschine 2
+      - id: Basic/NamePlate
+        value:
+          ckRecordId: Basic/NamePlate
+          attributes:
+            - id: Basic/NamePlate.ManufacturerName
+              value: DR. JOHANNES HEIDENHAIN GmbH
+            - id: Basic/NamePlate.ManufacturerProductDesignation
+              value: TNC 620
+            - id: Basic/NamePlate.SerialNumber
+              value: 12345
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 64a2b55a84c7869c60270d1a
+        targetCkTypeId: Basic/TreeNode          
