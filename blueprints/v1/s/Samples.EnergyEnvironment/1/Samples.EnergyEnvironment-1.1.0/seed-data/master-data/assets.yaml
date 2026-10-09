@@ -1,0 +1,777 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Basic-[2.0.3,3.0)
+  - Basic.Energy-[1.4.0,2.0)
+  - Industry.Basic-[2.2.0,3.0)
+  - Industry.Energy-[3.2.0,4.0)
+  - Environment-[3.2.0,4.0)
+
+# Assets of the Energy Environment demo: a Basic/Tree with one industrial site,
+# its PV system, inverter, storage, meters and consumers, plus the Environment
+# entities (carbon emissions and budget, certificates of origin, compliance
+# records, environmental goals) and the energy KPI / cost / forecast /
+# demand-response entities the dashboard reads.
+entities:
+  # ============================================================
+  # TREE STRUCTURE
+  # ============================================================
+  - rtId: e0500001000000000000aa01
+    ckTypeId: Basic/Tree
+    attributes:
+      - id: System/Name
+        value: Energy Environment Demo
+      - id: System/Description
+        value: Testdaten fuer das Energy Environment Energie-Management Dashboard
+
+  # Operating Facility - Werk Wien-Nord
+  - rtId: e0500001000000000000aa02
+    ckTypeId: Basic.Energy/OperatingFacility
+    attributes:
+      - id: System/Name
+        value: Werk Donaustein
+      - id: System/Description
+        value: Industriestandort Donaustein mit PV-Anlage und Energiespeicher
+      - id: Basic/Address
+        value:
+          ckRecordId: Basic/Address
+          attributes:
+            - id: Basic/AddressStreet
+              value: Industriestrasse 42
+            - id: Basic/AddressZipcode
+              value: 1210
+            - id: Basic/AddressCityTown
+              value: Wien
+            - id: Basic/AddressNationalCode
+              value: AT
+      - id: Basic.Energy/FacilityType
+        value: 3
+      - id: Basic.Energy/State
+        value: 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa01
+        targetCkTypeId: Basic/Tree
+
+  # ============================================================
+  # ANLAGEN & VERBRAUCHER (Industry.Energy / Industry.Basic)
+  # ============================================================
+
+  # Kompressoranlage C3
+  - rtId: e0500001000000000000ab01
+    ckTypeId: Industry.Energy/EnergyConsumer
+    attributes:
+      - id: System/Name
+        value: Kompressoranlage C3
+      - id: Industry.Basic/MachineState
+        value: 1
+      - id: Industry.Basic/Power
+        value: 2841
+      - id: Industry.Basic/ImportedEnergy
+        value: 8234
+      - id: Industry.Energy/NominalPower
+        value: 3000
+      - id: Industry.Energy/LoadPercent
+        value: 94
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # Produktionslinie P1
+  - rtId: e0500001000000000000ab02
+    ckTypeId: Industry.Energy/EnergyConsumer
+    attributes:
+      - id: System/Name
+        value: Produktionslinie P1
+      - id: Industry.Basic/MachineState
+        value: 1
+      - id: Industry.Basic/Power
+        value: 1240
+      - id: Industry.Basic/ImportedEnergy
+        value: 3102
+      - id: Industry.Energy/NominalPower
+        value: 2000
+      - id: Industry.Energy/LoadPercent
+        value: 62
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # Produktionslinie P2
+  - rtId: e0500001000000000000ab03
+    ckTypeId: Industry.Energy/EnergyConsumer
+    attributes:
+      - id: System/Name
+        value: Produktionslinie P2
+      - id: Industry.Basic/MachineState
+        value: 1
+      - id: Industry.Basic/Power
+        value: 980
+      - id: Industry.Basic/ImportedEnergy
+        value: 2450
+      - id: Industry.Energy/NominalPower
+        value: 2500
+      - id: Industry.Energy/LoadPercent
+        value: 40
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # Klimaanlage HVAC-A
+  - rtId: e0500001000000000000ab04
+    ckTypeId: Industry.Energy/EnergyConsumer
+    attributes:
+      - id: System/Name
+        value: Klimaanlage HVAC-A
+      - id: Industry.Basic/MachineState
+        value: 1
+      - id: Industry.Basic/Power
+        value: 380
+      - id: Industry.Basic/ImportedEnergy
+        value: 890
+      - id: Industry.Energy/NominalPower
+        value: 1000
+      - id: Industry.Energy/LoadPercent
+        value: 38
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # Beleuchtung Halle 1-3
+  - rtId: e0500001000000000000ab05
+    ckTypeId: Industry.Energy/EnergyConsumer
+    attributes:
+      - id: System/Name
+        value: Beleuchtung Halle 1-3
+      - id: Industry.Basic/MachineState
+        value: 1
+      - id: Industry.Basic/Power
+        value: 124
+      - id: Industry.Basic/ImportedEnergy
+        value: 310
+      - id: Industry.Energy/NominalPower
+        value: 1000
+      - id: Industry.Energy/LoadPercent
+        value: 12
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # PV-SYSTEM (Industry.Energy)
+  # ============================================================
+
+  - rtId: e0500001000000000000ac01
+    ckTypeId: Industry.Energy/PhotovoltaicSystem
+    attributes:
+      - id: System/Name
+        value: PV-Anlage Dach
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000ac02
+    ckTypeId: Industry.Energy/Inverter
+    attributes:
+      - id: System/Name
+        value: Wechselrichter WR-01
+      - id: Industry.Basic/Power
+        value: 810
+      - id: Industry.Energy/MaximumPower
+        value: 1000
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000ac01
+        targetCkTypeId: Industry.Energy/PhotovoltaicSystem
+
+  - rtId: e0500001000000000000ac03
+    ckTypeId: Industry.Energy/PhotovoltaicSystem.Module
+    attributes:
+      - id: System/Name
+        value: Modulfeld Sued
+      - id: Industry.Energy/PeakPower
+        value: 850
+      - id: Industry.Basic/Power
+        value: 610
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000ac01
+        targetCkTypeId: Industry.Energy/PhotovoltaicSystem
+
+  - rtId: e0500001000000000000ac04
+    ckTypeId: Industry.Energy/PhotovoltaicSystem.Module
+    attributes:
+      - id: System/Name
+        value: Modulfeld West
+      - id: Industry.Energy/PeakPower
+        value: 250
+      - id: Industry.Basic/Power
+        value: 200
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000ac01
+        targetCkTypeId: Industry.Energy/PhotovoltaicSystem
+
+  # ============================================================
+  # ENERGIESPEICHER (Industry.Energy)
+  # ============================================================
+
+  - rtId: e0500001000000000000ac05
+    ckTypeId: Industry.Energy/EnergyStorage
+    attributes:
+      - id: System/Name
+        value: Batteriespeicher BS-01
+      - id: Industry.Energy/SoC
+        value: 68
+      - id: Industry.Energy/SoH
+        value: 94
+      - id: Industry.Energy/Capacity
+        value: 500
+      - id: Industry.Basic/Power
+        value: 120
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # ENERGIEZAEHLER (Industry.Energy)
+  # ============================================================
+
+  - rtId: e0500001000000000000ac06
+    ckTypeId: Industry.Energy/EnergyMeter
+    attributes:
+      - id: System/Name
+        value: Hauptzaehler Netzbezug
+      - id: Industry.Basic/Power
+        value: 2252
+      - id: Industry.Basic/ImportedEnergy
+        value: 14986
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # DEMAND RESPONSE EVENT (Industry.Energy)
+  # ============================================================
+
+  - rtId: e0500001000000000000ad01
+    ckTypeId: Industry.Energy/DemandResponseEvent
+    attributes:
+      - id: System/Name
+        value: DR-Event 2026-03-13
+      - id: System/Description
+        value: Lastabsenkung Kompressoranlage C3 fuer APCS-Markt
+      - id: Industry.Energy/ReductionKw
+        value: 350
+      - id: Industry.Energy/DemandResponseStartTime
+        value: "2026-03-13T12:00:00Z"
+      - id: Industry.Energy/DemandResponseEndTime
+        value: "2026-03-13T15:30:00Z"
+      - id: Industry.Energy/Revenue
+        value: 124
+      - id: Industry.Energy/DemandResponseMarket
+        value: 0
+      - id: Industry.Energy/DemandResponseStatus
+        value: 0
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # ENERGIEKOSTEN (Industry.Energy) - Tageswerte Maerz 2026
+  # ============================================================
+
+  - rtId: e0500001000000000000ae01
+    ckTypeId: Industry.Energy/EnergyCost
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T00:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T23:59:59Z"
+      - id: Industry.Energy/CostAmount
+        value: 1847
+      - id: Industry.Energy/ForecastAmount
+        value: 4320
+      - id: Industry.Energy/TariffType
+        value: 0
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000ae02
+    ckTypeId: Industry.Energy/EnergyCost
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-12T00:00:00Z"
+            - id: Basic/To
+              value: "2026-03-12T23:59:59Z"
+      - id: Industry.Energy/CostAmount
+        value: 4180
+      - id: Industry.Energy/ForecastAmount
+        value: 4200
+      - id: Industry.Energy/TariffType
+        value: 0
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000ae03
+    ckTypeId: Industry.Energy/EnergyCost
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-11T00:00:00Z"
+            - id: Basic/To
+              value: "2026-03-11T23:59:59Z"
+      - id: Industry.Energy/CostAmount
+        value: 4350
+      - id: Industry.Energy/TariffType
+        value: 0
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # KI-PROGNOSE (Industry.Energy) - naechste 6h
+  # ============================================================
+
+  - rtId: e0500001000000000000af01
+    ckTypeId: Industry.Energy/EnergyForecast
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T13:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T14:00:00Z"
+      - id: Industry.Energy/PredictedLoad
+        value: 2280
+      - id: Industry.Energy/Confidence
+        value: 92
+      - id: Industry.Energy/ForecastModel
+        value: LSTM-LoadPredict-v3
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000af02
+    ckTypeId: Industry.Energy/EnergyForecast
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T14:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T15:00:00Z"
+      - id: Industry.Energy/PredictedLoad
+        value: 2610
+      - id: Industry.Energy/Confidence
+        value: 88
+      - id: Industry.Energy/ForecastModel
+        value: LSTM-LoadPredict-v3
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000af03
+    ckTypeId: Industry.Energy/EnergyForecast
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T15:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T16:00:00Z"
+      - id: Industry.Energy/PredictedLoad
+        value: 2750
+      - id: Industry.Energy/Confidence
+        value: 85
+      - id: Industry.Energy/ForecastModel
+        value: LSTM-LoadPredict-v3
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000af04
+    ckTypeId: Industry.Energy/EnergyForecast
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T16:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T17:00:00Z"
+      - id: Industry.Energy/PredictedLoad
+        value: 2380
+      - id: Industry.Energy/Confidence
+        value: 82
+      - id: Industry.Energy/ForecastModel
+        value: LSTM-LoadPredict-v3
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000af05
+    ckTypeId: Industry.Energy/EnergyForecast
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T17:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T18:00:00Z"
+      - id: Industry.Energy/PredictedLoad
+        value: 1950
+      - id: Industry.Energy/Confidence
+        value: 78
+      - id: Industry.Energy/ForecastModel
+        value: LSTM-LoadPredict-v3
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000af06
+    ckTypeId: Industry.Energy/EnergyForecast
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T18:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T19:00:00Z"
+      - id: Industry.Energy/PredictedLoad
+        value: 1420
+      - id: Industry.Energy/Confidence
+        value: 74
+      - id: Industry.Energy/ForecastModel
+        value: LSTM-LoadPredict-v3
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # EnPI - Energy Performance Indicator (Industry.Energy)
+  # ============================================================
+
+  - rtId: e0500001000000000000b001
+    ckTypeId: Industry.Energy/EnergyPerformanceIndicator
+    attributes:
+      - id: System/Name
+        value: EnPI Produktion
+      - id: System/Description
+        value: Spezifischer Energieverbrauch pro Stueck
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T00:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T23:59:59Z"
+      - id: Industry.Energy/IndicatorValue
+        value: 1.84
+      - id: Industry.Energy/IndicatorUnit
+        value: "kWh/Stk"
+      - id: Industry.Energy/ReferenceValue
+        value: 1.94
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # CO2 EMISSIONEN (Environment) - Tageswerte
+  # ============================================================
+
+  # Scope 1 - Direkte Emissionen (Heizung, Fuhrpark)
+  - rtId: e0500001000000000000b101
+    ckTypeId: Environment/CarbonEmission
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T00:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T23:59:59Z"
+      - id: Environment/EmissionAmount
+        value: 0.8
+      - id: Environment/CarbonScope
+        value: 0
+      - id: Environment/EmissionSource
+        value: Erdgas-Heizung
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # Scope 2 - Indirekte Emissionen (Strombezug)
+  - rtId: e0500001000000000000b102
+    ckTypeId: Environment/CarbonEmission
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T00:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T23:59:59Z"
+      - id: Environment/EmissionAmount
+        value: 2.1
+      - id: Environment/CarbonScope
+        value: 1
+      - id: Environment/EmissionSource
+        value: Strombezug Netz
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # Scope 3 - Lieferkette
+  - rtId: e0500001000000000000b103
+    ckTypeId: Environment/CarbonEmission
+    attributes:
+      - id: Basic/TimeRange
+        value:
+          ckRecordId: Basic/TimeRange
+          attributes:
+            - id: Basic/From
+              value: "2026-03-13T00:00:00Z"
+            - id: Basic/To
+              value: "2026-03-13T23:59:59Z"
+      - id: Environment/EmissionAmount
+        value: 0.3
+      - id: Environment/CarbonScope
+        value: 2
+      - id: Environment/EmissionSource
+        value: Logistik und Zulieferer
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # CO2 BUDGET (Environment)
+  # ============================================================
+
+  - rtId: e0500001000000000000b201
+    ckTypeId: Environment/CarbonBudget
+    attributes:
+      - id: System/Name
+        value: CO2-Budget 2026
+      - id: System/Description
+        value: Jahresbudget CO2 Werk Wien-Nord
+      - id: Environment/BudgetYear
+        value: 2026
+      - id: Environment/BudgetTotal
+        value: 680
+      - id: Environment/BudgetConsumed
+        value: 489
+      - id: Environment/TargetFulfillment
+        value: 72
+      - id: Environment/DailyEmissions
+        value: 3.8
+      - id: Environment/MonthlyEmissions
+        value: 48.2
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # COMPLIANCE RECORDS (Environment)
+  # ============================================================
+
+  - rtId: e0500001000000000000b301
+    ckTypeId: Environment/ComplianceRecord
+    attributes:
+      - id: System/Name
+        value: ISO 50001 Audit
+      - id: Environment/ComplianceCategory
+        value: 0
+      - id: Environment/ComplianceStatus
+        value: 3
+      - id: Environment/AuditDate
+        value: "2026-01-15T00:00:00Z"
+      - id: Environment/ComplianceNotes
+        value: Zertifizierung erfolgreich erneuert
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000b302
+    ckTypeId: Environment/ComplianceRecord
+    attributes:
+      - id: System/Name
+        value: EEffG Nachweis 2025
+      - id: Environment/ComplianceCategory
+        value: 1
+      - id: Environment/ComplianceStatus
+        value: 2
+      - id: Environment/DueDate
+        value: "2026-03-31T00:00:00Z"
+      - id: Environment/ComplianceNotes
+        value: Energieeffizienz-Nachweis beim Ministerium eingereicht
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000b303
+    ckTypeId: Environment/ComplianceRecord
+    attributes:
+      - id: System/Name
+        value: CSRD-Bericht Q1
+      - id: Environment/ComplianceCategory
+        value: 2
+      - id: Environment/ComplianceStatus
+        value: 1
+      - id: Environment/DueDate
+        value: "2026-04-30T00:00:00Z"
+      - id: Environment/ComplianceNotes
+        value: Nachhaltigkeitsbericht Q1 in Bearbeitung
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000b304
+    ckTypeId: Environment/ComplianceRecord
+    attributes:
+      - id: System/Name
+        value: NIS2-Sicherheitsaudit
+      - id: Environment/ComplianceCategory
+        value: 3
+      - id: Environment/ComplianceStatus
+        value: 4
+      - id: Environment/AuditDate
+        value: "2026-02-20T00:00:00Z"
+      - id: Environment/ComplianceNotes
+        value: NIS2-Audit bestanden, alle Massnahmen umgesetzt
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # HERKUNFTSNACHWEISE (Environment)
+  # ============================================================
+
+  - rtId: e0500001000000000000b401
+    ckTypeId: Environment/CertificateOfOrigin
+    attributes:
+      - id: System/Name
+        value: HKN Windpark Parndorf
+      - id: Environment/CertificateIssuer
+        value: HKN-Austria
+      - id: Environment/CertificateValidFrom
+        value: "2026-01-01T00:00:00Z"
+      - id: Environment/CertificateValidTo
+        value: "2026-12-31T23:59:59Z"
+      - id: Environment/EnergySource
+        value: 1
+      - id: Environment/CertifiedAmount
+        value: 2500
+      - id: Environment/IsVerified
+        value: true
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000b402
+    ckTypeId: Environment/CertificateOfOrigin
+    attributes:
+      - id: System/Name
+        value: HKN Solarpark Burgenland
+      - id: Environment/CertificateIssuer
+        value: HKN-Austria
+      - id: Environment/CertificateValidFrom
+        value: "2026-01-01T00:00:00Z"
+      - id: Environment/CertificateValidTo
+        value: "2026-12-31T23:59:59Z"
+      - id: Environment/EnergySource
+        value: 0
+      - id: Environment/CertifiedAmount
+        value: 800
+      - id: Environment/IsVerified
+        value: true
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  # ============================================================
+  # ENVIRONMENTAL GOALS (Environment - bestehender Type)
+  # ============================================================
+
+  - rtId: e0500001000000000000b501
+    ckTypeId: Environment/EnvironmentalGoal
+    attributes:
+      - id: System/Name
+        value: CO2-Neutralitaet 2030
+      - id: Environment/GoalText
+        value: Reduktion der CO2-Emissionen um 80% bis 2030 gegenueber Basisjahr 2020
+      - id: Environment/GoalState
+        value: 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
+
+  - rtId: e0500001000000000000b502
+    ckTypeId: Environment/EnvironmentalGoal
+    attributes:
+      - id: System/Name
+        value: 100% Erneuerbare Energie 2028
+      - id: Environment/GoalText
+        value: Vollstaendige Umstellung auf erneuerbare Energiequellen bis Ende 2028
+      - id: Environment/GoalState
+        value: 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: e0500001000000000000aa02
+        targetCkTypeId: Basic.Energy/OperatingFacility
