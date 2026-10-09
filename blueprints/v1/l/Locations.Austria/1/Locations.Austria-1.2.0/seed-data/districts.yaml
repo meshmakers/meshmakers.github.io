@@ -1,0 +1,1286 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.3,3.0)
+
+# The 116 Austrian districts (politische Bezirke, Vienna's 23 municipal districts
+# included), each parented to its state in tree.yaml.
+# Part of the Locations.Austria blueprint - see blueprint.yaml for the full file list.
+# rtId scheme: 10ca00000000000000<T><SSSSS> - T: 1=Tree 2=Country 3=State
+# 4=District 5=City; SSSSS: hex sequence within the type.
+entities:
+
+- rtId: 10ca00000000000000400001
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Amstetten"
+
+- rtId: 10ca00000000000000400002
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Baden"
+
+- rtId: 10ca00000000000000400003
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300008
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bludenz"
+
+- rtId: 10ca00000000000000400004
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Braunau am Inn"
+
+- rtId: 10ca00000000000000400005
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300008
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bregenz"
+
+- rtId: 10ca00000000000000400006
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bruck an der Leitha"
+
+- rtId: 10ca00000000000000400007
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Bruck-Mürzzuschlag"
+
+- rtId: 10ca00000000000000400008
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Deutschlandsberg"
+
+- rtId: 10ca00000000000000400009
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300008
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Dornbirn"
+
+- rtId: 10ca0000000000000040000a
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Eferding"
+
+- rtId: 10ca0000000000000040000b
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300001
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Eisenstadt(Stadt)"
+
+- rtId: 10ca0000000000000040000c
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300001
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Eisenstadt-Umgebung"
+
+- rtId: 10ca0000000000000040000d
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300008
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Feldkirch"
+
+- rtId: 10ca0000000000000040000e
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Feldkirchen"
+
+- rtId: 10ca0000000000000040000f
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Freistadt"
+
+- rtId: 10ca00000000000000400010
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Gmunden"
+
+- rtId: 10ca00000000000000400011
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Gmünd"
+
+- rtId: 10ca00000000000000400012
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Graz(Stadt)"
+
+- rtId: 10ca00000000000000400013
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Graz-Umgebung"
+
+- rtId: 10ca00000000000000400014
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Grieskirchen"
+
+- rtId: 10ca00000000000000400015
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Gänserndorf"
+
+- rtId: 10ca00000000000000400016
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300001
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Güssing"
+
+- rtId: 10ca00000000000000400017
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300005
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hallein"
+
+- rtId: 10ca00000000000000400018
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hartberg-Fürstenfeld"
+
+- rtId: 10ca00000000000000400019
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hermagor"
+
+- rtId: 10ca0000000000000040001a
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Hollabrunn"
+
+- rtId: 10ca0000000000000040001b
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Horn"
+
+- rtId: 10ca0000000000000040001c
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300007
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Imst"
+
+- rtId: 10ca0000000000000040001d
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300007
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Innsbruck-Land"
+
+- rtId: 10ca0000000000000040001e
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300007
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Innsbruck-Stadt"
+
+- rtId: 10ca0000000000000040001f
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300001
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Jennersdorf"
+
+- rtId: 10ca00000000000000400020
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Kirchdorf an der Krems"
+
+- rtId: 10ca00000000000000400021
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300007
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Kitzbühel"
+
+- rtId: 10ca00000000000000400022
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Klagenfurt Land"
+
+- rtId: 10ca00000000000000400023
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Klagenfurt Stadt"
+
+- rtId: 10ca00000000000000400024
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Korneuburg"
+
+- rtId: 10ca00000000000000400025
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Krems an der Donau(Stadt)"
+
+- rtId: 10ca00000000000000400026
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Krems(Land)"
+
+- rtId: 10ca00000000000000400027
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300007
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Kufstein"
+
+- rtId: 10ca00000000000000400028
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300007
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Landeck"
+
+- rtId: 10ca00000000000000400029
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Leibnitz"
+
+- rtId: 10ca0000000000000040002a
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Leoben"
+
+- rtId: 10ca0000000000000040002b
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300007
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Lienz"
+
+- rtId: 10ca0000000000000040002c
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Liezen"
+
+- rtId: 10ca0000000000000040002d
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Lilienfeld"
+
+- rtId: 10ca0000000000000040002e
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Linz(Stadt)"
+
+- rtId: 10ca0000000000000040002f
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Linz-Land"
+
+- rtId: 10ca00000000000000400030
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300001
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Mattersburg"
+
+- rtId: 10ca00000000000000400031
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Melk"
+
+- rtId: 10ca00000000000000400032
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Mistelbach"
+
+- rtId: 10ca00000000000000400033
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Murau"
+
+- rtId: 10ca00000000000000400034
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Murtal"
+
+- rtId: 10ca00000000000000400035
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Mödling"
+
+- rtId: 10ca00000000000000400036
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Neunkirchen"
+
+- rtId: 10ca00000000000000400037
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300001
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Neusiedl am See"
+
+- rtId: 10ca00000000000000400038
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300001
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Oberpullendorf"
+
+- rtId: 10ca00000000000000400039
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300001
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Oberwart"
+
+- rtId: 10ca0000000000000040003a
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Perg"
+
+- rtId: 10ca0000000000000040003b
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300007
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Reutte"
+
+- rtId: 10ca0000000000000040003c
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Ried im Innkreis"
+
+- rtId: 10ca0000000000000040003d
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Rohrbach"
+
+- rtId: 10ca0000000000000040003e
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300001
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Rust(Stadt)"
+
+- rtId: 10ca0000000000000040003f
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300005
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Salzburg(Stadt)"
+
+- rtId: 10ca00000000000000400040
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300005
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Salzburg-Umgebung"
+
+- rtId: 10ca00000000000000400041
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300005
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Sankt Johann im Pongau"
+
+- rtId: 10ca00000000000000400042
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Sankt Pölten(Land)"
+
+- rtId: 10ca00000000000000400043
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Sankt Pölten(Stadt)"
+
+- rtId: 10ca00000000000000400044
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Sankt Veit an der Glan"
+
+- rtId: 10ca00000000000000400045
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Scheibbs"
+
+- rtId: 10ca00000000000000400046
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300007
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Schwaz"
+
+- rtId: 10ca00000000000000400047
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Schärding"
+
+- rtId: 10ca00000000000000400048
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Spittal an der Drau"
+
+- rtId: 10ca00000000000000400049
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "St. Veit an der Glan"
+
+- rtId: 10ca0000000000000040004a
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Steyr(Stadt)"
+
+- rtId: 10ca0000000000000040004b
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Steyr-Land"
+
+- rtId: 10ca0000000000000040004c
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Südoststeiermark"
+
+- rtId: 10ca0000000000000040004d
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300005
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Tamsweg"
+
+- rtId: 10ca0000000000000040004e
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Tulln"
+
+- rtId: 10ca0000000000000040004f
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Urfahr-Umgebung"
+
+- rtId: 10ca00000000000000400050
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Villach Land"
+
+- rtId: 10ca00000000000000400051
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Villach Stadt"
+
+- rtId: 10ca00000000000000400052
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Voitsberg"
+
+- rtId: 10ca00000000000000400053
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Vöcklabruck"
+
+- rtId: 10ca00000000000000400054
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Völkermarkt"
+
+- rtId: 10ca00000000000000400055
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Waidhofen an der Thaya"
+
+- rtId: 10ca00000000000000400056
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300006
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Weiz"
+
+- rtId: 10ca00000000000000400057
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wels(Stadt)"
+
+- rtId: 10ca00000000000000400058
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300004
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wels-Land"
+
+- rtId: 10ca00000000000000400059
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien  1.,Innere Stadt"
+
+- rtId: 10ca0000000000000040005a
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien  2.,Leopoldstadt"
+
+- rtId: 10ca0000000000000040005b
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien  3.,Landstraße"
+
+- rtId: 10ca0000000000000040005c
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien  4.,Wieden"
+
+- rtId: 10ca0000000000000040005d
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien  5.,Margareten"
+
+- rtId: 10ca0000000000000040005e
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien  6.,Mariahilf"
+
+- rtId: 10ca0000000000000040005f
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien  7.,Neubau"
+
+- rtId: 10ca00000000000000400060
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien  8.,Josefstadt"
+
+- rtId: 10ca00000000000000400061
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien  9.,Alsergrund"
+
+- rtId: 10ca00000000000000400062
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 10.,Favoriten"
+
+- rtId: 10ca00000000000000400063
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 11.,Simmering"
+
+- rtId: 10ca00000000000000400064
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 12.,Meidling"
+
+- rtId: 10ca00000000000000400065
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 13.,Hietzing"
+
+- rtId: 10ca00000000000000400066
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 14.,Penzing"
+
+- rtId: 10ca00000000000000400067
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 15.,Rudolfsheim-Fünfhaus"
+
+- rtId: 10ca00000000000000400068
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 16.,Ottakring"
+
+- rtId: 10ca00000000000000400069
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 17.,Hernals"
+
+- rtId: 10ca0000000000000040006a
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 18.,Währing"
+
+- rtId: 10ca0000000000000040006b
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 20.,Brigittenau"
+
+- rtId: 10ca0000000000000040006c
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 21.,Floridsdorf"
+
+- rtId: 10ca0000000000000040006d
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 22.,Donaustadt"
+
+- rtId: 10ca0000000000000040006e
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien 23.,Liesing"
+
+- rtId: 10ca0000000000000040006f
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300009
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien-Flughafen"
+
+- rtId: 10ca00000000000000400070
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wiener Neustadt(Land)"
+
+- rtId: 10ca00000000000000400071
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wiener Neustadt(Stadt)"
+
+- rtId: 10ca00000000000000400072
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300002
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wolfsberg"
+
+- rtId: 10ca00000000000000400073
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300005
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Zell am See"
+
+- rtId: 10ca00000000000000400074
+  ckTypeId: Basic/District-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000300003
+    targetCkTypeId: Basic/State-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Zwettl"
