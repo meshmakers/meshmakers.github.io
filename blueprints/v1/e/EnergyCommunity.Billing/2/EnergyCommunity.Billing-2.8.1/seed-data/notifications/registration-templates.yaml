@@ -1,0 +1,159 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[4.9,5.0)
+- Basic-[2.4,3.0)
+- Basic.Energy-[1.9,2.0)
+- EnergyCommunity.Registration-[2.7,3.0)
+- System.Communication-[3.31,5.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+entities:
+
+- rtId: 'ec0000000000000000000903'
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: member-registration-confirmation
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Ihr Antrag bei ${community.name}'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      <p>Guten Tag,</p>
+
+      <p>wir haben Ihren Antrag auf Mitgliedschaft bei ${community.name} erhalten.</p>
+
+      <p>Wir prüfen Ihre Angaben und melden uns unter ${registration.email},<br />
+      sobald der Antrag geprüft ist.</p>
+
+      <p>Beste Grüße,<br />
+      ${community.name}<br />
+      ${community.contactEmail}</p>
+
+      <p>${community.logo}</p>
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 1
+
+- rtId: 'ec0000000000000000000906'
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: member-registration-operator-notification
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Neue Mitgliedsanmeldung bei ${community.name}'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      <p>Eine neue Mitgliedsanmeldung ist eingegangen.</p>
+
+      <p>Antragsteller: ${registration.firstName} ${registration.lastName} ${registration.companyName}<br />
+      Ansprechpartner: ${registration.contactPerson}<br />
+      E-Mail: ${registration.email}<br />
+      Telefon: ${registration.phone}</p>
+
+      <p>Adresse:<br />
+      ${registration.street}<br />
+      ${registration.zipcode} ${registration.cityTown}</p>
+
+      <p>Die Anmeldung liegt unter &quot;Anmeldungen&quot; zur Prüfung bereit.</p>
+
+      <p>${community.name}</p>
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 1
+
+- rtId: 'ec0000000000000000000907'
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: member-registration-accepted
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Ihre Aufnahme in ${community.name}'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      <p>Guten Tag,</p>
+
+      <p>Ihre Anmeldung wurde geprüft und angenommen. Sie sind nun Mitglied der Energiegemeinschaft.</p>
+
+      <p>Die von Ihnen angegebenen Zählpunkte wurden übernommen. Über die weiteren Schritte
+      informieren wir Sie gesondert.</p>
+
+      <p>${community.name}</p>
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 1
+
+- rtId: 'ec0000000000000000000908'
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: member-registration-denied-with-reason
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Ihre Anmeldung bei ${community.name}'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      <p>Guten Tag,</p>
+
+      <p>Ihre Anmeldung wurde geprüft. Wir können sie leider nicht annehmen.</p>
+
+      <p>Begründung:<br />
+      ${registration.rejectionReason}</p>
+
+      <p>Wenn sich die Umstände ändern, können Sie sich jederzeit erneut anmelden.</p>
+
+      <p>${community.name}</p>
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 1
+
+- rtId: 'ec0000000000000000000909'
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: member-registration-denied
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Ihre Anmeldung bei ${community.name}'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      <p>Guten Tag,</p>
+
+      <p>Ihre Anmeldung wurde geprüft. Wir können sie leider nicht annehmen.</p>
+
+      <p>Wenn sich die Umstände ändern, können Sie sich jederzeit erneut anmelden.</p>
+
+      <p>${community.name}</p>
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 1
+
+- rtId: 'ec000000000000000000090c'
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: member-registration-duplicate
+  associations: []
+  attributes:
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Ihr Antrag bei ${community.name} liegt bereits vor'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      <p>Guten Tag,</p>
+
+      <p>für ${registration.email} liegt bereits ein Antrag auf Mitgliedschaft bei
+      ${community.name} vor. Wir prüfen ihn und melden uns, sobald er bearbeitet ist.</p>
+
+      <p>Ein weiterer Antrag ist nicht nötig. Falls dieser Versuch nicht von Ihnen kam,
+      können Sie diese Nachricht ignorieren - es wurden keine neuen Daten gespeichert.</p>
+
+      <p>Beste Grüße,<br />
+      ${community.name}<br />
+      ${community.contactEmail}</p>
+
+      <p>${community.logo}</p>
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 1
