@@ -514,6 +514,7 @@
     {
       "id": "AllocationCutOffTime-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Local time (HH:mm, Europe/Vienna) on day D\u002B1 after which the allocation of day D is final and frozen; empty means 06:00"
     },
@@ -521,12 +522,14 @@
       "id": "AllocationKey-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/AllocationKey-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Allocation key of the community (default Dynamic)"
     },
     {
       "id": "BackfillDays-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Number of days a reset simulates backwards from today (default 730)"
     },
@@ -537,6 +540,7 @@
       "defaultValues": [
         "1"
       ],
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Billing cycle associated with the customer"
     },
@@ -544,6 +548,7 @@
       "id": "BillingDocumentState-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/BillingDocumentState-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The state of the billing document"
     },
@@ -551,60 +556,70 @@
       "id": "BillingType-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/BillingType-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The type of the billing document or billing item"
     },
     {
       "id": "CompletedAt-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "When the reset runner finished the request"
     },
     {
       "id": "ConsumptionFactor-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Multiplier on the annual consumption of all simulated consumers (default 1.0, sensible range 0.5-2)"
     },
     {
       "id": "Currency-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The ISO 4217 representation of the used currency"
     },
     {
       "id": "CustomerNumber-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Internal customer number"
     },
     {
       "id": "DailyRun-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Whether the daily simulation run generates values for this community (default true)"
     },
     {
       "id": "DateOfBirth-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Date of birth of the customer (natural person)"
     },
     {
       "id": "DiscardReported-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Allow a full reset to discard the values of self-reported metering points"
     },
     {
       "id": "EffectiveFrom-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "First day (Europe/Vienna) the settings revision applies to; never earlier than the day the revision was created, unless it is the base revision of a reset"
     },
     {
       "id": "EnergyConsumption-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Energy consumed per year in kWh",
       "metaData": [
@@ -617,6 +632,7 @@
     {
       "id": "EnergyProductionCapacity-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Maximal energy production capacity in kWp",
       "metaData": [
@@ -629,42 +645,49 @@
     {
       "id": "GrossAmount-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The gross amount of the billing document"
     },
     {
       "id": "GrossTotal-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The gross total of the billing document"
     },
     {
       "id": "IntervalCount-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Total number of stream-data intervals aggregated into the billed quantity"
     },
     {
       "id": "IntervalCountL1-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Number of billed intervals with data quality L1 (metered values)"
     },
     {
       "id": "IntervalCountL2-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Number of billed intervals with data quality L2 (interpolated values)"
     },
     {
       "id": "IntervalCountL3-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Number of billed intervals with data quality L3 (estimated values)"
     },
     {
       "id": "IntervalCountUnknown-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Number of billed intervals with unknown data quality"
     },
@@ -672,18 +695,21 @@
       "id": "LoadProfile-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/LoadProfile-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Standard load profile used to simulate the consumption (default H0)"
     },
     {
       "id": "MemberScale-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Multiplier on the number of members of the preset; takes effect only through a full reset (default 1.0)"
     },
     {
       "id": "MemberSpread-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Relative seeded spread of the size of each simulated member around its nominal value (0 = none, 0.25 = \u002B/-25 %)"
     },
@@ -691,36 +717,42 @@
       "id": "MeteringDataSource-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/MeteringDataSource-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Origin of the metering values; the simulation only writes metering points marked Simulated"
     },
     {
       "id": "NearRealTime-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Generate values every 15 minutes instead of once per day (planned)"
     },
     {
       "id": "NetAmount-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The net amount of the billing document"
     },
     {
       "id": "Price-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The price of a given unit of energy"
     },
     {
       "id": "PvCapacityFactor-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Multiplier on the installed capacity of all simulated PV producers (default 1.0, sensible range 0-3)"
     },
     {
       "id": "PvSpecificYield-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Annual PV yield in kWh per kWp under clear sky (default 1050, Salzburg)",
       "metaData": [
@@ -733,12 +765,14 @@
     {
       "id": "RequestedAt-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "When the reset was requested"
     },
     {
       "id": "RequestedBy-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Who requested the reset (user or client id)"
     },
@@ -746,6 +780,7 @@
       "id": "SimulationNoiseLevel-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationNoiseLevel-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Seeded noise on simulated values (default Off)"
     },
@@ -753,6 +788,7 @@
       "id": "SimulationPreset-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationPreset-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Composition preset of the simulated community; changing it takes effect only through a full reset"
     },
@@ -760,6 +796,7 @@
       "id": "SimulationResetMode-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationResetMode-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Requested reset mode"
     },
@@ -767,12 +804,14 @@
       "id": "SimulationResetState-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationResetState-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Processing state of the reset request"
     },
     {
       "id": "SimulationSeed-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Seed of all random values of the simulation; same settings and seed give identical data"
     },
@@ -780,18 +819,21 @@
       "id": "SimulationWeatherMode-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/SimulationWeatherMode-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Daily weather model for PV (default ClearSky)"
     },
     {
       "id": "SupersededByReset-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Set by a reset on all earlier settings revisions; superseded revisions no longer apply"
     },
     {
       "id": "TaxAmount-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The tax amount of the billing document"
     },
@@ -799,18 +841,21 @@
       "id": "TaxProcedureCreditNote-1",
       "valueType": "Enum",
       "valueCkEnumId": "EnergyCommunity-4.9.0/TaxProcedureCreditNote-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The tax procedure credit notes associated with the billing document"
     },
     {
       "id": "TaxRate-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The tax rate of the billing document"
     },
     {
       "id": "UnitPrice-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The unit price of the billing document"
     }
