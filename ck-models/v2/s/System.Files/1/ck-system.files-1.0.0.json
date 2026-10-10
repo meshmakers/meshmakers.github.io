@@ -1,0 +1,90 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.5.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "FileSystemContainer-1",
+      "derivedFromCkTypeId": "System.Files-1.0.0/FileSystemEntity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "associations": [
+        {
+          "id": "System-2.5.0/ParentChild-1",
+          "targetCkTypeId": "System.Files-1.0.0/Folder-1"
+        },
+        {
+          "id": "System-2.5.0/ParentChild-1",
+          "targetCkTypeId": "System.Files-1.0.0/FolderRoot-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base type of file system entries that live inside a folder or a folder root (folders and files)."
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "FileSystemEntity-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": true,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Abstract base type of all file system entries (folder roots, folders and files).",
+      "attributes": [
+        {
+          "id": "System-2.5.0/Name-1",
+          "name": "Name",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "FileSystemItem-1",
+      "derivedFromCkTypeId": "System.Files-1.0.0/FileSystemContainer-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A file. The bytes are stored as linked binary in the Content attribute.",
+      "attributes": [
+        {
+          "id": "System.Files-1.0.0/Content-1",
+          "name": "Content",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Folder-1",
+      "derivedFromCkTypeId": "System.Files-1.0.0/FileSystemContainer-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A folder inside a folder root or another folder."
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "FolderRoot-1",
+      "derivedFromCkTypeId": "System.Files-1.0.0/FileSystemEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Top-level folder of a file system tree, addressed by its well-known name (e.g. \u0027Files\u0027)."
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "Content-1",
+      "valueType": "BinaryLinked",
+      "isRuntimeState": false,
+      "description": "Binary content of a file, stored in the tenant\u0027s GridFS bucket and linked to the owning entity."
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "System.Files-1.0.0",
+  "description": "Platform file system: folder roots, folders and files with linked binary content (GridFS). Imported into every tenant by the asset repository; independent of Reporting (AB#6171)."
+}
