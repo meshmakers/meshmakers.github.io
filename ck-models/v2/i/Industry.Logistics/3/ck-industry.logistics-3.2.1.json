@@ -645,18 +645,21 @@
     {
       "id": "ArticleNumber-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "ArticleType-1",
       "valueType": "Enum",
       "valueCkEnumId": "Industry.Logistics-3.2.1/ArticleType-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "BillTo-1",
       "valueType": "Record",
       "valueCkRecordId": "Industry.Logistics-3.2.1/PostalAddress-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Whom the invoice addresses."
     },
@@ -664,11 +667,13 @@
       "id": "Carrier-1",
       "valueType": "Enum",
       "valueCkEnumId": "Industry.Logistics-3.2.1/Carrier-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "CarrierToken-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Carrier reference exactly as the fulfilment partner delivered it (for a shop system: its own carrier id), beside the Carrier enum."
     },
@@ -676,73 +681,86 @@
       "id": "Completeness-1",
       "valueType": "Enum",
       "valueCkEnumId": "Industry.Logistics-3.2.1/Completeness-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "Currency-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "ISO 4217 currency code of the order\u0027s amounts."
     },
     {
       "id": "CustomerNumber-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "DeliveredQuantity-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "DeliveryDate-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "Ean-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "ExportDay-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Calendar day (yyyy-MM-dd) in the delivery time zone \u2014 bucket key of the dedup marker, not a timestamp."
     },
     {
       "id": "ExportKind-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Kind of export/delivery run (e.g. article master export); the adapter supplies the value."
     },
     {
       "id": "ExternalOrderNumber-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Reference number from the source system (shop/ERP)"
     },
     {
       "id": "FileKey-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Identity of the inbound file and the only comparison key of the dedup marker; enforced unique by index. The adapter composes it from source name, remote directory, file name, size in bytes and the listing\u0027s last-write timestamp text, joined by \u0027|\u0027 (e.g. MySftp|/inbound|orders-20260828.txt|430|2026-08-28T07:11:16.0670000Z)."
     },
     {
       "id": "FileName-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "File name as reported by the source listing."
     },
     {
       "id": "FileSize-1",
       "valueType": "Int64",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Size in bytes as reported by the source listing."
     },
     {
       "id": "GrossAmount-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Gross amount: of the order on Order, of the LINE on OrderItem.",
       "metaData": [
@@ -759,18 +777,21 @@
       "defaultValues": [
         "0"
       ],
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "What a line is: an article, the shipping cost, something else."
     },
     {
       "id": "LastWriteUtc-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Last-write timestamp (UTC) of the file as reported by the source listing, stored as a date for filtering and sorting; the verbatim listing text is kept inside FileKey."
     },
     {
       "id": "NetAmount-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Net amount: of the order on Order, of the LINE on OrderItem (unit prices derive from it).",
       "metaData": [
@@ -783,17 +804,20 @@
     {
       "id": "OpenQuantity-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Undelivered quantity; negative = over-delivery"
     },
     {
       "id": "OrderDate-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "OrderNumber-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Primary order identifier"
     },
@@ -801,55 +825,65 @@
       "id": "OrderStatus-1",
       "valueType": "Enum",
       "valueCkEnumId": "Industry.Logistics-3.2.1/OrderStatus-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "PackagingType-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "ParcelCount-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "PositionNumber-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "ProcessedAt-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Point in time the adapter finished processing the file."
     },
     {
       "id": "ServiceType-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "ShipTo-1",
       "valueType": "Record",
       "valueCkRecordId": "Industry.Logistics-3.2.1/PostalAddress-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Where the goods go."
     },
     {
       "id": "ShipmentDate-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "ShipmentNumber-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Dispatch / forwarding number"
     },
     {
       "id": "ShippingMethod-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Shipping method as the source system identifies it (a method id or name); the fulfilment partner maps it to its carriers."
     },
@@ -859,18 +893,21 @@
       "defaultValues": [
         "Unknown"
       ],
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Name of the source system a record originates from (e.g. the shop or ERP the adapter reads); part of the identity of orders and export runs when one tenant is fed by more than one source. Unknown until an adapter states it."
     },
     {
       "id": "SourceDirectory-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Remote directory the file was listed in."
     },
     {
       "id": "SourceName-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Name of the source configuration entry the file was fetched from (e.g. the SFTP server configuration name)."
     },
@@ -878,11 +915,13 @@
       "id": "StockStatus-1",
       "valueType": "Enum",
       "valueCkEnumId": "Industry.Logistics-3.2.1/StockStatus-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "TaxRate-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "VAT rate of a line in percent.",
       "metaData": [
@@ -895,24 +934,28 @@
     {
       "id": "Title-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Line text of an order item as the source system states it (article name, service, shipping cost)."
     },
     {
       "id": "TrackingNumber-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Parcel / tracking number"
     },
     {
       "id": "TrackingUrl-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The carrier\u0027s tracking link when the partner delivered one."
     },
     {
       "id": "Weight-1",
       "valueType": "Double",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "metaData": [
         {
@@ -928,6 +971,7 @@
     {
       "id": "Zipcode-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Postal code as text - leading zeros and letters are part of it."
     }
