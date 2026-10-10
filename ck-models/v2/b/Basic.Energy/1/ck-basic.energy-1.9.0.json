@@ -611,36 +611,42 @@
       "id": "CarrierType-1",
       "valueType": "Enum",
       "valueCkEnumId": "Basic.Energy-1.9.0/CarrierType-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Type of energy carrier (e.g., electricity, gas)"
     },
     {
       "id": "ConsentActive-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Indicates whether the consent is currently active"
     },
     {
       "id": "ConsentEmailSent-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Indicates whether an email has been sent to the customer regarding the consent"
     },
     {
       "id": "ConsentEmailSentSuccess-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Indicates whether the email sent to the customer was successful"
     },
     {
       "id": "ConsentId-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Identifier for the consent associated with the metering point"
     },
     {
       "id": "ConsentUri-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "URI pointing to the consent site of the network operator"
     },
@@ -648,42 +654,50 @@
       "id": "DataQuality-1",
       "valueType": "Enum",
       "valueCkEnumId": "Basic.Energy-1.9.0/DataQuality-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The quality of the received data"
     },
     {
       "id": "EdaConversationId-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaMessageId-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaMessageProcessed-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaMessageType-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaProcessData-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaProcessFinished-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaProcessInfo-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
@@ -692,36 +706,43 @@
       "defaultValues": [
         "false"
       ],
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaProcessSuccess-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaRawMessage-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaReceiverId-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaResponseCode-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "EdaSenderId-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "FacilityName-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The name of the facility"
     },
@@ -729,35 +750,41 @@
       "id": "FacilityType-1",
       "valueType": "Enum",
       "valueCkEnumId": "Basic.Energy-1.9.0/FacilityType-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "IsProducer-1",
       "valueType": "Boolean",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Indicates if the new metering point is a producer"
     },
     {
       "id": "MeteringPointNumber-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Number identifying the metering point"
     },
     {
       "id": "NotificationContactEmail-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Email address for notifications related to the metering point"
     },
     {
       "id": "ObisCode-1",
       "valueType": "String",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The OBIS code associated with the energy measurement"
     },
     {
       "id": "PartitionFactor-1",
       "valueType": "Int",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Partition factor of the metering point within an energy community (percentage share, EDA process EC_PRTFACT_CHANGE)"
     },
@@ -765,11 +792,13 @@
       "id": "ProductionType-1",
       "valueType": "Enum",
       "valueCkEnumId": "Basic.Energy-1.9.0/ProductionType-1",
+      "ownership": "SeedOwned",
       "isRuntimeState": false
     },
     {
       "id": "SourceDocumentDate-1",
       "valueType": "DateTime",
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "Creation timestamp of the source document this measurement was read from \u2014 for an EDA consumption record the routing header\u0027s DocumentCreationDateTime. It is the document\u0027s OWN timestamp, never the time it was ingested, so replaying the same source produces the same value. Its purpose is to order two deliveries that cover the same window: a correction carries a later value than the message it corrects, and a re-send of an old message carries its original. Declare it as a key of an archive\u0027s ConflictPrecedence and the archive keeps the newer of two competing writes for the same window regardless of arrival order; leave the archive\u0027s precedence empty and the last writer wins. For metering data it belongs BEHIND DataQuality rather than alone: ordering by document date only lets a later estimate overwrite an earlier measurement."
     },
@@ -780,6 +809,7 @@
       "defaultValues": [
         "1"
       ],
+      "ownership": "SeedOwned",
       "isRuntimeState": false,
       "description": "The state of an object"
     }
