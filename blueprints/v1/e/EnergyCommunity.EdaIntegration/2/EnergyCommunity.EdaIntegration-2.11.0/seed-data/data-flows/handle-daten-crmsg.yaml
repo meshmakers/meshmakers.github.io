@@ -1,0 +1,300 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.9,2.0)
+- EnergyCommunity-[4.8,5.0)
+- System.Communication-[4.5,5.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# handle-daten-crmsg — writes 15-minute stream data (ParseConsumptionRecord@1).
+# The pipeline polls (FromPolling@1 00:00:42): deploying this DataFlow switches the ingest on.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _eda/handle-daten-crmsg-pipeline.yaml
+- rtId: 68c28050234ceec0d029dfdf
+  rtCreationDateTime: 2025-09-11T07:54:56.8180000Z
+  rtChangedDateTime: 2026-03-26T10:43:39.7550000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68b019048f03da854927fd8e
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        # - type: FromExecutePipelineCommand@1
+        - type: FromPolling@1
+          interval: 00:00:42
+      transformations:
+        - type: GetRtEntitiesByType@1
+          description: Load all not processed EDA messages
+          ckTypeId: Basic.Energy/EdaMessage
+          targetPath: $.InputMessages
+          take: 50
+          fieldFilters:
+            - attributePath: Processed
+              operator: Equals
+              comparisonValue: false
+            - attributePath: MessageType
+              operator: Equals
+              comparisonValue: DATEN_CRMSG
+
+        - type: If@1
+          description: Messages available
+          path: $.InputMessages.TotalCount
+          operator: GreaterThan
+          value: 0
+          valueType: Int
+          transformations:
+            - type: Flatten@1
+              description: Metering point numbers
+              path: $.InputMessages.Items[*].Attributes.MeteringPoint
+              targetPath: $.MeteringPointNumbers
+
+            - type: GetRtEntitiesByType@1
+              description: Load metering points
+              ckTypeId: Basic.Energy/MeteringPoint
+              targetPath: $.MeteringPoints
+              fieldFilters:
+                - attributePath: MeteringPointNumber
+                  operator: IN
+                  comparisonValuePath: $.MeteringPointNumbers
+
+            - type: If@1
+              description: Metering points
+              path: $.MeteringPoints.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                - type: Join@1
+                  description: Metering points
+                  path: $.InputMessages.Items[*]
+                  keyPath: $.Attributes.MeteringPoint
+                  joinPath: $.MeteringPoints.Items[*]
+                  joinKeyPath: $.Attributes.MeteringPointNumber
+                  itemPath: $.MeteringPoint
+
+            - type: Project@1
+              fields:
+                - path: $.MeteringPoints
+
+            # Send ABLEHNUNG_CRMSG for unknown metering points - once per ORIGINAL message.
+            # receive-eda-messages splits a DATEN_CRMSG covering more than a day into parts
+            # (SplitConsumptionRecord@1) and extends each part's MessageId by _001, _002, ... The
+            # sender only knows the original id, so the id is cut back to its first 35 characters
+            # (1.x AB#3774). Only the first part answers, or a message that was not split: the parts
+            # of one message can fall into different runs - a batch holds at most `take` of them -
+            # and a rule on the id holds across runs, where the Distinct@1 below sees one batch only.
+            - type: ForEach@1
+              description: Check if there are unknown metering points
+              iterationPath: $.InputMessages.Items
+              mergePath: $.notification
+              targetPath: $.notifications
+              transformations:
+                - type: If@1
+                  description: No metering point
+                  path: $.key.MeteringPoint[0].RtId
+                  operator: Equals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: If@1
+                      description: First part, or not split
+                      path: $.key.Attributes.MessageId
+                      operator: RegexMatch
+                      value: '(^[^_]*$)|(_001$)'
+                      valueType: String
+                      transformations:
+                        - type: Flatten@1
+                          path: $.key
+                          targetPath: $.notification
+
+            - type: Flatten@1
+              path: $.notifications[*][*]
+              targetPath: $.notifications
+
+            - type: If@1
+              description: notifications
+              operator: NotEquals
+              path: $.notifications[0].RtId
+              value: NULL
+              valueType: String
+              transformations:
+                - type: TransformString@1
+                  description: message id
+                  path: $.notifications[*]
+                  sourcePath: $.Attributes.MessageId
+                  targetPath: $.Attributes.MessageIdOrg
+                  operation: SubstringFromStart
+                  length: 35
+                - type: Distinct@1
+                  description: message id
+                  path: $.notifications
+                  distinctValuePath: $.Attributes.MessageIdOrg
+                  targetPath: $.notifications
+                - type: ForEach@1
+                  description: notifications
+                  iterationPath: $.notifications
+                  mergePath: $.notification
+                  targetPath: $.notifications
+                  transformations:
+                    - type: Logger@1
+                      message: Send ABLEHNUNG_CRMSG
+                    - type: SendNotification@1
+                      description: Send ABLEHNUNG_CRMSG
+                      senderAddressPath: $.key.Attributes.Receiver
+                      receiverAddressPath: $.key.Attributes.Sender
+                      originalMessageIdPath: $.key.Attributes.MessageIdOrg
+                      conversationIdPath: $.key.Attributes.ConversationId
+                      messageCode: "ABLEHNUNG_CRMSG"
+                      responseCode: 57
+                      targetPath: $.notification
+
+            - type: Flatten@1
+              description: Notifications
+              path: $.notifications[*]
+              targetPath: $.Result.Notifications
+
+            - type: Project@1
+              fields:
+                - path: $.notifications
+
+            # Parse all messages into 15-minute consumption records
+            # (EC v2, ADR 0001 / AB#4550: ParseConsumptionRecord@1 replaces
+            # AggregateConsumptionRecord@1 — no daily aggregation, raw slots go to
+            # the stream-data archive)
+            - type: ForEach@1
+              description: Parse all EDA messages
+              maxDegreeOfParallelism: 1
+              iterationPath: $.InputMessages.Items
+              mergePath: $.consumptionRecord
+              targetPath: $.data
+              transformations:
+                - type: If@1
+                  description: Metering point exists
+                  path: $.key.MeteringPoint[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: ParseConsumptionRecord@1
+                      path: $.key.Attributes.RawMessage
+                      meteringPointRtIdPath: $.key.MeteringPoint[0].RtId
+                      targetPath: $.consumptionRecord
+
+            - type: Flatten@1
+              description: Consumption records
+              path: $.data[*][*]
+              targetPath: $.consumptionRecords
+
+            - type: Flatten@1
+              description: Message ids
+              path: $.InputMessages.Items[*].RtId
+              targetPath: $.MessageIds
+
+            - type: Project@1
+              fields:
+                - path: $.InputMessages
+                - path: $.data
+
+            # Mark ALL loaded messages processed — unknown metering points were
+            # answered with ABLEHNUNG_CRMSG above and must not be re-processed.
+            - type: ForEach@1
+              description: Update messages
+              iterationPath: $.MessageIds
+              mergePath: $.update
+              targetPath: $.Result.UpdateMessages
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.update
+                  updateKind: UPDATE
+                  ckTypeId: Basic.Energy/EdaMessage
+                  rtIdPath: $.key
+                  attributeUpdates:
+                    - attributeName: Processed
+                      attributeValueType: Boolean
+                      value: true
+
+            - type: ApplyChanges@2
+              description: Set messages to processed
+              entityUpdatesPath: $.Result.UpdateMessages
+
+            - type: Project@1
+              fields:
+                - path: $.MessageIds
+                - path: $.Result.UpdateMessages
+
+            # Persist the parsed series: one EnergyMeasurement anchor per
+            # (metering point x OBIS code), well-known name <meteringPointRtId>_<obisCode>,
+            # plus one archive row per 15-minute slot.
+            #
+            # This replaced a nested ForEach that ran CreateUpdateInfo@1 +
+            # CreateAssociationUpdate@1 per slot, two JSONPath wildcard flattens over the
+            # result, an UpdateRtEntityIfNewer@1 and a separate ApplyChanges@2 — roughly
+            # two dozen node executions and one fully materialised runtime entity per
+            # quarter hour, to produce one row with four values. Measured on a full EDA
+            # replay of this tenant: 316,268 rows in 4,530 s (78 rows/s, 12.8 ms per
+            # slot), with the database nowhere near the bottleneck. The runtime model
+            # only ever needs one anchor per series — here 16 entities, built from
+            # 316,268 candidates.
+            #
+            # DataQuality and SourceDocumentDate are the archive's ConflictPrecedence keys
+            # (Base 2.6.0), compared in that order: a measurement is never displaced by an
+            # estimate, and within one quality level the newer source document wins —
+            # SourceDocumentDate is the message's own DocumentCreationDateTime, not the
+            # ingest time. The result no longer depends on the order messages arrive in,
+            # which is stronger than the guarantee 1.x had in FilterEnergyData@1 (that one
+            # sorted by CreationTime only and ranked quality nowhere).
+            - type: SaveTimeRangeSeriesInArchive@1
+              description: Persist measurement anchors and all slots
+              path: $.consumptionRecords
+              archiveRtId: ec0000000000000000000a01
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              valuesProperty: EnergyQuantities
+              wellKnownNameFormat: "{MeteringPointRtId}_{MeterCode}"
+              fromProperty: From
+              toProperty: To
+              anchorWindowFromAttribute: TimeRange.From
+              anchorWindowToAttribute: TimeRange.To
+              parentRtIdProperty: MeteringPointRtId
+              parentCkTypeId: Basic.Energy/MeteringPoint
+              parentAssociationRoleId: System/ParentChild
+              columns:
+                - name: Amount.Value
+                  valueProperty: Quantity
+                - name: Amount.Unit
+                  valueProperty: QuantityUnit
+                  scope: Series
+                - name: DataQuality
+                  valueProperty: Quality
+                - name: ObisCode
+                  valueProperty: MeterCode
+                  scope: Series
+                - name: SourceDocumentDate
+                  valueProperty: CreationTime
+                  scope: Series
+- rtId: 68b019048f03da854927fd8e
+  rtCreationDateTime: 2025-08-28T08:53:24.8200000Z
+  rtChangedDateTime: 2026-02-11T12:07:31.3160000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: handle-daten-crmsg
+  - id: System/Description-1
+    value: Handle all consumption record messages
