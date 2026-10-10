@@ -1,0 +1,267 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: EnergyCommunity.Simulation-2.8.2
+description: |
+  Energy simulation for Energy Community v2 DEMO/TEST tenants (AB#4571 value
+  simulator, AB#4579 demo-community generator, AB#4703 presentable community
+  extension; used e.g. by the energydemo tenant, AB#4569). Ported / extended
+  from the voest-app energy simulator.
+
+  NOT for productive tenants — install only where synthetic metering data is
+  wanted. The blueprint is a separate, optional sibling of EnergyCommunity.Base
+  precisely so productive installs never carry it.
+
+  Installs four DataFlows / seven pipelines. The value simulators come in two
+  generations: simulate-community (2.8.0, SimulateEnergyMeasurements@2,
+  preset-driven communities, e.g. the FH VSCT lab communities and eg-urstein)
+  and simulate-energy-measurements (@1, frozen for energydemo, decision D6).
+
+  REQUIRES a Mesh Adapter with SimulateEnergyMeasurements@2 (AB#5631) for the
+  simulate-community DataFlow. An adapter version is not expressible as a
+  blueprint dependency; an older adapter fails those two pipelines with an
+  unknown node type. The @1 pipelines and create-demo-community run on any
+  adapter that runs 2.7.0.
+
+  create-demo-community (ec0000000000000000000b04, DataFlow …b05, AB#4579 +
+  AB#4703, presets AB#5632)
+    CREATES a self-contained demo energy community from one of six PRESETS,
+    so demo/test tenants need no hand-seeded data and no EDA. Input of the
+    ExecutePipelineCommand, every key optional (defaults shown):
+      { "preset": "legacy", "seed": 1, "communityCode": "0000",
+        "effectiveFrom": "2024-01-01T00:00:00Z",
+        "participationFrom": "2024-01-01T00:00:00Z", "newRevision": false,
+        "defaultZipcode": 5020 }
+    A missing key gets its default; an unknown preset or a communityCode that
+    is not 1-4 digits fails the run before anything is written.
+    CITY PARENT (2.8.1, AB#6014): every facility gets a System/ParentChild to
+    the Basic/City of its address zip code; a zip code the tenant has no city
+    for (the fictional member addresses use 4021-4024, 5021, 5022) falls back
+    to the city of defaultZipcode. REQUIRES Locations.Austria (or another
+    Basic/City directory): without a city for defaultZipcode the run fails
+    before anything is written, naming the zip code and Locations.Austria.
+
+    | preset          | enum | consumers                    | producers                 | MPs | D corridor | U corridor |
+    |-----------------|------|------------------------------|---------------------------|-----|------------|------------|
+    | legacy          | 0    | 14 x H0 182500 kWh/a         | 3 x PV 132.8 kWp          | 17  | 14-19 %    | <= 1 %     |
+    | pv-dorf         | 1    | 30 x H0 3500, 2 x G0 20000   | 12 x PV 15 kWp            | 44  | 40-55 %    | 55-68 %    |
+    | gewerbepark     | 2    | 8 x G0 60000, 4 x H0 3500    | 4 x PV 100 kWp            | 16  | 55-75 %    | 12-35 %    |
+    | landwirtschaft  | 3    | 10 x L0 12000, 15 x H0 4000  | 6 x PV 30 kWp             | 31  | 30-42 %    | 58-70 %    |
+    | stadtblock      | 4    | 60 x H0 2500                 | 1 x PV 20 kWp             | 61  | 10-18 %    | <= 2 %     |
+    | wasserkraft-tal | 5    | 25 x H0 3500, 2 x G0 25000   | 1 x hydro 30 kW, 2 x PV 10| 30  | 65-82 % *  | 25-40 % *  |
+    D = coverage (allocated / consumption), U = undistributed share of the
+    production, per calendar year; corridors from presets.py (check over
+    seeds 1-30 green). * wasserkraft-tal is created now; the hydro producer
+    (ProductionType HEP) gets values from M3 (AB#5638), until then the preset
+    is a buyer and outside its corridor.
+
+    Every preset creates the community-operator customer (demo-customer-01),
+    the shared "EC Demo Community" facility and the 2 EnergyCommunity/EnergyPrice
+    (consumption 0.18 / feed-in 0.10 EUR). legacy keeps the historic 14 + 3
+    members exactly (numbers …0801-0814 / …0901-0903, names, facilities,
+    PartitionFactors; the 3 + 1 metering points on the shared facility exist
+    only in legacy). The other presets generate their members with
+    simulation-tools/presets.py (embedded as JSON literals; metering point
+    number AT00999900000 + communityCode + 16-digit suffix, PartitionFactor
+    100, fictional names). Per member: customer, facility
+    (EnergyCommunity/AssociatedFacilities), metering point (ParentChild to the
+    facility), ONE raw Basic.Energy/EnergyMeasurement anchor (consumer
+    1-1:1.9.0 G.01, producer 1-1:2.9.0 G.01; no 1-1:1.9.0 P.01 any more - an
+    existing one stays until the reset 'full' removes it) and an
+    EnergyCommunity/ParticipationPeriod from participationFrom to 2099-12-31.
+    Every metering point gets MeteringDataSource = Simulated and its size:
+    consumers EnergyConsumption + LoadProfile, producers
+    EnergyProductionCapacity + ProductionType - on create AND on every re-run,
+    so the metering points of an existing legacy tenant (eg-urstein) get them
+    by re-running with preset legacy.
+    SETTINGS REVISION: when the tenant has no EnergyCommunity/SimulationSettings,
+    or newRevision is true (then every existing revision is first marked
+    SupersededByReset), one revision is created: Preset, EffectiveFrom, Seed,
+    MemberSpread (legacy 0, others 0.25) and the simulation defaults spelled
+    out (ConsumptionFactor 1, PvCapacityFactor 1, PvSpecificYield 1050,
+    MemberScale 1, BackfillDays 730, DailyRun true, NearRealTime false,
+    Noise Off, Weather ClearSky). The allocation cut-off and key are community
+    settings (EnergyCommunity/CommunitySettings), not simulation settings. Revisions are never seeded, so InstallBlueprint -f keeps them.
+    Idempotent - every entity is upserted via GetOrCreateRtEntitiesByType@1
+    keyed on a stable natural key (facility Name, metering-point
+    MeteringPointNumber, customer/anchor/period/price RtWellKnownName), so a
+    second run creates nothing new. The city parent is the one association a
+    re-run still emits: an existing facility WITHOUT a parent gets it (repair
+    for tenants built by 2.2-2.8.0, e.g. eg-urstein: re-run the generator
+    with the tenant's preset); a facility that has a parent keeps it. The Producer subtype is
+    EnergyCommunity/Producer (exact type the value simulators classify as
+    producer), NOT Basic.Energy/Producer.
+
+  community-simulator-range / daily-community-simulation (…b08 / …b09,
+  DataFlow simulate-community …b07, AB#5632)
+    SimulateEnergyMeasurements@2: values only for the raw channels
+    (1-1:1.9.0 G.01 consumer, 1-1:2.9.0 G.01 producer) of metering points with
+    MeteringDataSource = Simulated, sized from their own attributes, PV
+    calibrated to PvSpecificYield, randomness from (Seed, MeteringPointNumber),
+    per day the applicable SimulationSettings revision (non-superseded,
+    greatest effective date). Writes into the raw archive
+    ec0000000000000000000a01 and returns a summary (anchors simulated/skipped,
+    datapoints, kWh per OBIS, revisions used, warnings).
+    - community-simulator-range (…b08): window from the input
+      { "startDate": "...T00:00:00Z", "numDays": n }; backfill in chunks of
+      <= 31 days.
+    - daily-community-simulation (…b09): FromPolling every 24 h +
+      ExecutePipelineCommand; creates missing raw anchors for the simulated
+      metering points (field filter MeteringDataSource = 1, no P.01), then
+      simulates the previous UTC calendar day.
+    Not in 2.8.0: the /simulation/reset HTTP route (needs the role seed of the
+    Base security work, AB#5627). The allocation registers G.03 / G.01T / P.01T
+    come from EnergyCommunity.Base 2.10.0 (allocate-community-energy, AB#5635),
+    which reads the raw channels written here.
+
+  reset-simulated-master-data (…b0b, DataFlow reset-simulation …b0a, AB#5633)
+    Step of the reset 'full' of src/blueprints/reset-community.ps1 (RST-03),
+    input { "dryRun": false }. Deletes every EnergyCommunity/Consumer and
+    EnergyCommunity/Producer with MeteringDataSource = Simulated together with
+    ALL its EnergyMeasurement anchors (any OBIS code, including the @1 leftover
+    1-1:1.9.0 P.01) and participation periods, then every OperatingFacility
+    whose metering points are all simulated (at least one) and the Customer
+    owning it when that is the customer's only facility. EDA and self-reported
+    metering points (and the facilities / customers still serving one),
+    prices, settings revisions and reset requests stay. Archive rows are not
+    touched: run it only through reset-community.ps1, which drops and
+    re-creates the archives. dryRun true only logs what it would delete.
+
+  energy-simulator / energy-simulator-range / daily-simulation (…b02 / …b03 /
+  …b06, DataFlow simulate-energy-measurements …b01, AB#4571 / AB#4701) - @1,
+  unchanged in 2.8.0 (energydemo stays on it, D6)
+    Generate deterministic synthetic 15-minute metering values for the
+    Basic.Energy/EnergyMeasurement ANCHOR entities that already exist in the
+    tenant (they do not create any entities): PV curve for anchors whose
+    parent metering point is an EnergyCommunity/Producer (default 50 kWp
+    peak), BDEW H0 load profile for all others (default 500 kWh/day), one
+    datapoint per 15-minute slot, written into the Base 2.x raw archive
+    energy-measurements (ec0000000000000000000a01).
+    - energy-simulator (…b02): fixed backfill window (startDate 2025-01-01,
+      numDays 365 — edit the pipeline definition to reshape the dataset)
+    - energy-simulator-range (…b03): on-demand variant; startDate + numDays
+      come from the ExecutePipelineCommand input
+      (e.g. an input file: { "startDate": "2026-07-20T00:00:00Z", "numDays": 3 }, passed via ExecutePipeline -f)
+
+  Self-contained flow for a fresh demo/test tenant:
+    ExecutePipeline create-demo-community     (master data, anchors, settings)
+    ExecutePipeline community-simulator-range (fills the raw archive, <= 31 d each)
+    ./backfill-rollups.ps1                    (populates the rollup ladder)
+    deploy simulate-community                 (daily-community-simulation continues)
+
+  DISABLED BY DEFAULT: all seven pipelines are seeded with System/Enabled =
+  false and DeploymentState 0, so a fresh install can never create or write
+  data on its own (the two daily runs carry a FromPolling@1 trigger, which
+  only fires once an operator enables and deploys their DataFlow). To run: enable the pipeline, DeployDataFlow /
+  DeployPipeline (Mesh Adapter 670…002 must be online), ExecutePipeline, then
+  UndeployDataFlow and set Enabled = false again. Re-applying the blueprint
+  does NOT reset Enabled: it is tenant-owned since System.Communication 3.36.0
+  (AB#5309). See src/blueprints/README.md ("Simulation") for the full runbook.
+
+  Prerequisites:
+  - EnergyCommunity.Base 2.x installed and the energy-measurements archives
+    activated (install-tenant.ps1 ActivateArchive phase)
+  - For create-demo-community: Locations.Austria (1.1.0 or later) installed,
+    or another Basic/City directory holding a city for defaultZipcode
+    (install-tenant.ps1 installs Locations.Austria unless -SkipLocations).
+    Deliberately NOT a blueprintDependency - see the comment there.
+  - For the value simulators only: EnergyMeasurement anchor entities exist
+    (well-known name <meteringPointRtId>_<obisCode>, System/ParentChild to
+    the metering point) — created by create-demo-community, by EDA ingest
+    (EnergyCommunity.EdaIntegration), or seeded as test master data
+
+  2.4.0 splits the seed across one file per topic (AB#4758 `seedDataPaths`) —
+  identical entities, no data change. It therefore requires an engine that knows
+  `seedDataPaths`: an older engine drops the unknown property, finds no
+  `seedDataPath` and installs an EMPTY seed while still reporting success.
+  Install 2.3.0 on such tenants.
+
+  2.4.0 -> 2.5.0: CK floors only - Basic 2.1.0, Basic.Energy 1.7 and EnergyCommunity 4.6, the
+  set EnergyCommunity.Base 2.6.0 installs. No entity changed.
+
+  2.5.0 -> 2.6.0 (AB#5359): CK floors only - Basic 2.2, Basic.Energy 1.8 and EnergyCommunity 4.7,
+  the set EnergyCommunity.Base 2.7.0 installs, rebuilt against System 2.4.0. No entity changed.
+
+  2.6.0 -> 2.7.0 (AB#5528): CK floors only - Basic 2.3, Basic.Energy 1.9 and EnergyCommunity 4.8,
+  the set EnergyCommunity.Base 2.8.0 installs, rebuilt against System 2.5.0. No entity changed.
+
+  2.7.0 -> 2.8.0 (AB#5632): presets, settings revisions and SimulateEnergyMeasurements@2.
+  - create-demo-community takes the input contract above (preset, seed, communityCode,
+    effectiveFrom, participationFrom, newRevision), creates the SimulationSettings revision,
+    sets size + MeteringDataSource on every metering point, creates raw anchors only (no
+    1-1:1.9.0 P.01) and sets ParticipationPeriod.From from participationFrom (default
+    2024-01-01; a re-run moves an existing legacy period from 2025-08-04 to it).
+  - New DataFlow simulate-community (…b07) with community-simulator-range (…b08) and
+    daily-community-simulation (…b09) on @2. New seed file
+    seed-data/data-flows/simulate-community.yaml.
+  - b02 / b03 / b06 are unchanged.
+  - New DataFlow reset-simulation (…b0a) with reset-simulated-master-data (…b0b, AB#5633) for
+    the reset 'full' of src/blueprints/reset-community.ps1. New seed file
+    seed-data/data-flows/reset-simulation.yaml.
+  - Requires EnergyCommunity.Base 2.10 (floor [2.10,3.0)): the allocation pipeline and
+    EnergyCommunity 4.9 come with it.
+  - CK: EnergyCommunity 4.9 (SimulationSettings, SimulationResetRequest, MeteringDataSource,
+    LoadProfile). Simulation declares the same ckModelDependencies as its seeds (Basic /
+    Basic.Energy unchanged at the Base floors, EnergyCommunity 4.9 like Base 2.10.0). RISK: EnergyCommunity.Registration 2.6.0 is compiled against EnergyCommunity 4.8.0,
+    and a compiled CK model pins its dependencies exactly. A tenant that imports Registration
+    AND gets EnergyCommunity 4.9.0 from this blueprint can end with Registration unresolvable
+    (ResolveFailed) until a Registration build against 4.9.0 is published. Simulation tenants
+    are demo/test tenants without Registration today; check before installing 2.8.0 on one
+    that has it.
+
+  2.8.0 -> 2.8.1 (AB#6014): create-demo-community parents every operating facility to a
+    Basic/City. Up to 2.8.0 the generated facilities had no parent, and the Energy Community app
+    fails on them with "City data not found" (the facility form reads the city from that
+    association, as the app's own create flow writes it).
+  - City = the Basic/City whose Zipcode equals the facility address zip code, else the city of
+    the new optional input defaultZipcode (default 5020, Salzburg: the simulation's location).
+    A zip code shared by several cities takes the first match.
+  - No city for defaultZipcode: the run fails before anything is written (ExecuteCSharp@1
+    throws; all updates go out in the one ApplyChanges@2 at the end), the message names the zip
+    code and Locations.Austria. No half-built facility.
+  - Repair: a re-run links every existing facility that has no parent (eg-urstein: re-run with
+    the tenant's preset, e.g. {}); facilities with a parent are untouched.
+  - No new blueprint or CK dependency (Basic/City is in Basic, already pinned), so a patch:
+    Locations.Austria stays a documented prerequisite. Base floor unchanged ([2.10,3.0)).
+  2.8.1 -> 2.8.2 (AB#5528): System.Communication ranges only - the upper bound moves from 4.0
+  to 5.0 in blueprint.yaml and every seed ([3.22,5.0)), the floors stay. Nothing in this blueprint
+  touches what System.Communication 4.0.0 renames (Pool -> DeploymentSite, Manages -> Hosts), so
+  the same seeds install on 3.x and 4.x. Without the widening a tenant migrated to 4.x refuses
+  every re-apply / update of this blueprint. No entity changed.
+blueprintDependencies:
+  # The 2.x simulation pairs with Base 2.x (EnergyCommunity 4.x / stream data,
+  # ADR 0001). It must never install on top of Base 1.x.
+  # 2.6 floor (Simulation 2.5.0): the seeds require the CK set Base 2.6.0 installs (Basic 2.1,
+  # Basic.Energy 1.7, EnergyCommunity 4.6); on an older Base the seed import fails.
+  # 2.7 floor (Simulation 2.6.0): the same for the set Base 2.7.0 installs (Basic 2.2,
+  # Basic.Energy 1.8, EnergyCommunity 4.7).
+  # 2.8 floor (Simulation 2.7.0, AB#5528): the set rebuilt against System 2.5.0, which Base 2.8.0 installs.
+  # 2.10 floor (Simulation 2.8.0, AB#5632): Base 2.10.0 installs EnergyCommunity 4.9 and the
+  # allocation pipeline that turns the simulated raw channels into G.03 / G.01T / P.01T, and it
+  # carries the route security of Base 2.9.0 (AB#5627). The simulated communities are only
+  # meaningful with the allocation, so the pair is one set.
+  - EnergyCommunity.Base-[2.10,3.0)
+  # NOT listed (AB#6014): Locations.Austria, although create-demo-community needs a Basic/City
+  # directory. A blueprintDependency would install it on every Simulation tenant with no way out,
+  # and a tenant that already holds a city tree imported by hand gets a SECOND tree (sbeg: 4474
+  # cities instead of 2237, docs/runbooks/ec-v2-migration.md) - which is why install-tenant.ps1
+  # installs it as its own step with -SkipLocations. Base, which needs the directory for every
+  # facility, does not declare it either. The generator checks for it at run time instead and
+  # names it in its error message.
+# EnergyCommunity 4.9 (AB#5632) is needed by the seeds (SimulationSettings, MeteringDataSource,
+# LoadProfile). Base 2.10.0 installs the same 4.9 floor; the pins stay here as well, because
+# blueprint.yaml and the seeds carry the same set and the seeds must not rely on a sibling. ckModelDependencies install the FLOOR of each range; a tenant
+# already at or above it is left untouched. The list is the same set the seeds declare (rule:
+# blueprint.yaml and every seed file carry the SAME pins). EnergyCommunity 4.9.0 is built against
+# Basic 2.4.0 and Basic.Energy 1.9.0 - the floors Base 2.8.0 installs - so the set stays one set.
+# System.Communication is service-managed; the floor only guards the type names.
+ckModelDependencies:
+  - Basic-[2.4,3.0)
+  - Basic.Energy-[1.9,2.0)
+  - EnergyCommunity-[4.9,5.0)
+  - System.Communication-[3.22,5.0)
+# All files below are merged into ONE runtime model before the import runs, so the
+# order is presentation only and associations may cross files.
+seedDataPaths:
+  - seed-data/data-flows/simulate-energy-measurements.yaml
+  - seed-data/data-flows/create-demo-community.yaml
+  - seed-data/data-flows/simulate-community.yaml
+  - seed-data/data-flows/reset-simulation.yaml
