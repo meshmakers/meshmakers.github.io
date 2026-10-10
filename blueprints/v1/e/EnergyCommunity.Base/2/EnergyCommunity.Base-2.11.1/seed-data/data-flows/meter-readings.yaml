@@ -1,0 +1,229 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.4,3.0)
+- Basic.Energy-[1.9,2.0)
+# 4.9: MeteringDataSource (SelfReported) and CommunitySettings.AllocationCutOffTime.
+- EnergyCommunity-[4.9,5.0)
+- System.Communication-[3.26,5.0)
+- System.StreamData-[1.13,2.0)
+
+# meter-readings (AB#5637) — 15-min values of self-reported metering points.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── meter-readings (AB#5637, MTR-02..05) ─────────────
+#
+# rtIds (meter reporting block ec0000000000000000000a6X):
+#   …a63  DataFlow  meter-readings
+#   …a64  Pipeline  meter-readings
+#
+# Contract:
+#   POST /meterReadings
+#   { "readings": [ { "meteringPointNumber": "AT009998...", "direction": "consumption",
+#       "values": [ { "from": "<iso-utc>", "to": "<iso-utc>", "kWh": 1.25 } ] } ] }
+#   -> { status: ok|partial|error, message: "<n> of <m> values accepted.", accepted,
+#        rejected: [ { reading, value, code, message } ], frozenUntil }
+#   codes: UNKNOWN_METERING_POINT, NOT_SELF_REPORTED, OFF_GRID, OUT_OF_RANGE,
+#          IN_FUTURE, NOT_PARTICIPATING, DAY_FROZEN, DUPLICATE_SLOT
+# Accepted values are upserted into the raw archive ec0000000000000000000a01 with
+# DataQuality L1 and SourceDocumentDate = request time; the write block is the one
+# of allocate-community-energy. The cut-off (D+1 CommunitySettings.AllocationCutOffTime,
+# default 06:00 Europe/Vienna) is the allocation's, so no value reaches a frozen day.
+#
+# Security: FromHttpRequest@2, allowAnonymous false, requiredRoles [MeterReporter]
+# (seed-data/identity/roles-groups.yaml). A missing token or role is refused by the
+# adapter before the pipeline runs. Every data node runs with identity ServiceAccount.
+# Always HTTP 200 with the outcome in the body; SetPipelineExecutionResult@1 keeps it
+# as the execution result and the final Project@1 (clear + inclusion) returns only the
+# result fields - never headers, principal or the request body. The request body is
+# never logged (no PrintDebug@1).
+# Tenant separation for client-credentials tokens needs the adapter tenant check AB#5628.
+#
+# Ships Enabled and DeploymentState 2 (like manual-metering-entry): the routes only
+# answer once the DataFlow is deployed (DeployDataFlow ec0000000000000000000a63).
+# REQUIRES the Mesh Adapter release that ships PrepareMeterReadings@1; on an older adapter
+# the deploy fails with an unknown node type. An adapter version is not expressible
+# as a blueprint dependency.
+#
+# Executes on the default Mesh Adapter 670000000000000000000002.
+
+- rtId: ec0000000000000000000a63
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: meter-readings
+  - id: System/Description-1
+    value: >-
+      Reporting of 15-min values for self-reported metering points (AB#5637):
+      validated per value, upserted into the raw archive ec0000000000000000000a01
+      with DataQuality L1 until the day cut-off.
+
+- rtId: ec0000000000000000000a64
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a63
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: meter-readings
+  - id: System/Description-1
+    value: >-
+      POST /meterReadings (role MeterReporter). Validates each value (grid, range,
+      future, participation, cut-off) and upserts the accepted ones on the raw
+      anchor of the direction; always HTTP 200 with status ok|partial|error.
+      Requires the Mesh Adapter release that ships PrepareMeterReadings@1
+      (AB#5637).
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      # meter-readings (AB#5637, MTR-02..05) — a client reports 15-min values of its
+      # self-reported metering points.
+      #
+      # REQUIRES the Mesh Adapter release that ships PrepareMeterReadings@1 (AB#5637);
+      # on an older adapter the deploy fails with an unknown node type.
+      #
+      # POST /meterReadings, role MeterReporter. Addressed by metering point number +
+      # direction, never by rtId; the client cannot name an OBIS code. Each accepted
+      # value is upserted into the raw archive ec0000000000000000000a01 on the raw
+      # anchor of its direction (1-1:1.9.0 G.01 / 1-1:2.9.0 G.01) with DataQuality L1
+      # and SourceDocumentDate = request time, so until the day's cut-off a later
+      # report replaces an earlier one (ConflictPrecedence: DataQuality LowerWins,
+      # SourceDocumentDate HigherWins). The allocation registers (G.03, G.01T, P.01T)
+      # stay owned by allocate-community-energy.
+      #
+      # Validation per value (PrepareMeterReadings@1): UNKNOWN_METERING_POINT,
+      # NOT_SELF_REPORTED, OFF_GRID, OUT_OF_RANGE, IN_FUTURE, NOT_PARTICIPATING,
+      # DAY_FROZEN, DUPLICATE_SLOT. Valid values are written even when others are
+      # rejected (status partial). The cut-off is the same as the allocation's:
+      # D+1 CommunitySettings.AllocationCutOffTime (empty or no entity = 06:00
+      # Europe/Vienna), so no value reaches a day the final run has frozen.
+      #
+      # Always HTTP 200; the outcome is in the body:
+      #   { status: ok|partial|error, message, accepted, rejected[], frozenUntil }
+      # The request body is never logged.
+      triggers:
+        - type: FromHttpRequest@2
+          path: /meterReadings
+          method: Post
+          allowAnonymous: false
+          requiredRoles: [MeterReporter]
+      transformations:
+        - type: Logger@1
+          message: "meter-readings (AB#5637): request received on /meterReadings"
+
+        - type: SetPrimitiveValue@1
+          targetPath: $.result.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.result.message
+          value: "The meter readings could not be processed."
+          valueType: String
+
+        # Same cut-off source as allocate-community-energy: the tenant carries at most
+        # one CommunitySettings entity; none, or an empty AllocationCutOffTime, leaves
+        # the node default 06:00 in place.
+        - type: GetRtEntitiesByType@1
+          description: Load the community settings (reporting cut-off)
+          identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+          ckTypeId: EnergyCommunity/CommunitySettings
+          targetPath: $.communitySettings
+          take: 1
+
+        # Node defaults (not overridden, listed for readers): maxValues 2880,
+        # maxKWh 1000, futureTolerance 1 min, 15-min slots, Europe/Vienna, cut-off day
+        # offset 1, quality L1, unit kWh, EnergyCommunity/Consumer + Producer, raw OBIS
+        # 1-1:1.9.0 G.01 / 1-1:2.9.0 G.01. The records have exactly the shape
+        # AllocateCommunityEnergy@1 produces, so the write below is the allocation's.
+        - type: PrepareMeterReadings@1
+          description: Validate the readings and build the archive records
+          identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+          readingsPath: $.body.readings
+          cutOffTimePath: $.communitySettings.Items[0].Attributes.AllocationCutOffTime
+          targetPath: $.meterReadings.records
+          resultTargetPath: $.result
+
+        - type: If@1
+          description: at least one value was accepted
+          path: $.meterReadings.records[0].MeteringPointRtId
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            # Keep this block identical to the one in allocate-community-energy.yaml
+            # (and handle-daten-crmsg.yaml): one EnergyMeasurement anchor per
+            # (metering point x OBIS code), well-known name <meteringPointRtId>_<obisCode>,
+            # one archive row per 15-min slot.
+            - type: SaveTimeRangeSeriesInArchive@1
+              description: Upsert the accepted values into the raw archive
+              identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+              path: $.meterReadings.records
+              archiveRtId: ec0000000000000000000a01
+              ckTypeId: Basic.Energy/EnergyMeasurement
+              valuesProperty: EnergyQuantities
+              wellKnownNameFormat: "{MeteringPointRtId}_{MeterCode}"
+              fromProperty: From
+              toProperty: To
+              anchorWindowFromAttribute: TimeRange.From
+              anchorWindowToAttribute: TimeRange.To
+              parentRtIdProperty: MeteringPointRtId
+              parentCkTypeId: Basic.Energy/MeteringPoint
+              parentAssociationRoleId: System/ParentChild
+              columns:
+                - name: Amount.Value
+                  valueProperty: Quantity
+                - name: Amount.Unit
+                  valueProperty: QuantityUnit
+                  scope: Series
+                - name: DataQuality
+                  valueProperty: Quality
+                - name: ObisCode
+                  valueProperty: MeterCode
+                  scope: Series
+                - name: SourceDocumentDate
+                  valueProperty: CreationTime
+                  scope: Series
+
+        - type: SetPipelineExecutionResult@1
+          path: $.result
+
+        # The adapter answers with the final data context verbatim (headers, principal,
+        # body, records). Lift the result fields to the top level, then drop the rest.
+        - type: SelectByPath@1
+          description: Lift the result fields to the response
+          selectPath:
+            - path: $.result.status
+              targetPath: $.status
+            - path: $.result.message
+              targetPath: $.message
+            - path: $.result.accepted
+              targetPath: $.accepted
+            - path: $.result.rejected
+              targetPath: $.rejected
+            - path: $.result.frozenUntil
+              targetPath: $.frozenUntil
+        - type: Project@1
+          description: Shape the HTTP response body
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.accepted
+              inclusion: true
+            - path: $.rejected
+              inclusion: true
+            - path: $.frozenUntil
+              inclusion: true
