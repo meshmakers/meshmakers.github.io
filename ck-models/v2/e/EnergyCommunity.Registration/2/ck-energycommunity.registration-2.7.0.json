@@ -1,0 +1,309 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.4.0",
+    "Basic.Energy-1.9.0",
+    "EnergyCommunity-4.9.0",
+    "System-2.5.0"
+  ],
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "MemberRegistration-1",
+      "derivedFromCkTypeId": "System-2.5.0/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "UniqueNotDeleted",
+          "fields": [
+            {
+              "attributePaths": [
+                "EMail"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegisteredCustomer-1",
+          "targetCkTypeId": "EnergyCommunity-4.9.0/Customer-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "An application for membership of the energy community, submitted through the public registration page",
+      "attributes": [
+        {
+          "id": "Basic-2.4.0/LegalEntityType-1",
+          "name": "ApplicantType",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/FirstName-1",
+          "name": "FirstName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.4.0/LastName-1",
+          "name": "LastName",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity-4.9.0/DateOfBirth-1",
+          "name": "DateOfBirth",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.4.0/CompanyName-1",
+          "name": "CompanyName",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationContactPerson-1",
+          "name": "ContactPerson",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.4.0/TaxIdentificationNumber-1",
+          "name": "TaxIdentificationNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.4.0/CompanyRegisterNumber-1",
+          "name": "CompanyRegisterNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.4.0/AddressStreet-1",
+          "name": "BillingStreet",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationPostalCode-1",
+          "name": "BillingPostalCode",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.4.0/AddressCityTown-1",
+          "name": "BillingCity",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.4.0/EMailAddress-1",
+          "name": "EMail",
+          "isOptional": false
+        },
+        {
+          "id": "Basic-2.4.0/TelephoneNumber-1",
+          "name": "PhoneNumber",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/MemberRegistrationMeteringPoints-1",
+          "name": "MeteringPoints",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationConsentAccepted-1",
+          "name": "ConsentAccepted",
+          "isOptional": false
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationConsentVersion-1",
+          "name": "ConsentVersion",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationSubmittedAt-1",
+          "name": "SubmittedAt",
+          "isOptional": false
+        },
+        {
+          "id": "Basic.Energy-1.9.0/State-1",
+          "name": "State",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationRejectionReason-1",
+          "name": "RejectionReason",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationLanguage-1",
+          "name": "Language",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "RegistrationConfiguration-1",
+      "derivedFromCkTypeId": "System-2.5.0/Configuration-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Configuration for the public membership registration endpoint",
+      "attributes": [
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationCaptchaSecret-1",
+          "name": "CaptchaSecret",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationNotificationRecipients-1",
+          "name": "NotificationRecipients",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "RegisteredCustomer-1",
+      "inboundName": "Registration",
+      "outboundName": "Customer",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "The customer an accepted membership application produced (AB#3717). ZeroOrOne on both ends: an application is pending until an operator accepts it, and a customer created by hand has no application behind it. Without it an accepted and a rejected application would be indistinguishable once both are archived."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "MemberRegistrationMeteringPoints-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "EnergyCommunity.Registration-2.7.0/MemberRegistrationMeteringPoint-1",
+      "isRuntimeState": false,
+      "description": "The metering points declared on a membership application"
+    },
+    {
+      "id": "RegistrationAnnualConsumptionKwh-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Declared approximate annual consumption of a metering point, in kWh"
+    },
+    {
+      "id": "RegistrationCapacityKwPeak-1",
+      "valueType": "Double",
+      "isRuntimeState": false,
+      "description": "Declared capacity of a generation plant, in kWpeak"
+    },
+    {
+      "id": "RegistrationCaptchaSecret-1",
+      "valueType": "String",
+      "isRuntimeState": true,
+      "description": "Cloudflare Turnstile secret key, read by the registration pipeline when it verifies a submitted CAPTCHA token. Empty means the endpoint refuses every application: the CAPTCHA is required and cannot be switched off"
+    },
+    {
+      "id": "RegistrationConsentAccepted-1",
+      "valueType": "Boolean",
+      "isRuntimeState": false,
+      "description": "Whether the applicant confirmed the consent clause. Stamped by the pipeline, not taken from the request body"
+    },
+    {
+      "id": "RegistrationConsentVersion-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Version of the consent text the applicant was shown, so a later change to the wording stays auditable"
+    },
+    {
+      "id": "RegistrationContactPerson-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The person to contact at an applying company (Ansprechpartner)"
+    },
+    {
+      "id": "RegistrationDesignation-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "The applicant\u0027s own label for a declared metering point, so several can be told apart"
+    },
+    {
+      "id": "RegistrationLanguage-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Language the application was submitted in (de or en), so the confirmation reads the same way the form did"
+    },
+    {
+      "id": "RegistrationNotificationRecipients-1",
+      "valueType": "StringArray",
+      "isRuntimeState": true,
+      "description": "Addresses told that a membership application arrived. Empty means nobody is notified, which is what an unconfigured tenant gets rather than a failed send"
+    },
+    {
+      "id": "RegistrationPostalCode-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Postal code as typed on a membership application, before an operator has resolved it to a city"
+    },
+    {
+      "id": "RegistrationRejectionReason-1",
+      "valueType": "String",
+      "isRuntimeState": false,
+      "description": "Why an operator refused the application, in the operator\u0027s own words. Sent to the applicant verbatim in the refusal mail, so it is written for them to read"
+    },
+    {
+      "id": "RegistrationSubmittedAt-1",
+      "valueType": "DateTime",
+      "isRuntimeState": false,
+      "description": "When the application reached the endpoint. Stamped server-side"
+    }
+  ],
+  "records": [
+    {
+      "recordId": "MemberRegistrationMeteringPoint-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "A metering point declared on a public membership application",
+      "attributes": [
+        {
+          "id": "Basic.Energy-1.9.0/IsProducer-1",
+          "name": "IsProducer",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationDesignation-1",
+          "name": "Designation",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.9.0/MeteringPointNumber-1",
+          "name": "MeteringPointNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic.Energy-1.9.0/ProductionType-1",
+          "name": "ProductionType",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationCapacityKwPeak-1",
+          "name": "CapacityKwPeak",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationAnnualConsumptionKwh-1",
+          "name": "AnnualConsumptionKwh",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.4.0/AddressStreet-1",
+          "name": "Street",
+          "isOptional": true
+        },
+        {
+          "id": "EnergyCommunity.Registration-2.7.0/RegistrationPostalCode-1",
+          "name": "PostalCode",
+          "isOptional": true
+        },
+        {
+          "id": "Basic-2.4.0/AddressCityTown-1",
+          "name": "City",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "enums": [],
+  "modelId": "EnergyCommunity.Registration-2.7.0"
+}
