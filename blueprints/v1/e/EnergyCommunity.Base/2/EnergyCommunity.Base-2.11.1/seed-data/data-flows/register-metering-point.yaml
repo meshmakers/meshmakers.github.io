@@ -1,0 +1,179 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.4,3.0)
+- Basic.Energy-[1.9,2.0)
+# 4.9: MeteringDataSource (SelfReported) and CommunitySettings.AllocationCutOffTime.
+- EnergyCommunity-[4.9,5.0)
+- System.Communication-[3.26,5.0)
+- System.StreamData-[1.13,2.0)
+
+# register-metering-point (AB#5636) — self-registration of a self-reported metering point.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── register-metering-point (AB#5636, MTR-01) ─────────────
+#
+# rtIds (meter reporting block ec0000000000000000000a6X):
+#   …a61  DataFlow  register-metering-point
+#   …a62  Pipeline  register-metering-point
+#
+# Contract:
+#   POST /registerMeteringPoint
+#   { "meteringPointNumber": "AT009998...", "direction": "consumption|production",
+#     "displayName": "...", "customer": { "name": "...", "legalEntityType": "..." },
+#     "participationFrom": "yyyy-MM-dd", "participationFactor": 1..100,
+#     "loadProfile": "H0", "annualConsumptionKwh": n, "productionType": "Other",
+#     "capacityKwp": n }                      (only number + direction required)
+#   -> { status: ok|error, code?, message, created, meteringPoint: { rtId,
+#        meteringPointNumber, direction, anchors: [{obisCode, rtId}],
+#        participation: { from, factor } } }
+#   codes: VALIDATION, NUMBER_RESERVED, DIRECTION_CONFLICT, NOT_SELF_REPORTED
+#
+# Security: FromHttpRequest@2, allowAnonymous false, requiredRoles [MeterReporter]
+# (seed-data/identity/roles-groups.yaml). A missing token or role is refused by the
+# adapter before the pipeline runs. Every data node runs with identity ServiceAccount.
+# Always HTTP 200 with the outcome in the body; SetPipelineExecutionResult@1 keeps it
+# as the execution result and the final Project@1 (clear + inclusion) returns only the
+# result fields - never headers, principal or the request body. The request body is
+# never logged (no PrintDebug@1).
+# Tenant separation for client-credentials tokens needs the adapter tenant check AB#5628.
+#
+# Ships Enabled and DeploymentState 2 (like manual-metering-entry): the routes only
+# answer once the DataFlow is deployed (DeployDataFlow ec0000000000000000000a61).
+# REQUIRES the Mesh Adapter release that ships RegisterSelfReportedMeteringPoint@1; on an older adapter
+# the deploy fails with an unknown node type. An adapter version is not expressible
+# as a blueprint dependency.
+#
+# Executes on the default Mesh Adapter 670000000000000000000002.
+
+- rtId: ec0000000000000000000a61
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: register-metering-point
+  - id: System/Description-1
+    value: >-
+      Self-registration of a self-reported metering point (AB#5636): customer,
+      facility, metering point, raw anchor and participation, idempotent by
+      metering point number.
+
+- rtId: ec0000000000000000000a62
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a61
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: register-metering-point
+  - id: System/Description-1
+    value: >-
+      POST /registerMeteringPoint (role MeterReporter). Creates or updates a
+      metering point with MeteringDataSource SelfReported in the reserved number
+      range AT009998...; always HTTP 200 with status ok|error and code. Requires
+      the Mesh Adapter release that ships RegisterSelfReportedMeteringPoint@1
+      (AB#5636).
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      # register-metering-point (AB#5636, MTR-01) — a client registers its own
+      # self-reported metering point.
+      #
+      # REQUIRES the Mesh Adapter release that ships RegisterSelfReportedMeteringPoint@1
+      # (AB#5636); on an older adapter the deploy fails with an unknown node type.
+      #
+      # POST /registerMeteringPoint, role MeterReporter. Idempotent: creates (or
+      # reuses) the customer, one operating facility, the metering point
+      # (MeteringDataSource = SelfReported), the raw anchor of its direction
+      # (1-1:1.9.0 G.01 consumption, 1-1:2.9.0 G.01 production) and one participation
+      # period. A repeated call with the same number and direction answers
+      # created: false with the same rtIds and updates displayName, participation
+      # factor and sizes; it never moves the participation start.
+      #
+      # Only numbers in the reserved self-report range (node default AT009998...) are
+      # accepted, so a client can never adopt an EDA or simulated metering point.
+      #
+      # The facility is parented to the Basic/City of the optional request field
+      # zipcode (node default 5020); the app fails with "City data not found"
+      # without it. Needs Locations.Austria in the tenant, else CITY_NOT_FOUND.
+      #
+      # Always HTTP 200; the outcome is in the body:
+      #   { status: ok|error, code?, message, created?, meteringPoint? }
+      # A missing token or role is refused by the adapter before the pipeline runs.
+      # The request body is never logged.
+      triggers:
+        - type: FromHttpRequest@2
+          path: /registerMeteringPoint
+          method: Post
+          allowAnonymous: false
+          requiredRoles: [MeterReporter]
+      transformations:
+        - type: Logger@1
+          message: "register-metering-point (AB#5636): request received on /registerMeteringPoint"
+
+        # Default outcome. The node replaces $.result as a whole; a validation failure
+        # is a result (status error + code), never an exception.
+        - type: SetPrimitiveValue@1
+          targetPath: $.result.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.result.message
+          value: "The metering point could not be registered."
+          valueType: String
+
+        # Node defaults (not overridden, listed for readers): reservedNumberPrefix
+        # AT009998, participationFactor 100, participationFrom = today Europe/Vienna,
+        # EnergyCommunity/Consumer + Producer, raw OBIS 1-1:1.9.0 G.01 / 1-1:2.9.0 G.01.
+        # Everything is validated before the first write, so a rejected request leaves
+        # nothing half-created.
+        - type: RegisterSelfReportedMeteringPoint@1
+          description: Create or update the self-reported metering point chain
+          identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+          requestPath: $.body
+          targetPath: $.result
+
+        - type: SetPipelineExecutionResult@1
+          path: $.result
+
+        # The adapter answers with the final data context verbatim (headers, principal,
+        # body). Lift the result fields to the top level, then drop everything else.
+        # SelectByPath@1 skips a field the result does not carry (code on success,
+        # meteringPoint on a validation error).
+        - type: SelectByPath@1
+          description: Lift the result fields to the response
+          selectPath:
+            - path: $.result.status
+              targetPath: $.status
+            - path: $.result.code
+              targetPath: $.code
+            - path: $.result.message
+              targetPath: $.message
+            - path: $.result.created
+              targetPath: $.created
+            - path: $.result.meteringPoint
+              targetPath: $.meteringPoint
+        - type: Project@1
+          description: Shape the HTTP response body
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.code
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.created
+              inclusion: true
+            - path: $.meteringPoint
+              inclusion: true
