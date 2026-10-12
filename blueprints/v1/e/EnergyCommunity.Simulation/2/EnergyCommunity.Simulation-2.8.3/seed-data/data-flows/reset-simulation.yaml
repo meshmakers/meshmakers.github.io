@@ -1,0 +1,415 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.4,3.0)
+- Basic.Energy-[1.9,2.0)
+- EnergyCommunity-[4.9,5.0)
+- System.Communication-[3.22,5.0)
+
+# reset-simulation — the DataFlow and its pipeline that delete the simulated
+# master data of a community for the reset 'full' (AB#5633, RST-03).
+# Part of the EnergyCommunity.Simulation blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Reset of the simulated master data (AB#5633) ──────────────────────────
+#
+# rtId scheme (documented in ../../README.md): ec0000000000000000000bXX
+#   …b0a  DataFlow  reset-simulation
+#   …b0b  Pipeline  reset-simulated-master-data   (input { "dryRun": false })
+#
+# Deletes every EnergyCommunity/Consumer and EnergyCommunity/Producer with
+# MeteringDataSource = Simulated (1) together with ALL its
+# Basic.Energy/EnergyMeasurement anchors (any OBIS code, including the @1
+# leftover 1-1:1.9.0 P.01) and its EnergyCommunity/ParticipationPeriod, then
+# every Basic.Energy/OperatingFacility whose metering points are all simulated
+# (at least one) and the EnergyCommunity/Customer owning it when that facility
+# is the customer's only one. EDA and self-reported metering points, the
+# facilities still holding one, prices, SimulationSettings revisions and
+# SimulationResetRequests stay. Archive rows are NOT touched.
+#
+# Run it only through src/blueprints/reset-community.ps1 -Mode full: the
+# script undeploys the simulation DataFlows first, then drops and re-creates
+# the archives and re-creates the community. Run alone it leaves the archive
+# rows of the deleted anchors orphaned. { "dryRun": true } only logs what it
+# would delete.
+#
+# DISABLED-BY-DEFAULT CONTRACT: System/Enabled = false and DeploymentState 0;
+# the trigger is FromExecutePipelineCommand@1 only. System/Enabled is
+# tenant-owned (System.Communication 3.36.0): the seed sets it once, a re-apply
+# keeps the operator's value. reset-community.ps1 enables the pipeline, deploys
+# reset-simulation, runs it and then undeploys and disables it again.
+
+- rtId: ec0000000000000000000b0a
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: reset-simulation
+  - id: System/Description-1
+    value: >-
+      Deletes the simulated master data of the community (metering points
+      marked MeteringDataSource = Simulated with their anchors and
+      participation periods, their facilities and customers) for the reset
+      'full' of reset-community.ps1. Simulation-only — NOT for productive
+      tenants.
+
+- rtId: ec0000000000000000000b0b
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000b0a
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: reset-simulated-master-data
+  - id: System/Description-1
+    value: >-
+      Deletes every metering point with MeteringDataSource = Simulated with
+      all its EnergyMeasurement anchors (any OBIS code) and participation
+      periods, every facility holding only simulated metering points and the
+      customer owning it (when it is the customer's only facility). Input
+      { "dryRun": false }. Does not touch archive rows - run through
+      reset-community.ps1 -Mode full. Disabled by default; trigger via
+      ExecutePipelineCommand only.
+  - id: System/Enabled-1
+    value: false
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        # Input: { "dryRun": false }. dryRun true collects the deletions and logs
+        # them without writing anything.
+        #
+        # Deletes the SIMULATED master data of the community (reset 'full', RST-03):
+        #   A. every EnergyCommunity/Consumer and EnergyCommunity/Producer with
+        #      MeteringDataSource = Simulated (1), with ALL its
+        #      Basic.Energy/EnergyMeasurement anchors (any OBIS code, including the
+        #      @1 leftover 1-1:1.9.0 P.01) and its EnergyCommunity/ParticipationPeriod;
+        #   B. every Basic.Energy/OperatingFacility whose metering points are ALL
+        #      simulated (at least one), and the EnergyCommunity/Customer owning it
+        #      when that facility is the customer's only one.
+        # EDA and self-reported metering points, facilities that still hold one and
+        # their customers, prices, settings revisions and reset requests stay.
+        # Archive rows are not touched (reset-community.ps1 drops the archives).
+        - type: Logger@1
+          message: "reset-simulated-master-data (AB#5633): deleting the simulated metering points, anchors, participation periods, facilities and customers"
+        - type: If@1
+          description: Default dryRun false
+          path: $.dryRun
+          operator: Equals
+          value: null
+          valueType: Boolean
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.dryRun
+              value: false
+              valueType: Boolean
+        # Pre-seeded as empty arrays so the Flatten@1 Append writes stay flat.
+        - type: WriteJson@1
+          description: Init entity-update collection
+          targetPath: $.updates.items
+          jsonString: "[]"
+        - type: WriteJson@1
+          description: Init metering point list
+          targetPath: $.mps.all
+          jsonString: "[]"
+
+        # ===== A. Simulated metering points with their anchors and periods =====
+        - type: GetRtEntitiesByType@1
+          description: Load the simulated consumer metering points
+          ckTypeId: EnergyCommunity/Consumer
+          targetPath: $.mps.cons
+          take: 100000
+          fieldFilters:
+            - attributePath: MeteringDataSource
+              operator: Equals
+              comparisonValue: 1 # Simulated
+        - type: GetRtEntitiesByType@1
+          description: Load the simulated producer metering points
+          ckTypeId: EnergyCommunity/Producer
+          targetPath: $.mps.prods
+          take: 100000
+          fieldFilters:
+            - attributePath: MeteringDataSource
+              operator: Equals
+              comparisonValue: 1 # Simulated
+        - type: Flatten@1
+          description: Collect the simulated consumers
+          path: $.mps.cons.Items[*]
+          targetPath: $.mps.all
+          targetValueWriteMode: Append
+        - type: Flatten@1
+          description: Collect the simulated producers
+          path: $.mps.prods.Items[*]
+          targetPath: $.mps.all
+          targetValueWriteMode: Append
+        - type: If@1
+          description: Only when there are simulated metering points
+          path: $.mps.all[0].RtId
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: ForEach@1
+              description: Delete each simulated metering point with its anchors and participation periods
+              iterationPath: $.mps.all
+              mergePath: $.key.u
+              targetPath: $.mpWork
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: WriteJson@1
+                  targetPath: $.key.u.items
+                  jsonString: "[]"
+                - type: CreateUpdateInfo@1
+                  description: Delete the metering point
+                  targetPath: $.key.u.items
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: Delete
+                  ckTypeIdPath: $.key.CkTypeId
+                  rtIdPath: $.key.RtId
+                # Every anchor, whatever its OBIS code (raw channels, the @1
+                # leftover 1-1:1.9.0 P.01, allocation registers).
+                - type: GetAssociationTargets@1
+                  description: Anchors of the metering point (ParentChild, inbound)
+                  graphDirection: Inbound
+                  originRtIdPath: $.key.RtId
+                  originCkTypeIdPath: $.key.CkTypeId
+                  targetCkTypeId: Basic.Energy/EnergyMeasurement
+                  associationRoleId: System/ParentChild
+                  targetPath: $.key.anchors
+                - type: If@1
+                  description: Only when the metering point has anchors
+                  path: $.key.anchors[0].Items[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: ForEach@1
+                      description: Delete each anchor
+                      iterationPath: $.key.anchors[0].Items
+                      mergePath: $.key.d
+                      targetPath: $.key.u.anchorDeletes
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          targetPath: $.key.d
+                          updateKind: Delete
+                          ckTypeId: Basic.Energy/EnergyMeasurement
+                          rtIdPath: $.key.RtId
+                - type: GetAssociationTargets@1
+                  description: Participation periods of the metering point (inbound)
+                  graphDirection: Inbound
+                  originRtIdPath: $.key.RtId
+                  originCkTypeIdPath: $.key.CkTypeId
+                  targetCkTypeId: EnergyCommunity/ParticipationPeriod
+                  associationRoleId: EnergyCommunity/ParticipationPeriod
+                  targetPath: $.key.periods
+                - type: If@1
+                  description: Only when the metering point has participation periods
+                  path: $.key.periods[0].Items[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: ForEach@1
+                      description: Delete each participation period
+                      iterationPath: $.key.periods[0].Items
+                      mergePath: $.key.d
+                      targetPath: $.key.u.periodDeletes
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          targetPath: $.key.d
+                          updateKind: Delete
+                          ckTypeId: EnergyCommunity/ParticipationPeriod
+                          rtIdPath: $.key.RtId
+            - type: Flatten@1
+              description: Collect the metering point deletions
+              path: $.mpWork[*].items[*]
+              targetPath: $.updates.items
+              targetValueWriteMode: Append
+            - type: Flatten@1
+              description: Collect the anchor deletions
+              path: $.mpWork[*].anchorDeletes[*]
+              targetPath: $.updates.items
+              targetValueWriteMode: Append
+            - type: Flatten@1
+              description: Collect the participation period deletions
+              path: $.mpWork[*].periodDeletes[*]
+              targetPath: $.updates.items
+              targetValueWriteMode: Append
+
+        # ===== B. Facilities whose metering points are all simulated, and their customers =====
+        # Facility-centric, so a facility shared by several metering points (legacy
+        # "EC Demo Community") is deleted exactly once. A facility without any
+        # metering point is left alone (create-demo-community upserts it by Name).
+        - type: GetRtEntitiesByType@1
+          description: Load the operating facilities
+          ckTypeId: Basic.Energy/OperatingFacility
+          targetPath: $.facs
+          take: 100000
+        - type: If@1
+          description: Only when there are facilities
+          path: $.facs.Items[0].RtId
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: ForEach@1
+              description: Delete facilities that hold only simulated metering points
+              iterationPath: $.facs.Items
+              mergePath: $.key.u
+              targetPath: $.facWork
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: WriteJson@1
+                  targetPath: $.key.u.items
+                  jsonString: "[]"
+                # Basic.Energy/MeteringPoint matches every subtype (Consumer, Producer, ...).
+                - type: GetAssociationTargets@1
+                  description: All metering points of the facility
+                  graphDirection: Inbound
+                  originRtIdPath: $.key.RtId
+                  originCkTypeIdPath: $.key.CkTypeId
+                  targetCkTypeId: Basic.Energy/MeteringPoint
+                  associationRoleId: System/ParentChild
+                  targetPath: $.key.allMps
+                - type: GetAssociationTargets@1
+                  description: Simulated consumers of the facility
+                  graphDirection: Inbound
+                  originRtIdPath: $.key.RtId
+                  originCkTypeIdPath: $.key.CkTypeId
+                  targetCkTypeId: EnergyCommunity/Consumer
+                  associationRoleId: System/ParentChild
+                  targetPath: $.key.simCons
+                  fieldFilters:
+                    - attributePath: MeteringDataSource
+                      operator: Equals
+                      comparisonValue: 1 # Simulated
+                - type: GetAssociationTargets@1
+                  description: Simulated producers of the facility
+                  graphDirection: Inbound
+                  originRtIdPath: $.key.RtId
+                  originCkTypeIdPath: $.key.CkTypeId
+                  targetCkTypeId: EnergyCommunity/Producer
+                  associationRoleId: System/ParentChild
+                  targetPath: $.key.simProds
+                  fieldFilters:
+                    - attributePath: MeteringDataSource
+                      operator: Equals
+                      comparisonValue: 1 # Simulated
+                - type: ExecuteCSharp@1
+                  description: Delete the facility? (at least one metering point, all of them simulated)
+                  targetPath: $.key.deleteFacility
+                  returnType: Boolean
+                  arguments:
+                    - name: all
+                      valuePath: $.key.allMps[0].TotalCount
+                      dataType: Int
+                    - name: simCons
+                      valuePath: $.key.simCons[0].TotalCount
+                      dataType: Int
+                    - name: simProds
+                      valuePath: $.key.simProds[0].TotalCount
+                      dataType: Int
+                  code: |
+                    return all > 0 && simCons + simProds == all;
+                - type: If@1
+                  description: Facility with simulated metering points only
+                  path: $.key.deleteFacility
+                  operator: Equals
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: CreateUpdateInfo@1
+                      description: Delete the facility
+                      targetPath: $.key.u.items
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Delete
+                      ckTypeIdPath: $.key.CkTypeId
+                      rtIdPath: $.key.RtId
+                    - type: GetAssociationTargets@1
+                      description: Customers owning the facility (AssociatedFacilities, inbound)
+                      graphDirection: Inbound
+                      originRtIdPath: $.key.RtId
+                      originCkTypeIdPath: $.key.CkTypeId
+                      targetCkTypeId: EnergyCommunity/Customer
+                      associationRoleId: EnergyCommunity/AssociatedFacilities
+                      targetPath: $.key.customers
+                    - type: If@1
+                      description: Only when the facility has an owner
+                      path: $.key.customers[0].Items[0].RtId
+                      operator: NotEquals
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: ForEach@1
+                          description: Delete each owner whose only facility this is (a kept owner carries no d)
+                          iterationPath: $.key.customers[0].Items
+                          targetPath: $.key.u.customerScan
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: GetAssociationTargets@1
+                              description: Facilities of the customer (outbound)
+                              graphDirection: Outbound
+                              originRtIdPath: $.key.RtId
+                              originCkTypeIdPath: $.key.CkTypeId
+                              targetCkTypeId: Basic.Energy/OperatingFacility
+                              associationRoleId: EnergyCommunity/AssociatedFacilities
+                              targetPath: $.key.facilities
+                            - type: If@1
+                              description: The customer owns this facility only
+                              path: $.key.facilities[0].TotalCount
+                              operator: Equals
+                              value: 1
+                              valueType: Int
+                              transformations:
+                                - type: CreateUpdateInfo@1
+                                  targetPath: $.key.d
+                                  updateKind: Delete
+                                  ckTypeIdPath: $.key.CkTypeId
+                                  rtIdPath: $.key.RtId
+            - type: Flatten@1
+              description: Collect the facility deletions
+              path: $.facWork[*].items[*]
+              targetPath: $.updates.items
+              targetValueWriteMode: Append
+            - type: Flatten@1
+              description: Collect the customer deletions (an owner that keeps another facility has no d)
+              path: $.facWork[*].customerScan[*].d
+              targetPath: $.updates.items
+              targetValueWriteMode: Append
+
+        # ===== Write (unless dryRun) =====
+        - type: If@1
+          description: Apply the deletions
+          path: $.dryRun
+          operator: Equals
+          value: false
+          valueType: Boolean
+          transformations:
+            - type: ApplyChanges@2
+              description: Delete everything collected above in one transaction
+              entityUpdatesPath: $.updates.items
+        - type: Project@1
+          description: Keep only the input and the collected deletions
+          fields:
+            - path: $.mps
+            - path: $.mpWork
+            - path: $.facs
+            - path: $.facWork
+        - type: PrintDebug@1
+          description: Log the deletions (dryRun or applied)
+        - type: SetPipelineExecutionResult@1
+          description: Keep the deletions as the execution result
+          path: $.updates
