@@ -1,0 +1,172 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.4,3.0)
+- Basic.Energy-[1.9,2.0)
+# 4.9: MeteringDataSource (SelfReported) and CommunitySettings.AllocationCutOffTime.
+- EnergyCommunity-[4.9,5.0)
+- System.Communication-[3.26,5.0)
+- System.StreamData-[1.13,2.0)
+
+# community-balance (AB#5639) — provisional balance of the last closed slots (read-only).
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── community-balance (AB#5639, BAL-01..03) ─────────────
+#
+# rtIds (meter reporting block ec0000000000000000000a6X):
+#   …a65  DataFlow  community-balance
+#   …a66  Pipeline  community-balance
+#
+# Contract:
+#   POST /communityBalance
+#   { "slots": 4, "meteringPoints": ["AT009998..."] }            (both optional)
+#   -> { status, message, generatedAt, provisional: true, simulatedIncluded,
+#        slots: [ { from, to, productionKwh, offeredKwh, allocatedKwh, surplusKwh,
+#                   consumptionKwh, shortfallKwh, coverage,
+#                   reported: { expected, received, simulated },
+#                   meteringPoints?: [ { meteringPointNumber, direction,
+#                                        registers: { "<obis>": kWh } } ] } ] }
+# Writes nothing. Same allocator as allocate-community-energy, so a slot with
+# complete inputs matches the later final run to 0.001 kWh.
+#
+# Security: FromHttpRequest@2, allowAnonymous false, requiredRoles [MeterReporter, EnergyCommunityReporting]
+# (seed-data/identity/roles-groups.yaml). A missing token or role is refused by the
+# adapter before the pipeline runs. Every data node runs with identity ServiceAccount.
+# Always HTTP 200 with the outcome in the body; SetPipelineExecutionResult@1 keeps it
+# as the execution result and the final Project@1 (clear + inclusion) returns only the
+# result fields - never headers, principal or the request body. The request body is
+# never logged (no PrintDebug@1).
+# Tenant separation for client-credentials tokens needs the adapter tenant check AB#5628.
+#
+# Ships Enabled and DeploymentState 2 (like manual-metering-entry): the routes only
+# answer once the DataFlow is deployed (DeployDataFlow ec0000000000000000000a65).
+# REQUIRES the Mesh Adapter release that ships CommunityEnergyBalance@1; on an older adapter
+# the deploy fails with an unknown node type. An adapter version is not expressible
+# as a blueprint dependency.
+#
+# Executes on the default Mesh Adapter 670000000000000000000002.
+
+- rtId: ec0000000000000000000a65
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: community-balance
+  - id: System/Description-1
+    value: >-
+      Provisional community energy balance of the last closed 15-min slots
+      (AB#5639), computed with the allocation algorithm without writing anything.
+
+- rtId: ec0000000000000000000a66
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a65
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: community-balance
+  - id: System/Description-1
+    value: >-
+      POST /communityBalance (role MeterReporter or EnergyCommunityReporting).
+      Read-only provisional balance of the last N closed 15-min slots (default 4,
+      max 96), optionally per metering point; always HTTP 200. Requires the Mesh
+      Adapter release that ships CommunityEnergyBalance@1 (AB#5639).
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      # community-balance (AB#5639, BAL-01..03) — provisional balance of the last
+      # closed 15-min slots. Read-only: writes nothing.
+      #
+      # REQUIRES the Mesh Adapter release that ships CommunityEnergyBalance@1 (AB#5639);
+      # on an older adapter the deploy fails with an unknown node type.
+      #
+      # POST /communityBalance, role MeterReporter or EnergyCommunityReporting.
+      # Request (both optional): { "slots": 4, "meteringPoints": ["AT..."] }
+      #   slots           last N closed slots (to <= now), default 4, max 96
+      #   meteringPoints  adds the per-metering-point registers of those numbers only
+      # CommunityEnergyBalance@1 uses the same allocator, member loading and input
+      # reading as AllocateCommunityEnergy@1, so a slot with complete inputs matches
+      # the later final run to 0.001 kWh. Missing values count as 0 (ALC-04);
+      # reported.received < reported.expected shows it. simulatedIncluded is false
+      # when a participating simulated member has no value in any returned slot.
+      #
+      # Always HTTP 200; the outcome is in the body:
+      #   { status, message, generatedAt, provisional, simulatedIncluded, slots[] }
+      triggers:
+        - type: FromHttpRequest@2
+          path: /communityBalance
+          method: Post
+          allowAnonymous: false
+          requiredRoles: [MeterReporter, EnergyCommunityReporting]
+      transformations:
+        - type: Logger@1
+          message: "community-balance (AB#5639): request received on /communityBalance"
+
+        - type: SetPrimitiveValue@1
+          targetPath: $.result.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.result.message
+          value: "The community balance could not be computed."
+          valueType: String
+
+        # Node defaults (not overridden, listed for readers): slots 4 (max 96), the
+        # schema, registers, resolution 0.001 kWh, Europe/Vienna and the missing-value
+        # quality of AllocateCommunityEnergy@1. A participating member whose data
+        # source cannot be allocated (Eda) makes the answer status error, as the final
+        # run aborts such a day.
+        - type: CommunityEnergyBalance@1
+          description: Compute the provisional balance of the last closed slots
+          identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+          archiveRtId: ec0000000000000000000a01
+          slotsPath: $.body.slots
+          meteringPointsPath: $.body.meteringPoints
+          targetPath: $.result
+
+        - type: SetPipelineExecutionResult@1
+          path: $.result
+
+        # The adapter answers with the final data context verbatim (headers, principal,
+        # body). Lift the result fields to the top level, then drop everything else.
+        - type: SelectByPath@1
+          description: Lift the result fields to the response
+          selectPath:
+            - path: $.result.status
+              targetPath: $.status
+            - path: $.result.message
+              targetPath: $.message
+            - path: $.result.generatedAt
+              targetPath: $.generatedAt
+            - path: $.result.provisional
+              targetPath: $.provisional
+            - path: $.result.simulatedIncluded
+              targetPath: $.simulatedIncluded
+            - path: $.result.slots
+              targetPath: $.slots
+        - type: Project@1
+          description: Shape the HTTP response body
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.generatedAt
+              inclusion: true
+            - path: $.provisional
+              inclusion: true
+            - path: $.simulatedIncluded
+              inclusion: true
+            - path: $.slots
+              inclusion: true
