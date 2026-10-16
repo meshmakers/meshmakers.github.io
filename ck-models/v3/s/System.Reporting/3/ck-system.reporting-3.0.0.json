@@ -1,0 +1,173 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.5.0",
+    "System.Files-1.1.0"
+  ],
+  "dependencyRanges": [
+    {
+      "range": "System-[2.5,3.0)",
+      "floor": "2.5.0",
+      "usedSurface": [
+        "System@2/Configuration-1"
+      ],
+      "usedSurfaceHash": "sha256:96dd8cc6c5baf67e299858f58f7f172949455b7e2040cc35bbc2e4d4d9b159e8"
+    },
+    {
+      "range": "System.Files-[1.0,2.0)",
+      "floor": "1.0.0",
+      "usedSurface": [],
+      "usedSurfaceHash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "minEngineVersion": "3.5.1",
+  "migrations": {
+    "meta": {
+      "$schema": "https://schemas.meshmakers.cloud/ck-migration-meta.schema.json",
+      "ckModelId": "System.Reporting-3.0.0",
+      "migrations": [
+        {
+          "fromVersion": "2.0.0",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.3.0-to-3.0.0.yaml",
+          "description": "File system types move to System.Files 1.0.0; data moved by the asset repository sweep - entry point for 2.0.0",
+          "breaking": true
+        },
+        {
+          "fromVersion": "2.1.0",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.3.0-to-3.0.0.yaml",
+          "description": "File system types move to System.Files 1.0.0; data moved by the asset repository sweep - entry point for 2.1.0",
+          "breaking": true
+        },
+        {
+          "fromVersion": "2.2.0",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.3.0-to-3.0.0.yaml",
+          "description": "File system types move to System.Files 1.0.0; data moved by the asset repository sweep - entry point for 2.2.0",
+          "breaking": true
+        },
+        {
+          "fromVersion": "2.2.1",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.3.0-to-3.0.0.yaml",
+          "description": "File system types move to System.Files 1.0.0; data moved by the asset repository sweep - entry point for 2.2.1 (AB#5528 first repin cut, superseded by 2.3.0; may exist on local tenants)",
+          "breaking": true
+        },
+        {
+          "fromVersion": "2.3.0",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.3.0-to-3.0.0.yaml",
+          "description": "File system types move to System.Files 1.0.0; data moved by the asset repository sweep - entry point for 2.3.0",
+          "breaking": true
+        },
+        {
+          "fromVersion": "2.4.0",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.3.0-to-3.0.0.yaml",
+          "description": "File system types move to System.Files 1.0.0; data moved by the asset repository sweep - entry point for 2.4.0 (ConnectionString as SECRET, AB#5528)",
+          "breaking": true
+        },
+        {
+          "fromVersion": "2.5.0",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.3.0-to-3.0.0.yaml",
+          "description": "File system types move to System.Files 1.0.0; data moved by the asset repository sweep - entry point for 2.5.0 (one-time MINOR re-pin after the range-retention flip, AB#6691)",
+          "breaking": true
+        }
+      ]
+    },
+    "scripts": [
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.3.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from System.Reporting 2.x to 3.0.0 (AB#6176, Epic AB#6171). Intentionally empty.\n\n3.0.0 is a major because the file system types FileSystemEntity, FileSystemContainer,\nFileSystemItem, Folder and FolderRoot and the attribute Content move out of this model to the\nplatform model System.Files 1.0.0 (owned by the asset repository, imported into every tenant).\nThe data of those types is NOT moved by this migration: the asset repository\u0027s file sweep\n(AB#6175) moves the entities, associations and GridFS owner stamps to System.Files. Reporting\nonly keeps ConnectionInfo.\n\nWhy the script exists at all (AB#4924 / G3): the CK engine refuses the post-chain schema-only\nbridge across a major version (CkMigrationMajorVersionGuard). This empty step is the explicit\nstatement that 2.x -\u003E 3.0.0 needs no data transform of its own.\n\nRollout order (concept AB#6171 section 8.7): import 3.0.0 into a tenant only after the file\nsweep has run there and the apps of the tenant query System.Files; until then the old types\nstay in System.Reporting 2.3.0.\n",
+        "steps": []
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.3.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from System.Reporting 2.x to 3.0.0 (AB#6176, Epic AB#6171). Intentionally empty.\n\n3.0.0 is a major because the file system types FileSystemEntity, FileSystemContainer,\nFileSystemItem, Folder and FolderRoot and the attribute Content move out of this model to the\nplatform model System.Files 1.0.0 (owned by the asset repository, imported into every tenant).\nThe data of those types is NOT moved by this migration: the asset repository\u0027s file sweep\n(AB#6175) moves the entities, associations and GridFS owner stamps to System.Files. Reporting\nonly keeps ConnectionInfo.\n\nWhy the script exists at all (AB#4924 / G3): the CK engine refuses the post-chain schema-only\nbridge across a major version (CkMigrationMajorVersionGuard). This empty step is the explicit\nstatement that 2.x -\u003E 3.0.0 needs no data transform of its own.\n\nRollout order (concept AB#6171 section 8.7): import 3.0.0 into a tenant only after the file\nsweep has run there and the apps of the tenant query System.Files; until then the old types\nstay in System.Reporting 2.3.0.\n",
+        "steps": []
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.3.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from System.Reporting 2.x to 3.0.0 (AB#6176, Epic AB#6171). Intentionally empty.\n\n3.0.0 is a major because the file system types FileSystemEntity, FileSystemContainer,\nFileSystemItem, Folder and FolderRoot and the attribute Content move out of this model to the\nplatform model System.Files 1.0.0 (owned by the asset repository, imported into every tenant).\nThe data of those types is NOT moved by this migration: the asset repository\u0027s file sweep\n(AB#6175) moves the entities, associations and GridFS owner stamps to System.Files. Reporting\nonly keeps ConnectionInfo.\n\nWhy the script exists at all (AB#4924 / G3): the CK engine refuses the post-chain schema-only\nbridge across a major version (CkMigrationMajorVersionGuard). This empty step is the explicit\nstatement that 2.x -\u003E 3.0.0 needs no data transform of its own.\n\nRollout order (concept AB#6171 section 8.7): import 3.0.0 into a tenant only after the file\nsweep has run there and the apps of the tenant query System.Files; until then the old types\nstay in System.Reporting 2.3.0.\n",
+        "steps": []
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.3.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from System.Reporting 2.x to 3.0.0 (AB#6176, Epic AB#6171). Intentionally empty.\n\n3.0.0 is a major because the file system types FileSystemEntity, FileSystemContainer,\nFileSystemItem, Folder and FolderRoot and the attribute Content move out of this model to the\nplatform model System.Files 1.0.0 (owned by the asset repository, imported into every tenant).\nThe data of those types is NOT moved by this migration: the asset repository\u0027s file sweep\n(AB#6175) moves the entities, associations and GridFS owner stamps to System.Files. Reporting\nonly keeps ConnectionInfo.\n\nWhy the script exists at all (AB#4924 / G3): the CK engine refuses the post-chain schema-only\nbridge across a major version (CkMigrationMajorVersionGuard). This empty step is the explicit\nstatement that 2.x -\u003E 3.0.0 needs no data transform of its own.\n\nRollout order (concept AB#6171 section 8.7): import 3.0.0 into a tenant only after the file\nsweep has run there and the apps of the tenant query System.Files; until then the old types\nstay in System.Reporting 2.3.0.\n",
+        "steps": []
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.3.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from System.Reporting 2.x to 3.0.0 (AB#6176, Epic AB#6171). Intentionally empty.\n\n3.0.0 is a major because the file system types FileSystemEntity, FileSystemContainer,\nFileSystemItem, Folder and FolderRoot and the attribute Content move out of this model to the\nplatform model System.Files 1.0.0 (owned by the asset repository, imported into every tenant).\nThe data of those types is NOT moved by this migration: the asset repository\u0027s file sweep\n(AB#6175) moves the entities, associations and GridFS owner stamps to System.Files. Reporting\nonly keeps ConnectionInfo.\n\nWhy the script exists at all (AB#4924 / G3): the CK engine refuses the post-chain schema-only\nbridge across a major version (CkMigrationMajorVersionGuard). This empty step is the explicit\nstatement that 2.x -\u003E 3.0.0 needs no data transform of its own.\n\nRollout order (concept AB#6171 section 8.7): import 3.0.0 into a tenant only after the file\nsweep has run there and the apps of the tenant query System.Files; until then the old types\nstay in System.Reporting 2.3.0.\n",
+        "steps": []
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.3.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from System.Reporting 2.x to 3.0.0 (AB#6176, Epic AB#6171). Intentionally empty.\n\n3.0.0 is a major because the file system types FileSystemEntity, FileSystemContainer,\nFileSystemItem, Folder and FolderRoot and the attribute Content move out of this model to the\nplatform model System.Files 1.0.0 (owned by the asset repository, imported into every tenant).\nThe data of those types is NOT moved by this migration: the asset repository\u0027s file sweep\n(AB#6175) moves the entities, associations and GridFS owner stamps to System.Files. Reporting\nonly keeps ConnectionInfo.\n\nWhy the script exists at all (AB#4924 / G3): the CK engine refuses the post-chain schema-only\nbridge across a major version (CkMigrationMajorVersionGuard). This empty step is the explicit\nstatement that 2.x -\u003E 3.0.0 needs no data transform of its own.\n\nRollout order (concept AB#6171 section 8.7): import 3.0.0 into a tenant only after the file\nsweep has run there and the apps of the tenant query System.Files; until then the old types\nstay in System.Reporting 2.3.0.\n",
+        "steps": []
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.3.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from System.Reporting 2.x to 3.0.0 (AB#6176, Epic AB#6171). Intentionally empty.\n\n3.0.0 is a major because the file system types FileSystemEntity, FileSystemContainer,\nFileSystemItem, Folder and FolderRoot and the attribute Content move out of this model to the\nplatform model System.Files 1.0.0 (owned by the asset repository, imported into every tenant).\nThe data of those types is NOT moved by this migration: the asset repository\u0027s file sweep\n(AB#6175) moves the entities, associations and GridFS owner stamps to System.Files. Reporting\nonly keeps ConnectionInfo.\n\nWhy the script exists at all (AB#4924 / G3): the CK engine refuses the post-chain schema-only\nbridge across a major version (CkMigrationMajorVersionGuard). This empty step is the explicit\nstatement that 2.x -\u003E 3.0.0 needs no data transform of its own.\n\nRollout order (concept AB#6171 section 8.7): import 3.0.0 into a tenant only after the file\nsweep has run there and the apps of the tenant query System.Files; until then the old types\nstay in System.Reporting 2.3.0.\n",
+        "steps": []
+      }
+    ]
+  },
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "ConnectionInfo-1",
+      "derivedFromCkTypeId": "System@2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "Connection Information of Reporting Services",
+      "attributes": [
+        {
+          "id": "System.Reporting-3.0.0/Provider-1",
+          "name": "Provider",
+          "isOptional": true
+        },
+        {
+          "id": "System.Reporting-3.0.0/ConnectionString-1",
+          "name": "ConnectionString",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "ConnectionString-1",
+      "valueType": "Secret",
+      "ownership": "Secret",
+      "isRuntimeState": true,
+      "description": "Connection string of a shared report data connection. Stored encrypted; write the plaintext, reads only report whether it is set. The reporting service reveals it in process for the report designer and engine."
+    },
+    {
+      "id": "Provider-1",
+      "valueType": "String",
+      "isRuntimeState": false
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "System.Reporting-3.0.0"
+}
