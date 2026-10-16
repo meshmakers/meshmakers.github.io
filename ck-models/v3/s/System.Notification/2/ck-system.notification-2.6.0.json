@@ -1,0 +1,705 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.5.0"
+  ],
+  "dependencyRanges": [
+    {
+      "range": "System-[2.5,3.0)",
+      "floor": "2.5.0",
+      "usedSurface": [
+        "System@2/Configuration-1",
+        "System@2/Description-1",
+        "System@2/Enabled-1",
+        "System@2/Entity-1",
+        "System@2/Name-1",
+        "System@2/PersistentQuery-1"
+      ],
+      "usedSurfaceHash": "sha256:85a8bcb64417fd4d4baef49aa2ef6bb39f3e183e6af3f1e6fe9c1dc6413d6a11"
+    }
+  ],
+  "minEngineVersion": "3.5.1",
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "CssTemplateConfiguration-1",
+      "derivedFromCkTypeId": "System@2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Notification-2.6.0/CssStyle-1",
+          "name": "CssStyle",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Event-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Notification-2.6.0/Message-1",
+          "name": "Message",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/EventLevel-1",
+          "name": "Level",
+          "isOptional": false
+        },
+        {
+          "id": "System.Notification-2.6.0/EventSource-1",
+          "name": "Source",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "MailNotificationConfiguration-1",
+      "derivedFromCkTypeId": "System@2/Configuration-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Notification-2.6.0/EnableEmailNotifications-1",
+          "name": "EnableEmailNotifications",
+          "isOptional": false
+        },
+        {
+          "id": "System.Notification-2.6.0/RedirectAfterEmailInteractionUrl-1",
+          "name": "RedirectAfterEmailInteractionUrl",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "NotificationDeliveryState-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Notification-2.6.0/DeliveryStatePreference-1",
+          "targetCkTypeId": "System.Notification-2.6.0/NotificationPreference-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "What the notification engine remembers about one preference between runs. Written by the engine only.",
+      "attributes": [
+        {
+          "id": "System.Notification-2.6.0/ProcessedUntil-1",
+          "name": "ProcessedUntil",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/SentRows-1",
+          "name": "SentRows",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/QueryRtId-1",
+          "name": "QueryRtId",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/DeliveredToSubjectId-1",
+          "name": "SubjectId",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/DeliveredWithSkipExistingRows-1",
+          "name": "SkipExistingRows",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/LastRunAt-1",
+          "name": "LastRunAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/LastSentAt-1",
+          "name": "LastSentAt",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/LastError-1",
+          "name": "LastError",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/RunningSince-1",
+          "name": "RunningSince",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "NotificationPreference-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Notification-2.6.0/PreferenceSubscription-1",
+          "targetCkTypeId": "System.Notification-2.6.0/NotificationSubscription-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One user subscribed to a notification subscription, with when they get its new rows.",
+      "attributes": [
+        {
+          "id": "System.Notification-2.6.0/SubjectId-1",
+          "name": "SubjectId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Notification-2.6.0/CronExpression-1",
+          "name": "CronExpression",
+          "isOptional": false
+        },
+        {
+          "id": "System.Notification-2.6.0/SkipExistingRows-1",
+          "name": "SkipExistingRows",
+          "isOptional": false
+        },
+        {
+          "id": "System.Notification-2.6.0/TimeZone-1",
+          "name": "TimeZone",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "NotificationSubscription-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": true,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "System.Notification-2.6.0/SubscriptionQuery-1",
+          "targetCkTypeId": "System@2/PersistentQuery-1"
+        },
+        {
+          "id": "System.Notification-2.6.0/SubscriptionTemplate-1",
+          "targetCkTypeId": "System.Notification-2.6.0/NotificationTemplate-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "What to notify about (a runtime query) and what to send (a notification template); users subscribe to it with a notification preference.",
+      "attributes": [
+        {
+          "id": "System@2/Name-1",
+          "name": "Name",
+          "isOptional": false
+        },
+        {
+          "id": "System@2/Description-1",
+          "name": "Description",
+          "isOptional": true
+        },
+        {
+          "id": "System@2/Enabled-1",
+          "name": "Enabled",
+          "isOptional": false,
+          "ownership": "TenantOwned"
+        },
+        {
+          "id": "System.Notification-2.6.0/DeployedAt-1",
+          "name": "DeployedAt",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "NotificationTemplate-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Notification-2.6.0/SubjectTemplate-1",
+          "name": "SubjectTemplate",
+          "isOptional": false
+        },
+        {
+          "id": "System.Notification-2.6.0/BodyTemplate-1",
+          "name": "BodyTemplate",
+          "isOptional": true
+        },
+        {
+          "id": "System.Notification-2.6.0/NotificationType-1",
+          "name": "Type",
+          "isOptional": false
+        },
+        {
+          "id": "System.Notification-2.6.0/RenderingType-1",
+          "name": "RenderingType",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "StatefulEvent-1",
+      "derivedFromCkTypeId": "System.Notification-2.6.0/Event-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "attributes": [
+        {
+          "id": "System.Notification-2.6.0/EventState-1",
+          "name": "State",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "DeliveryStatePreference-1",
+      "inboundName": "DeliveryState",
+      "outboundName": "Preference",
+      "inboundMultiplicity": "ZeroOrOne",
+      "outboundMultiplicity": "One",
+      "description": "Links the engine\u0027s delivery state to the preference it belongs to."
+    },
+    {
+      "id": "PreferenceSubscription-1",
+      "inboundName": "Preferences",
+      "outboundName": "Subscription",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Links a notification preference to the subscription whose mails the user receives."
+    },
+    {
+      "id": "SubscriptionQuery-1",
+      "inboundName": "NotificationSubscriptions",
+      "outboundName": "Query",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Links a notification subscription to the runtime query whose new rows it notifies about."
+    },
+    {
+      "id": "SubscriptionTemplate-1",
+      "inboundName": "Subscriptions",
+      "outboundName": "Template",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Links a notification subscription to the template its notifications are rendered with."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "BodyTemplate-1",
+      "valueType": "String",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "The body of the event as a template"
+    },
+    {
+      "id": "BodyText-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "The body text of the notification"
+    },
+    {
+      "id": "CronExpression-1",
+      "valueType": "String",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "Cron expression with five fields, or six with seconds, that sets when the preference\u0027s user gets the new rows of the subscription"
+    },
+    {
+      "id": "CssStyle-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "The css style for a rendered html text"
+    },
+    {
+      "id": "DeliveredToSubjectId-1",
+      "valueType": "String",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "The subject id the delivery state was built for; when the preference names another user, the next run starts from scratch"
+    },
+    {
+      "id": "DeliveredWithSkipExistingRows-1",
+      "valueType": "Boolean",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "The start option the delivery state was built with; when the preference switches between Onwards and Catch up, the next run is a new start that keeps the rows sent in the last 30 days"
+    },
+    {
+      "id": "DeployedAt-1",
+      "valueType": "DateTime",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "When the subscription was last deployed; a preference starts at the later of its creation and this moment"
+    },
+    {
+      "id": "EnableEmailNotifications-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "false"
+      ],
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "Enable email notifications"
+    },
+    {
+      "id": "EventLevel-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Notification-2.6.0/EventLevels-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Defines the level of the event (Information, Warning, Error)"
+    },
+    {
+      "id": "EventSource-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Notification-2.6.0/EventSources-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Defines event sources"
+    },
+    {
+      "id": "EventState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Notification-2.6.0/EventStates-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Defines the state of the event (Active, Inactive)"
+    },
+    {
+      "id": "LastError-1",
+      "valueType": "String",
+      "ownership": "RuntimeState",
+      "isRuntimeState": true,
+      "description": "Why the last run of the preference failed; empty after a successful run"
+    },
+    {
+      "id": "LastRunAt-1",
+      "valueType": "DateTime",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "When the engine last ran the preference\u0027s query"
+    },
+    {
+      "id": "LastSentAt-1",
+      "valueType": "DateTime",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "When the engine last sent the preference\u0027s user a mail"
+    },
+    {
+      "id": "Message-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "The message of the event"
+    },
+    {
+      "id": "NotificationType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Notification-2.6.0/NotificationTypes-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Defines the type of the notification (Email, SMS, Push)"
+    },
+    {
+      "id": "ProcessedUntil-1",
+      "valueType": "DateTime",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "The change time (rtChangedDateTime) up to which the query result was processed; the next run reads only rows changed after it, minus a five-minute overlap for late commits and clock skew; empty means from the beginning"
+    },
+    {
+      "id": "QueryRtId-1",
+      "valueType": "String",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "The query the delivery state was built with; when the subscription points at another query, the next run is a new start"
+    },
+    {
+      "id": "RedirectAfterEmailInteractionUrl-1",
+      "valueType": "String",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "Redirect after email interaction URL"
+    },
+    {
+      "id": "RenderingType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "System.Notification-2.6.0/RenderingTypes-1",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "Defines the rendering type of the notification (Text, Html)"
+    },
+    {
+      "id": "RunningSince-1",
+      "valueType": "DateTime",
+      "ownership": "RuntimeState",
+      "isRuntimeState": true,
+      "description": "Lease of a run in progress; another tick of the same preference is skipped while it is recent"
+    },
+    {
+      "id": "SentRowAt-1",
+      "valueType": "DateTime",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "When the row was mailed; the entry is dropped 30 days later"
+    },
+    {
+      "id": "SentRowChangedAt-1",
+      "valueType": "DateTime",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "The change time of the row when it was mailed; while it lies inside the overlap the next run reads, the entry is never dropped"
+    },
+    {
+      "id": "SentRowRtId-1",
+      "valueType": "String",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "The rtId of a row of the query result that was mailed"
+    },
+    {
+      "id": "SentRows-1",
+      "valueType": "RecordArray",
+      "valueCkRecordId": "System.Notification-2.6.0/SentRow-1",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "The rows mailed to the user, so that they are not mailed again; an entry is kept while the next run could read its row again (changed inside the overlap) and otherwise for 30 days, at most the 10,000 most recent, so the size is bounded by the recent sends and not by the size of the query result"
+    },
+    {
+      "id": "SkipExistingRows-1",
+      "valueType": "Boolean",
+      "defaultValues": [
+        "true"
+      ],
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "Rows that already match the query when the preference starts (created or its subscription deployed, whichever is later) are not sent to its user"
+    },
+    {
+      "id": "SubjectId-1",
+      "valueType": "String",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "Subject id (token sub) of the Identity user the preference belongs to"
+    },
+    {
+      "id": "SubjectTemplate-1",
+      "valueType": "String",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "The subject of the event as a template"
+    },
+    {
+      "id": "SubjectText-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "The subject text of the notification"
+    },
+    {
+      "id": "TimeZone-1",
+      "valueType": "String",
+      "ownership": "TenantOwned",
+      "isRuntimeState": true,
+      "description": "IANA time zone (for example Europe/Vienna) the preference\u0027s cron expression is scheduled in, and that dates in its mails are shown in; empty means UTC"
+    }
+  ],
+  "records": [
+    {
+      "recordId": "SentRow-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "One row of a notification query result that was mailed to the preference\u0027s user, and when.",
+      "attributes": [
+        {
+          "id": "System.Notification-2.6.0/SentRowRtId-1",
+          "name": "RowRtId",
+          "isOptional": false
+        },
+        {
+          "id": "System.Notification-2.6.0/SentRowAt-1",
+          "name": "SentAt",
+          "isOptional": false
+        },
+        {
+          "id": "System.Notification-2.6.0/SentRowChangedAt-1",
+          "name": "ChangedAt",
+          "isOptional": false
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "EventLevels-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Debug",
+          "description": "Debug",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Information",
+          "description": "Information",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Warning",
+          "description": "Warning",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Error",
+          "description": "Error",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Critical",
+          "description": "Critical",
+          "isExtension": false
+        }
+      ],
+      "description": "Defines the level of the event (Information, Warning, Error)"
+    },
+    {
+      "enumId": "EventSources-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Undefined",
+          "description": "No source has been assigned to the event.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "IdentityService",
+          "description": "The event was generated by the Identity Service.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "BotService",
+          "description": "The event was generated by the Bot Service.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "CommunicationService",
+          "description": "The event was generated by the Communication Service.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "AssetRepositoryService",
+          "description": "The event was generated by the Asset Repository Service.",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "MeshAdapter",
+          "description": "The event was generated by the Mesh Adapter.",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "AdminPanel",
+          "description": "The event was generated by the Admin Panel.",
+          "isExtension": false
+        }
+      ],
+      "description": "The source of an event is the entity that is responsible for the event."
+    },
+    {
+      "enumId": "EventStates-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Active",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Inactive",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Error",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "NotificationTypes-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 1,
+          "name": "EMail",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "SMS",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Push",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "RenderingTypes-1",
+      "useFlags": false,
+      "isExtensible": false,
+      "values": [
+        {
+          "key": 0,
+          "name": "Plain",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Html",
+          "isExtension": false
+        }
+      ]
+    }
+  ],
+  "modelId": "System.Notification-2.6.0"
+}
