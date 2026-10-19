@@ -1,0 +1,29 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.1.0,4.0)
+  - Meshmakers.Accounting.Tesla-[1.4,2.0)
+  - System.Bot-[3.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+entities:
+  - rtId: 67d4a2f0b2e4d8c3a1f00300
+    ckTypeId: Meshmakers.Accounting.Tesla/TeslaConfiguration
+    rtWellKnownName: TeslaConfiguration
+    attributes:
+      - id: Meshmakers.Accounting.Tesla/BaseUrl
+        value: "https://fleet-api.prd.eu.vn.cloud.tesla.com"
+      - id: Meshmakers.Accounting.Tesla/TokenUrl
+        value: "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
+      - id: Meshmakers.Accounting.Tesla/ClientId
+        value: "<tesla-client-id-here>"
+      # AB#5929: the two credentials are seeded EMPTY, never with a placeholder
+      # (SECRET attributes with the Meshmakers.Accounting.Tesla SECRET model; a
+      # placeholder would then be an ordinary, encrypted value that reads as "set").
+      # Both are runtime state: a re-apply keeps what the tenant stored and the
+      # fetcher pipeline rotated.
+      - id: Meshmakers.Accounting.Tesla/ClientSecret
+        value: ""
+      - id: Meshmakers.Accounting.Tesla/RefreshToken
+        value: ""
+      - id: Meshmakers.Accounting.Tesla/PageSize
+        value: 25
