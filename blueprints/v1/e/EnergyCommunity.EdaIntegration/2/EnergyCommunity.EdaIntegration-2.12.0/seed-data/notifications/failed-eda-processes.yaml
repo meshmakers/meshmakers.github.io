@@ -1,0 +1,100 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.9,2.0)
+- EnergyCommunity-[4.8,5.0)
+- System.Notification-[2.6,3.0)
+
+# Notification about failed EDA processes (AB#2585). Engine: System.Communication.Notifications
+# (communication controller). The subscription ships undeployed; recipients are added in the
+# Energy Community app (Settings > Notifications), which also deploys it.
+#
+# The customer columns navigate process -System/Related-> metering point -> operating facility ->
+# customer. `Start EDA process HTTP request` writes that edge since 2.12.0; older processes get it
+# from `Relate EDA processes to metering points`. NavigationFilterMode is Include, so a process
+# without the edge, or a facility without a customer (no Billing blueprint), is still listed with
+# empty customer cells.
+entities:
+
+- rtId: 'ec0000000000000000000d11'
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Failed EDA processes
+  - id: System/Description-1
+    value: EDA processes the grid operator rejected or that failed, with their metering point and customer.
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaProcess
+  - id: System/Query.NavigationFilterMode-1
+    value: 1
+  - id: System/Query.Columns-1
+    value:
+    - name
+    - meteringPointNumber
+    - startTime
+    - responseCode
+    - info
+    - relatesTo.basicEnergyMeteringPoint->parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->customerNumber
+    - relatesTo.basicEnergyMeteringPoint->parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->contact.firstName
+    - relatesTo.basicEnergyMeteringPoint->parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->contact.lastName
+    - relatesTo.basicEnergyMeteringPoint->parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->contact.companyName
+  - id: System/Query.Sorting-1
+    value:
+    - ckRecordId: System/SortOrderItem-1
+      attributes:
+      - id: System/AttributePath-1
+        value: startTime
+      - id: System/SortOrder-1
+        value: 1
+  - id: System/Query.FieldFilter-1
+    value:
+    - ckRecordId: System/FieldFilter-1
+      attributes:
+      - id: System/AttributePath-1
+        value: success
+      - id: System/FieldFilter.Operator-1
+        value: 0
+      - id: System/ComparisonValue-1
+        value: false
+
+- rtId: 'ec0000000000000000000d12'
+  ckTypeId: System.Notification/NotificationTemplate-1
+  rtWellKnownName: eda-process-failed
+  associations: []
+  attributes:
+  - id: System/RtBlueprintLocked-1
+    value: false
+  - id: System.Notification/SubjectTemplate-1
+    value: 'Fehlgeschlagene EDA-Prozesse: ${count}'
+  - id: System.Notification/BodyTemplate-1
+    value: |-
+      <p><strong>${name}</strong> - Zählpunkt ${meteringPointNumber}<br />
+      Kunde: ${relatesTo.basicEnergyMeteringPoint->parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->customerNumber} ${relatesTo.basicEnergyMeteringPoint->parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->contact.firstName} ${relatesTo.basicEnergyMeteringPoint->parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->contact.lastName} ${relatesTo.basicEnergyMeteringPoint->parent.basicEnergyOperatingFacility->customer.energyCommunityCustomer->contact.companyName}<br />
+      Gestartet: ${startTime}<br />
+      Antwortcode: ${responseCode}<br />
+      Info: ${info}</p>
+  - id: System.Notification/NotificationType-1
+    value: 1
+  - id: System.Notification/RenderingType-1
+    value: 1
+
+- rtId: 'ec0000000000000000000d13'
+  ckTypeId: System.Notification/NotificationSubscription-1
+  associations:
+  - roleId: System.Notification/SubscriptionQuery-1
+    targetRtId: 'ec0000000000000000000d11'
+    targetCkTypeId: System/SimpleRtQuery-1
+    attributes: []
+  - roleId: System.Notification/SubscriptionTemplate-1
+    targetRtId: 'ec0000000000000000000d12'
+    targetCkTypeId: System.Notification/NotificationTemplate-1
+    attributes: []
+  attributes:
+  - id: System/RtBlueprintLocked-1
+    value: false
+  - id: System/Name-1
+    value: Fehlgeschlagene EDA-Prozesse
+  - id: System/Description-1
+    value: Meldet EDA-Prozesse, die der Netzbetreiber abgelehnt hat oder die fehlgeschlagen sind.
+  - id: System/Enabled-1
+    value: false
