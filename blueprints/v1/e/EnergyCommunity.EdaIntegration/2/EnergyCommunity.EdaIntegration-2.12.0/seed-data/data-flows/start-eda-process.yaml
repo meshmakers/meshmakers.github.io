@@ -1,0 +1,465 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.9,2.0)
+- EnergyCommunity-[4.8,5.0)
+- System.Communication-[4.5,5.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipelines — the seed carries the pipeline definitions inline.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── EDA pipelines ───────────────────────────────────────────────────────
+
+# Source: _eda/start-eda-process-pipeline.yaml
+- rtId: 68c28086234ceec0d029dfec
+  rtCreationDateTime: 2025-09-11T07:55:50.6700000Z
+  rtChangedDateTime: 2025-11-17T16:14:53.6880000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68b017a08f03da854927fd86
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Start EDA process HTTP request
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: >+
+      triggers:
+        - type: FromHttpRequest@2
+          path: /startProcess
+          method: POST
+          # AB#5627 phase A: a valid token of this tenant is required. Phase B adds the
+          # required role once the roles are assigned in every productive tenant.
+          allowAnonymous: false
+          requiredRoles: []
+      transformations:
+        # EdaStartProcess@1 sends the request at once - unless it carries a start date. Then nothing
+        # is created or sent yet and the result only carries that StartDate: the process is stored as
+        # planned, and `Start planned EDA processes` sends it when the date is due (1.x AB#3147).
+        - type: EdaStartProcess@1
+          path: $.body.requestData
+          targetPath: $.request
+        - type: If@1
+          description: request successful
+          path: $.request.IsSuccess
+          operator: Equals
+          value: true
+          valueType: Boolean
+          transformations:
+            - type: If@1
+              description: already sent to receiver
+              path: $.request.StartDate
+              operator: Equals
+              value: null
+              valueType: DateTime
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.update
+                  targetValueKind: Array
+                  updateKind: INSERT
+                  ckTypeId: Basic.Energy/EdaProcess
+                  rtIdPath: $.rtId
+                  generateRtId: true
+                  attributeUpdates:
+                    - attributeName: Name
+                      attributeValueType: String
+                      valuePath: $.body.requestData.processName
+                    - attributeName: Description
+                      attributeValueType: String
+                      valuePath: $.body.requestData.comment
+                    - attributeName: ConversationId
+                      attributeValueType: String
+                      valuePath: $.request.Message.ProcessDirectory.ConversationId
+                    - attributeName: Finished
+                      attributeValueType: Boolean
+                      value: false
+                    - attributeName: StartTime
+                      attributeValueType: DateTime
+                      valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.DocumentCreationDateTime
+                    - attributeName: Sender
+                      attributeValueType: String
+                      valuePath: $.body.requestData.processData.sender
+                    - attributeName: Receiver
+                      attributeValueType: String
+                      valuePath: $.body.requestData.processData.receiver
+                    - attributeName: MeteringPointNumber
+                      attributeValueType: String
+                      valuePath: $.body.requestData.processData.meteringPoint
+                    - attributeName: Planned
+                      attributeValueType: Boolean
+                      value: false
+                    - attributeName: RawMessage
+                      attributeValueType: String
+                      valuePath: $.request.Message
+            - type: If@1
+              description: planned process
+              path: $.request.StartDate
+              operator: NotEqual
+              value: null
+              valueType: DateTime
+              transformations:
+                - type: CreateUpdateInfo@1
+                  targetPath: $.update
+                  targetValueKind: Array
+                  updateKind: INSERT
+                  ckTypeId: Basic.Energy/EdaProcess
+                  rtIdPath: $.rtId
+                  generateRtId: true
+                  attributeUpdates:
+                    - attributeName: Name
+                      attributeValueType: String
+                      valuePath: $.body.requestData.processName
+                    - attributeName: Description
+                      attributeValueType: String
+                      valuePath: $.body.requestData.comment
+                    - attributeName: ConversationId
+                      attributeValueType: String
+                      value: "-"
+                    - attributeName: Finished
+                      attributeValueType: Boolean
+                      value: false
+                    - attributeName: StartTime
+                      attributeValueType: DateTime
+                      valuePath: $.request.StartDate
+                    - attributeName: Sender
+                      attributeValueType: String
+                      valuePath: $.body.requestData.processData.sender
+                    - attributeName: Receiver
+                      attributeValueType: String
+                      valuePath: $.body.requestData.processData.receiver
+                    - attributeName: MeteringPointNumber
+                      attributeValueType: String
+                      valuePath: $.body.requestData.processData.meteringPoint
+                    - attributeName: Planned
+                      attributeValueType: Boolean
+                      value: true
+                    - attributeName: ProcessData
+                      attributeValueType: String
+                      valuePath: $.body.requestData.processData
+            - type: GetRtEntitiesByType@1
+              description: The metering point the process is about
+              identity: ServiceAccount
+              ckTypeId: Basic.Energy/MeteringPoint
+              targetPath: $.meteringPoint
+              take: 2
+              fieldFilters:
+                - attributePath: MeteringPointNumber
+                  operator: Equals
+                  comparisonValuePath: $.body.requestData.processData.meteringPoint
+            - type: If@1
+              description: a metering point carries the number
+              path: $.meteringPoint.Items[0].RtId
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: If@1
+                  description: no second metering point carries it
+                  path: $.meteringPoint.Items[1].RtId
+                  operator: Equals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: CreateAssociationUpdate@1
+                      description: Relate the process to its metering point
+                      targetPath: $.relation
+                      targetValueKind: Array
+                      updateKind: CREATE
+                      originRtIdPath: $.update[0].RtEntity.RtId
+                      originCkTypeId: Basic.Energy/EdaProcess
+                      targetRtIdPath: $.meteringPoint.Items[0].RtId
+                      targetCkTypeIdPath: $.meteringPoint.Items[0].CkTypeId
+                      associationRoleId: System/Related
+            - type: ApplyChanges@2
+              identity: ServiceAccount
+              entityUpdatesPath: $.update
+              associationUpdatesPath: $.relation
+
+        # AB#5627: the adapter answers the HTTP call with the final data context verbatim -
+        # request headers, principal, body and the raw EDA message. Reduce it to status and
+        # message; status=ok only when the EDA messenger accepted the request (or the process
+        # was stored as planned). Callers today key off the HTTP status, which stays 200.
+        - type: SetPrimitiveValue@1
+          targetPath: $.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.message
+          value: "The EDA messenger did not accept the process request."
+          valueType: String
+        - type: If@1
+          description: request successful
+          path: $.request.IsSuccess
+          operator: Equals
+          value: true
+          valueType: Boolean
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.status
+              value: ok
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.message
+              value: "EDA process started or planned."
+              valueType: String
+        - type: Project@1
+          description: Shape the HTTP response body
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+# Second pipeline in the start-eda-process DataFlow: starts EDA processes that
+# were persisted with Planned=true and a due StartTime (AB#3147 in the CK model,
+# ported from energy-community-deployment). It polls every 10 minutes
+# (FromPolling@1 00:10:00) once the DataFlow is deployed; FromExecutePipelineCommand@1
+# stays in the definition, commented out.
+- rtId: 6a2bc26a6830b2865f042892
+  rtCreationDateTime: 2026-06-12T08:25:14.8890000Z
+  rtChangedDateTime: 2026-06-12T12:25:21.3760000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68b017a08f03da854927fd86
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Start planned EDA processes
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: "triggers:\n  # - type: FromExecutePipelineCommand@1\n  - type: FromPolling@1\n    interval: 00:10:00\ntransformations:\n  - type: DateTime@1\n    description: current date\n    operation: Now\n    targetPath: $.Now\n  - type: GetQueryById@1\n    targetPath: $.query\n    queryRtId: 6a2bbc146830b2865f042891\n    fieldFilters:\n      - attributePath: startTime\n        operator: LessEqualThan\n        comparisonValuePath: $.Now\n  - type: ForEach@1\n    description: messages\n    iterationPath: $.query.Rows\n    maxDegreeOfParallelism: 1\n    #mergePath: $.message\n    #targetPath: $.result\n    transformations:\n      - type: SetPrimitiveValue@1\n        description: process name\n        valueType: String\n        targetPath: $.process.processName\n        valuePath: $.key.Values[0]\n      - type: EdaStartProcess@1\n        path: $.process\n        processDataPath: $.key.Values[2]\n        targetPath: $.request\n      - type: If@1\n        description: request successful\n        path: $.request.IsSuccess\n        operator: Equals\n        value: true\n        valueType: Boolean\n        transformations:\n          - type: CreateUpdateInfo@1\n            targetPath: $.update\n            targetValueKind: Array\n            updateKind: UPDATE\n            ckTypeIdPath: $.key.CkTypeId\n            rtIdPath: $.key.RtId\n            attributeUpdates:\n              - attributeName: ConversationId\n                attributeValueType: String\n                valuePath: $.request.Message.ProcessDirectory.ConversationId\n              - attributeName: Finished\n                attributeValueType: Boolean\n                value: false\n              - attributeName: StartTime\n                attributeValueType: DateTime\n                valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.DocumentCreationDateTime\n              - attributeName: Planned\n                attributeValueType: Boolean\n                value: false\n              - attributeName: RawMessage\n                attributeValueType: String\n                valuePath: $.request.Message\n          - type: ApplyChanges@1\n            path: $.update"
+# Third pipeline in the start-eda-process DataFlow (AB#2585): relates every EDA process that has
+# no metering point yet to the one metering point carrying its number (System/Related), so the
+# notification query ec0000000000000000000d11 can show the customer. One run handles one page of
+# 1000 processes in rtId order and writes its relations in one transaction: run it without input,
+# then again with {"after": "<next>"} until the result carries no `next`. Re-runs skip processes
+# that are already related. The result lists the new relations and the processes whose number
+# matches no or several metering points.
+- rtId: ec0000000000000000000d14
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68b017a08f03da854927fd86
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Relate EDA processes to metering points
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: SetPrimitiveValue@1
+          description: First page
+          targetPath: $.cursor
+          value: '000000000000000000000000'
+          valueType: String
+        - type: If@1
+          description: a later page
+          path: $.after
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.cursor
+              valuePath: $.after
+              valueType: String
+        - type: SetPrimitiveValue@1
+          description: The page this run read, also when it was empty
+          targetPath: $.result.after
+          valuePath: $.cursor
+          valueType: String
+        - type: GetRtEntitiesByType@1
+          description: One page of EDA processes after the cursor
+          identity: ServiceAccount
+          ckTypeId: Basic.Energy/EdaProcess
+          take: 1000
+          sortOrders:
+            - attributeName: rtId
+              sortOrder: Ascending
+          fieldFilters:
+            - attributePath: rtId
+              operator: GreaterThan
+              comparisonValuePath: $.cursor
+          targetPath: $.processes
+        - type: If@1
+          description: there is a process
+          path: $.processes.Items[0].RtId
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: GetQueryById@1
+              description: The processes of the page that are already related to a metering point
+              queryRtId: ec0000000000000000000d15
+              fieldFilters:
+                - attributePath: rtId
+                  operator: In
+                  comparisonValuePath: $.processes.Items[*].RtId
+              targetPath: $.related
+            - type: GetRtEntitiesByType@1
+              description: The metering points carrying a number of the page
+              identity: ServiceAccount
+              ckTypeId: Basic.Energy/MeteringPoint
+              fieldFilters:
+                - attributePath: meteringPointNumber
+                  operator: In
+                  comparisonValuePath: $.processes.Items[*].Attributes.MeteringPointNumber
+              targetPath: $.meteringPoints
+            - type: Join@1
+              description: The relation a process already has
+              path: $.processes.Items[*]
+              keyPath: $.RtId
+              joinPath: $.related.Rows[*]
+              joinKeyPath: $.RtId
+              itemPath: $.related
+            - type: Join@1
+              description: The metering points that carry the process's number
+              path: $.processes.Items[*]
+              keyPath: $.Attributes.MeteringPointNumber
+              joinPath: $.meteringPoints.Items[*]
+              joinKeyPath: $.Attributes.MeteringPointNumber
+              itemPath: $.meteringPoints
+              allowMissingKey: true
+            - type: ForEach@1
+              iterationPath: $.processes.Items
+              mergePath: $.updates
+              targetPath: $.updates
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: If@1
+                  description: not related yet
+                  path: $.key.related[0].RtId
+                  operator: Equals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: If@1
+                      description: a metering point carries the number
+                      path: $.key.meteringPoints[0].RtId
+                      operator: NotEquals
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: If@1
+                          description: no second metering point carries it
+                          path: $.key.meteringPoints[1].RtId
+                          operator: Equals
+                          value: null
+                          valueType: String
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              description: Relate the process to its metering point
+                              targetPath: $.updates.relations
+                              updateKind: CREATE
+                              originRtIdPath: $.key.RtId
+                              originCkTypeId: Basic.Energy/EdaProcess
+                              targetRtIdPath: $.key.meteringPoints[0].RtId
+                              targetCkTypeIdPath: $.key.meteringPoints[0].CkTypeId
+                              associationRoleId: System/Related
+                    - type: If@1
+                      description: no metering point carries the number
+                      path: $.key.meteringPoints[0].RtId
+                      operator: Equals
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.updates.unmatched
+                          valuePath: $.key.RtId
+                          valueType: String
+                    - type: If@1
+                      description: several metering points carry the number
+                      path: $.key.meteringPoints[1].RtId
+                      operator: NotEquals
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.updates.unmatched
+                          valuePath: $.key.RtId
+                          valueType: String
+            - type: Flatten@1
+              path: $.updates[*].relations
+              targetPath: $.result.relations
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: Flatten@1
+              path: $.updates[*].unmatched
+              targetPath: $.result.unmatched
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: ApplyChanges@2
+              identity: ServiceAccount
+              associationUpdatesPath: $.result.relations
+            - type: If@1
+              description: the page was full, so another one may follow
+              path: $.processes.Items[999].RtId
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  description: Run again with this as after
+                  targetPath: $.result.next
+                  valuePath: $.processes.Items[999].RtId
+                  valueType: String
+        - type: SetPipelineExecutionResult@1
+          path: $.result
+- rtId: 'ec0000000000000000000d15'
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: pipeline_eda_processes_related_to_metering_point
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EdaProcess
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
+  - id: System/Query.Columns-1
+    value:
+    - meteringPointNumber
+    - relatesTo.basicEnergyMeteringPoint->rtId
+- rtId: 68b017a08f03da854927fd86
+  rtCreationDateTime: 2025-08-28T08:47:28.9310000Z
+  rtChangedDateTime: 2025-09-11T07:55:50.5910000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: start-eda-process
+  - id: System/Description-1
+    value: Pipeline to start eda processes
