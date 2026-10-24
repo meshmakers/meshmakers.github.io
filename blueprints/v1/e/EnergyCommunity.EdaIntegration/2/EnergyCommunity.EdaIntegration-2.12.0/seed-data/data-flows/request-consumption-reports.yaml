@@ -1,0 +1,315 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[1.9,2.0)
+- EnergyCommunity-[4.8,5.0)
+- System.Communication-[4.5,5.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _eda/request-consumption-reports-pipeline.yaml
+- rtId: 692448a1911382c3502c6b96
+  rtCreationDateTime: 2025-11-24T11:59:29.1940000Z
+  rtChangedDateTime: 2026-03-20T10:55:46.2050000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 692448a0911382c3502c6b95
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromPipelineTriggerEvent@1
+        # - type: FromExecutePipelineCommand@1
+      transformations:
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.Configuration
+
+        # The cut-off is midnight UTC of today minus consumptionRecordRequestDelay
+        # days, whatever the time zone of the adapter host. The Vienna day of that
+        # date has started before it (at 22:00 or 23:00 UTC), so it is the newest
+        # day requested: on the morning of 30 September with a delay of 15 that is
+        # 15 September, as on the 1.x line.
+        - type: ExecuteCSharp@1
+          targetPath: $.until
+          code: "DateTime.UtcNow.Date - TimeSpan.FromDays(delayDays)"
+          returnType: DATETIME
+          timeoutMs: 1000
+          arguments:
+            - name: delayDays
+              valuePath: $.Configuration.consumptionRecordRequestDelay
+              dataType: INT
+
+        - type: SetPrimitiveValue@1
+          description: partner id
+          targetPath: $.partnerId
+          valuePath: $.Configuration.partnerId
+          valueType: String
+
+        - type: Project@1
+          fields:
+            - path: $.Configuration
+
+        # Which days to request again (AB#4551, AB#5512)
+        #
+        # The daily rollup of the measurement archive (ec0000000000000000000a03) holds
+        # one row per measurement anchor (metering point x OBIS code) and calendar day
+        # (Europe/Vienna), with the worst data quality of the day in dataquality_max.
+        # 3 is L3 -- the enum is stored as its key. Every anchor counts, whatever its
+        # register: an L3 value in any OBIS code asks for the day again (AB#5512; up
+        # to 2.10.1 only 1-1:2.9.0 G.03, G.01T and P.01T were read). A CR_REQ_PT
+        # returns every register of the metering point, so the requests stay one per
+        # metering point and day (Distinct@1 below).
+        #
+        # The L3 rows are read first, without an rtId filter, and only the anchors
+        # that have one are looked up: the cost of a run follows the number of L3
+        # days, not the number of anchors. The rollup has no OBIS column, so the old
+        # register filter could only come from reading every anchor beforehand.
+        #
+        # toPath keeps the rule of the 1.x line (a day counts when it started before
+        # the cut-off): on a windowed archive "to" selects the rows that start before
+        # it. No take: every L3 day is requested, every morning, until its values are
+        # better than L3. Oldest day first.
+        - type: GetStreamData@1
+          description: Days with L3 values per measurement anchor
+          archiveRtId: ec0000000000000000000a03
+          columns:
+            - dataquality_max
+          fieldFilters:
+            - attributePath: dataquality_max
+              operator: Equals
+              comparisonValue: 3
+          toPath: $.until
+          sortOrders:
+            - attributeName: WindowStart
+              sortOrder: Ascending
+          targetPath: $.query
+
+        # GetAssociationTargets@1 fails without an origin id, and ForEach@1 on a
+        # missing array, so everything else runs in here.
+        - type: If@1
+          description: At least one L3 day
+          path: $.query.Rows[0].RtId
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            # An anchor has one row per L3 day; look each one up once.
+            - type: Distinct@1
+              description: Anchors with an L3 day
+              path: $.query.Rows
+              distinctValuePath: $.RtId
+              targetPath: $.l3Anchors
+
+            - type: GetAssociationTargets@1
+              description: Metering point of each anchor with an L3 day
+              associationRoleId: System/ParentChild
+              graphDirection: Outbound
+              originCkTypeId: Basic.Energy/EnergyMeasurement
+              targetCkTypeId: Basic.Energy/MeteringPoint
+              originRtIdPath: $.l3Anchors[*].RtId
+              targetPath: $.parents
+
+            # The row of an anchor without a metering point gets no parent and is
+            # dropped by "Metering point known" below.
+            - type: Join@1
+              description: Attach the metering point to each L3 day
+              path: $.query.Rows[*]
+              keyPath: $.RtId
+              joinPath: $.parents[*]
+              joinKeyPath: $.OriginRtId
+              itemPath: $.parent
+
+            # Each row carries its metering point now; the lookup lists are dead
+            # weight for every If@1 exit below.
+            - type: Project@1
+              fields:
+                - path: $.l3Anchors
+                - path: $.parents
+
+            - type: TransformString@1
+              description: receiver from metering point number
+              path: $.query.Rows[*]
+              sourcePath: $.parent[0].Items[0].Attributes.MeteringPointNumber
+              targetPath: $.receiver
+              operation: SubstringFromStart
+              length: 8
+
+            # One request per metering point and day; the row window is the
+            # day.
+            - type: ForEach@1
+              description: All L3 days
+              #maxDegreeOfParallelism: 1
+              iterationPath: $.query.Rows
+              mergePath: $.request
+              targetPath: $.RequestData
+              transformations:
+                - type: If@1
+                  description: Metering point known
+                  path: $.key.parent[0].Items[0].Attributes.MeteringPointNumber
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: FormatString@1
+                      description: Request key (metering point and day)
+                      format: "{$.key.parent[0].Items[0].Attributes.MeteringPointNumber}|{$.key.Values[1]}"
+                      targetPath: $.request.requestKey
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.request.requestData.processName
+                      value: "CR_REQ_PT"
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.request.requestData.comment
+                      value: "Automated consumption request"
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.request.requestData.processData.meteringPoint
+                      valuePath: $.key.parent[0].Items[0].Attributes.MeteringPointNumber
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      description: Start of the day (row window)
+                      targetPath: $.request.requestData.processData.from
+                      valuePath: $.key.Values[1]
+                      valueType: DATETIME
+                    - type: SetPrimitiveValue@1
+                      description: End of the day (row window)
+                      targetPath: $.request.requestData.processData.to
+                      valuePath: $.key.Values[2]
+                      valueType: DATETIME
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.request.requestData.processData.sender
+                      valuePath: $.full.partnerId
+                      valueType: String
+                    # - type: FormatString@1
+                    #   description: Add test environment
+                    #   format: "{$.key.receiver}TEST2"
+                    #   nullValue: "NULL"
+                    #   targetPath: $.key.receiver
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.request.requestData.processData.receiver
+                      valuePath: $.key.receiver
+                      valueType: String
+
+            # Every register of a metering point with L3 on the same day yields a row.
+            - type: Distinct@1
+              description: One request per metering point and day
+              path: $.RequestData
+              distinctValuePath: $.requestKey
+              targetPath: $.RequestData
+
+            - type: Project@1
+              fields:
+                - path: $.until
+                - path: $.partnerId
+                - path: $.query
+
+            - type: ForEach@1
+              description: "Send all requests"
+              maxDegreeOfParallelism: 1
+              iterationPath: $.RequestData
+              #mergePath: $.request
+              #targetPath: $.Requests
+              transformations:
+                - type: EdaStartProcess@1
+                  path: $.key.requestData
+                  targetPath: $.request
+                - type: SetPrimitiveValue@1
+                  targetPath: $.request.comment
+                  valuePath: $.key.requestData.comment
+                  valueType: String
+                - type: If@1
+                  description: If successfull sent create a new process in DB
+                  path: $.request.IsSuccess
+                  operator: Equals
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: CreateUpdateInfo@1
+                      targetPath: $.update
+                      targetValueKind: Array
+                      updateKind: INSERT
+                      ckTypeId: Basic.Energy/EdaProcess
+                      attributeUpdates:
+                        - attributeName: Name
+                          attributeValueType: String
+                          value: "CR_REQ_PT"
+                        - attributeName: Description
+                          attributeValueType: String
+                          valuePath: $.request.comment
+                        - attributeName: ConversationId
+                          attributeValueType: String
+                          valuePath: $.request.Message.ProcessDirectory.ConversationId
+                        - attributeName: Finished
+                          attributeValueType: Boolean
+                          value: false
+                        - attributeName: StartTime
+                          attributeValueType: DateTime
+                          valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.DocumentCreationDateTime
+                        - attributeName: Sender
+                          attributeValueType: String
+                          valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.Sender.MessageAddress
+                        - attributeName: Receiver
+                          attributeValueType: String
+                          valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.Receiver.MessageAddress
+                        - attributeName: MeteringPointNumber
+                          attributeValueType: String
+                          valuePath: $.request.Message.ProcessDirectory.MeteringPoint
+                        - attributeName: RawMessage
+                          attributeValueType: String
+                          valuePath: $.request.Message
+
+                    - type: ApplyChanges@1
+                      path: $.update
+- rtId: 692448a0911382c3502c6b95
+  rtCreationDateTime: 2025-11-24T11:59:28.9590000Z
+  rtChangedDateTime: 2026-02-10T14:41:06.5500000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: request-consumption-reports
+  - id: System/Description-1
+    value: Request new consumption reports for low quality items
+
+# Cron trigger of request-consumption-reports (AB#4551): the pipeline is started
+# by this System.Communication/PipelineTrigger (FromPipelineTriggerEvent@1) every
+# day at 05:00 UTC, as the 1.x tenants ran it. Ships DeploymentState 0 like every
+# other EDA entity - it goes live with the DeployDataFlow of its DataFlow.
+- rtId: 69dde3c2870f4f0d6e91e61e
+  ckTypeId: System.Communication/PipelineTrigger-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 692448a0911382c3502c6b95
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Triggers-1
+    targetRtId: 692448a1911382c3502c6b96
+    targetCkTypeId: System.Communication/Pipeline-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: request-low-quality-data
+  - id: System/Enabled-1
+    value: true
+  - id: System.Bot/CronExpression-1
+    value: 0 0 5 * * *
