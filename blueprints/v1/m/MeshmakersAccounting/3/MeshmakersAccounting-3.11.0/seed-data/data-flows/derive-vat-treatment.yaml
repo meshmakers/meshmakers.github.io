@@ -1,0 +1,569 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# Derive VAT Treatment (AB#7513, Feature AB#7507 VAT estimate).
+#
+# ONE pipeline, ONE rule engine, two doors:
+#
+#   1. Document Analysis (document-analysis.yaml) hands the document it is about to create over with
+#      ToPipelineDataEvent@1 (awaitResult) and writes the answer into VatTreatment /
+#      VatTreatmentSource / VatTreatmentReason. ToPipelineDataEvent@1 only reaches a pipeline of the
+#      SAME DataFlow, so this pipeline lives in the Document Analysis DataFlow (aa...300) - this file
+#      only adds it; all seed files are merged into one model before the import.
+#   2. POST /deriveVatTreatment (AccountingManagement) re-derives EXISTING documents: the same rules,
+#      the same script node. Body (all optional):
+#        { "from": "2026-01-01", "to": "2026-12-31", "dryRun": true }
+#      from / to = inclusive UTC document day, absent = no bound. dryRun DEFAULTS TO TRUE: a call without
+#      the flag only reports; { "dryRun": false } writes. The response carries the counts per treatment
+#      and per rule and, per document, the old and the new treatment with the reason.
+#
+# The rules (first match wins, every result carries its reason and a rule code) are in the ExecuteCSharp@1
+# node "AB#7513 derive VAT treatment" - the ONLY copy. scripts/derive_vat_treatment_test.py runs that node
+# text through scripts/extraction-check-harness over fixtures from the real 2026 documents. The rule table
+# is in CLAUDE.md ("VAT treatment derivation (AB#7513)").
+#
+# What is written (and nothing else): VatTreatment, VatTreatmentSource = DERIVED, VatTreatmentReason. A
+# document whose VatTreatmentSource is MANUAL is never touched. A result that cannot decide ("to check")
+# writes only the reason and leaves VatTreatment empty; if an earlier derivation had set a treatment, the
+# treatment and the source are cleared (written as null - only reachable after a rule change).
+#
+# Data context, event door: the caller sends $.input = { mode: event, document: <entity-shaped document> } (the
+# shape of the stored AccountingDocument, plus an optional Vies = { Status, Party } with the verdict of this very
+# document), the answer is $.vat.results[0] (treatment / source only when a treatment was derived, reason always).
+dependencies:
+  - Meshmakers.Accounting-[3.11.0,4.0)
+  - System.Communication-[4.5,5.0)
+entities:
+  - rtId: aa0000000000000000751301
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000300
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Derive VAT Treatment
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            # The event door (Document Analysis) and the management route for the app, the backfill and
+            # the dry-run report.
+            - type: FromPipelineDataEvent@1
+            - type: FromHttpRequest@2
+              path: /deriveVatTreatment
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            # --- 0. Which door: the event door names itself, everything else is the route -------
+            - type: SetPrimitiveValue@1
+              description: Route unless a pipeline handed documents over
+              targetPath: $.vatRoute
+              value: true
+              valueType: Boolean
+            - type: If@1
+              description: A pipeline handed documents over - evaluate exactly those
+              path: $.input.mode
+              operator: Equals
+              value: event
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  description: Not the route
+                  targetPath: $.vatRoute
+                  value: false
+                  valueType: Boolean
+                - type: SelectByPath@1
+                  description: The one document to evaluate, as the one-element list the rules take
+                  selectPath:
+                    - path: $.input.document
+                      targetPath: $.vatDocs
+                      targetValueKind: Array
+
+            # --- 1. Route: options and load ------------------------------------------------------
+            - type: If@1
+              description: Route - read the options and load the documents and the VIES cache
+              path: $.vatRoute
+              operator: Equals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: SetPrimitiveValue@1
+                  description: Default is a dry run, only dryRun false writes
+                  targetPath: $.dryRun
+                  value: true
+                  valueType: Boolean
+                - type: SelectByPath@1
+                  description: Take the caller's options when present
+                  selectPath:
+                    - path: $.body.dryRun
+                      targetPath: $.dryRun
+                    - path: $.body.from
+                      targetPath: $.vatFrom
+                    - path: $.body.to
+                      targetPath: $.vatTo
+                # Date filters on dynamic CK attributes do not coerce in Mongo (AB#4389), so the
+                # period is applied in the script and the load is unfiltered (newest first).
+                - type: GetRtEntitiesByType@1
+                  description: All accounting documents, newest first
+                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                  targetPath: $.vatLoad
+                  take: 50000
+                  sortOrders:
+                    - sortOrder: Descending
+                      attributeName: RtId
+                - type: If@1
+                  description: Document count exceeds the load cap - never skip silently
+                  path: $.vatLoad.TotalCount
+                  operator: GreaterThan
+                  value: 50000
+                  valueType: Int64
+                  transformations:
+                    - type: Logger@1
+                      message: Derive VAT Treatment cap exceeded - more than 50000 accounting documents; the oldest beyond the cap are NOT derived this run (AB#7513).
+                - type: GetRtEntitiesByType@1
+                  description: Cached VIES verdicts per VAT id (AB#5772)
+                  ckTypeId: Meshmakers.Accounting/VatIdVerification
+                  targetPath: $.vatViesLoad
+                  take: 5000
+                - type: SelectByPath@1
+                  description: The documents and the VIES cache to evaluate
+                  selectPath:
+                    - path: $.vatLoad.Items
+                      targetPath: $.vatDocs
+                    - path: $.vatViesLoad.Items
+                      targetPath: $.vatVies
+
+            # --- 2. The rules ---------------------------------------------------------------------
+            # AB#7513: tested by scripts/derive_vat_treatment_test.py through
+            # scripts/extraction-check-harness (the node is located by this description).
+            - type: ExecuteCSharp@1
+              description: AB#7513 derive VAT treatment
+              timeoutMs: 30000
+              usings:
+                - System
+                - System.Linq
+                - System.Text.Json
+                - System.Collections.Generic
+                - System.Globalization
+              returnType: String
+              arguments:
+                - name: docs
+                  valuePath: $.vatDocs
+                  dataType: RecordArray
+                - name: vies
+                  valuePath: $.vatVies
+                  dataType: RecordArray
+                - name: periodFrom
+                  valuePath: $.vatFrom
+                  dataType: String
+                - name: periodTo
+                  valuePath: $.vatTo
+                  dataType: String
+              targetPath: $.vatJson
+              code: |
+                var inv = CultureInfo.InvariantCulture;
+                var styles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal;
+                Func<object, JsonElement> El = o => o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                Func<JsonElement, string, JsonElement> Prop = (e, n) => {
+                  if (e.ValueKind == JsonValueKind.Object)
+                    foreach (var p in e.EnumerateObject())
+                      if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                  return default(JsonElement);
+                };
+                Func<JsonElement, string> Str = e =>
+                  e.ValueKind == JsonValueKind.String ? e.GetString()
+                  : (e.ValueKind == JsonValueKind.Undefined || e.ValueKind == JsonValueKind.Null) ? null
+                  : e.ToString();
+                // A record's members: its "Attributes" bag when it has one (entities, nested records), else the element itself.
+                Func<JsonElement, JsonElement> Rec = e => { var a = Prop(e, "Attributes"); return a.ValueKind == JsonValueKind.Object ? a : e; };
+                Func<JsonElement, double?> Num = e => {
+                  if (e.ValueKind == JsonValueKind.Number) { double v; if (e.TryGetDouble(out v)) return v; }
+                  if (e.ValueKind == JsonValueKind.String) { double v; if (double.TryParse(e.GetString(), NumberStyles.Float, inv, out v)) return v; }
+                  return null;
+                };
+                // Enum attribute: int key or the NAME (resolveEnumValuesToNames reads); "" when absent or unknown.
+                Func<JsonElement, string[], string> EnumName = (e, names) => {
+                  if (e.ValueKind == JsonValueKind.Number) { int k; if (e.TryGetInt32(out k) && k >= 0 && k < names.Length) return names[k]; return ""; }
+                  var s = Str(e); if (s == null) return "";
+                  s = s.Trim().ToUpperInvariant(); int i;
+                  if (int.TryParse(s, NumberStyles.Integer, inv, out i)) return i >= 0 && i < names.Length ? names[i] : "";
+                  return names.Contains(s) ? s : "";
+                };
+                Func<JsonElement, string> Day = e => {
+                  DateTime d; var s = Str(e);
+                  if (s != null && DateTime.TryParse(s, inv, styles, out d)) return d.ToString("yyyy-MM-dd", inv);
+                  return "";
+                };
+                Func<double, double> R2 = v => Math.Round(v, 2, MidpointRounding.AwayFromZero);
+                Func<double, string> F2 = v => v.ToString("0.00", inv);
+                Func<double, string> F1 = v => v.ToString("0.##", inv);
+
+                var treatNames = new[] { "DOMESTIC", "EUREVERSECHARGE", "THIRDCOUNTRYREVERSECHARGE", "FOREIGNVAT", "NOVAT", "EUACQUISITIONGOODS" };
+                var sourceNames = new[] { "DERIVED", "MANUAL" };
+                var viesNames = new[] { "VALID", "INVALID", "NOTVERIFIED" };
+                // AB#7550: goods or service? Read from the printed notes only (ReverseChargeNote, TaxExemptionNote). The text is
+                // folded (lower case, umlauts, punctuation -> one space) and matched against fixed phrases. Goods wording =
+                // intra-community supply / acquisition; service wording = reverse charge / transfer of the tax liability.
+                // Service wording or no wording at all = service (the payable amount is the same, Frigg's decision on AB#7550);
+                // BOTH kinds in one note = unclear = "to check".
+                Func<string, string> FoldText = s => System.Text.RegularExpressions.Regex.Replace(
+                  (s ?? "").ToLowerInvariant().Replace("\u00e4", "ae").Replace("\u00f6", "oe").Replace("\u00fc", "ue").Replace("\u00df", "ss"), "[^a-z0-9]+", " ").Trim();
+                var goodsWording = new System.Text.RegularExpressions.Regex(
+                  @"innergemeinschaftlich\w* (lieferung|erwerb)|\big (lieferung|erwerb)\b|intra ?(community|eu) (supply|delivery|acquisition|sale)|supply of goods|\bgoods\b|(art|article) 138\b|\b4 nr 1 ?b\b|livraison intracommunautaire");
+                var serviceWording = new System.Text.RegularExpressions.Regex(
+                  @"reverse charge|uebergang der steuerschuld|steuerschuldnerschaft|steuerschuldner|\b13b\b|(art|article) 196\b");
+                // "GOODS", "SERVICE" (service wording or none) or "UNCLEAR" (both).
+                Func<string, string> WordingKind = text => {
+                  var f = FoldText(text);
+                  var g = goodsWording.IsMatch(f); var sv = serviceWording.IsMatch(f);
+                  return g && sv ? "UNCLEAR" : g ? "GOODS" : "SERVICE";
+                };
+                Func<string, bool> HasWording = text => { var f = FoldText(text); return goodsWording.IsMatch(f) || serviceWording.IsMatch(f); };
+                var docTypeNames = new[] { "INCOMING", "OUTGOING" };
+                var docStateNames = new[] { "OPEN", "PAID", "PARTIALLYPAID", "CANCELLED", "RECURRING" };
+
+                // Country codes: two letters, EL -> GR, UK / XI -> GB; the OSS prefix EU names no country.
+                Func<string, string> Cc2 = s => {
+                  var t = (s ?? "").Trim().ToUpperInvariant();
+                  if (t.Length != 2 || !char.IsLetter(t[0]) || !char.IsLetter(t[1])) return "";
+                  if (t == "EL") return "GR"; if (t == "UK" || t == "XI") return "GB"; if (t == "EU") return "";
+                  return t;
+                };
+                Func<string, string> NormVat = s => new string((s ?? "").ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+                Func<string, string> VatPrefix = v => { var n = NormVat(v); return n.Length >= 2 && char.IsLetter(n[0]) && char.IsLetter(n[1]) ? Cc2(n.Substring(0, 2)) : ""; };
+                var eu = new HashSet<string> { "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE" };
+                // Standard and reduced VAT rates (percent) per country of a foreign supplier; 0 is always allowed.
+                // Maintained by hand: a country that is not listed is never classified FOREIGNVAT, it goes to "to check".
+                var rates = new Dictionary<string, double[]> {
+                  { "AT", new[] { 20d, 13d, 10d } },
+                  { "BE", new[] { 21d, 12d, 6d } }, { "BG", new[] { 20d, 9d } }, { "HR", new[] { 25d, 13d, 5d } },
+                  { "CY", new[] { 19d, 9d, 5d, 3d } }, { "CZ", new[] { 21d, 12d } }, { "DK", new[] { 25d } },
+                  { "EE", new[] { 24d, 13d, 9d } }, { "FI", new[] { 25.5d, 14d, 10d } }, { "FR", new[] { 20d, 10d, 5.5d, 2.1d } },
+                  { "DE", new[] { 19d, 7d } }, { "GR", new[] { 24d, 13d, 6d } }, { "HU", new[] { 27d, 18d, 5d } },
+                  { "IE", new[] { 23d, 13.5d, 9d, 4.8d } }, { "IT", new[] { 22d, 10d, 5d, 4d } }, { "LV", new[] { 21d, 12d, 5d } },
+                  { "LT", new[] { 21d, 9d, 5d } }, { "LU", new[] { 17d, 14d, 8d, 3d } }, { "MT", new[] { 18d, 12d, 7d, 5d } },
+                  { "NL", new[] { 21d, 9d } }, { "PL", new[] { 23d, 8d, 5d } }, { "PT", new[] { 23d, 13d, 6d } },
+                  { "RO", new[] { 21d, 11d } }, { "SK", new[] { 23d, 19d, 5d } }, { "SI", new[] { 22d, 9.5d, 5d } },
+                  { "ES", new[] { 21d, 10d, 4d } }, { "SE", new[] { 25d, 12d, 6d } },
+                  { "CH", new[] { 8.1d, 3.8d, 2.6d } }, { "GB", new[] { 20d, 5d } }, { "NO", new[] { 25d, 15d, 12d } } };
+                var atRates = rates["AT"];
+                // The tax of a row fits a rate when it is net * rate within rounding (3 cent plus 0.2 % of the net).
+                Func<double, double, double, bool> Fits = (n, t, r) => Math.Abs(t - n * r / 100.0) <= 0.03 + 0.002 * Math.Abs(n);
+                Func<double[], double, double, bool> FitsAny = (rs, n, t) => rs.Any(r => Fits(n, t, r));
+                // A flat total (no per-rate rows) whose ratio lies between 0 and the top rate is most likely several rates mixed.
+                Func<double[], List<Tuple<double?, double, double>>, bool> LooksMixed = (rs, rows0) => rows0.All(r => {
+                  if (r.Item1 != null || Math.Abs(r.Item2) < 0.005) return false;
+                  var q = r.Item3 / r.Item2 * 100.0; return q > 0.3 && q < rs.Max() + 0.3; });
+
+                DateTime pFrom = default(DateTime), pTo = default(DateTime);
+                var hasFrom = !string.IsNullOrWhiteSpace(periodFrom) && DateTime.TryParse(periodFrom, inv, styles, out pFrom);
+                var hasTo = !string.IsNullOrWhiteSpace(periodTo) && DateTime.TryParse(periodTo, inv, styles, out pTo);
+                var fromDay = hasFrom ? pFrom.ToString("yyyy-MM-dd", inv) : "";
+                var toDay = hasTo ? pTo.ToString("yyyy-MM-dd", inv) : "";
+
+                // VIES cache: normalised VAT id -> status.
+                var viesCache = new Dictionary<string, string>();
+                foreach (var o in vies ?? new object[0]) {
+                  var a = Rec(El(o)); var k = NormVat(Str(Prop(a, "VatIdNormalized")));
+                  if (k != "" && !viesCache.ContainsKey(k)) viesCache[k] = EnumName(Prop(a, "VatIdStatus"), viesNames);
+                }
+
+                var results = new List<Dictionary<string, object>>();
+                var writes = new List<Dictionary<string, object>>();
+                var byTreatment = new SortedDictionary<string, int>(StringComparer.Ordinal);
+                var byRule = new SortedDictionary<string, int>(StringComparer.Ordinal);
+                int total = 0, manual = 0, derived = 0, toCheck = 0, skippedCount = 0;
+
+                foreach (var o in docs ?? new object[0]) {
+                  var e = El(o); var a = Rec(e);
+                  var id = Str(Prop(e, "RtId")) ?? "";
+                  var number = Str(Prop(a, "DocumentNumber")) ?? "";
+                  var day = Day(Prop(a, "DocumentDate"));
+                  if ((fromDay != "" || toDay != "") && (day == "" || (fromDay != "" && string.CompareOrdinal(day, fromDay) < 0) || (toDay != "" && string.CompareOrdinal(day, toDay) > 0))) continue;
+                  total++;
+
+                  var outgoing = EnumName(Prop(a, "DocumentType"), docTypeNames) == "OUTGOING";
+                  var curTreat = EnumName(Prop(a, "VatTreatment"), treatNames);
+                  var curSource = EnumName(Prop(a, "VatTreatmentSource"), sourceNames);
+                  var docState = EnumName(Prop(a, "DocumentState"), docStateNames);
+                  var curReason = Str(Prop(a, "VatTreatmentReason")) ?? "";
+
+                  // The counterparty: the supplier of an incoming, the customer of an outgoing document.
+                  var cp = Rec(Prop(a, outgoing ? "Customer" : "Vendor"));
+                  var cpName = Str(Prop(cp, "CompanyName")) ?? "";
+                  var cpVat = Str(Prop(cp, "TaxIdentificationNumber")) ?? "";
+                  var prefix = VatPrefix(cpVat);
+                  var addrCc = Cc2(Str(Prop(Rec(Prop(cp, "Address")), "NationalCode")));
+                  var docCc = outgoing ? "" : Cc2(Str(Prop(a, "VendorCountryCode")));
+                  var cc = docCc != "" ? docCc : addrCc != "" ? addrCc : prefix;
+                  var ccFrom = docCc != "" ? "extraction" : addrCc != "" ? "address" : prefix != "" ? "VAT id prefix" : "";
+
+                  // VIES: the verdict the analysis just got ($.vies, party must match) or the cached one for this VAT id.
+                  var viesStatus = "";
+                  var vv = Prop(e, "Vies");
+                  if (vv.ValueKind == JsonValueKind.Object) {
+                    var party = (Str(Prop(vv, "Party")) ?? "").Trim().ToLowerInvariant();
+                    if (party == "" || party == (outgoing ? "customer" : "vendor"))
+                      viesStatus = EnumName(Prop(vv, "Status"), viesNames);
+                  }
+                  if (viesStatus == "" && NormVat(cpVat) != "") { string vs; if (viesCache.TryGetValue(NormVat(cpVat), out vs)) viesStatus = vs; }
+
+                  // Amounts: the per-rate rows when stored, else the flat totals as ONE implicit row (rate = tax / net).
+                  var gross = Num(Prop(a, "GrossTotal")); var netF = Num(Prop(a, "NetTotal")); var taxF = Num(Prop(a, "TaxTotal"));
+                  var rows = new List<Tuple<double?, double, double>>(); // declared rate, net, tax
+                  var br = Prop(a, "TaxBreakdown");
+                  if (br.ValueKind == JsonValueKind.Array)
+                    foreach (var r0 in br.EnumerateArray()) {
+                      var r = Rec(r0); var rn = Num(Prop(r, "NetAmount")); var rt = Num(Prop(r, "TaxAmount"));
+                      if (rn != null && rt != null) rows.Add(Tuple.Create(Num(Prop(r, "TaxRate")), rn.Value, rt.Value));
+                    }
+                  double? T, N;
+                  if (rows.Count > 0) { T = R2(rows.Sum(r => r.Item3)); N = R2(rows.Sum(r => r.Item2)); }
+                  else {
+                    // No tax total: it is gross - net, unless that has the wrong sign (net above gross is no tax, it is a discount or an extraction error).
+                    T = taxF != null ? taxF : (netF != null && gross != null && (gross.Value - netF.Value) * netF.Value >= -0.0001 ? (double?)R2(gross.Value - netF.Value) : null);
+                    N = netF != null ? netF : (gross != null && T != null ? (double?)R2(gross.Value - T.Value) : null);
+                    if (N != null && T != null && Math.Abs(N.Value) > 0.004) rows.Add(Tuple.Create((double?)null, N.Value, T.Value));
+                  }
+                  var hasAmounts = (gross != null && Math.Abs(gross.Value) > 0.004) || (N != null && Math.Abs(N.Value) > 0.004);
+                  var tZero = T != null && Math.Abs(T.Value) <= 0.004;
+                  var tPos = T != null && !tZero;
+                  var taxed = rows.Where(r => Math.Abs(r.Item3) > 0.004).ToList();
+                  var euPrefixNotAt = prefix != "" && prefix != "AT" && eu.Contains(prefix);
+                  var rcNote = !string.IsNullOrWhiteSpace(Str(Prop(a, "ReverseChargeNote")));
+                  var exNote = !string.IsNullOrWhiteSpace(Str(Prop(a, "TaxExemptionNote")));
+                  // AB#7550: both printed notes are the wording evidence; an EU goods note (e.g. "steuerfreie ig Lieferung") that the
+                  // extraction filed as an exemption note still belongs to the EU branch below, not to NOVAT.
+                  var kindText = (Str(Prop(a, "ReverseChargeNote")) ?? "") + " | " + (Str(Prop(a, "TaxExemptionNote")) ?? "");
+                  var exEuGoods = exNote && !tPos && euPrefixNotAt && WordingKind(Str(Prop(a, "TaxExemptionNote"))) == "GOODS";
+                  var noWording = !HasWording(kindText);
+                  var noWordingText = noWording ? "; no goods/service wording found, treated as service" : "";
+                  Func<string, string> Shorten = s => { s = (s ?? "").Trim(); return s.Length > 60 ? s.Substring(0, 57) + "..." : s; };
+                  Func<IEnumerable<Tuple<double?, double, double>>, string> Ratios = rs =>
+                    string.Join(", ", rs.Select(r => Math.Abs(r.Item2) > 0.004 ? F1(Math.Round(r.Item3 / r.Item2 * 100, 2)) + " %" : "n/a").Distinct());
+                  var ctry = cc == "" ? "unknown" : cc + (ccFrom != "" ? " (" + ccFrom + ")" : "");
+                  var abroad = cc != "" && cc != "AT";
+
+                  // --- The rules. First match wins; every result carries its reason and a rule code. ---------------
+                  Func<string, string, string, Tuple<string, string, string>> R = (t, reason, rule) => Tuple.Create(t, reason, rule);
+                  Func<Tuple<string, string, string>> Decide = () => {
+                    if (curSource == "MANUAL") return R(curTreat == "" ? null : curTreat, "Set manually - never re-derived", "MANUAL");
+                    if (docState == "CANCELLED" || docState == "RECURRING")
+                      return R(null, (docState == "CANCELLED" ? "Cancelled document" : "Recurring master document") + " - not part of the VAT estimate, nothing derived", "SKIPPED_STATE");
+                    if (!hasAmounts) return R(null, "No amounts extracted (gross total 0 or missing)", "NO_AMOUNTS");
+                    // Consistency first: a row that contradicts itself is never classified, whatever else is printed.
+                    foreach (var r in rows) {
+                      if (r.Item1 == null) continue;
+                      if (Math.Abs(r.Item1.Value) < 0.005 && Math.Abs(r.Item3) > 0.004)
+                        return R(null, "0 % row carries a tax amount of " + F2(r.Item3) + " (net " + F2(r.Item2) + ")", "ZERO_RATE_WITH_TAX");
+                      if (!Fits(r.Item2, r.Item3, r.Item1.Value))
+                        return R(null, "Row " + F1(r.Item1.Value) + " %: tax " + F2(r.Item3) + " is not " + F1(r.Item1.Value) + " % of net " + F2(r.Item2), "ROW_MISMATCH");
+                    }
+                    if (exNote && !exEuGoods) {
+                      if (tPos) return R(null, "Exemption note printed but tax " + F2(T.Value) + " shown", "EXEMPT_NOTE_WITH_TAX");
+                      return R("NOVAT", "Exemption note printed (" + Shorten(Str(Prop(a, "TaxExemptionNote"))) + "), no tax", "EXEMPT_NOTE");
+                    }
+                    if (outgoing) {
+                      if (taxed.Count > 0) {
+                        if (taxed.All(r => FitsAny(atRates, r.Item2, r.Item3)))
+                          return R("DOMESTIC", "Austrian rate " + Ratios(taxed) + " on an outgoing document", "OUT_DOMESTIC");
+                        return R(null, "Outgoing document: tax/net " + Ratios(taxed) + " matches no Austrian rate (20/13/10 %)", "OUT_RATE_NO_MATCH");
+                      }
+                      if (T == null) return R(null, "Outgoing document without a tax total - tax unknown", N == null ? "GROSS_ONLY" : "NET_NO_TAX");
+                      if (euPrefixNotAt) {
+                        if (viesStatus == "INVALID") return R(null, "Customer EU VAT id " + NormVat(cpVat) + " reported invalid by VIES", "OUT_EU_VIES_INVALID");
+                        var oVat = "Customer EU VAT id " + NormVat(cpVat) + " (" + (viesStatus == "VALID" ? "VIES valid" : "VIES " + (viesStatus == "" ? "not checked" : "not verified") + ", decided by the VAT id prefix " + prefix) + "), no tax";
+                        var oKind = WordingKind(kindText);
+                        if (oKind == "UNCLEAR") return R(null, "EU goods supply or EU service? " + oVat + "; the note names both goods and service wording ('" + Shorten(kindText.Replace(" | ", " ").Trim()) + "')", "OUT_EU_KIND_UNCLEAR");
+                        if (oKind == "GOODS") return R("EUACQUISITIONGOODS", "Intra-community supply of goods: " + oVat + "; goods wording in note '" + Shorten(kindText.Replace(" | ", " ").Trim()) + "'", "OUT_EU_GOODS");
+                        return R("EUREVERSECHARGE", oVat + noWordingText, "OUT_EU_RC");
+                      }
+                      if (cc != "" && cc != "AT" && !eu.Contains(cc)) return R("THIRDCOUNTRYREVERSECHARGE", "Customer in " + cc + " outside the EU, no tax", "OUT_THIRD");
+                      if (cc != "" && cc != "AT") return R(null, "EU customer in " + cc + " without a VAT id and no tax", "OUT_EU_NO_VATID");
+                      if (cc == "AT") return R(null, "Austrian customer and no tax printed", "OUT_NO_TAX_DOMESTIC");
+                      return R(null, "No tax printed and the customer country is unknown", "OUT_NO_COUNTRY");
+                    }
+                    // Incoming: reverse charge - a printed note, or no tax from a supplier abroad.
+                    if (rcNote || exEuGoods || (tZero && abroad)) {
+                      if (tPos) return R(null, "Reverse-charge note printed but tax " + F2(T.Value) + " shown", "RC_NOTE_WITH_TAX");
+                      if (prefix == "AT") return R(null, "No tax / reverse-charge note, but the supplier shows an Austrian VAT id " + NormVat(cpVat), "RC_NOTE_AT_ID");
+                      var note = rcNote ? ", note '" + Shorten(Str(Prop(a, "ReverseChargeNote"))) + "'" : ", no tax printed";
+                      if (euPrefixNotAt) {
+                        if (viesStatus == "INVALID") return R(null, "EU VAT id " + NormVat(cpVat) + " reported invalid by VIES", "RC_EU_VIES_INVALID");
+                        var euText = "EU VAT id " + NormVat(cpVat) + " (" + (viesStatus == "VALID" ? "VIES valid" : "VIES " + (viesStatus == "" ? "not checked" : "not verified") + ", decided by the VAT id prefix " + prefix) + ")" + (rcNote ? note : exEuGoods ? ", note '" + Shorten(Str(Prop(a, "TaxExemptionNote"))) + "'" : note) + "; supplier country " + ctry;
+                        var kind = WordingKind(kindText);
+                        if (kind == "UNCLEAR") return R(null, "EU goods acquisition or EU service? The note names both goods and service wording; " + euText, "RC_EU_KIND_UNCLEAR");
+                        if (kind == "GOODS") return R("EUACQUISITIONGOODS", "EU acquisition of goods: goods wording in the note; " + euText, "RC_EU_GOODS");
+                        return R("EUREVERSECHARGE", euText + noWordingText, "RC_EU");
+                      }
+                      if (abroad && !eu.Contains(cc)) return R("THIRDCOUNTRYREVERSECHARGE", "Supplier in " + ctry + " outside the EU" + note, "RC_THIRD");
+                      if (abroad) return R(null, "EU supplier in " + cc + " without a VAT id" + note + " - reverse charge not confirmable", "RC_EU_NO_VATID");
+                      return R(null, "Reverse-charge note but no supplier country and no VAT id", "RC_NO_COUNTRY");
+                    }
+                    if (taxed.Count == 0) {
+                      if (T == null && N == null) return R(null, "Only a gross total printed - no net, tax or rate", "GROSS_ONLY");
+                      if (T == null) return R(null, "A net total but no tax total, and no gross total to derive it from", "NET_NO_TAX");
+                      if (cc == "AT") return R(null, "Austrian supplier, but no VAT shown and no exemption note", "NO_TAX_DOMESTIC");
+                      return R(null, "No VAT shown and the supplier country is unknown", "NO_TAX_UNKNOWN_COUNTRY");
+                    }
+                    var atFits = taxed.All(r => FitsAny(atRates, r.Item2, r.Item3));
+                    var table = abroad && rates.ContainsKey(cc);
+                    var ccFits = table && taxed.All(r => FitsAny(rates[cc], r.Item2, r.Item3));
+                    var rateText = Ratios(taxed);
+                    if (!abroad) {
+                      if (cc == "AT" && prefix != "" && prefix != "AT")
+                        return R(null, "Austrian supplier address contradicts the VAT id prefix " + prefix + " (" + NormVat(cpVat) + ")", "COUNTRY_PREFIX_MISMATCH");
+                      if (atFits) return R("DOMESTIC", "Austrian rate " + rateText + "; supplier country " + ctry, "DOMESTIC_RATE");
+                      if (LooksMixed(atRates, taxed)) return R(null, "Flat totals only: tax/net " + rateText + " is no single Austrian rate, most likely several rates mixed - per-rate rows are missing", "RATE_MIXED_FLAT");
+                      return R(null, "Tax/net " + rateText + " matches no Austrian rate (20/13/10 %)", "RATE_NO_MATCH");
+                    }
+                    if (atFits && prefix == "AT") return R("DOMESTIC", "Austrian VAT id " + NormVat(cpVat) + " and Austrian rate " + rateText + " (address in " + cc + ")", "DOMESTIC_ATU_FOREIGN_ADDRESS");
+                    if (atFits && ccFits) return R(null, "Rate " + rateText + " fits Austria and " + cc + "; supplier in " + cc + " without an Austrian VAT id - confirm", "AT_RATE_AMBIGUOUS");
+                    if (atFits) return R(null, "Austrian rate " + rateText + " but supplier address in " + cc + " without an Austrian VAT id - probably DOMESTIC, confirm", "AT_RATE_FOREIGN_ADDRESS");
+                    if (ccFits) {
+                      if (prefix != "" && prefix != cc) return R(null, "Supplier country " + cc + " contradicts the VAT id prefix " + prefix + " (" + NormVat(cpVat) + ")", "COUNTRY_PREFIX_MISMATCH");
+                      return R("FOREIGNVAT", "Foreign VAT " + cc + " " + rateText + ", country from " + ccFrom, "FOREIGN_VAT");
+                    }
+                    if (!table) return R(null, "Supplier in " + cc + ": no rate table, tax/net " + rateText, "NO_RATE_TABLE");
+                    if (LooksMixed(rates[cc], taxed)) return R(null, "Flat totals only: tax/net " + rateText + " is no single " + cc + " rate, most likely several rates mixed - per-rate rows are missing", "RATE_MIXED_FLAT");
+                    return R(null, "Tax/net " + rateText + " matches no " + cc + " rate", "RATE_NO_MATCH");
+                  };
+                  var d = Decide();
+                  var treat = d.Item1; var reason = d.Item2; var rule = d.Item3;
+                  var isManual = rule == "MANUAL";
+                  var skipped = rule == "SKIPPED_STATE";
+                  var status = isManual ? "manual" : skipped ? "skipped" : treat != null ? "set" : "toCheck";
+                  if (isManual) manual++; else if (skipped) skippedCount++; else if (treat != null) derived++; else toCheck++;
+                  var tkey = isManual ? "(manual) " + (treat ?? "-") : skipped ? "(skipped: cancelled / recurring)" : treat ?? "TO CHECK";
+                  int c0; byTreatment[tkey] = (byTreatment.TryGetValue(tkey, out c0) ? c0 : 0) + 1;
+                  int c1; byRule[rule] = (byRule.TryGetValue(rule, out c1) ? c1 : 0) + 1;
+
+                  // What the write changes: only the derived fields, only when they differ. A to-check result clears a
+                  // treatment a previous derivation had set (a MANUAL one never reaches this).
+                  var write = false;
+                  var w = new Dictionary<string, object> { { "id", id }, { "reason", reason } };
+                  if (!isManual && treat != null) {
+                    write = curTreat != treat || curSource != "DERIVED" || curReason != reason;
+                    w["treatment"] = treat; w["source"] = "DERIVED";
+                  } else if (!isManual) {
+                    write = curTreat != "" || curSource != "" || curReason != reason;
+                    if (curTreat != "") w["treatment"] = null;
+                    if (curSource != "") w["source"] = null;
+                  }
+                  if (write) writes.Add(w);
+                  var res = new Dictionary<string, object> {
+                    { "id", id }, { "number", number }, { "date", day }, { "direction", outgoing ? "OUTGOING" : "INCOMING" },
+                    { "party", cpName }, { "country", cc }, { "status", status }, { "rule", rule }, { "reason", reason },
+                    { "oldTreatment", curTreat == "" ? null : curTreat }, { "oldSource", curSource == "" ? null : curSource },
+                    { "write", write } };
+                  if (!isManual && treat != null) { res["treatment"] = treat; res["source"] = "DERIVED"; }
+                  results.Add(res);
+                }
+                var summary = new Dictionary<string, object> {
+                  { "documents", total }, { "derived", derived }, { "toCheck", toCheck }, { "manual", manual }, { "skipped", skippedCount },
+                  { "writeCount", writes.Count }, { "byTreatment", byTreatment }, { "byRule", byRule },
+                  { "from", fromDay }, { "to", toDay } };
+                return JsonSerializer.Serialize(new Dictionary<string, object> { { "summary", summary }, { "results", results }, { "writes", writes } });
+            - type: WriteJson@1
+              description: Parse the result
+              targetPath: $.vat
+              jsonStringPath: $.vatJson
+            # Release what the result was made from: the write loop below snapshots its `path` under
+            # $.full per loop start, and needs nothing but $.vat.
+            - type: SetPrimitiveValue@1
+              description: Release the document load
+              targetPath: $.vatLoad
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the documents
+              targetPath: $.vatDocs
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the result string
+              targetPath: $.vatJson
+              value: ""
+              valueType: String
+
+            # --- 3. Route: write the derived fields (skipped on a dry run) ----------------------
+            - type: If@1
+              description: Route and not a dry run - write the derived fields
+              path: $.vatRoute
+              operator: Equals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: If@1
+                  description: Not a dry run
+                  path: $.dryRun
+                  operator: NotEquals
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: If@1
+                      description: Something to write
+                      path: $.vat.summary.writeCount
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Int64
+                      transformations:
+                        - type: ForEach@1
+                          description: One update per document whose derived fields change
+                          path: $.vat.writes
+                          iterationPath: $.vat.writes
+                          targetPath: $._vatWrites
+                          mergePath: $.u
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            # An absent path skips the attribute, a JSON null clears it: a to-check
+                            # result carries no treatment / source key unless an earlier derivation
+                            # set one (then null). A MANUAL document never gets here.
+                            - type: CreateUpdateInfo@1
+                              description: The derived fields of this document
+                              targetPath: $.u
+                              updateKind: Update
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              rtIdPath: $.key.id
+                              attributeUpdates:
+                                - attributeName: VatTreatment
+                                  attributeValueType: Enum
+                                  valuePath: $.key.treatment
+                                - attributeName: VatTreatmentSource
+                                  attributeValueType: Enum
+                                  valuePath: $.key.source
+                                - attributeName: VatTreatmentReason
+                                  attributeValueType: String
+                                  valuePath: $.key.reason
+                        - type: ApplyChanges@2
+                          description: Persist the derived fields (one batch)
+                          entityUpdatesPath: $._vatWrites
+
+            # --- 4. Route: the HTTP response is the whole data context - reduce it --------------
+            - type: If@1
+              description: Route - report the mode, the counts and the documents only
+              path: $.vatRoute
+              operator: Equals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: Project@1
+                  description: Keep the mode, the summary and the per-document old/new only
+                  clear: true
+                  fields:
+                    - path: $.dryRun
+                      inclusion: true
+                    - path: $.vat.summary
+                      inclusion: true
+                    - path: $.vat.results
+                      inclusion: true
+                - type: SetPipelineExecutionResult@1
+                  description: Persist the report as OutputData
+                  path: $
