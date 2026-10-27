@@ -1,0 +1,47 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: MqttEdgeSample-1.1.1
+description: |
+  Sample blueprint for the MQTT edge adapter (AB#7510, Feature AB#6095): one install sets up everything needed
+  to bring typed MQTT readings from an edge broker into a tenant.
+
+  Installs:
+  - A small sample CK model MqttEdgeSample (ElectricityMeter with five Double attributes) so the sample runs on a
+    fresh tenant. Real deployments bind the mesh pipeline to their own CK type.
+  - An edge deployment site "MQTT edge site" and the MQTT edge adapter (chart octo-mqtt-adapter from the public
+    adapter chart repository), hosted on that site.
+  - The MqttConfiguration "ShrdzmBroker" with PLACEHOLDERS ONLY (host broker.example.com, port 8883, TLS on). The
+    broker password is a Secret and is never seeded.
+  - The DataFlow "SHRDZM smart meters" with two pipelines: the edge pipeline (MqttTrigger@1 on topic
+    SHRDZM/+/+/sensor -> typed values -> 30 s buffer) and the mesh pipeline (one ElectricityMeter entity per device
+    id + stream data), connected by ToPipelineDataEvent@1. The edge pipeline is linked to the configuration with the
+    Uses association.
+  - The stream-data archive MqttEdgeSampleMeterArchive (Created, not activated).
+
+  DELIBERATELY NOT SEEDED: the default deployment site, the Mesh Adapter 670000000000000000000002 and the Helm
+  repositories 670...003/004/005 belong to the service-managed System.Communication blueprint. The adapter's
+  pipeline service account is provisioned by the controller after the blueprint is applied.
+
+  Prerequisites: Communication and stream data enabled on the tenant (System.Communication >= 4.13, the version
+  with MqttConfiguration), an edge Communication Operator registered against the edge site, a reachable MQTT broker.
+
+  Getting started (the readme of octo-adapter-mqtt has the full walk-through):
+  1. octo-cli -c InstallBlueprint -b MqttEdgeSample-1.1.1
+  2. Set host, port, user name and password of the broker on the MqttConfiguration ShrdzmBroker (Refinery Studio
+     form; the password with the Secret-aware update, e.g. MCP set_entity_secrets).
+  3. octo-cli -c ActivateArchive -id 6760711ec4ff02221e0b5a20
+  4. octo-cli -c DeployWorkload -id 6760711ec4ff02221e0b5a42   (rolls the adapter out onto the edge site)
+  5. octo-cli -c DeployDataFlow --identifier 6760711ec4ff02221e0b5a30
+
+  UpdateBlueprint keeps what the admin entered: host, port, user name and TLS flag of the configuration are runtime
+  state, the password is a Secret, the archive status is runtime state, and the adapter's chart version and
+  deployment states are runtime state as well.
+ckModelDependencies:
+  # Install order. The engine installs the FLOOR of each range as the exact version.
+  - System-[2.5,3.0)
+  - System.Communication-[4.13,5.0)
+  - System.StreamData-[1.7,2.0)
+  - MqttEdgeSample-[1.1.0,2.0.0)
+seedDataPaths:
+  - seed-data/infrastructure.yaml
+  - seed-data/archive.yaml
+  - seed-data/data-flow.yaml
