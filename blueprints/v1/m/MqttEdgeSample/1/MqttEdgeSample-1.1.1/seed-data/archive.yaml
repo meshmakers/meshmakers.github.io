@@ -1,0 +1,63 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.StreamData-[1.7,2.0)
+  - MqttEdgeSample-[1.1.0,2.0.0)
+
+# Stream-data archive of the sample meter readings (AB#7510). An archive is bound to one CK type; the mesh pipeline
+# writes the typed readings of the MqttEdgeSample/ElectricityMeter entities into it (SaveStreamDataInArchive@1).
+#
+# Seeded as Created (Status 0). A blueprint never activates an archive: enable stream data on the tenant and run
+#   octo-cli -c ActivateArchive -id 6760711ec4ff02221e0b5a20
+# once, before the DataFlow is deployed; writes into an archive that is not activated fail.
+# Archive.Status is runtime state, so an UpdateBlueprint never deactivates an activated archive.
+entities:
+  - rtId: 6760711ec4ff02221e0b5a20
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: MqttEdgeSampleMeterArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: MqttEdgeSample/ElectricityMeter
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: VoltageL1
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: PowerImportW
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: PowerSumW
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: EnergyImportKwh
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: EnergyExportKwh
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
