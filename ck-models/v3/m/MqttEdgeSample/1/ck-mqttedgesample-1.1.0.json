@@ -1,0 +1,97 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "System-2.7.0"
+  ],
+  "dependencyRanges": [
+    {
+      "range": "System-[2.2,3.0)",
+      "floor": "2.2.0",
+      "usedSurface": [
+        "System@2/Entity-1"
+      ],
+      "usedSurfaceHash": "sha256:5573e519e505a53fd4c2505760800163c22ae1f9c408d852371819b8955f810d"
+    }
+  ],
+  "minEngineVersion": "3.5.1",
+  "types": [
+    {
+      "isCollectionRoot": true,
+      "typeId": "ElectricityMeter-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "An electricity meter that reports its readings over MQTT. One entity per device, the rtWellKnownName is the device id.",
+      "attributes": [
+        {
+          "id": "MqttEdgeSample-1.1.0/VoltageL1-1",
+          "name": "VoltageL1",
+          "isOptional": true
+        },
+        {
+          "id": "MqttEdgeSample-1.1.0/PowerImportW-1",
+          "name": "PowerImportW",
+          "isOptional": true
+        },
+        {
+          "id": "MqttEdgeSample-1.1.0/PowerSumW-1",
+          "name": "PowerSumW",
+          "isOptional": true
+        },
+        {
+          "id": "MqttEdgeSample-1.1.0/EnergyImportKwh-1",
+          "name": "EnergyImportKwh",
+          "isOptional": true
+        },
+        {
+          "id": "MqttEdgeSample-1.1.0/EnergyExportKwh-1",
+          "name": "EnergyExportKwh",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [],
+  "attributes": [
+    {
+      "id": "EnergyExportKwh-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Meter reading, energy exported, in kilowatt hours"
+    },
+    {
+      "id": "EnergyImportKwh-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Meter reading, energy imported, in kilowatt hours"
+    },
+    {
+      "id": "PowerImportW-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Current power drawn from the grid in watt"
+    },
+    {
+      "id": "PowerSumW-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Current net power (import minus export) in watt"
+    },
+    {
+      "id": "VoltageL1-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Voltage of phase L1 in volt"
+    }
+  ],
+  "records": [],
+  "enums": [],
+  "modelId": "MqttEdgeSample-1.1.0",
+  "description": "Minimal sample model for the MqttEdgeSample blueprint (AB#7510): one ElectricityMeter type whose Double attributes receive the typed MQTT readings of the sample pipelines and are the columns of the sample stream-data archive. It exists so the sample runs on a fresh tenant without any customer model; real deployments bind the mesh pipeline to their own CK type instead."
+}
