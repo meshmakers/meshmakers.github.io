@@ -1,0 +1,178 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Communication-[4.13,5.0)
+  - MqttEdgeSample-[1.1.0,2.0.0)
+  - System.StreamData-[1.7,2.0)
+
+# DataFlow "SHRDZM smart meters" (AB#7510), see blueprint.yaml. The two pipeline definitions are the sample
+# pipelines of scripts/mqtt-typed-data (AB#7509) with the ckTypeId bound to the MqttEdgeSample model; a test
+# (SampleBlueprintFilesTests) fails when they drift apart.
+#
+#   edge pipeline  executes on the MQTT edge adapter (infrastructure.yaml), Uses the MqttConfiguration
+#                  ShrdzmBroker, buffers 30 s and sends the typed readings to the mesh pipeline
+#   mesh pipeline  executes on the mesh adapter 670000000000000000000002 (System.Communication blueprint):
+#                  one ElectricityMeter entity per device id + stream data in the archive ...a20
+entities:
+  - rtId: 6760711ec4ff02221e0b5a30
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: SHRDZM smart meters
+
+  - rtId: 6760711ec4ff02221e0b5a11
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 6760711ec4ff02221e0b5a30
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '6760711ec4ff02221e0b5a42'
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: 6760711ec4ff02221e0b5a01
+        targetCkTypeId: System.Communication/MqttConfiguration
+    attributes:
+      - id: System/Name
+        value: SHRDZM edge
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: MqttTrigger@1
+              configurationName: ShrdzmBroker
+              topicFilter: SHRDZM/+/+/sensor
+              qualityOfServiceLevel: 1
+              clientId: shrdzm-edge-sample
+          transformations:
+            - type: MqttMessageTransform@1
+              path: $
+              targetPath: $.message
+              topicPattern: ^SHRDZM/(?<deviceId>[^/]+)/(?<moduleId>[^/]+)/sensor$
+              payloadPath: ''
+            - type: ConvertDataType@1
+              path: $.message.value['32.7.0']
+              targetPath: $.reading.voltageL1
+              valueType: Double
+              onMissing: Skip
+            - type: ConvertDataType@1
+              path: $.message.value['1.7.0']
+              targetPath: $.reading.powerImportW
+              valueType: Double
+              onMissing: Skip
+            - type: ConvertDataType@1
+              path: $.message.value['16.7.0']
+              targetPath: $.reading.powerSumW
+              valueType: Double
+              onMissing: Skip
+            - type: ConvertDataType@1
+              path: $.message.value['1.8.0']
+              targetPath: $.reading.energyImportKwh
+              valueType: Double
+              onMissing: Skip
+            - type: ConvertDataType@1
+              path: $.message.value['2.8.0']
+              targetPath: $.reading.energyExportKwh
+              valueType: Double
+              onMissing: Skip
+            - type: ConvertDataType@1
+              path: $.message.topicParts.deviceId
+              targetPath: $.reading.deviceId
+              valueType: String
+              onMissing: Skip
+            - type: ConvertDataType@1
+              path: $.message.topicParts.moduleId
+              targetPath: $.reading.moduleId
+              valueType: String
+              onMissing: Skip
+            - type: ConvertDataType@1
+              path: $.message.timestamp
+              targetPath: $.reading.timestamp
+              valueType: String
+              onMissing: Skip
+            - type: BufferData@1
+              path: $.reading
+              bufferTime: 00:00:30
+              transformations:
+                - type: ToPipelineDataEvent@1
+                  path: $
+                  targetPath: $.readings
+                  targetPipelineRtId: 6760711ec4ff02221e0b5a12
+
+  - rtId: 6760711ec4ff02221e0b5a12
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 6760711ec4ff02221e0b5a30
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: SHRDZM mesh
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromPipelineDataEvent@1
+          transformations:
+            - type: GetRtEntitiesByWellKnownName@1
+              ckTypeId: MqttEdgeSample/ElectricityMeter
+              # path is the ARRAY, not its items: with $.readings[*] the node resolves nothing (AB#7669).
+              path: $.readings
+              wellKnownNamePath: $.deviceId
+              rtIdTargetPath: $.rtId
+              ckTypeIdTargetPath: $.ckTypeId
+              modOperationPath: $.modOperation
+              generateInsertOperation: true
+            - type: ForEach@1
+              iterationPath: $.readings
+              targetPath: $.readings
+              fullDocumentPath: $.full
+              keyPath: $.key
+              mergePath: $.key
+              transformations:
+                - type: CreateUpdateInfo@1
+                  updateKindPath: $.key.modOperation
+                  rtIdPath: $.key.rtId
+                  ckTypeIdPath: $.key.ckTypeId
+                  rtWellKnownNamePath: $.key.deviceId
+                  timestampPath: $.key.timestamp
+                  attributeUpdates:
+                    - attributeName: voltageL1
+                      attributeValueType: Double
+                      valuePath: $.key.voltageL1
+                    - attributeName: powerImportW
+                      attributeValueType: Double
+                      valuePath: $.key.powerImportW
+                    - attributeName: powerSumW
+                      attributeValueType: Double
+                      valuePath: $.key.powerSumW
+                    - attributeName: energyImportKwh
+                      attributeValueType: Double
+                      valuePath: $.key.energyImportKwh
+                    - attributeName: energyExportKwh
+                      attributeValueType: Double
+                      valuePath: $.key.energyExportKwh
+                  targetPath: $.key._entityUpdates
+                  targetValueWriteMode: Append
+                  targetValueKind: Array
+            - type: Flatten@1
+              path: $.readings[*]._entityUpdates[*]
+              targetPath: $._entityUpdates
+            - type: SaveStreamDataInArchive@1
+              path: $._entityUpdates
+              archiveRtId: 6760711ec4ff02221e0b5a20
+            - type: FilterLatestUpdateInfo@1
+              path: $._entityUpdates
+              targetPath: $._entityUpdates
+            # FilterLatestUpdateInfo keeps EVERY insert. Two readings of one new device in a batch share the generated
+            # RtId and would both insert it (E11000 duplicate key), so keep one update per entity (AB#7669).
+            - type: Distinct@1
+              path: $._entityUpdates
+              distinctValuePath: $.RtEntity.RtId
+              targetPath: $._entityUpdates
+            - type: ApplyChanges@2
+              entityUpdatesPath: $._entityUpdates
