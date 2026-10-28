@@ -1,0 +1,88 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Communication-[4.13,5.0)
+
+# Edge site, Helm repository, MQTT edge adapter and the broker connection of the MqttEdgeSample blueprint
+# (AB#7510), see blueprint.yaml. Every value below is a placeholder or a neutral default: no real host,
+# user name or device id is part of this blueprint, and the broker password is a Secret that is never seeded.
+entities:
+  # Edge deployment site. The Communication Operator that serves this site must be installed outside the central
+  # cluster, on the machine next to the broker (octo-cli -c ... / Refinery Studio shows the registration details).
+  - rtId: 6760711ec4ff02221e0b5a40
+    ckTypeId: System.Communication/DeploymentSite
+    rtWellKnownName: MqttEdgeSite
+    attributes:
+      - id: System/Name
+        value: MQTT edge site
+      - id: System/Description
+        value: Edge deployment site of the MqttEdgeSample blueprint. Register the edge Communication Operator against it.
+      - id: System.Communication/Environment
+        value: 0   # Edge
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/CommunicationState
+        value: 0   # Unregistered
+      - id: System.Communication/ConfigurationState
+        value: 0   # Unconfigured
+
+  # Public release channel of the adapter charts (octo-mqtt-adapter is published there on every r* release).
+  # An own entity instead of the service-managed 670...004, which exists on staging/production only.
+  - rtId: 6760711ec4ff02221e0b5a41
+    ckTypeId: System.Communication/HelmRepositoryConfiguration
+    rtWellKnownName: mqtt-sample-charts
+    attributes:
+      - id: System.Communication/RepositoryUrl
+        value: https://meshmakers.github.io/charts
+      - id: System.Communication/Channel
+        value: 1   # Release
+      - id: System.Communication/HelmRepositoryPurpose
+        value: 0   # Adapters
+
+  # The MQTT edge adapter: a pure edge worker (no cluster secrets, no database), rolled out by the edge operator
+  # with the Helm chart octo-mqtt-adapter. ChartVersion stays empty = newest published chart; pin it per install.
+  # The adapter's pipeline service account is provisioned by the controller after the blueprint is applied.
+  - rtId: 6760711ec4ff02221e0b5a42
+    ckTypeId: System.Communication/Adapter
+    rtWellKnownName: MqttEdgeAdapter
+    associations:
+      - roleId: System.Communication/Hosts
+        targetRtId: 6760711ec4ff02221e0b5a40
+        targetCkTypeId: System.Communication/DeploymentSite
+      - roleId: System.Communication/HelmRepository
+        targetRtId: 6760711ec4ff02221e0b5a41
+        targetCkTypeId: System.Communication/HelmRepositoryConfiguration
+    attributes:
+      - id: System/Name
+        value: MQTT edge adapter
+      - id: System/Description
+        value: Subscribes to the MQTT broker of the ShrdzmBroker configuration and forwards the typed readings to the mesh adapter.
+      - id: System.Communication/ChartName
+        value: octo-mqtt-adapter
+      - id: System.Communication/ChartVersion
+        value: ""
+      - id: System.Communication/ReceivesClusterSecrets
+        value: false
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/CommunicationState
+        value: 0   # Unregistered
+      - id: System.Communication/ConfigurationState
+        value: 0   # Unconfigured
+      - id: System.Communication/LastSyncedSequenceNumber
+        value: 0
+
+  # The broker connection. Host, Port, Username and IsSslEnabled are runtime state: the admin sets them once
+  # (Refinery Studio form) and an UpdateBlueprint keeps them. The Password is a Secret and is NOT seeded: set it
+  # with the Secret-aware update (Studio form or MCP set_entity_secrets); it survives every update too.
+  - rtId: 6760711ec4ff02221e0b5a01
+    ckTypeId: System.Communication/MqttConfiguration
+    rtWellKnownName: ShrdzmBroker
+    attributes:
+      - id: System.Communication/Host
+        value: broker.example.com   # placeholder: the admin sets the real broker host
+      - id: System.Communication/Port
+        value: 8883   # MQTT over TLS
+      - id: System.Communication/Username
+        value: replace-with-broker-user   # placeholder: the admin sets the real user
+      - id: System.Communication/IsSslEnabled
+        value: true
