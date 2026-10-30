@@ -1,0 +1,808 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.1.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipeline: camt.053 export for BMD (AB#6224) ---
+  # The tax advisor imports bank statements into BMD as camt.053; BelegCockpit holds the
+  # bookings of every account (finAPI, camt.053 import, bank CSV, PayPal CSV), so it
+  # writes them out as camt.053.001.02 (ISO namespace), ONE statement per account and
+  # calendar month. Concept and decisions: docs/concepts/camt053-export.md.
+  #
+  # Route: POST /exportCamt053 (AccountingManagement), JSON body, every field optional:
+  #   { "accountId": "<BankAccount rtId>" (default: all accounts),
+  #     "from": "yyyy-MM-dd", "to": "yyyy-MM-dd" (months touched by the range; default:
+  #     first booking month .. last complete month), "dryRun": true|false }
+  # dryRun returns the statement list (balances, fingerprints) and the findings without
+  # writing a file - the app shows it before the download. Otherwise exactly one
+  # statement is stored as the XML itself, several as a ZIP (camt/<account>/... plus
+  # camt/pruefprotokoll-camt.txt); the response carries { fileSystemItem, report }.
+  #
+  # Balances are computed BACKWARDS from BankAccount.Balance/BalanceDate (decision
+  # 2026-10-09: the camt import does not store the bank's own statement balances). They
+  # are only right when the booking history is complete, so the script runs plausibility
+  # gates and reports every gap; an account without a Balance is NOT exported at all.
+  # Post-install: DeployDataFlow for this DataFlow.
+  - rtId: aa0000000000000000000800
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: camt.053 Export
+      - id: System/Description
+        value: Exports bank transactions as camt.053.001.02 statements (one per account and month, balances computed backwards from the account balance) for the tax advisor's BMD
+  - rtId: aa0000000000000000000801
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000800
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: camt.053 Export Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromHttpRequest@2
+              method: POST
+              path: /exportCamt053
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            # --- 0. Parameters (all optional) ----------------------------------------------
+            - type: SetPrimitiveValue@1
+              description: Default - all accounts
+              targetPath: $.p.accountId
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Default - from the first booking month
+              targetPath: $.p.from
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Default - up to the last complete month
+              targetPath: $.p.to
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Default - write the file
+              targetPath: $.p.dryRun
+              value: false
+              valueType: Boolean
+            - type: SelectByPath@1
+              description: Take the caller's parameters when present
+              selectPath:
+                - path: $.body.accountId
+                  targetPath: $.p.accountId
+                - path: $.body.from
+                  targetPath: $.p.from
+                - path: $.body.to
+                  targetPath: $.p.to
+                - path: $.body.dryRun
+                  targetPath: $.p.dryRun
+
+            # --- 1. Load accounts, their bookings, owner name and the cost categories ------
+            - type: GetRtEntitiesByType@1
+              description: Our company profile (account owner name in the statement)
+              ckTypeId: Meshmakers.Accounting/CompanyProfile
+              take: 1
+              targetPath: $.camtCompany
+            - type: SetPrimitiveValue@1
+              description: Default owner name
+              targetPath: $.camtOwner
+              value: ""
+              valueType: String
+            - type: SelectByPath@1
+              description: Copy the company name when present
+              selectPath:
+                - path: $.camtCompany.Items[0].Attributes.Name
+                  targetPath: $.camtOwner
+            - type: GetRtEntitiesByType@1
+              description: All bank accounts (a statement per account and month)
+              ckTypeId: Basic.Accounting/BankAccount
+              take: 200
+              targetPath: $.camtAccounts
+            - type: WriteJson@1
+              description: No account, no bookings
+              targetPath: $.camtGroups
+              jsonString: '[]'
+            # One batched lookup over every account (wildcard origin path, the AB#5624
+            # pattern): { OriginRtId, TotalCount, Items } per account. ParentChild is
+            # declared on BankTransaction, so the bookings are INBOUND from the account.
+            # No date filter: dynamic date attributes do not coerce in Mongo (AB#4389), and
+            # the backward balance needs every booking after the month anyway.
+            - type: If@1
+              description: At least one account - load its bookings
+              path: $.camtAccounts.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int64
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: Bank transactions per account
+                  originRtIdPath: $.camtAccounts.Items[*].RtId
+                  originCkTypeId: Basic.Accounting/BankAccount
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: System/ParentChild
+                  graphDirection: Inbound
+                  targetPath: $.camtGroups
+            # Cost categories decide the bank transaction code of fees and interest
+            # (BANKFEES / INTEREST / INTERESTEXPENSE). Same lookup lines as the handover's
+            # Kategorie column: {"n":name,"ct":type,"t":[txRtId...]}.
+            - type: GetRtEntitiesByType@1
+              description: Cost categories (fee and interest bookings)
+              ckTypeId: Meshmakers.Accounting/CostCategory
+              targetPath: $.camtCats
+              take: 500
+            - type: ForEach@1
+              description: Per category, its type and transactions as one lookup line
+              iterationPath: $.camtCats.Items
+              targetPath: $.camtCatResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: WriteJson@1
+                  targetPath: $.key._ccTxs
+                  jsonString: '[{"Items":[],"TotalCount":0}]'
+                - type: GetAssociationTargets@1
+                  description: Transactions assigned to this category
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/CostCategory
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: Meshmakers.Accounting/TransactionToCategory
+                  graphDirection: Outbound
+                  targetPath: $.key._ccTxs
+                - type: ExecuteCSharp@1
+                  description: Category lookup line (type + transaction ids); null when unused
+                  code: 'var ctNames = new string[] { "IT", "RENT", "PERSONNEL", "TRAVEL", "OFFICE", "MARKETING", "CONSULTING", "INSURANCE", "OTHER", "BANKFEES", "ITOPERATION", "FACILITY", "REVENUE", "INTEREST", "OTHERINCOME", "VAT", "TAXES", "GRANTS", "INTERESTEXPENSE" }; var ct = -1; if (catType is JsonElement ce) { if (ce.ValueKind == JsonValueKind.Number) ct = ce.GetInt32(); else if (ce.ValueKind == JsonValueKind.String) { var cs = (ce.GetString() ?? "").Trim().ToUpperInvariant(); var ix = Array.IndexOf(ctNames, cs); if (ix >= 0) ct = ix; else { int pn; if (int.TryParse(cs, out pn)) ct = pn; } } } if (ct != 9 && ct != 13 && ct != 18) return null; var ids = new List<string>(); var els = new List<JsonElement>(); object txObj = txs; if (txObj is JsonElement te && te.ValueKind == JsonValueKind.Array) { foreach (var el in te.EnumerateArray()) els.Add(el); } else if (txObj is System.Collections.IEnumerable seq) { foreach (var o in seq) { if (o is JsonElement oe) els.Add(oe); else if (o != null) { try { els.Add(JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(o))); } catch { } } } } foreach (var t in els) { if (t.ValueKind != JsonValueKind.Object) continue; JsonElement p; if (t.TryGetProperty("RtId", out p) && p.ValueKind == JsonValueKind.String) { var s = p.GetString(); if (!string.IsNullOrWhiteSpace(s)) ids.Add(s); } } if (ids.Count == 0) return null; return JsonSerializer.Serialize(new Dictionary<string, object> { { "ct", ct }, { "t", ids } });'
+                  usings:
+                    - System
+                    - System.Linq
+                    - System.Text.Json
+                    - System.Collections.Generic
+                  returnType: String
+                  arguments:
+                    - name: catType
+                      valuePath: $.key.Attributes.CategoryType
+                      dataType: Record
+                    - name: txs
+                      valuePath: $.key._ccTxs[0].Items
+                      dataType: RecordArray
+                  targetPath: $.key.catLine
+                - type: SetPrimitiveValue@1
+                  targetPath: $.key._ccTxs
+                  value: ""
+                  valueType: String
+            - type: Flatten@1
+              description: Collect the category lookup lines
+              path: $.camtCatResults[*].catLine
+              targetPath: $.camtCatLines
+            - type: SetPrimitiveValue@1
+              description: Release the category pass results
+              targetPath: $.camtCatResults
+              value: ""
+              valueType: String
+
+            # --- 2. Statements ----------------------------------------------------------------
+            # AB#6224: ONE script builds every statement, the balance gates and the protocol.
+            # The node is byte-identical in camt-053-export.yaml and bmd-handover-export.yaml
+            # (scripts/camt053_export_test.py locates both by this description and compares
+            # them) - change both together.
+            - type: ExecuteCSharp@1
+              description: AB#6224 build camt.053 statements per account and month
+              timeoutMs: 30000
+              usings:
+                - System
+                - System.Linq
+                - System.Text
+                - System.Text.Json
+                - System.Text.RegularExpressions
+                - System.Collections.Generic
+                - System.Globalization
+                - System.Security.Cryptography
+              returnType: String
+              arguments:
+                - name: accounts
+                  valuePath: $.camtAccounts.Items
+                  dataType: RecordArray
+                - name: groups
+                  valuePath: $.camtGroups
+                  dataType: RecordArray
+                # Only the handover passes every transaction (orphan check); absent = null.
+                - name: allTx
+                  valuePath: $.camtAllTx
+                  dataType: RecordArray
+                - name: cats
+                  valuePath: $.camtCatLines
+                  dataType: StringArray
+                # Reserved for the bank's own statement balances once AB#4742 stores them.
+                - name: known
+                  valuePath: $.camtKnownBalances
+                  dataType: StringArray
+                - name: ownerName
+                  valuePath: $.camtOwner
+                  dataType: String
+                - name: pFrom
+                  valuePath: $.p.from
+                  dataType: String
+                - name: pTo
+                  valuePath: $.p.to
+                  dataType: String
+                - name: accountId
+                  valuePath: $.p.accountId
+                  dataType: String
+                # Tests pin the clock; absent = UtcNow.
+                - name: nowIso
+                  valuePath: $.camtNow
+                  dataType: String
+              targetPath: $.camtJson
+              code: |
+                // AB#6224: camt.053.001.02 statements (one per account and calendar month) from the stored
+                // BankTransactions. Balances are computed BACKWARDS from BankAccount.Balance/BalanceDate.
+                // Returns JSON: { v, fileCount, files[], statements[], accounts[], findings[], summary[], protocolBase64 }.
+                var inv = CultureInfo.InvariantCulture;
+                // German number format without ICU (the adapter may run in globalization-invariant mode).
+                var de = (NumberFormatInfo)CultureInfo.InvariantCulture.NumberFormat.Clone();
+                de.NumberDecimalSeparator = ","; de.NumberGroupSeparator = ".";
+                var NS = "urn:iso:std:iso:20022:tech:xsd:camt.053.001.02";
+                JsonElement El(object o) => o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                JsonElement Prop(JsonElement e, string n)
+                {
+                  if (e.ValueKind == JsonValueKind.Object)
+                    foreach (var p in e.EnumerateObject())
+                      if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                  return default;
+                }
+                string Str(JsonElement e)
+                {
+                  switch (e.ValueKind)
+                  {
+                    case JsonValueKind.String: return e.GetString() ?? "";
+                    case JsonValueKind.Number: return e.GetRawText();
+                    case JsonValueKind.True: return "true";
+                    case JsonValueKind.False: return "false";
+                    default: return "";
+                  }
+                }
+                string A(JsonElement item, string n) => Str(Prop(Prop(item, "Attributes"), n)).Trim();
+                string D10(string v) => v == null ? "" : (v.Length >= 10 ? v.Substring(0, 10) : "");
+                long? Cents(JsonElement e)
+                {
+                  if (e.ValueKind == JsonValueKind.Number) return (long)Math.Round(e.GetDecimal() * 100m, MidpointRounding.AwayFromZero);
+                  decimal d;
+                  if (e.ValueKind == JsonValueKind.String && decimal.TryParse(e.GetString(), NumberStyles.Float, inv, out d)) return (long)Math.Round(d * 100m, MidpointRounding.AwayFromZero);
+                  return null;
+                }
+                int EnumKey(JsonElement e, string[] names)
+                {
+                  if (e.ValueKind == JsonValueKind.Number) { int k; return e.TryGetInt32(out k) ? k : -1; }
+                  if (e.ValueKind == JsonValueKind.String)
+                  {
+                    var s = (e.GetString() ?? "").Trim();
+                    for (var i = 0; i < names.Length; i++) if (string.Equals(names[i], s, StringComparison.OrdinalIgnoreCase)) return i;
+                    int k; if (int.TryParse(s, NumberStyles.Integer, inv, out k)) return k;
+                  }
+                  return -1;
+                }
+                IEnumerable<JsonElement> Items(object arr)
+                {
+                  if (arr == null) yield break;
+                  if (arr is JsonElement je)
+                  {
+                    if (je.ValueKind == JsonValueKind.Array) foreach (var x in je.EnumerateArray()) yield return x;
+                    yield break;
+                  }
+                  if (arr is System.Collections.IEnumerable seq) foreach (var o in seq) if (o != null) yield return El(o);
+                }
+                IEnumerable<string> Strings(object arr)
+                {
+                  foreach (var e in Items(arr)) { var s = e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText(); if (!string.IsNullOrWhiteSpace(s)) yield return s; }
+                }
+                string Clean(string s)
+                {
+                  if (string.IsNullOrEmpty(s)) return "";
+                  var sb = new StringBuilder(s.Length);
+                  foreach (var c in s) sb.Append(c < 0x20 || (c >= 0x7F && c < 0xA0) || c == '\uFFFE' || c == '\uFFFF' ? ' ' : c);
+                  return Regex.Replace(sb.ToString(), @"\s+", " ").Trim();
+                }
+                string Cut(string s, int max) => s.Length <= max ? s : s.Substring(0, max);
+                string X(string s) => System.Security.SecurityElement.Escape(s) ?? "";
+                string Amt(long cents) => (Math.Abs(cents) / 100m).ToString("0.00", inv);
+                string Money(long cents) => (cents / 100m).ToString("#,##0.00", de);
+                bool IsIban(string s) => Regex.IsMatch(s ?? "", "^[A-Z]{2}[0-9]{2}[A-Za-z0-9]{1,30}$");
+                bool IsBic(string s) => Regex.IsMatch(s ?? "", "^[A-Z]{6}[A-Z2-9][A-NP-Z0-9]([A-Z0-9]{3})?$");
+                string Hex(string s) { using (var h = SHA256.Create()) return string.Concat(h.ComputeHash(Encoding.UTF8.GetBytes(s)).Select(b => b.ToString("x2"))); }
+                string Safe(string s)
+                {
+                  s = (s ?? "").Replace("ä", "ae").Replace("ö", "oe").Replace("ü", "ue").Replace("Ä", "Ae").Replace("Ö", "Oe").Replace("Ü", "Ue").Replace("ß", "ss");
+                  s = Regex.Replace(s, "[^A-Za-z0-9.-]+", "_").Trim('_');
+                  return s.Length == 0 ? "Konto" : Cut(s, 40);
+                }
+                List<string> Chunks(string text, int max)
+                {
+                  var res = new List<string>(); var cur = new StringBuilder();
+                  foreach (var w in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                  {
+                    var word = w;
+                    while (word.Length > max) { if (cur.Length > 0) { res.Add(cur.ToString()); cur.Clear(); } res.Add(word.Substring(0, max)); word = word.Substring(max); }
+                    if (word.Length == 0) continue;
+                    if (cur.Length == 0) cur.Append(word);
+                    else if (cur.Length + 1 + word.Length <= max) cur.Append(' ').Append(word);
+                    else { res.Add(cur.ToString()); cur.Clear(); cur.Append(word); }
+                  }
+                  if (cur.Length > 0) res.Add(cur.ToString());
+                  return res;
+                }
+
+                var now = DateTime.UtcNow;
+                DateTime parsedNow;
+                if (!string.IsNullOrWhiteSpace(nowIso) && DateTime.TryParse(nowIso, inv, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out parsedNow)) now = parsedNow;
+                var today = now.ToString("yyyy-MM-dd", inv);
+                var creDtTm = now.ToString("yyyy-MM-dd'T'HH:mm:ss", inv) + "Z";
+                var fromD = D10(pFrom ?? ""); var toD = D10(pTo ?? "");
+                var onlyAccount = (accountId ?? "").Trim();
+
+                // Category lookup lines (same shape as the handover's payCatLines): {"n":name,"ct":type,"t":[txRtId]}.
+                // Category types: 9 BANKFEES, 13 INTEREST, 18 INTERESTEXPENSE.
+                var txCatType = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (var line in Strings(cats))
+                {
+                  try
+                  {
+                    using (var doc = JsonDocument.Parse(line))
+                    {
+                      var ct = Prop(doc.RootElement, "ct"); int cti = ct.ValueKind == JsonValueKind.Number ? ct.GetInt32() : -1;
+                      var t = Prop(doc.RootElement, "t");
+                      if (t.ValueKind == JsonValueKind.Array) foreach (var id in t.EnumerateArray()) { var s = Str(id); if (s.Length > 0 && !txCatType.ContainsKey(s)) txCatType[s] = cti; }
+                    }
+                  }
+                  catch { }
+                }
+                // Known bank balances (reserved for AB#4742 statement storage): {"a":accountRtId,"d":"yyyy-MM-dd","b":amount}.
+                var knownBal = new List<Tuple<string, string, long>>();
+                foreach (var line in Strings(known))
+                {
+                  try
+                  {
+                    using (var doc = JsonDocument.Parse(line))
+                    {
+                      var r = doc.RootElement; var c = Cents(Prop(r, "b"));
+                      if (c.HasValue) knownBal.Add(Tuple.Create(Str(Prop(r, "a")), D10(Str(Prop(r, "d"))), c.Value));
+                    }
+                  }
+                  catch { }
+                }
+
+                var byAccount = new Dictionary<string, List<JsonElement>>(StringComparer.Ordinal);
+                foreach (var g in Items(groups))
+                {
+                  var origin = Str(Prop(g, "OriginRtId"));
+                  if (origin.Length == 0) continue;
+                  List<JsonElement> l; if (!byAccount.TryGetValue(origin, out l)) { l = new List<JsonElement>(); byAccount[origin] = l; }
+                  foreach (var t in Items(Prop(g, "Items"))) l.Add(t);
+                }
+
+                var files = new List<Dictionary<string, object>>();
+                var statements = new List<Dictionary<string, object>>();
+                var accountsOut = new List<Dictionary<string, object>>();
+                var findings = new List<string>();
+                var summary = new List<string>();
+                var accountTypeNames = new[] { "Checking", "Savings", "CreditCard", "Loan", "Securities", "PayPal", "Other" };
+                var linked = new HashSet<string>(StringComparer.Ordinal);
+
+                var accountList = Items(accounts).Where(a => Str(Prop(a, "RtId")).Length > 0)
+                  .OrderBy(a => A(a, "Name"), StringComparer.OrdinalIgnoreCase).ThenBy(a => Str(Prop(a, "RtId")), StringComparer.Ordinal).ToList();
+                foreach (var acct in accountList)
+                {
+                  var rtId = Str(Prop(acct, "RtId"));
+                  List<JsonElement> accTxAll; if (!byAccount.TryGetValue(rtId, out accTxAll)) accTxAll = new List<JsonElement>();
+                  foreach (var t in accTxAll) linked.Add(Str(Prop(t, "RtId")));
+                  if (onlyAccount.Length > 0 && onlyAccount != rtId) continue;
+
+                  var name = Clean(A(acct, "Name"));
+                  var iban = Regex.Replace(A(acct, "Iban"), @"\s+", "").ToUpperInvariant();
+                  var hasIban = IsIban(iban);
+                  var othrId = Cut(Clean(A(acct, "AccountNumber")).Replace(" ", ""), 34);
+                  if (othrId.Length == 0) othrId = Cut(Clean(A(acct, "ExternalId")).Replace(" ", ""), 34);
+                  if (othrId.Length == 0) othrId = rtId;
+                  var acctKey = hasIban ? iban : othrId;
+                  var keyTail = Regex.Replace(acctKey, "[^A-Za-z0-9]", "");
+                  if (keyTail.Length > 20) keyTail = keyTail.Substring(keyTail.Length - 20);
+                  var shortKey = keyTail.Length > 4 ? keyTail.Substring(keyTail.Length - 4) : keyTail;
+                  var label = (name.Length > 0 ? name : "Konto") + " (…" + shortKey + ")";
+                  var fileLabel = Safe(name) + "_" + Safe(shortKey);
+                  var ccy = A(acct, "Currency").ToUpperInvariant();
+                  var acctType = EnumKey(Prop(Prop(acct, "Attributes"), "AccountType"), accountTypeNames);
+                  var owner = Clean(A(acct, "AccountHolder")); if (owner.Length == 0) owner = Clean(ownerName ?? "");
+                  var bankName = Clean(A(acct, "BankName"));
+                  var balance = Cents(Prop(Prop(acct, "Attributes"), "Balance"));
+                  var overdraft = Cents(Prop(Prop(acct, "Attributes"), "Overdraft"));
+                  var balanceDate = D10(A(acct, "BalanceDate"));
+
+                  // Real bank bookings only: split parts (the split dialog's "<id>-split-<n>" rows) and pending
+                  // entries are not on the bank statement; the split ORIGINAL (ExclusionReason SPLITPARENT) is.
+                  var txs = new List<JsonElement>(); int splitParts = 0, pending = 0, noDate = 0, ccyMismatch = 0, dirMismatch = 0;
+                  foreach (var t in accTxAll)
+                  {
+                    var tid = A(t, "TransactionId");
+                    if (Regex.IsMatch(tid, @"-split-\d+$") || A(t, "MatchComment").StartsWith("Split part", StringComparison.Ordinal)) { splitParts++; continue; }
+                    if (EnumKey(Prop(Prop(t, "Attributes"), "BookingStatus"), new[] { "UNKNOWN", "BOOKED", "PENDING" }) == 2) { pending++; continue; }
+                    if (!Regex.IsMatch(D10(A(t, "BookingDate")), @"^\d{4}-\d{2}-\d{2}$") || !Cents(Prop(Prop(t, "Attributes"), "Amount")).HasValue) { noDate++; continue; }
+                    var tc = A(t, "Currency").ToUpperInvariant(); if (tc.Length > 0 && ccy.Length > 0 && tc != ccy) ccyMismatch++;
+                    var amt = Cents(Prop(Prop(t, "Attributes"), "Amount")).Value;
+                    var dir = EnumKey(Prop(Prop(t, "Attributes"), "Direction"), new[] { "Credit", "Debit" });
+                    if ((dir == 0 && amt < 0) || (dir == 1 && amt > 0)) dirMismatch++;
+                    txs.Add(t);
+                  }
+                  Func<JsonElement, string> BD = t => D10(A(t, "BookingDate"));
+                  Func<JsonElement, long> AM = t => Cents(Prop(Prop(t, "Attributes"), "Amount")).Value;
+
+                  var acctOut = new Dictionary<string, object> { { "accountRtId", rtId }, { "account", label }, { "status", "ok" }, { "reason", "" } };
+                  accountsOut.Add(acctOut);
+                  if (txs.Count == 0)
+                  {
+                    acctOut["status"] = "skipped"; acctOut["reason"] = "Keine Buchungen";
+                    summary.Add(label + ": keine Buchungen – kein Kontoauszug.");
+                    continue;
+                  }
+                  if (!balance.HasValue || ccy.Length != 3)
+                  {
+                    acctOut["status"] = "blocked";
+                    acctOut["reason"] = !balance.HasValue ? "Kein Kontostand hinterlegt" : "Keine Kontowährung hinterlegt";
+                    findings.Add(label + ": NICHT EXPORTIERT – " + acctOut["reason"] + " (Einstellungen → Bankkonten). Ohne Kontostand lassen sich Anfangs- und Endsaldo nicht berechnen.");
+                    continue;
+                  }
+                  var anchorDate = balanceDate;
+                  if (anchorDate.Length == 0)
+                  {
+                    anchorDate = txs.Count > 0 ? txs.Max(BD) : today;
+                    findings.Add(label + ": Kontostand ohne Datum – angenommen: Stand nach der letzten Buchung (" + anchorDate + "). Bitte Saldodatum prüfen.");
+                  }
+                  var anchor = balance.Value;
+                  // Balance at the END of day d: anchor minus bookings after d up to the anchor date, plus
+                  // bookings after the anchor date up to d (a statement month after the anchor).
+                  Func<string, long> BalanceAt = d =>
+                  {
+                    long b = anchor;
+                    foreach (var t in txs)
+                    {
+                      var bd = BD(t);
+                      if (string.CompareOrdinal(bd, d) > 0 && string.CompareOrdinal(bd, anchorDate) <= 0) b -= AM(t);
+                      else if (string.CompareOrdinal(bd, anchorDate) > 0 && string.CompareOrdinal(bd, d) <= 0) b += AM(t);
+                    }
+                    return b;
+                  };
+
+                  if (splitParts > 0) summary.Add(label + ": " + splitParts + " Teilbuchung(en) aus Aufteilungen nicht exportiert (die Originalbuchung steht im Auszug).");
+                  if (pending > 0) summary.Add(label + ": " + pending + " vorgemerkte Buchung(en) nicht exportiert.");
+                  if (noDate > 0) findings.Add(label + ": " + noDate + " Buchung(en) ohne Buchungsdatum oder Betrag – in keinem Auszug enthalten, Salden können abweichen.");
+                  if (ccyMismatch > 0) findings.Add(label + ": " + ccyMismatch + " Buchung(en) mit abweichender Währung – als " + ccy + " exportiert, bitte prüfen.");
+                  if (dirMismatch > 0) findings.Add(label + ": " + dirMismatch + " Buchung(en), deren Richtung nicht zum Vorzeichen passt – das Vorzeichen des Betrags gilt.");
+                  int credits = txs.Count(t => AM(t) > 0), debits = txs.Count(t => AM(t) < 0);
+                  if (debits >= 10 && credits == 0 && acctType != 2 && txs.Select(t => BD(t).Substring(0, 7)).Distinct().Count() >= 2)
+                    findings.Add(label + ": nur Belastungen, keine einzige Gutschrift importiert – die Buchungshistorie ist vermutlich unvollständig (z. B. PayPal-CSV ohne Haben-Buchungen), die Salden sind nicht belastbar.");
+
+                  // Months: the requested range clamped to [first booking month, last complete month] - the
+                  // handover passes open bounds (0001-01-01 / 9999-12-31) when the fiscal year has no dates.
+                  var firstMonth = txs.Min(BD).Substring(0, 7);
+                  var curMonth = now.ToString("yyyy-MM", inv);
+                  var lastComplete = new DateTime(now.Year, now.Month, 1).AddMonths(-1).ToString("yyyy-MM", inv);
+                  var reqStart = fromD.Length > 0 ? fromD.Substring(0, 7) : firstMonth;
+                  var reqEnd = toD.Length > 0 ? toD.Substring(0, 7) : lastComplete;
+                  var startM = string.CompareOrdinal(reqStart, firstMonth) < 0 ? firstMonth : reqStart;
+                  var endM = string.CompareOrdinal(reqEnd, lastComplete) > 0 ? lastComplete : reqEnd;
+                  if (string.CompareOrdinal(reqStart, firstMonth) < 0 && string.CompareOrdinal(reqEnd, firstMonth) >= 0 && string.CompareOrdinal(reqStart, "1900-01") > 0)
+                    summary.Add(label + ": kein Auszug vor " + firstMonth + " (die erste gespeicherte Buchung liegt in diesem Monat).");
+                  if (string.CompareOrdinal(reqEnd, lastComplete) > 0 && string.CompareOrdinal(reqEnd, curMonth) <= 0)
+                    summary.Add(label + ": kein Auszug für " + curMonth + " (Monat noch nicht abgeschlossen).");
+                  var months = new List<string>();
+                  if (string.CompareOrdinal(startM, endM) <= 0)
+                  {
+                    var cursor = DateTime.ParseExact(startM + "-01", "yyyy-MM-dd", inv);
+                    var endCursor = DateTime.ParseExact(endM + "-01", "yyyy-MM-dd", inv);
+                    while (cursor <= endCursor && months.Count < 600) { months.Add(cursor.ToString("yyyy-MM", inv)); cursor = cursor.AddMonths(1); }
+                  }
+                  if (months.Count == 0) summary.Add(label + ": keine abgeschlossenen Monate mit Buchungen im Zeitraum – kein Auszug.");
+                  var booked = new HashSet<string>(txs.Select(t => BD(t).Substring(0, 7)), StringComparer.Ordinal);
+                  foreach (var m in months)
+                  {
+                    var mStart = DateTime.ParseExact(m + "-01", "yyyy-MM-dd", inv);
+                    var mEnd = mStart.AddMonths(1).AddDays(-1);
+                    var first = mStart.ToString("yyyy-MM-dd", inv); var last = mEnd.ToString("yyyy-MM-dd", inv);
+                    var prevLast = mStart.AddDays(-1).ToString("yyyy-MM-dd", inv);
+                    var mTx = txs.Where(t => BD(t).StartsWith(m, StringComparison.Ordinal))
+                      .OrderBy(t => BD(t), StringComparer.Ordinal).ThenBy(t => D10(A(t, "ValueDate")), StringComparer.Ordinal)
+                      .ThenBy(t => A(t, "TransactionId"), StringComparer.Ordinal).ToList();
+                    var closing = BalanceAt(last);
+                    var opening = BalanceAt(prevLast);
+                    var warn = new List<string>();
+                    if (mTx.Count == 0 && booked.Any(b => string.CompareOrdinal(b, m) < 0) && booked.Any(b => string.CompareOrdinal(b, m) > 0))
+                      warn.Add("keine Buchungen in einem Monat zwischen gebuchten Monaten – Importlücke?");
+                    if ((acctType == 1 || acctType == 5) && (opening < 0 || closing < 0))
+                      warn.Add("negativer Saldo bei einem " + (acctType == 5 ? "PayPal" : "Spar") + "konto – Buchungen fehlen vermutlich");
+                    if (acctType == 0 && overdraft.HasValue && overdraft.Value > 0 && (opening < -overdraft.Value || closing < -overdraft.Value))
+                      warn.Add("Saldo unter dem Überziehungsrahmen – Buchungen fehlen vermutlich");
+                    foreach (var kb in knownBal.Where(k => k.Item1 == rtId && (k.Item2 == last || k.Item2 == prevLast)))
+                    {
+                      var mine = kb.Item2 == last ? closing : opening;
+                      if (mine != kb.Item3) warn.Add("Saldo am " + kb.Item2 + " laut Bank " + Money(kb.Item3) + ", berechnet " + Money(mine) + " (Differenz " + Money(mine - kb.Item3) + ")");
+                    }
+
+                    var lglSeq = (mStart.Year * 100000 + mStart.Month).ToString(inv);
+                    var stmtId = m.Replace("-", "") + "-" + keyTail;
+                    var sb = new StringBuilder();
+                    sb.Append("<FrToDt><FrDtTm>").Append(first).Append("T00:00:00</FrDtTm><ToDtTm>").Append(last).Append("T23:59:59</ToDtTm></FrToDt>");
+                    sb.Append("<Acct><Id>");
+                    if (hasIban) sb.Append("<IBAN>").Append(iban).Append("</IBAN>"); else sb.Append("<Othr><Id>").Append(X(othrId)).Append("</Id></Othr>");
+                    sb.Append("</Id><Ccy>").Append(ccy).Append("</Ccy>");
+                    if (name.Length > 0) sb.Append("<Nm>").Append(X(Cut(name, 70))).Append("</Nm>");
+                    if (owner.Length > 0) sb.Append("<Ownr><Nm>").Append(X(Cut(owner, 140))).Append("</Nm></Ownr>");
+                    if (bankName.Length > 0) sb.Append("<Svcr><FinInstnId><Nm>").Append(X(Cut(bankName, 140))).Append("</Nm></FinInstnId></Svcr>");
+                    sb.Append("</Acct>");
+                    Action<string, long, string> Bal = (code, cents, dt) => sb.Append("<Bal><Tp><CdOrPrtry><Cd>").Append(code).Append("</Cd></CdOrPrtry></Tp><Amt Ccy=\"").Append(ccy).Append("\">").Append(Amt(cents))
+                      .Append("</Amt><CdtDbtInd>").Append(cents < 0 ? "DBIT" : "CRDT").Append("</CdtDbtInd><Dt><Dt>").Append(dt).Append("</Dt></Dt></Bal>");
+                    Bal("PRCD", opening, prevLast);
+                    Bal("CLBD", closing, last);
+                    var cr = mTx.Where(t => AM(t) >= 0).ToList(); var dr = mTx.Where(t => AM(t) < 0).ToList();
+                    sb.Append("<TxsSummry><TtlCdtNtries><NbOfNtries>").Append(cr.Count.ToString(inv)).Append("</NbOfNtries><Sum>").Append(Amt(cr.Sum(AM))).Append("</Sum></TtlCdtNtries>")
+                      .Append("<TtlDbtNtries><NbOfNtries>").Append(dr.Count.ToString(inv)).Append("</NbOfNtries><Sum>").Append(Amt(dr.Sum(AM))).Append("</Sum></TtlDbtNtries></TxsSummry>");
+                    DateTime lastCaptured = DateTime.MinValue;
+                    foreach (var t in mTx)
+                    {
+                      var tRt = Str(Prop(t, "RtId"));
+                      var amt = AM(t); var credit = amt >= 0;
+                      var tid = A(t, "TransactionId");
+                      var cd = DateTime.MinValue; DateTime cdp;
+                      if (DateTime.TryParse(Str(Prop(t, "RtCreationDateTime")), inv, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out cdp)) cd = cdp;
+                      if (cd > lastCaptured) lastCaptured = cd;
+                      // AcctSvcrRef: the bank's own reference when stored, else derived from TransactionId so a
+                      // re-import through ImportFromCamt053@1 (key = IBAN|AcctSvcrRef) reproduces a camt-imported id.
+                      var svc = Clean(A(t, "AccountServicerReference"));
+                      if (svc.Length == 0 || svc.Length > 35)
+                      {
+                        var rest = hasIban && tid.StartsWith(iban + "|", StringComparison.Ordinal) ? tid.Substring(iban.Length + 1) : tid;
+                        svc = rest.Length > 0 && rest.Length <= 35 && Regex.IsMatch(rest, @"^[\x21-\x7E]+$") ? rest : "MM" + Hex(tid).Substring(0, 33).ToUpperInvariant();
+                      }
+                      var purpose = Clean(A(t, "Purpose"));
+                      var cpName = Clean(A(t, "CounterpartName"));
+                      var cpIban = Regex.Replace(A(t, "CounterpartIban"), @"\s+", "").ToUpperInvariant();
+                      var cpBic = Regex.Replace(A(t, "CounterpartBic"), @"\s+", "").ToUpperInvariant();
+                      var payRef = Clean(A(t, "PaymentReference")); var e2e = Clean(A(t, "EndToEndReference"));
+                      var mandate = Clean(A(t, "MandateReference")); var creditorId = Clean(A(t, "CreditorId"));
+                      var code = Regex.Replace(A(t, "BankTransactionCode"), @"\s+", "").ToUpperInvariant();
+                      var cardDate = A(t, "CardTransactionDate");
+                      int catType; if (!txCatType.TryGetValue(tRt, out catType)) catType = -1;
+                      // BkTxCd: a stored ISO sub-family code wins, otherwise the code is DERIVED; a stored
+                      // proprietary code is passed on as Prtry without an issuer, none is ever invented.
+                      string dom = null, fam = null, sub = null, prtry = null;
+                      switch (code)
+                      {
+                        case "ESCT": dom = "PMNT"; fam = credit ? "RCDT" : "ICDT"; sub = "ESCT"; break;
+                        case "ESDD": case "BBDD": dom = "PMNT"; fam = credit ? "IDDT" : "RDDT"; sub = code; break;
+                        case "STDO": dom = "PMNT"; fam = credit ? "RCDT" : "ICDT"; sub = "STDO"; break;
+                        case "POSD": case "CWDL": dom = "PMNT"; fam = "CCRD"; sub = code; break;
+                        case "CHRG": dom = "ACMT"; fam = credit ? "MCOP" : "MDOP"; sub = "CHRG"; break;
+                        case "INTR": dom = "ACMT"; fam = credit ? "MCOP" : "MDOP"; sub = "INTR"; break;
+                        default: if (code.Length > 0 && code.Length <= 35) prtry = code; break;
+                      }
+                      if (dom == null)
+                      {
+                        var up = purpose.ToUpperInvariant();
+                        if (catType == 9) { dom = "ACMT"; fam = credit ? "MCOP" : "MDOP"; sub = "CHRG"; }
+                        else if (catType == 13 || catType == 18) { dom = "ACMT"; fam = credit ? "MCOP" : "MDOP"; sub = "INTR"; }
+                        else if (cardDate.Length > 0 || Regex.IsMatch(up, @"\b(E-COMM|POS)\b|\bK\d\s+\d{2}\.\d{2}\.")) { dom = "PMNT"; fam = "CCRD"; sub = credit ? "OTHR" : "POSD"; }
+                        else if (!credit && (mandate.Length > 0 || creditorId.Length > 0)) { dom = "PMNT"; fam = "RDDT"; sub = "ESDD"; }
+                        else if (IsIban(cpIban)) { dom = "PMNT"; fam = credit ? "RCDT" : "ICDT"; sub = "ESCT"; }
+                        else { dom = "PMNT"; fam = "OTHR"; sub = "OTHR"; }
+                      }
+                      sb.Append("<Ntry>");
+                      if (payRef.Length > 0 && payRef.Length <= 35) sb.Append("<NtryRef>").Append(X(payRef)).Append("</NtryRef>");
+                      sb.Append("<Amt Ccy=\"").Append(ccy).Append("\">").Append(Amt(amt)).Append("</Amt><CdtDbtInd>").Append(credit ? "CRDT" : "DBIT").Append("</CdtDbtInd><Sts>BOOK</Sts>");
+                      var bdS = BD(t); var vdS = D10(A(t, "ValueDate")); if (!Regex.IsMatch(vdS, @"^\d{4}-\d{2}-\d{2}$")) vdS = bdS;
+                      sb.Append("<BookgDt><Dt>").Append(bdS).Append("</Dt></BookgDt><ValDt><Dt>").Append(vdS).Append("</Dt></ValDt>");
+                      sb.Append("<AcctSvcrRef>").Append(X(svc)).Append("</AcctSvcrRef>");
+                      sb.Append("<BkTxCd><Domn><Cd>").Append(dom).Append("</Cd><Fmly><Cd>").Append(fam).Append("</Cd><SubFmlyCd>").Append(sub).Append("</SubFmlyCd></Fmly></Domn>");
+                      if (prtry != null) sb.Append("<Prtry><Cd>").Append(X(prtry)).Append("</Cd></Prtry>");
+                      sb.Append("</BkTxCd>");
+                      sb.Append("<NtryDtls><TxDtls>");
+                      var refs = new StringBuilder();
+                      if (e2e.Length > 0 && e2e.Length <= 35) refs.Append("<EndToEndId>").Append(X(e2e)).Append("</EndToEndId>");
+                      if (mandate.Length > 0 && mandate.Length <= 35) refs.Append("<MndtId>").Append(X(mandate)).Append("</MndtId>");
+                      if (refs.Length > 0) sb.Append("<Refs>").Append(refs).Append("</Refs>");
+                      sb.Append("<AmtDtls><TxAmt><Amt Ccy=\"").Append(ccy).Append("\">").Append(Amt(amt)).Append("</Amt></TxAmt></AmtDtls>");
+                      Action<string, string, string, string> Party = (role, nm, idXml, acctXml) =>
+                      {
+                        if (nm.Length > 0 || idXml.Length > 0) { sb.Append('<').Append(role).Append('>'); if (nm.Length > 0) sb.Append("<Nm>").Append(X(Cut(nm, 140))).Append("</Nm>"); sb.Append(idXml).Append("</").Append(role).Append('>'); }
+                        if (acctXml.Length > 0) sb.Append('<').Append(role).Append("Acct><Id>").Append(acctXml).Append("</Id></").Append(role).Append("Acct>");
+                      };
+                      var ownAcctXml = hasIban ? "<IBAN>" + iban + "</IBAN>" : "<Othr><Id>" + X(othrId) + "</Id></Othr>";
+                      var cpAcctXml = IsIban(cpIban) ? "<IBAN>" + cpIban + "</IBAN>" : "";
+                      var cdtrIdXml = creditorId.Length > 0 && creditorId.Length <= 35 ? "<Id><OrgId><Othr><Id>" + X(creditorId) + "</Id></Othr></OrgId></Id>" : "";
+                      var parties = new StringBuilder();
+                      var outer = sb; sb = parties;
+                      if (credit) { Party("Dbtr", cpName, "", cpAcctXml); Party("Cdtr", owner, "", ownAcctXml); }
+                      else { Party("Dbtr", owner, "", ownAcctXml); Party("Cdtr", cpName, cdtrIdXml, cpAcctXml); }
+                      sb = outer;
+                      if (parties.Length > 0) sb.Append("<RltdPties>").Append(parties).Append("</RltdPties>");
+                      if (IsBic(cpBic)) sb.Append("<RltdAgts><").Append(credit ? "DbtrAgt" : "CdtrAgt").Append("><FinInstnId><BIC>").Append(cpBic).Append("</BIC></FinInstnId></").Append(credit ? "DbtrAgt" : "CdtrAgt").Append("></RltdAgts>");
+                      var ustrd = Chunks(purpose, 140);
+                      if (ustrd.Count > 0) { sb.Append("<RmtInf>"); foreach (var u in ustrd) sb.Append("<Ustrd>").Append(X(u)).Append("</Ustrd>"); sb.Append("</RmtInf>"); }
+                      sb.Append("</TxDtls></NtryDtls>");
+                      var addtl = purpose.Length > 0 ? purpose : cpName;
+                      if (addtl.Length > 0) sb.Append("<AddtlNtryInf>").Append(X(Cut(addtl, 500))).Append("</AddtlNtryInf>");
+                      sb.Append("</Ntry>");
+                    }
+                    var body = sb.ToString();
+                    var fp = Hex(stmtId + "|" + body).Substring(0, 7);
+                    var msgId = stmtId + "-" + fp;
+                    var addtlStmt = "Erstellt aus den Buchungen in meshmakers BelegCockpit, kein Originalauszug der Bank. Salden rückgerechnet aus dem Kontostand vom " + anchorDate + ". Prüfsumme " + fp + ".";
+                    var xml = new StringBuilder();
+                    xml.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Document xmlns=\"").Append(NS).Append("\"><BkToCstmrStmt>");
+                    xml.Append("<GrpHdr><MsgId>").Append(X(msgId)).Append("</MsgId><CreDtTm>").Append(creDtTm).Append("</CreDtTm></GrpHdr>");
+                    xml.Append("<Stmt><Id>").Append(X(stmtId)).Append("</Id><ElctrncSeqNb>").Append(lglSeq).Append("</ElctrncSeqNb><LglSeqNb>").Append(lglSeq).Append("</LglSeqNb><CreDtTm>").Append(creDtTm).Append("</CreDtTm>");
+                    xml.Append(body).Append("<AddtlStmtInf>").Append(X(addtlStmt)).Append("</AddtlStmtInf></Stmt></BkToCstmrStmt></Document>\n");
+                    var bytes = Encoding.UTF8.GetBytes(xml.ToString());
+                    var baseName = "camt053_" + fileLabel + "_" + m + ".xml";
+                    files.Add(new Dictionary<string, object> { { "fileName", "camt/" + fileLabel + "/" + baseName }, { "baseName", baseName }, { "contentBase64", Convert.ToBase64String(bytes) }, { "length", bytes.LongLength }, { "verbatim", true } });
+                    var capturedText = lastCaptured > DateTime.MinValue ? lastCaptured.ToString("yyyy-MM-dd", inv) : "";
+                    statements.Add(new Dictionary<string, object> {
+                      { "accountRtId", rtId }, { "account", label }, { "month", m }, { "stmtId", stmtId }, { "msgId", msgId }, { "lglSeqNb", lglSeq },
+                      { "fingerprint", fp }, { "entries", mTx.Count }, { "credits", cr.Count }, { "debits", dr.Count },
+                      { "opening", opening / 100m }, { "closing", closing / 100m }, { "currency", ccy },
+                      { "lastCapturedAt", capturedText }, { "status", warn.Count == 0 ? "ok" : "warn" }, { "warnings", warn }, { "fileName", baseName } });
+                    summary.Add(label + " " + m + ": " + mTx.Count + " Buchung(en), Anfangssaldo " + Money(opening) + " / Endsaldo " + Money(closing) + " " + ccy
+                      + ", Prüfsumme " + fp + (capturedText.Length > 0 ? ", zuletzt erfasst am " + capturedText : "") + ".");
+                    foreach (var w in warn) findings.Add(label + " " + m + ": " + w + ".");
+                  }
+                }
+                if (onlyAccount.Length == 0 && allTx != null)
+                {
+                  var orphans = Items(allTx).Where(t => !linked.Contains(Str(Prop(t, "RtId"))))
+                    .Where(t => { var bd = D10(A(t, "BookingDate")); return (fromD.Length == 0 || string.CompareOrdinal(bd, fromD) >= 0) && (toD.Length == 0 || string.CompareOrdinal(bd, toD) <= 0); })
+                    .Where(t => !Regex.IsMatch(A(t, "TransactionId"), @"-split-\d+$")).ToList();
+                  if (orphans.Count > 0)
+                    findings.Add(orphans.Count + " Buchung(en) des Zeitraums ohne Bankkonto-Zuordnung – in keinem Kontoauszug enthalten (Summe " + Money(orphans.Sum(t => Cents(Prop(Prop(t, "Attributes"), "Amount")) ?? 0)) + ").");
+                }
+
+                var ruler = new string('=', 72);
+                var prot = new StringBuilder();
+                prot.Append("KONTOAUSZÜGE (camt.053.001.02) – PRÜFPROTOKOLL\r\n").Append(ruler).Append("\r\n");
+                prot.Append("Erstellt: ").Append(creDtTm).Append("  Zeitraum: ").Append(fromD.Length > 0 ? fromD : "ab erster Buchung").Append(" bis ").Append(toD.Length > 0 ? toD : "letzter abgeschlossener Monat").Append("\r\n");
+                prot.Append("Die Auszüge werden aus den gespeicherten Buchungen erzeugt. Anfangs- und Endsalden sind vom\r\nhinterlegten Kontostand rückgerechnet und nur richtig, wenn die Buchungshistorie lückenlos ist.\r\n\r\n");
+                prot.Append("AUSZÜGE (").Append(statements.Count.ToString(inv)).Append(")\r\n");
+                foreach (var s in summary) prot.Append("- ").Append(s).Append("\r\n");
+                prot.Append("\r\nAUFFÄLLIGKEITEN (").Append(findings.Count.ToString(inv)).Append(")\r\n");
+                if (findings.Count == 0) prot.Append("Keine.\r\n"); else foreach (var f in findings) prot.Append("- ").Append(f).Append("\r\n");
+                var protBytes = Encoding.UTF8.GetBytes("\uFEFF" + prot.ToString());
+
+                return JsonSerializer.Serialize(new Dictionary<string, object> {
+                  { "v", 1 }, { "fileCount", files.Count }, { "statementCount", statements.Count }, { "findingCount", findings.Count },
+                  { "files", files }, { "statements", statements }, { "accounts", accountsOut }, { "findings", findings }, { "summary", summary },
+                  { "protocolBase64", Convert.ToBase64String(protBytes) }, { "protocolLength", protBytes.LongLength } });
+            - type: WriteJson@1
+              description: Parse the statements, findings and files
+              jsonStringPath: $.camtJson
+              targetPath: $.camt
+            - type: SetPrimitiveValue@1
+              description: Release the script output
+              targetPath: $.camtJson
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the bookings
+              targetPath: $.camtGroups
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the accounts
+              targetPath: $.camtAccounts
+              value: ""
+              valueType: String
+
+            # --- 3. File: one statement = the XML itself, several = a ZIP ---------------------
+            - type: SetPrimitiveValue@1
+              description: No file unless one is written below
+              targetPath: $.fileSystemItem
+              value: ""
+              valueType: String
+            - type: If@1
+              description: Not a dry run - write the file
+              path: $.p.dryRun
+              operator: NotEquals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: If@1
+                  description: Exactly one statement - store the XML
+                  path: $.camt.fileCount
+                  operator: Equals
+                  value: 1
+                  valueType: Int64
+                  transformations:
+                    - type: CreateFileSystemUpdate@1
+                      description: Store the camt.053 XML
+                      targetPath: $.camtFs
+                      path: $.camt.files[0].contentBase64
+                      generateRtId: true
+                      fileNamePath: $.camt.files[0].baseName
+                      contentType: application/xml
+                      contentLengthPath: $.camt.files[0].length
+                      rootFolderWellKnownName: Documents
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.fileSystemItem
+                      valuePath: $.camtFs.RtId
+                      valueType: String
+                - type: If@1
+                  description: Several statements - one ZIP with the protocol
+                  path: $.camt.fileCount
+                  operator: GreaterThan
+                  value: 1
+                  valueType: Int64
+                  transformations:
+                    - type: Flatten@1
+                      description: One ZIP entry per statement (camt/<account>/camt053_<account>_<yyyy-MM>.xml)
+                      path: $.camt.files[*]
+                      targetPath: $.camtZipEntries
+                    - type: FormatString@1
+                      description: Verbatim ZIP entry for the camt protocol
+                      format: '{"fileName":"camt/pruefprotokoll-camt.txt","contentBase64":"{$.camt.protocolBase64}","verbatim":true}'
+                      targetPath: $.camtProtEntry
+                    - type: WriteJson@1
+                      description: Append the protocol to the ZIP entries
+                      jsonStringPath: $.camtProtEntry
+                      targetPath: $.camtZipEntries
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                    - type: CreateZipArchive@1
+                      description: Store the statements as one ZIP
+                      path: $.camtZipEntries
+                      persistAsFileSystemItem: true
+                      rootFolderWellKnownName: Documents
+                      fileName: camt053-export.zip
+                      contentType: application/zip
+                      generateRtId: true
+                      targetPath: $.camtZipRtId
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.fileSystemItem
+                      valuePath: $.camtZipRtId
+                      valueType: String
+
+            # --- 4. Response: the file id plus the report, never the request or the XML -------
+            - type: SelectByPath@1
+              description: Report for the app (statements, accounts, findings, summary)
+              selectPath:
+                - path: $.camt.fileCount
+                  targetPath: $.report.fileCount
+                - path: $.camt.statements
+                  targetPath: $.report.statements
+                - path: $.camt.accounts
+                  targetPath: $.report.accounts
+                - path: $.camt.findings
+                  targetPath: $.report.findings
+                - path: $.camt.summary
+                  targetPath: $.report.summary
+                - path: $.p.dryRun
+                  targetPath: $.report.dryRun
+            - type: SetPipelineExecutionResult@1
+              path: $.report
+            # Security: the HTTP body is the whole data context - reduce it so it never echoes
+            # the caller's headers/Authorization (FromHttpRequest echo-leak trap) or the XML.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.fileSystemItem
+                  inclusion: true
+                - path: $.report
+                  inclusion: true
