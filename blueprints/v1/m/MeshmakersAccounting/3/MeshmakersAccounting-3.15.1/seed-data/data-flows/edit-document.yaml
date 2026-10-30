@@ -1,0 +1,515 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.1.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: edit-document (document page editor, AB#4760) ---
+  # Server side of the document page editor: assembles a corrected PDF from one or
+  # more source uploads via an ordered page-op list (rotate 90° steps, crop,
+  # reorder, delete pages, merge across sources — TransformPdf@1), stages it as a
+  # NEW UploadedDocument (re-runs analysis) and cascade-deletes the source uploads,
+  # their stored files and — when the caller passes deleteDocRtIds — the superseded
+  # AccountingDocuments that were built from the old (wrongly oriented/split)
+  # source. Callers editing a shared multi-invoice source (PageFrom/PageTo,
+  # AB#4543) must pass ALL documents that depend on the edited uploads, because
+  # the source files are deleted (outside the retention lock).
+  # AB#5780 (decision 2026-10-09): under the retention lock the edit is NOT refused but
+  # REPLACES (response replacedUnderRetention: true + lockedDocuments): the edited version is
+  # staged, the sources stay and the superseded documents are CANCELLED instead of deleted,
+  # while any affected document - named in
+  # deleteDocRtIds, produced by a source upload or linking a source file - is under the
+  # retention lock. The app tells the user before the edit that it will replace.
+  - rtId: 67d4a2f0b2e4d8c3a1f00140
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Edit Document
+      - id: System/Description
+        value: Rotates, crops, reorders and merges source PDF pages into a corrected document that re-runs analysis
+  - rtId: 67d4a2f0b2e4d8c3a1f00141
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00140
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Edit Document Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /editDocument
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+                - AccountingEmployee
+          transformations:
+            # Guard: need at least one source upload. The op list is validated by
+            # TransformPdf@1 itself (fails the run when empty or out of range).
+            - type: If@1
+              description: Only proceed when at least one source upload is given
+              path: $.body.uploadRtIds[0]
+              operator: NotEquals
+              valueType: String
+              transformations:
+                # --- AB#5780 retention lock guard (BEFORE anything is written) ---------
+                # The edit DELETES the source uploads' stored files - which are the
+                # originals of every AccountingDocument built from them (System/Related)
+                # - and the superseded documents in deleteDocRtIds. Under the retention
+                # lock neither may go before RetentionUntil, so the whole edit is refused
+                # when ANY affected document is locked: the documents named by the
+                # caller, the documents each source upload produced (UploadedToDocument)
+                # and every document that links a source file (System/Related - that
+                # also covers files attached to a document from the inbox, AB#4874,
+                # which carry no UploadedToDocument edge). Refused = nothing written,
+                # not even the edited upload; the response says retentionLocked.
+                # Lock rule as in the app (models/retention.model.ts): locked unless
+                # RetentionUntil is set and in the past - an unstamped document is
+                # locked (fail-closed).
+                - type: GetRtEntitiesById@1
+                  description: Load the source uploads (lock guard)
+                  ckTypeId: Meshmakers.Accounting/UploadedDocument
+                  rtIdsPath: $.body.uploadRtIds
+                  targetPath: $.lkUploads
+                - type: WriteJson@1
+                  targetPath: $.lkByUpload
+                  jsonString: '[]'
+                - type: WriteJson@1
+                  targetPath: $.lkByFile
+                  jsonString: '[]'
+                - type: WriteJson@1
+                  targetPath: $.lkExplicit
+                  jsonString: '{"Items":[],"TotalCount":0}'
+                - type: If@1
+                  description: Uploads found - documents they produced
+                  path: $.lkUploads.Items[0].RtId
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    - type: GetAssociationTargets@1
+                      description: Documents produced by the source uploads
+                      originRtIdPath: $.lkUploads.Items[*].RtId
+                      originCkTypeId: Meshmakers.Accounting/UploadedDocument
+                      targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                      associationRoleId: Meshmakers.Accounting/UploadedToDocument
+                      graphDirection: Outbound
+                      targetPath: $.lkByUpload
+                - type: If@1
+                  description: Source files present - documents linking them
+                  path: $.lkUploads.Items[0].Attributes.FileRtId
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    - type: GetAssociationTargets@1
+                      description: Documents whose System/Related file is a source file
+                      originRtIdPath: $.lkUploads.Items[*].Attributes.FileRtId
+                      originCkTypeId: System.Files/FileSystemItem
+                      targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                      associationRoleId: System/Related
+                      graphDirection: Inbound
+                      targetPath: $.lkByFile
+                - type: If@1
+                  description: Superseded documents named by the caller
+                  path: $.body.deleteDocRtIds[0]
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    - type: GetRtEntitiesById@1
+                      description: Load the documents the caller wants deleted
+                      ckTypeId: Meshmakers.Accounting/AccountingDocument
+                      rtIdsPath: $.body.deleteDocRtIds
+                      targetPath: $.lkExplicit
+                - type: DateTime@1
+                  description: Lock evaluation instant
+                  operation: Now
+                  targetPath: $.lkNow
+                # AB#5780: tested by scripts/document_retention_test.py through
+                # scripts/extraction-check-harness (located by this description).
+                - type: ExecuteCSharp@1
+                  description: AB#5780 retention lock check
+                  usings:
+                    - System
+                    - System.Linq
+                    - System.Text.Json
+                    - System.Collections.Generic
+                    - System.Globalization
+                  returnType: String
+                  arguments:
+                    - name: byUpload
+                      valuePath: $.lkByUpload
+                      dataType: RecordArray
+                    - name: byFile
+                      valuePath: $.lkByFile
+                      dataType: RecordArray
+                    - name: explicitDocs
+                      valuePath: $.lkExplicit.Items
+                      dataType: RecordArray
+                    - name: now
+                      valuePath: $.lkNow
+                      dataType: Record
+                  targetPath: $.lockJson
+                  code: |
+                    var styles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal;
+                    Func<object, JsonElement> El = o => o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                    Func<JsonElement, string, JsonElement> Prop = (e, n) => {
+                      if (e.ValueKind == JsonValueKind.Object)
+                        foreach (var p in e.EnumerateObject())
+                          if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                      return default(JsonElement);
+                    };
+                    Func<JsonElement, string> Str = e =>
+                      e.ValueKind == JsonValueKind.String ? e.GetString()
+                      : (e.ValueKind == JsonValueKind.Undefined || e.ValueKind == JsonValueKind.Null) ? null
+                      : e.ToString();
+                    DateTime runAt = DateTime.UtcNow;
+                    if (now is DateTime) runAt = ((DateTime)now).ToUniversalTime();
+                    else if (now != null) {
+                      DateTime n;
+                      if (DateTime.TryParse(Str(El(now)), CultureInfo.InvariantCulture, styles, out n)) runAt = n;
+                    }
+                    // Entities straight (GetRtEntitiesById items) or grouped
+                    // ({ OriginRtId, Items } per origin from GetAssociationTargets).
+                    var docs = new Dictionary<string, JsonElement>();
+                    Action<object[]> Collect = arr => {
+                      foreach (var o in arr ?? new object[0]) {
+                        var e = El(o); var items = Prop(e, "Items");
+                        var list = items.ValueKind == JsonValueKind.Array ? items.EnumerateArray().ToList() : new List<JsonElement> { e };
+                        foreach (var d in list) { var id = Str(Prop(d, "RtId")); if (id != null && !docs.ContainsKey(id)) docs[id] = d; }
+                      }
+                    };
+                    Collect(explicitDocs); Collect(byUpload); Collect(byFile);
+                    var locked = new List<Dictionary<string, string>>();
+                    foreach (var kv in docs) {
+                      var a = Prop(kv.Value, "Attributes");
+                      DateTime until = default(DateTime); var s = Str(Prop(a, "RetentionUntil"));
+                      var stamped = s != null && DateTime.TryParse(s, CultureInfo.InvariantCulture, styles, out until);
+                      if (stamped && until <= runAt) continue;
+                      locked.Add(new Dictionary<string, string> {
+                        { "rtId", kv.Key }, { "documentNumber", Str(Prop(a, "DocumentNumber")) },
+                        { "retentionUntil", stamped ? until.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null } });
+                    }
+                    return JsonSerializer.Serialize(new Dictionary<string, object> {
+                      { "checked", docs.Count }, { "locked", locked.Count }, { "docs", locked.Take(20).ToList() } });
+                - type: WriteJson@1
+                  description: Parse the lock verdict
+                  targetPath: $.lock
+                  jsonStringPath: $.lockJson
+                # Decision 2026-10-09: a locked edit is NOT refused - it REPLACES. The edited PDF
+                # becomes a new upload as always, but nothing under the lock is deleted: the
+                # source files and uploads stay, and the superseded documents are set to
+                # CANCELLED with a note instead of being deleted (replace + keep the old one).
+                - type: SetPrimitiveValue@1
+                  description: Default - nothing locked, the edit deletes what it replaces
+                  targetPath: $.keepOriginals
+                  value: false
+                  valueType: Boolean
+                - type: If@1
+                  description: A locked document is affected - replace and keep the originals
+                  path: $.lock.locked
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.keepOriginals
+                      value: true
+                      valueType: Boolean
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.replacedUnderRetention
+                      value: true
+                      valueType: Boolean
+                    - type: SelectByPath@1
+                      selectPath:
+                        - path: $.lock.docs
+                          targetPath: $.lockedDocuments
+                    - type: Logger@1
+                      message: AB#5780 editDocument under the retention lock - the edited version is staged, the originals stay and the superseded documents are cancelled.
+                - type: If@1
+                  description: Run the edit (both modes)
+                  path: $.lock.locked
+                  operator: GreaterEqualsThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    # --- Load the FIRST source's metadata (inherited onto the edited doc) ---
+                    - type: FormatString@1
+                      description: First rtId as a single-element JSON array
+                      format: '["{$.body.uploadRtIds[0]}"]'
+                      targetPath: $.firstIdJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.firstIdJson
+                      targetPath: $.firstIdArr
+                    - type: GetRtEntitiesById@1
+                      description: Load first source UploadedDocument for inherited metadata
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdsPath: $.firstIdArr
+                      targetPath: $.firstDoc
+                    # --- Collect each source's stored PDF, IN uploadRtIds ORDER ---
+                    # The op list's sourceIndex refers to positions in this array.
+                    - type: ForEach@1
+                      description: Load each source PDF in the given source order
+                      iterationPath: $.body.uploadRtIds
+                      targetPath: $.docResults
+                      mergePath: $.pdf
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: FormatString@1
+                          description: Current rtId as single-element JSON array
+                          format: '["{$.key}"]'
+                          targetPath: $.idJson
+                        - type: WriteJson@1
+                          jsonStringPath: $.idJson
+                          targetPath: $.idArr
+                        - type: GetRtEntitiesById@1
+                          description: Load the UploadedDocument to read its stored file rtId
+                          ckTypeId: Meshmakers.Accounting/UploadedDocument
+                          rtIdsPath: $.idArr
+                          targetPath: $.doc
+                        - type: GetFileSystemContent@1
+                          description: Read the stored PDF bytes (base64) into the merge path
+                          rtIdPath: $.doc.Items[0].Attributes.FileRtId
+                          targetPath: $.pdf
+                    # --- Assemble the corrected PDF from the ordered page ops ---
+                    # Strict: an unreadable source aborts the edit instead of silently
+                    # dropping pages from a receipt.
+                    - type: TransformPdf@1
+                      description: Apply rotate/crop/reorder/delete/merge page ops
+                      path: $.docResults
+                      opsPath: $.body.ops
+                      targetPath: $.editedPdf
+                      contentLengthTargetPath: $.editedLen
+                      failOnInvalidPdf: true
+                    - type: ComputeFileHash@1
+                      description: SHA-256 of the edited PDF (fresh content, own hash)
+                      path: $.editedPdf
+                      targetPath: $.fileHash
+                    - type: SetPrimitiveValue@1
+                      description: Edited document file name (re-analysis sets the real identity)
+                      targetPath: $.editedFileName
+                      value: 'Bearbeitet.pdf'
+                      valueType: String
+                    - type: DateTime@1
+                      description: Upload timestamp
+                      operation: Now
+                      targetPath: $.uploadedAt
+                    - type: CreateFileSystemUpdate@1
+                      description: Store the edited PDF
+                      targetPath: $.fileSystemItem
+                      path: $.editedPdf
+                      generateRtId: true
+                      fileNamePath: $.editedFileName
+                      contentType: application/pdf
+                      contentLengthPath: $.editedLen
+                      rootFolderWellKnownName: "Documents"
+                    - type: CreateUpdateInfo@1
+                      description: Stage the edited document (NEW -> analysis)
+                      targetPath: $.updates._items
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Insert
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdPath: $.editedUploadRtId
+                      generateRtId: true
+                      attributeUpdates:
+                        - attributeName: OriginalFileName
+                          attributeValueType: String
+                          valuePath: $.editedFileName
+                        - attributeName: FileRtId
+                          attributeValueType: String
+                          valuePath: $.fileSystemItem.RtId
+                        - attributeName: FileHash
+                          attributeValueType: String
+                          valuePath: $.fileHash
+                        - attributeName: UploadedAt
+                          attributeValueType: DateTime
+                          valuePath: $.uploadedAt
+                        - attributeName: ProcessingState
+                          attributeValueType: Enum
+                          value: NEW
+                        - attributeName: SourceChannel
+                          attributeValueType: Enum
+                          valuePath: $.firstDoc.Items[0].Attributes.SourceChannel
+                        - attributeName: SourceSender
+                          attributeValueType: String
+                          valuePath: $.firstDoc.Items[0].Attributes.SourceSender
+                        - attributeName: SourceReceivedAt
+                          attributeValueType: DateTime
+                          valuePath: $.firstDoc.Items[0].Attributes.SourceReceivedAt
+                    - type: CreateAssociationUpdate@1
+                      description: Link edited upload to its stored file
+                      targetPath: $.updates._assocItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Create
+                      originRtIdPath: $.updates._items[0].RtEntity.RtId
+                      originCkTypeIdPath: $.updates._items[0].RtEntity.CkTypeId
+                      targetRtIdPath: $.fileSystemItem.RtId
+                      targetCkTypeIdPath: $.fileSystemItem.CkTypeId
+                      associationRoleId: System/Related
+                    - type: ApplyChanges@2
+                      description: Persist the edited document + file link FIRST
+                      entityUpdatesPath: $.updates._items
+                      associationUpdatesPath: $.updates._assocItems
+                    # --- Now that the edited doc is safe, delete the sources ---
+                    # Same two sequential loops as the merge pipeline: files first (while
+                    # the source docs still exist so FileRtId resolves), then the docs.
+                    # Only outside the retention lock: under it the originals stay.
+                    - type: If@1
+                      description: Not under the retention lock - delete the replaced sources
+                      path: $.keepOriginals
+                      operator: Equals
+                      value: false
+                      valueType: Boolean
+                      transformations:
+                        - type: ForEach@1
+                          description: Delete each source's stored file
+                          iterationPath: $.body.uploadRtIds
+                          targetPath: $.fileDeletes
+                          mergePath: $.fd
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: FormatString@1
+                              format: '["{$.key}"]'
+                              targetPath: $.idJson
+                            - type: WriteJson@1
+                              jsonStringPath: $.idJson
+                              targetPath: $.idArr
+                            - type: GetRtEntitiesById@1
+                              ckTypeId: Meshmakers.Accounting/UploadedDocument
+                              rtIdsPath: $.idArr
+                              targetPath: $.doc
+                            - type: CreateUpdateInfo@1
+                              description: Delete the stored file (single object into the merge path)
+                              targetPath: $.fd
+                              updateKind: Delete
+                              ckTypeId: System.Files/FileSystemItem
+                              rtIdPath: $.doc.Items[0].Attributes.FileRtId
+                        - type: ApplyChanges@2
+                          description: Delete the source stored files
+                          entityUpdatesPath: $.fileDeletes
+                        - type: ForEach@1
+                          description: Delete each source UploadedDocument
+                          iterationPath: $.body.uploadRtIds
+                          targetPath: $.docDeletes
+                          mergePath: $.dd
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: CreateUpdateInfo@1
+                              description: Delete the source upload (single object into the merge path)
+                              targetPath: $.dd
+                              updateKind: Delete
+                              ckTypeId: Meshmakers.Accounting/UploadedDocument
+                              rtIdPath: $.key
+                        - type: ApplyChanges@2
+                          description: Delete the source UploadedDocuments
+                          entityUpdatesPath: $.docDeletes
+                    # --- Optionally delete the superseded AccountingDocuments ---
+                    # The re-analysis of the edited upload produces the corrected
+                    # document(s); the old ones (built from the wrong source, e.g. with
+                    # wrong amounts) are removed together with their category/fiscal-year
+                    # links. Their System/Related file link pointed at the source files
+                    # deleted above.
+                    - type: If@1
+                      description: Only when the caller passed superseded document rtIds
+                      path: $.body.deleteDocRtIds[0]
+                      operator: NotEquals
+                      valueType: String
+                      transformations:
+                        - type: If@1
+                          description: Not under the retention lock - delete the superseded documents
+                          path: $.keepOriginals
+                          operator: Equals
+                          value: false
+                          valueType: Boolean
+                          transformations:
+                            - type: ForEach@1
+                              description: Delete each superseded AccountingDocument
+                              iterationPath: $.body.deleteDocRtIds
+                              targetPath: $.accDocDeletes
+                              mergePath: $.ad
+                              maxDegreeOfParallelism: 1
+                              transformations:
+                                - type: CreateUpdateInfo@1
+                                  description: Delete the superseded document (single object into the merge path)
+                                  targetPath: $.ad
+                                  updateKind: Delete
+                                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                  rtIdPath: $.key
+                            - type: ApplyChanges@2
+                              description: Delete the superseded AccountingDocuments
+                              entityUpdatesPath: $.accDocDeletes
+                        # Under the retention lock (decision 2026-10-09): replace + keep - the
+                        # superseded documents stay, CANCELLED and flagged for clarification with
+                        # a note naming the edit, so nothing is lost before RetentionUntil. The
+                        # duplicate check skips CANCELLED documents, so the re-analysis of the
+                        # edited upload is not parked as a duplicate of its own predecessor.
+                        - type: If@1
+                          description: Under the retention lock - cancel the superseded documents instead
+                          path: $.keepOriginals
+                          operator: Equals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: ForEach@1
+                              description: Cancel each superseded AccountingDocument
+                              iterationPath: $.body.deleteDocRtIds
+                              targetPath: $.accDocCancels
+                              mergePath: $.ac
+                              maxDegreeOfParallelism: 1
+                              transformations:
+                                - type: CreateUpdateInfo@1
+                                  description: Cancel the superseded document (single object into the merge path)
+                                  targetPath: $.ac
+                                  updateKind: Update
+                                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                                  rtIdPath: $.key
+                                  attributeUpdates:
+                                    - attributeName: DocumentState
+                                      attributeValueType: Enum
+                                      value: CANCELLED
+                                    - attributeName: InClarification
+                                      attributeValueType: Boolean
+                                      value: true
+                                    - attributeName: ClarificationNote
+                                      attributeValueType: String
+                                      value: "Replaced by an edited version in the page editor; kept cancelled under the retention lock (auto)"
+                            - type: ApplyChanges@2
+                              description: Persist the cancellations
+                              entityUpdatesPath: $.accDocCancels
+                    # --- Return the edited upload rtId to the HTTP caller ---
+                    # generateRtId does NOT write the generated id back to rtIdPath, so
+                    # copy it out of the staged update info (same place the association
+                    # update reads it from).
+                    - type: SetPrimitiveValue@1
+                      description: Expose the new upload's rtId for the response
+                      targetPath: $.editedUploadRtId
+                      valuePath: $.updates._items[0].RtEntity.RtId
+                      valueType: String
+                    - type: SetPipelineExecutionResult@1
+                      path: $.editedUploadRtId
+
+            # Terminal response shaping (top-level, always runs — also on the guard-skip
+            # path): rebuild the root with ONLY the edited rtId so the HTTP response never
+            # echoes the request headers (Authorization/Bearer), body or intermediate
+            # state. See feedback_fromhttprequest_response_echo_leak.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.editedUploadRtId
+                  inclusion: true
+                - path: $.replacedUnderRetention
+                  inclusion: true
+                - path: $.lockedDocuments
+                  inclusion: true
