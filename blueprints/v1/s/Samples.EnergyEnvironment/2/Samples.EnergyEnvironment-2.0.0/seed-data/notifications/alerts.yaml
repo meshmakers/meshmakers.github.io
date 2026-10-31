@@ -1,0 +1,75 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Notification-[2.1.0,3.0)
+
+# Stateful events shown as alerts on the dashboard: peak load, storage state of
+# charge, forecast deviation and the like.
+entities:
+  # ============================================================
+  # STATEFUL EVENTS - Energy Alerts
+  # ============================================================
+
+  # Active Warning: Peak Load approaching limit
+  - rtId: e0500001000000000000e001
+    ckTypeId: System.Notification/StatefulEvent-1
+    attributes:
+    - id: System.Notification/Message-1
+      value: "Lastspitze: Aktueller Verbrauch 2.750 kW nähert sich dem Limit von 3.000 kW. Lastabwurf prüfen."
+    - id: System.Notification/EventLevel-1
+      value: 2
+    - id: System.Notification/EventState-1
+      value: 0
+    - id: System.Notification/EventSource-1
+      value: 5
+
+  # Active Error: PV inverter communication lost
+  - rtId: e0500001000000000000e002
+    ckTypeId: System.Notification/StatefulEvent-1
+    attributes:
+    - id: System.Notification/Message-1
+      value: "Kommunikation mit Wechselrichter WR-02 seit 12:45 Uhr unterbrochen. PV-Einspeisung nicht verfügbar."
+    - id: System.Notification/EventLevel-1
+      value: 3
+    - id: System.Notification/EventState-1
+      value: 0
+    - id: System.Notification/EventSource-1
+      value: 5
+
+  # Active Critical: Grid frequency deviation
+  - rtId: e0500001000000000000e003
+    ckTypeId: System.Notification/StatefulEvent-1
+    attributes:
+    - id: System.Notification/Message-1
+      value: "Netzfrequenz 49.85 Hz — unter Schwellwert 49.90 Hz. Speicher-Einspeisung aktiviert."
+    - id: System.Notification/EventLevel-1
+      value: 4
+    - id: System.Notification/EventState-1
+      value: 0
+    - id: System.Notification/EventSource-1
+      value: 5
+
+  # Inactive (resolved): Storage SOC low
+  - rtId: e0500001000000000000e004
+    ckTypeId: System.Notification/StatefulEvent-1
+    attributes:
+    - id: System.Notification/Message-1
+      value: "Speicher SOC unter 20% gefallen. Ladezyklus wurde eingeleitet."
+    - id: System.Notification/EventLevel-1
+      value: 2
+    - id: System.Notification/EventState-1
+      value: 1
+    - id: System.Notification/EventSource-1
+      value: 5
+
+  # Active Information: DR event scheduled
+  - rtId: e0500001000000000000e005
+    ckTypeId: System.Notification/StatefulEvent-1
+    attributes:
+    - id: System.Notification/Message-1
+      value: "DR-Event geplant für morgen 14:00–16:00 Uhr. Erwartete Reduktion: 400 kW."
+    - id: System.Notification/EventLevel-1
+      value: 1
+    - id: System.Notification/EventState-1
+      value: 0
+    - id: System.Notification/EventSource-1
+      value: 2
