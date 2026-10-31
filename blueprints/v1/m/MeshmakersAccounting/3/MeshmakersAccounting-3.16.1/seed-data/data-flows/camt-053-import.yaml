@@ -1,0 +1,399 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.1.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipeline: import-camt053 (AB#4757) ---
+  - rtId: 67d4a2f0b2e4d8c3a1f00060
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: camt.053 Import
+      - id: System/Description
+        value: Imports bank transactions from camt.053 XML statements (both Raiffeisen/STUZZA and ISO dialects)
+  - rtId: 67d4a2f0b2e4d8c3a1f00061
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00060
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: camt.053 Import Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |
+          # camt.053 bank-statement import pipeline (BelegCockpit / Klaus Bernkopf).
+          #
+          # POST a single camt.053 XML file (multipart/form-data) to the mesh adapter at
+          #   {adapterUrl}/{tenantId}/importCamt053
+          # → parses both dialects (Raiffeisen/STUZZA + Hypo/ISO) via ImportFromCamt053@1,
+          #   upserts one Basic.Accounting/BankTransaction per Ntry (idempotent by TransactionId,
+          #   MatchState=Unreviewed) and links it to the tenant's BankAccount by IBAN.
+          # The existing "Match Transactions Pipeline" then picks up the Unreviewed rows.
+          #
+          # Structure mirrors the proven CSV-import pipeline in the blueprint seed; only the
+          # source node (ImportFromCamt053@1 instead of ImportFromCsv@1) and the field paths differ,
+          # because ImportFromCamt053@1 already emits a signed amount, a direction (0/1) and accountIban.
+          triggers:
+            - type: FromHttpRequest@2
+              method: POST
+              path: /importCamt053
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+
+          transformations:
+            - type: ImportFromCamt053@1
+              description: Parse the uploaded camt.053 XML into normalized booking objects (one per Ntry)
+              fileIndex: 0
+              targetPath: $.camtEntries
+
+            - type: ForEach@1
+              description: Upsert BankTransaction entities from camt entries (idempotent by TransactionId)
+              iterationPath: $.camtEntries
+              targetPath: $._updateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: GetOrCreateRtEntitiesByType@1
+                  description: Resolve the existing BankTransaction by TransactionId or generate a new id
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  fieldFilters:
+                    - attributePath: TransactionId
+                      operator: Equals
+                      comparisonValuePath: $.key.transactionId
+                  rtIdTargetPath: $._txRtId
+                  ckTypeIdTargetPath: $._txCkTypeId
+                  modOperationPath: $._txModOp
+
+                - type: If@1
+                  description: Only insert new transactions — re-importing the same statement is a no-op
+                  path: $._txModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    # AB#5091: card bookings print the DATE OF THE PURCHASE in the purpose as
+                    # "K<n> dd.mm." - e.g. "E-COMM 180,00 US K2 18.07. 06:37 ANTHROPIC* CLAUDE SUB"
+                    # or "POS 59,69 AT K1 15.07. 12:01 SPAR 2361" - while the BOOKING date is 1-3
+                    # days later. That purchase date is the invoice date of the receipt, so the
+                    # matcher uses it as a first-class key; persist it here instead of re-parsing
+                    # the purpose in every pass. The year comes from the booking date with a
+                    # rollover at the turn of the year (card month 12 + booking month 1 => previous
+                    # year, card month 1 + booking month 12 => next year). The helper returns null
+                    # when the pattern is absent or the day/month is malformed; the If@1 below then
+                    # leaves $.key._cardTxDateOk ABSENT, and CreateUpdateInfo@1 silently skips an
+                    # attribute whose valuePath does not exist - which is what keeps the optional
+                    # attribute unwritten instead of written as null.
+                    # The code is byte-identical in finapi.yaml, csv-transaction-import.yaml (both
+                    # write points) and camt-053-import.yaml - keep it that way.
+                    - type: ExecuteCSharp@1
+                      description: Card transaction date parsed from the purpose ("K<n> dd.mm."), null when absent
+                      code: 'if (string.IsNullOrWhiteSpace(purpose) || string.IsNullOrWhiteSpace(bookingDate)) return null; var m = Regex.Match(purpose, @"\bK\d\s+(\d{2})\.(\d{2})\."); if (!m.Success) return null; int cd; int cm; if (!int.TryParse(m.Groups[1].Value, out cd) || !int.TryParse(m.Groups[2].Value, out cm)) return null; if (cm < 1 || cm > 12 || cd < 1 || cd > 31) return null; var st = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal; DateTime b; if (!DateTime.TryParse(bookingDate, CultureInfo.InvariantCulture, st, out b)) return null; var y = b.Year; if (cm == 12 && b.Month == 1) y = y - 1; else if (cm == 1 && b.Month == 12) y = y + 1; if (cd > DateTime.DaysInMonth(y, cm)) return null; return new DateTime(y, cm, cd, 0, 0, 0, DateTimeKind.Utc).ToString("yyyy-MM-dd") + "T00:00:00Z";'
+                      usings:
+                        - System
+                        - System.Globalization
+                        - System.Text.RegularExpressions
+                      returnType: String
+                      arguments:
+                        - name: purpose
+                          valuePath: $.key.purpose
+                          dataType: String
+                        - name: bookingDate
+                          valuePath: $.key.bookingDate
+                          dataType: String
+                      targetPath: $.key._cardTxDate
+                    - type: If@1
+                      description: Publish the parsed card date only when there is one (CardTransactionDate is optional)
+                      path: $.key._cardTxDate
+                      operator: RegexMatch
+                      value: .+
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.key._cardTxDateOk
+                          valuePath: $.key._cardTxDate
+                          valueType: String
+                    - type: GetRtEntitiesByType@1
+                      description: Find the BankAccount by the statement account IBAN
+                      ckTypeId: Basic.Accounting/BankAccount
+                      targetPath: $._account
+                      take: 1
+                      fieldFilters:
+                        - attributePath: Iban
+                          operator: Equals
+                          comparisonValuePath: $.key.accountIban
+
+                    - type: CreateUpdateInfo@1
+                      targetPath: $._txUpdate
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Insert
+                      ckTypeId: Basic.Accounting/BankTransaction
+                      rtIdPath: $._txRtId
+                      rtWellKnownNamePath: $.key.transactionId
+                      attributeUpdates:
+                        - attributeName: TransactionId
+                          attributeValueType: String
+                          valuePath: $.key.transactionId
+                        - attributeName: Amount
+                          attributeValueType: Double
+                          valuePath: $.key.amount
+                        - attributeName: Currency
+                          attributeValueType: String
+                          valuePath: $.key.currency
+                        - attributeName: BookingDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.bookingDate
+                        - attributeName: ValueDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.valueDate
+                        - attributeName: Purpose
+                          attributeValueType: String
+                          valuePath: $.key.purpose
+                        - attributeName: CardTransactionDate
+                          attributeValueType: DateTime
+                          valuePath: $.key._cardTxDateOk
+                        - attributeName: CounterpartName
+                          attributeValueType: String
+                          valuePath: $.key.counterpartName
+                        - attributeName: CounterpartIban
+                          attributeValueType: String
+                          valuePath: $.key.counterpartIban
+                        - attributeName: CounterpartBic
+                          attributeValueType: String
+                          valuePath: $.key.counterpartBic
+                        - attributeName: PaymentReference
+                          attributeValueType: String
+                          valuePath: $.key.paymentReference
+                        - attributeName: EndToEndReference
+                          attributeValueType: String
+                          valuePath: $.key.endToEndReference
+                        - attributeName: MandateReference
+                          attributeValueType: String
+                          valuePath: $.key.mandateReference
+                        - attributeName: CreditorId
+                          attributeValueType: String
+                          valuePath: $.key.creditorId
+                        - attributeName: BankTransactionCode
+                          attributeValueType: String
+                          valuePath: $.key.bankTransactionCode
+                        - attributeName: Direction
+                          attributeValueType: Int
+                          valuePath: $.key.direction
+                        - attributeName: MatchState
+                          attributeValueType: Enum
+                          value: Unreviewed
+
+                    - type: If@1
+                      description: Link the transaction to its bank account when known
+                      path: $._account.TotalCount
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Int64
+                      transformations:
+                        - type: CreateAssociationUpdate@1
+                          description: BankTransaction -> BankAccount via ParentChild (mandatory)
+                          targetPath: $._assocUpdate
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Create
+                          originRtIdPath: $._txRtId
+                          originCkTypeId: Basic.Accounting/BankTransaction
+                          targetRtIdPath: $._account.Items[0].RtId
+                          targetCkTypeId: Basic.Accounting/BankAccount
+                          associationRoleId: System/ParentChild
+
+                    - type: ApplyChanges@2
+                      description: Persist transaction and association
+                      entityUpdatesPath: $._txUpdate
+                      associationUpdatesPath: $._assocUpdate
+
+            # AB#6251: the camt.053 export computes statement balances BACKWARDS from
+            # BankAccount.Balance at BalanceDate (AB#6224), and an account fed only by this import
+            # never had one. Decision (Gerald, 2026-10-09): the import stamps the CLOSING balance
+            # (CLBD) of the NEWEST statement of the uploaded file, with that statement's date, on the
+            # matched BankAccount - no statement entities, no original-file storage (AB#4742), no
+            # backfill (an account gets it on its next import, even if every booking in the file is
+            # already known: this step runs for re-imports too). ImportFromCamt053@1 (platform repo)
+            # is deliberately untouched, so ONE ExecuteCSharp@1 reads the same uploaded XML again:
+            # namespace-agnostic (STUZZA/APC and ISO), per account IBAN the CLBD with CdtDbtInd sign
+            # (DBIT = negative) and its date (Bal/Dt/Dt, else Bal/Dt/DtTm, else Stmt/FrToDt/ToDtTm) of
+            # the statement with the latest closing date; a statement without a CLBD (or without a
+            # usable sign/date) yields nothing. The body is try/catch: any failure returns an empty
+            # list, because a throw would abort the whole import. The step MUST stay after
+            # ImportFromCamt053@1 - that node loads System.Xml.Linq into the adapter process, which
+            # the script compiler references from the loaded assemblies.
+            - type: ExecuteCSharp@1
+              description: AB#6251 closing balance (CLBD) of the newest statement per account IBAN, as JSON
+              code: |
+                var items = new List<Dictionary<string, object>>();
+                try
+                {
+                  if (!string.IsNullOrWhiteSpace(fileData))
+                  {
+                    var xml = Encoding.UTF8.GetString(Convert.FromBase64String(fileData)).TrimStart('﻿');
+                    var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null };
+                    XDocument doc;
+                    using (var sr = new StringReader(xml))
+                    using (var xr = XmlReader.Create(sr, settings))
+                      doc = XDocument.Load(xr);
+                    Func<XElement, string, XElement> kid = (e, n) => e == null ? null : e.Elements().FirstOrDefault(x => x.Name.LocalName == n);
+                    Func<XElement, string> val = e => e == null ? "" : e.Value.Trim();
+                    Func<string, string> day = s =>
+                    {
+                      if (string.IsNullOrWhiteSpace(s) || s.Trim().Length < 10) return null;
+                      var d10 = s.Trim().Substring(0, 10);
+                      DateTime parsed;
+                      return DateTime.TryParseExact(d10, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed) ? d10 : null;
+                    };
+                    var best = new Dictionary<string, KeyValuePair<string, double>>();
+                    var order = new List<string>();
+                    foreach (var stmt in doc.Root.Descendants().Where(x => x.Name.LocalName == "Stmt"))
+                    {
+                      var iban = val(kid(kid(kid(stmt, "Acct"), "Id"), "IBAN"));
+                      if (iban.Length == 0) continue;
+                      foreach (var bal in stmt.Elements().Where(x => x.Name.LocalName == "Bal"))
+                      {
+                        if (!string.Equals(val(kid(kid(kid(bal, "Tp"), "CdOrPrtry"), "Cd")), "CLBD", StringComparison.OrdinalIgnoreCase)) continue;
+                        double amount;
+                        if (!double.TryParse(val(kid(bal, "Amt")), NumberStyles.Any, CultureInfo.InvariantCulture, out amount)) continue;
+                        var ind = val(kid(bal, "CdtDbtInd"));
+                        if (string.Equals(ind, "DBIT", StringComparison.OrdinalIgnoreCase)) amount = -amount;
+                        else if (!string.Equals(ind, "CRDT", StringComparison.OrdinalIgnoreCase)) continue;
+                        var dt = kid(bal, "Dt");
+                        var when = day(val(kid(dt, "Dt")));
+                        if (when == null) when = day(val(kid(dt, "DtTm")));
+                        if (when == null) when = day(val(kid(kid(stmt, "FrToDt"), "ToDtTm")));
+                        if (when == null) continue;
+                        KeyValuePair<string, double> cur;
+                        if (!best.TryGetValue(iban, out cur)) order.Add(iban);
+                        if (!best.TryGetValue(iban, out cur) || string.CompareOrdinal(when, cur.Key) >= 0)
+                          best[iban] = new KeyValuePair<string, double>(when, Math.Round(amount, 2));
+                      }
+                    }
+                    foreach (var iban in order)
+                      items.Add(new Dictionary<string, object> { { "i", iban }, { "b", best[iban].Value }, { "d", best[iban].Key + "T00:00:00Z" } });
+                  }
+                }
+                catch (Exception)
+                {
+                  items.Clear();
+                }
+                return JsonSerializer.Serialize(new Dictionary<string, object> { { "Items", items }, { "TotalCount", items.Count } });
+              usings:
+                - System
+                - System.Collections.Generic
+                - System.Globalization
+                - System.IO
+                - System.Linq
+                - System.Text
+                - System.Text.Json
+                - System.Xml
+                - System.Xml.Linq
+              returnType: String
+              arguments:
+                - name: fileData
+                  valuePath: $.files[0].data
+                  dataType: String
+              targetPath: $._balJson
+
+            - type: WriteJson@1
+              description: Parse the per-account closing balances into the data context
+              targetPath: $._balances
+              jsonStringPath: $._balJson
+
+            - type: ForEach@1
+              description: Stamp Balance + BalanceDate on every matched BankAccount - only forward in time (AB#6251)
+              iterationPath: $._balances.Items
+              targetPath: $._balResults
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: GetRtEntitiesByType@1
+                  description: Find the BankAccount by the statement account IBAN (same lookup as the booking upsert)
+                  ckTypeId: Basic.Accounting/BankAccount
+                  targetPath: $._balAccount
+                  take: 1
+                  fieldFilters:
+                    - attributePath: Iban
+                      operator: Equals
+                      comparisonValuePath: $.key.i
+
+                - type: If@1
+                  description: Only a known account gets a balance
+                  path: $._balAccount.TotalCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    # Monotonic: an account whose stored BalanceDate is already LATER than this
+                    # statement's date keeps its balance - a month uploaded late must never overwrite
+                    # a newer balance (finAPI stamps BalanceDate on every sync). The comparison is
+                    # TYPED (If@1 + valueType DateTime, like the AB#5086 date window in
+                    # document-analysis.yaml): a DateTime fieldFilter on a dynamic CK attribute never
+                    # matches in Mongo, so a "BalanceDate > date" query would always come back empty
+                    # and every import would write. An absent optional attribute is missing from the
+                    # JSON and SelectByPath@1 skips a missing source, so the stored value is defaulted
+                    # to the dawn of time first: an account without a BalanceDate is written, and the
+                    # same day is written too (stored <= statement date).
+                    - type: SetPrimitiveValue@1
+                      description: Default - the account holds no balance date yet
+                      targetPath: $._balStored
+                      valueType: String
+                      value: "0001-01-01T00:00:00Z"
+                    - type: SelectByPath@1
+                      description: The stored BalanceDate, when the account has one
+                      selectPath:
+                        - path: $._balAccount.Items[0].Attributes.BalanceDate
+                          targetPath: $._balStored
+                    - type: If@1
+                      description: Stored balance date not after the statement date - write the closing balance
+                      path: $._balStored
+                      operator: LessEqualsThan
+                      valuePath: $.key.d
+                      valueType: DateTime
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          description: Balance + BalanceDate of the BankAccount from the closing balance
+                          targetPath: $._balUpdate
+                          targetValueKind: Array
+                          targetValueWriteMode: Overwrite
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankAccount
+                          rtIdPath: $._balAccount.Items[0].RtId
+                          attributeUpdates:
+                            - attributeName: Balance
+                              attributeValueType: Double
+                              valuePath: $.key.b
+                            - attributeName: BalanceDate
+                              attributeValueType: DateTime
+                              valuePath: $.key.d
+                        - type: ApplyChanges@2
+                          description: Persist the account balance
+                          entityUpdatesPath: $._balUpdate
+
+            # Security: the HTTP response body is the whole data context. Reduce it to a
+            # minimal acknowledgement so it can never echo the caller's request headers /
+            # Authorization or the raw uploaded statement (FromHttpRequest echo-leak trap).
+            - type: SetPrimitiveValue@1
+              targetPath: $.done
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
