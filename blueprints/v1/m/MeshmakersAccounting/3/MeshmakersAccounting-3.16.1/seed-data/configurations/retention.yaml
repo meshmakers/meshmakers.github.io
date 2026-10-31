@@ -1,0 +1,34 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.4.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Document retention configuration (AB#5780, KARL+ K-01 pilot) ---------------
+  # Read by the Stamp Document Retention pipeline (document-retention.yaml) through
+  # GetPipelineConfigByWellKnownName + its Uses edge. Both attributes are isRuntimeState:
+  # this seed lands only where the tenant has no value yet, and a blueprint re-apply
+  # PRESERVES a tenant's own value.
+  #
+  #   RetentionDefaultYears         7 - the retention period counted from the end of the
+  #                                 calendar year of the document date (BAO §132 / GoBD
+  #                                 style "7 years"); statutory minimum: values outside
+  #                                 7..100 fall back to 7 (decision 2026-10-09).
+  #   RetentionYearsByCategoryType  deliberately NOT seeded. A JSON object keyed by
+  #                                 CostCategoryType name, e.g. {"FACILITY":22,"RENT":22},
+  #                                 only SUGGESTS the 22-year flag for documents of those
+  #                                 category types (app hint + stamp summary). The 22 years
+  #                                 themselves come only from the per-document flag
+  #                                 RetentionLongTerm (decision 2026-10-09).
+  #
+  # No settings page in the pilot: change the values through the API / Refinery Studio.
+  # The reconcile only ever RAISES a document's RetentionUntil, so lowering a value here
+  # shortens no lock that was already granted.
+  - rtId: aa0000000000000000000784
+    ckTypeId: Meshmakers.Accounting/RetentionSettings
+    rtWellKnownName: RetentionSettings
+    attributes:
+      - id: Meshmakers.Accounting/RetentionDefaultYears
+        value: 7
