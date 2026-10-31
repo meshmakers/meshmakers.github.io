@@ -1,0 +1,690 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.4.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # ===================================================================================
+  # Document Retention (AB#5780, KARL+ K-01 pilot)
+  # ===================================================================================
+  # Pilot of the GoBD/BAO-style archive lock, enforced IN THE APP and in the seeded
+  # pipelines - not at the API (the platform has no attribute-based delete guard, see
+  # docs/concepts/it4-archive-pilot.md) and not as WORM storage (AB#5790).
+  #
+  #   - Stamp Document Retention: keeps AccountingDocument.RetentionUntil/RetentionRule in
+  #     step with the data. One central reconcile (cron + POST /stampRetention) instead of
+  #     a hook in each of the writers (Document Analysis, /aiPrompt, manual create in the
+  #     app, Ersatzbeleg, Tesla add-on), exactly like Assign Fiscal Years (AB#5624): the
+  #     same run is the backfill of every legacy document, the stamp of every new one and
+  #     the raise after a configuration change. The Document Analysis pipeline stays
+  #     untouched.
+  #   - Verify Document Original: POST /verifyDocumentHash re-reads the stored original(s)
+  #     of one document (System/Related FileSystemItems), recomputes SHA-256 and compares it
+  #     with FileHash, the hash recorded at intake; result, time and caller are written to
+  #     the document.
+  #
+  # Lock rule (identical in the app, models/retention.model.ts, and in edit-document.yaml):
+  # a document is LOCKED unless RetentionUntil is set AND lies in the past. Unset = locked
+  # (fail-closed): a document captured minutes ago is protected before its first stamp.
+  - rtId: aa0000000000000000000780
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Document Retention
+      - id: System/Description
+        value: Retention lock of accounting documents and their originals - stamps RetentionUntil on every document and verifies stored originals against their intake SHA-256 (AB#5780)
+
+  # -----------------------------------------------------------------------------------
+  # Stamp Document Retention
+  # -----------------------------------------------------------------------------------
+  # Rule: RetentionUntil = 31.12. of (basis year + years), 23:59:59 UTC, where
+  #   basis year = the calendar year of DocumentDate, read as a DATE (shifted by 12 h, so a
+  #                hand-created document stored at local midnight - the previous day in
+  #                UTC - lands on its own day; a shift can only make the period LONGER);
+  #                fallback when DocumentDate is missing: the capture date
+  #                (RtCreationDateTime); a document with neither is reported, not stamped
+  #                - it stays locked;
+  #   years      = RetentionSettings.RetentionDefaultYears (seeded 7; statutory minimum: outside
+  #                7..100 -> 7), raised to 22 when the document carries RetentionLongTerm = true
+  #                (decision Gerald 2026-10-09: the 22-year case is a flag PER DOCUMENT; the
+  #                category type only SUGGESTS it - RetentionYearsByCategoryType names the types,
+  #                the summary counts the suggested documents, the stamp never uses it).
+  # Monotonic: a run writes a document only when it has no stamp yet, when the computed end
+  # is LATER than the stored one, or when only the rule text differs; a computed end that
+  # is EARLIER is counted (keptLonger) and never written - a corrected DocumentDate or a
+  # lowered setting does not shorten a lock that was already granted.
+  #
+  # Concurrent runs (backlogged cron ticks after an adapter outage, AB#5651) are harmless
+  # here: the writes are attribute updates of the same value, not association creates, so
+  # no run collides with another. A document deleted between plan and write fails that
+  # run's batch; the next run plans without it.
+  #
+  # Route: POST /stampRetention (AccountingManagement), body { "dryRun": true } plans and
+  # reports without writing. The response and the execution's OutputData carry the summary
+  # (incl. lockedNow / expired - the input of the K-03 deletion concept) plus up to 50
+  # sample changes. Tested by scripts/document_retention_test.py.
+  - rtId: aa0000000000000000000781
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000780
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: aa0000000000000000000784
+        targetCkTypeId: Meshmakers.Accounting/RetentionSettings
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Stamp Document Retention
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            # Cron PipelineTrigger aa0000000000000000000782 and the management route.
+            - type: FromPipelineTriggerEvent@1
+            - type: FromHttpRequest@2
+              path: /stampRetention
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            # --- 0. Mode: apply unless the caller asks for a dry run ---------------------
+            - type: SetPrimitiveValue@1
+              description: Default mode applies the plan
+              targetPath: $.dryRun
+              value: false
+              valueType: Boolean
+            - type: SelectByPath@1
+              description: Take the caller's dryRun flag when present (cron runs have no body)
+              selectPath:
+                - path: $.body.dryRun
+                  targetPath: $.dryRun
+
+            # --- 1. Load configuration, documents and their categories --------------------
+            - type: GetPipelineConfigByWellKnownName@1
+              description: Retention settings (default years, per-category-type overrides)
+              wellKnownName: RetentionSettings
+              targetPath: $.retCfg
+            - type: SetPrimitiveValue@1
+              description: No override map unless configured (an unset attribute is absent)
+              targetPath: $.retOverrides
+              value: ""
+              valueType: String
+            - type: SelectByPath@1
+              description: Take the override map when configured
+              selectPath:
+                - path: $.retCfg.attributes.RetentionYearsByCategoryType
+                  targetPath: $.retOverrides
+            - type: DateTime@1
+              description: Run instant (the lock is evaluated against it)
+              operation: Now
+              targetPath: $.retNow
+            # Date filters on dynamic CK attributes do not coerce in Mongo (AB#4389), so the
+            # rule runs in the script and the load is unfiltered. Newest first: if the cap is
+            # ever hit, only the oldest tail waits for a later run - and stays locked meanwhile.
+            - type: GetRtEntitiesByType@1
+              description: All accounting documents, newest first
+              ckTypeId: Meshmakers.Accounting/AccountingDocument
+              targetPath: $.retDocs
+              take: 50000
+              sortOrders:
+                - sortOrder: Descending
+                  attributeName: RtId
+            - type: If@1
+              description: Document count exceeds the load cap - never skip silently
+              path: $.retDocs.TotalCount
+              operator: GreaterThan
+              value: 50000
+              valueType: Int64
+              transformations:
+                - type: Logger@1
+                  message: Stamp Document Retention cap exceeded - more than 50000 accounting documents; the oldest beyond the cap are NOT stamped this run (AB#5780).
+            - type: GetRtEntitiesByType@1
+              description: Cost categories (their CategoryType selects a long-term suggestion)
+              ckTypeId: Meshmakers.Accounting/CostCategory
+              targetPath: $.retCats
+              take: 5000
+            - type: WriteJson@1
+              description: No category, no category edges
+              targetPath: $.retCatDocs
+              jsonString: '[]'
+            # DocumentToCategory is declared on CostCategory, so the documents are OUTBOUND;
+            # one batched lookup over every category (wildcard origin path).
+            - type: If@1
+              description: At least one category - load its documents
+              path: $.retCats.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int64
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: Documents per category
+                  originRtIdPath: $.retCats.Items[*].RtId
+                  originCkTypeId: Meshmakers.Accounting/CostCategory
+                  targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  associationRoleId: Meshmakers.Accounting/DocumentToCategory
+                  graphDirection: Outbound
+                  targetPath: $.retCatDocs
+
+            # --- 2. Plan -----------------------------------------------------------------
+            # AB#5780: tested by scripts/document_retention_test.py through
+            # scripts/extraction-check-harness (the node is located by this description).
+            - type: ExecuteCSharp@1
+              description: AB#5780 plan document retention stamps
+              timeoutMs: 30000
+              usings:
+                - System
+                - System.Linq
+                - System.Text.Json
+                - System.Collections.Generic
+                - System.Globalization
+              returnType: String
+              arguments:
+                - name: docs
+                  valuePath: $.retDocs.Items
+                  dataType: RecordArray
+                - name: cats
+                  valuePath: $.retCats.Items
+                  dataType: RecordArray
+                - name: catDocs
+                  valuePath: $.retCatDocs
+                  dataType: RecordArray
+                - name: defaultYears
+                  valuePath: $.retCfg.attributes.RetentionDefaultYears
+                  dataType: Record
+                - name: overridesJson
+                  valuePath: $.retOverrides
+                  dataType: String
+                - name: now
+                  valuePath: $.retNow
+                  dataType: Record
+              targetPath: $.planJson
+              code: |
+                var styles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal;
+                Func<object, JsonElement> El = o => o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                Func<JsonElement, string, JsonElement> Prop = (e, n) => {
+                  if (e.ValueKind == JsonValueKind.Object)
+                    foreach (var p in e.EnumerateObject())
+                      if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                  return default(JsonElement);
+                };
+                Func<JsonElement, string> Str = e =>
+                  e.ValueKind == JsonValueKind.String ? e.GetString()
+                  : (e.ValueKind == JsonValueKind.Undefined || e.ValueKind == JsonValueKind.Null) ? null
+                  : e.ToString();
+                Func<JsonElement, DateTime?> Day = e => {
+                  DateTime d; var s = Str(e);
+                  if (s != null && DateTime.TryParse(s, CultureInfo.InvariantCulture, styles, out d)) return d;
+                  return null;
+                };
+                Func<string, int?> Int = s => {
+                  int v;
+                  if (s != null && int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out v)) return v;
+                  return null;
+                };
+                // CostCategoryType keys 0-18 (append-only). An unknown key stays "#<key>".
+                var typeNames = new[] { "IT", "RENT", "PERSONNEL", "TRAVEL", "OFFICE", "MARKETING", "CONSULTING",
+                  "INSURANCE", "OTHER", "BANKFEES", "ITOPERATION", "FACILITY", "REVENUE", "INTEREST", "OTHERINCOME",
+                  "VAT", "TAXES", "GRANTS", "INTERESTEXPENSE" };
+                Func<string, string> TypeName = s => {
+                  if (s == null) return null;
+                  var k = Int(s);
+                  if (k != null) return k.Value >= 0 && k.Value < typeNames.Length ? typeNames[k.Value] : "#" + k.Value;
+                  return s.Trim().ToUpperInvariant();
+                };
+
+                DateTime runAt = DateTime.UtcNow;
+                if (now is DateTime) runAt = ((DateTime)now).ToUniversalTime();
+                else if (now != null) { var n = Day(El(now)); if (n != null) runAt = n.Value; }
+
+                // Statutory minimum 7 (BAO § 132, decision 2026-10-09): a lower or invalid value is ignored.
+                int defYears = 7; bool invalidDefault = false;
+                if (defaultYears != null) {
+                  var dv = Int(Str(El(defaultYears)));
+                  if (dv != null && dv.Value >= 7 && dv.Value <= 100) defYears = dv.Value; else invalidDefault = true;
+                }
+                const int LongTermYears = 22;
+
+                var overrides = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var invalidOverrides = new List<string>();
+                if (!string.IsNullOrWhiteSpace(overridesJson)) {
+                  try {
+                    using (var jd = JsonDocument.Parse(overridesJson)) {
+                      if (jd.RootElement.ValueKind != JsonValueKind.Object) invalidOverrides.Add("(not a JSON object)");
+                      else foreach (var p in jd.RootElement.EnumerateObject()) {
+                        var y = Int(Str(p.Value));
+                        if (y == null || y.Value < 1 || y.Value > 100) { invalidOverrides.Add(p.Name); continue; }
+                        overrides[TypeName(p.Name)] = y.Value;
+                      }
+                    }
+                  } catch (JsonException) { invalidOverrides.Add("(unparsable JSON)"); }
+                }
+
+                // Category -> type name, document -> type name of its (at most one) category.
+                var catType = new Dictionary<string, string>();
+                foreach (var o in cats ?? new object[0]) {
+                  var e = El(o); var id = Str(Prop(e, "RtId")); if (id == null) continue;
+                  var t = TypeName(Str(Prop(Prop(e, "Attributes"), "CategoryType")));
+                  if (t != null) catType[id] = t;
+                }
+                var docType = new Dictionary<string, string>();
+                foreach (var o in catDocs ?? new object[0]) {
+                  var g = El(o); var cid = Str(Prop(g, "OriginRtId")); var items = Prop(g, "Items");
+                  string tn;
+                  if (cid == null || items.ValueKind != JsonValueKind.Array || !catType.TryGetValue(cid, out tn)) continue;
+                  foreach (var t in items.EnumerateArray()) {
+                    var did = Str(Prop(t, "RtId"));
+                    if (did != null && !docType.ContainsKey(did)) docType[did] = tn;
+                  }
+                }
+
+                var writes = new List<Dictionary<string, string>>();
+                var sample = new List<Dictionary<string, object>>();
+                int total = 0, stamped = 0, raised = 0, ruleOnly = 0, unchanged = 0, keptLonger = 0;
+                int fromCreation = 0, noBasis = 0, longTerm = 0, lockedNow = 0, expired = 0;
+                var suggested = new List<Dictionary<string, object>>(); int suggestedCount = 0;
+                foreach (var o in docs ?? new object[0]) {
+                  var e = El(o); var id = Str(Prop(e, "RtId")); if (id == null) continue;
+                  total++;
+                  var a = Prop(e, "Attributes");
+                  var basis = "DocumentDate";
+                  var bd = Day(Prop(a, "DocumentDate"));
+                  if (bd == null) { bd = Day(Prop(e, "RtCreationDateTime")); basis = "CreationDate"; }
+                  if (bd == null) { noBasis++; lockedNow++; continue; }
+                  if (basis == "CreationDate") fromCreation++;
+                  int year = bd.Value.AddHours(12).Year;
+                  int years = defYears; string source = "default"; string tn;
+                  var lt = Prop(a, "RetentionLongTerm");
+                  bool isLongTerm = lt.ValueKind == JsonValueKind.True
+                    || (lt.ValueKind == JsonValueKind.String && string.Equals(lt.GetString(), "true", StringComparison.OrdinalIgnoreCase));
+                  if (isLongTerm && LongTermYears > years) { years = LongTermYears; source = "longTerm"; longTerm++; }
+                  else if (!isLongTerm && docType.TryGetValue(id, out tn) && overrides.ContainsKey(tn)) {
+                    // Suggestion only: the category type is listed, the flag is not set.
+                    suggestedCount++;
+                    if (suggested.Count < 50)
+                      suggested.Add(new Dictionary<string, object> { { "doc", id }, { "number", Str(Prop(a, "DocumentNumber")) }, { "categoryType", tn } });
+                  }
+                  var until = new DateTime(Math.Min(year + years, 9999), 12, 31, 23, 59, 59, DateTimeKind.Utc);
+                  var rule = "basis=" + basis + ";year=" + year.ToString(CultureInfo.InvariantCulture)
+                    + ";years=" + years.ToString(CultureInfo.InvariantCulture) + ";source=" + source;
+                  var stored = Day(Prop(a, "RetentionUntil"));
+                  var storedRule = Str(Prop(a, "RetentionRule"));
+                  string change = null; var effective = until;
+                  if (stored == null) { stamped++; change = "stamp"; }
+                  else if (until > stored.Value.AddSeconds(1)) { raised++; change = "raise"; }
+                  else if (until < stored.Value.AddSeconds(-1)) { keptLonger++; effective = stored.Value; }
+                  else if (storedRule != rule) { ruleOnly++; change = "rule"; }
+                  else unchanged++;
+                  if (effective > runAt) lockedNow++; else expired++;
+                  if (change == null) continue;
+                  writes.Add(new Dictionary<string, string> {
+                    { "id", id }, { "until", until.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture) }, { "rule", rule } });
+                  if (sample.Count < 50)
+                    sample.Add(new Dictionary<string, object> {
+                      { "doc", id }, { "number", Str(Prop(a, "DocumentNumber")) },
+                      { "from", stored == null ? null : stored.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) },
+                      { "to", until.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) }, { "rule", rule }, { "change", change } });
+                }
+                var summary = new Dictionary<string, object> {
+                  { "documents", total }, { "defaultYears", defYears }, { "invalidDefaultYears", invalidDefault },
+                  { "overrides", overrides }, { "invalidOverrides", invalidOverrides },
+                  { "stamped", stamped }, { "raised", raised }, { "ruleUpdated", ruleOnly }, { "unchanged", unchanged },
+                  { "keptLonger", keptLonger }, { "fromCreationDate", fromCreation }, { "withoutAnyDate", noBasis },
+                  { "longTerm", longTerm }, { "longTermSuggested", suggestedCount },
+                  { "lockedNow", lockedNow }, { "expired", expired },
+                  { "writeCount", writes.Count },
+                  { "evaluatedAt", runAt.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture) } };
+                return JsonSerializer.Serialize(new Dictionary<string, object> {
+                  { "summary", summary }, { "sample", sample }, { "suggested", suggested }, { "writes", writes } });
+            - type: WriteJson@1
+              description: Parse the plan
+              targetPath: $.plan
+              jsonStringPath: $.planJson
+            # Release what the plan was made from: the write loop below snapshots its `path`
+            # under $.full per loop start, and needs nothing but $.plan.
+            - type: SetPrimitiveValue@1
+              description: Release the document load
+              targetPath: $.retDocs
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the category edges
+              targetPath: $.retCatDocs
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the category load
+              targetPath: $.retCats
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the plan string
+              targetPath: $.planJson
+              value: ""
+              valueType: String
+
+            # --- 3. Apply (skipped on a dry run) ------------------------------------------
+            - type: If@1
+              description: Not a dry run - write the stamps
+              path: $.dryRun
+              operator: NotEquals
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: If@1
+                  description: Something to write
+                  path: $.plan.summary.writeCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: ForEach@1
+                      description: One attribute update per document to stamp
+                      path: $.plan.writes
+                      iterationPath: $.plan.writes
+                      targetPath: $._retWrites
+                      mergePath: $.u
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          description: RetentionUntil + RetentionRule of this document
+                          targetPath: $.u
+                          updateKind: Update
+                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                          rtIdPath: $.key.id
+                          attributeUpdates:
+                            - attributeName: RetentionUntil
+                              attributeValueType: DateTime
+                              valuePath: $.key.until
+                            - attributeName: RetentionRule
+                              attributeValueType: String
+                              valuePath: $.key.rule
+                    - type: ApplyChanges@2
+                      description: Persist the stamps (one batch)
+                      entityUpdatesPath: $._retWrites
+
+            # --- 4. Result: the HTTP response is the whole data context - reduce it ------
+            - type: Project@1
+              description: Keep the mode, the summary, the sample and the long-term suggestions only
+              clear: true
+              fields:
+                - path: $.dryRun
+                  inclusion: true
+                - path: $.plan.summary
+                  inclusion: true
+                - path: $.plan.sample
+                  inclusion: true
+                - path: $.plan.suggested
+                  inclusion: true
+            - type: SetPipelineExecutionResult@1
+              description: Persist the summary as OutputData (visible per cron run)
+              path: $
+  - rtId: aa0000000000000000000782
+    ckTypeId: System.Communication/PipelineTrigger
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000780
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Triggers
+        targetRtId: aa0000000000000000000781
+        targetCkTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: Stamp Document Retention Schedule
+      - id: System/Description
+        value: Stamps RetentionUntil on every accounting document every 15 minutes, off the matcher's and the fiscal-year reconcile's minutes (AB#5780).
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System.Bot/CronExpression
+        value: '11,26,41,56 * * * *'
+
+  # -----------------------------------------------------------------------------------
+  # Verify Document Original
+  # -----------------------------------------------------------------------------------
+  # POST /verifyDocumentHash { "documentRtId": "<rtId>" } - the "Verify original" action of
+  # the document page. Server side on purpose: GetFileSystemContent@1 reads the STORED bytes
+  # (the same node the analysis uses to read originals for OCR), ComputeFileHash@1 is the
+  # same SHA-256 (lower-case hex) every intake path stamps, so the comparison never depends
+  # on what a browser downloaded. Every System/Related file of the document is hashed (an
+  # original plus amendments attached later, AB#4874); the verdict is
+  #   MATCH     one of them hashes to FileHash (the original is present and unaltered),
+  #   MISMATCH  files exist but none hashes to FileHash,
+  #   NOHASH    the document has no FileHash (legacy - see scripts/backfill-document-file-hash.py),
+  #   NOFILE    the document has no stored file.
+  # Result, UTC time and the verified caller (display name, else subject id) are written to
+  # HashVerificationResult / HashVerifiedAt / HashVerifiedBy and returned to the caller.
+  # Management and employee, like /editDocument: anyone who may open the document may check it.
+  - rtId: aa0000000000000000000783
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000780
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Verify Document Original
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /verifyDocumentHash
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+                - AccountingEmployee
+          transformations:
+            - type: SetPrimitiveValue@1
+              description: Default outcome (no document id or unknown document)
+              targetPath: $._resultType
+              value: 'notFound'
+              valueType: String
+            - type: If@1
+              description: A document id was given
+              path: $.body.documentRtId
+              operator: NotEquals
+              valueType: String
+              transformations:
+                - type: FormatString@1
+                  description: Document rtId as a single-element JSON array
+                  format: '["{$.body.documentRtId}"]'
+                  targetPath: $.idJson
+                - type: WriteJson@1
+                  jsonStringPath: $.idJson
+                  targetPath: $.idArr
+                - type: GetRtEntitiesById@1
+                  description: Load the document (FileHash)
+                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                  rtIdsPath: $.idArr
+                  targetPath: $.vDoc
+                - type: If@1
+                  description: The document exists
+                  path: $.vDoc.Items[0].RtId
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    - type: WriteJson@1
+                      description: No stored file until proven otherwise
+                      targetPath: $.vFileGroups
+                      jsonString: '[]'
+                    - type: WriteJson@1
+                      description: No hashes until a file was read
+                      targetPath: $.vHashes
+                      jsonString: '[]'
+                    - type: GetAssociationTargets@1
+                      description: Stored files of the document (original + attached amendments)
+                      originRtIdPath: $.vDoc.Items[0].RtId
+                      originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                      targetCkTypeId: System.Files/FileSystemItem
+                      associationRoleId: System/Related
+                      graphDirection: Outbound
+                      targetPath: $.vFileGroups
+                    - type: If@1
+                      description: At least one stored file
+                      path: $.vFileGroups[0].Items[0].RtId
+                      operator: NotEquals
+                      valueType: String
+                      transformations:
+                        - type: ForEach@1
+                          description: SHA-256 of every stored file, one at a time
+                          path: $.vFileGroups[0].Items
+                          iterationPath: $.vFileGroups[0].Items
+                          targetPath: $.vHashes
+                          mergePath: $.h
+                          maxDegreeOfParallelism: 1
+                          transformations:
+                            - type: GetFileSystemContent@1
+                              description: Read the stored bytes (base64)
+                              rtIdPath: $.key.RtId
+                              targetPath: $.bytes
+                            - type: ComputeFileHash@1
+                              description: SHA-256 of the stored bytes (lower-case hex)
+                              path: $.bytes
+                              targetPath: $.h
+                            - type: SetPrimitiveValue@1
+                              description: Release the file content
+                              targetPath: $.bytes
+                              value: ""
+                              valueType: String
+                    # AB#5780: tested by scripts/document_retention_test.py.
+                    - type: ExecuteCSharp@1
+                      description: AB#5780 verify original hash verdict
+                      usings:
+                        - System
+                        - System.Linq
+                        - System.Text.Json
+                      returnType: String
+                      arguments:
+                        - name: expected
+                          valuePath: $.vDoc.Items[0].Attributes.FileHash
+                          dataType: Record
+                        - name: hashes
+                          valuePath: $.vHashes
+                          dataType: RecordArray
+                      targetPath: $.vResult
+                      code: |
+                        Func<object, string> S = o => {
+                          if (o == null) return null;
+                          if (o is string) return (string)o;
+                          var e = o is JsonElement ? (JsonElement)o : JsonSerializer.SerializeToElement(o);
+                          return e.ValueKind == JsonValueKind.String ? e.GetString()
+                            : (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) ? null : e.ToString();
+                        };
+                        var computed = (hashes ?? new object[0]).Select(S)
+                          .Where(h => !string.IsNullOrWhiteSpace(h)).Select(h => h.Trim().ToLowerInvariant()).ToList();
+                        if (computed.Count == 0) return "NOFILE";
+                        var exp = S(expected);
+                        if (string.IsNullOrWhiteSpace(exp)) return "NOHASH";
+                        return computed.Contains(exp.Trim().ToLowerInvariant()) ? "MATCH" : "MISMATCH";
+                    - type: WriteVerifiedCaller@1
+                      description: Who asked (display information for HashVerifiedBy)
+                      targetPath: $.caller
+                    - type: SetPrimitiveValue@1
+                      description: Caller unknown unless the trigger resolved one
+                      targetPath: $.vBy
+                      value: 'unknown'
+                      valueType: String
+                    - type: SelectByPath@1
+                      description: Subject id of the caller
+                      selectPath:
+                        - path: $.caller.subjectId
+                          targetPath: $.vBy
+                    - type: SelectByPath@1
+                      description: Display name of the caller wins when present
+                      selectPath:
+                        - path: $.caller.name
+                          targetPath: $.vBy
+                    - type: DateTime@1
+                      description: Verification instant
+                      operation: Now
+                      targetPath: $.vAt
+                    - type: CreateUpdateInfo@1
+                      description: Record the verification on the document
+                      targetPath: $.vUpd
+                      targetValueKind: Array
+                      targetValueWriteMode: Overwrite
+                      updateKind: Update
+                      ckTypeId: Meshmakers.Accounting/AccountingDocument
+                      rtIdPath: $.vDoc.Items[0].RtId
+                      attributeUpdates:
+                        - attributeName: HashVerificationResult
+                          attributeValueType: Enum
+                          valuePath: $.vResult
+                        - attributeName: HashVerifiedAt
+                          attributeValueType: DateTime
+                          valuePath: $.vAt
+                        - attributeName: HashVerifiedBy
+                          attributeValueType: String
+                          valuePath: $.vBy
+                    # Decision 2026-10-09: every check is logged as its own OriginalVerification
+                    # child (audit trail); the attributes above keep only the LAST result for lists.
+                    - type: CreateUpdateInfo@1
+                      description: Log this check as an OriginalVerification child (audit trail)
+                      targetPath: $.vUpd
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Insert
+                      generateRtId: true
+                      rtIdPath: $.vLogRtId
+                      ckTypeId: Meshmakers.Accounting/OriginalVerification
+                      attributeUpdates:
+                        - attributeName: CheckedAt
+                          attributeValueType: DateTime
+                          valuePath: $.vAt
+                        - attributeName: Result
+                          attributeValueType: Enum
+                          valuePath: $.vResult
+                        - attributeName: CheckedBy
+                          attributeValueType: String
+                          valuePath: $.vBy
+                    - type: CreateAssociationUpdate@1
+                      description: Link the log entry (child) to its document (parent)
+                      targetPath: $.vAssoc
+                      targetValueKind: Array
+                      targetValueWriteMode: Overwrite
+                      updateKind: Create
+                      # The generated rtId lands in the emitted update-info (index 1 - the
+                      # document update is index 0), not in rtIdPath (notify-todo-inbound.yaml).
+                      originRtIdPath: $.vUpd[1].RtEntity.RtId
+                      originCkTypeIdPath: $.vUpd[1].RtEntity.CkTypeId
+                      targetRtIdPath: $.vDoc.Items[0].RtId
+                      targetCkTypeId: Meshmakers.Accounting/AccountingDocument
+                      associationRoleId: System/ParentChild
+                    - type: ApplyChanges@2
+                      description: Persist the verification and its log entry
+                      entityUpdatesPath: $.vUpd
+                      associationUpdatesPath: $.vAssoc
+                    - type: SetPrimitiveValue@1
+                      targetPath: $._resultType
+                      value: 'verified'
+                      valueType: String
+            # Terminal response shaping: never echo the request (headers, bearer) or the file
+            # content back - only the outcome.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $._resultType
+                  inclusion: true
+                - path: $.vResult
+                  inclusion: true
+                - path: $.vAt
+                  inclusion: true
+                - path: $.vBy
+                  inclusion: true
