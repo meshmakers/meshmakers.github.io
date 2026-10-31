@@ -1,0 +1,1993 @@
+{
+  "$schema": "https://schemas.meshmakers.cloud/construction-kit-compiled.schema.json",
+  "dependencies": [
+    "Basic-2.5.0",
+    "System-2.8.0"
+  ],
+  "dependencyRanges": [
+    {
+      "range": "Basic-[2.4,3.0)",
+      "floor": "2.4.0",
+      "usedSurface": [
+        "Basic@2/AddressCityTown-1",
+        "Basic@2/AddressNationalCode-1",
+        "Basic@2/AddressStreet-1",
+        "Basic@2/AddressVATnumber-1",
+        "Basic@2/CompanyName-1",
+        "Basic@2/Contact-1",
+        "Basic@2/EMailAddress-1",
+        "Basic@2/FirstName-1",
+        "Basic@2/LastName-1",
+        "Basic@2/NamedEntity-1",
+        "Basic@2/Quantity-1",
+        "Basic@2/TelephoneNumber-1"
+      ],
+      "usedSurfaceHash": "sha256:446f6bef0636cf58fd061044a0e4226d96f756f395b99ac61093e7ba76909be3"
+    },
+    {
+      "range": "System-[2.5,3.0)",
+      "floor": "2.5.0",
+      "usedSurface": [
+        "System@2/Entity-1"
+      ],
+      "usedSurfaceHash": "sha256:5573e519e505a53fd4c2505760800163c22ae1f9c408d852371819b8955f810d"
+    }
+  ],
+  "minEngineVersion": "3.5.1",
+  "migrations": {
+    "meta": {
+      "$schema": "https://schemas.meshmakers.cloud/ck-migration-meta.schema.json",
+      "ckModelId": "Industry.Logistics-3.0.0",
+      "migrations": [
+        {
+          "fromVersion": "1.2.0",
+          "toVersion": "2.0.0",
+          "scriptPath": "1.2.0-to-2.0.0.yaml",
+          "description": "Rename ExportDate to ExportDay on ExportRun",
+          "breaking": true
+        },
+        {
+          "fromVersion": "2.0.0",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.2.0-to-3.0.0.yaml",
+          "description": "Schema-only major (unique indexes on Source, AB#5399) \u2014 entry point for 2.0.0",
+          "breaking": false
+        },
+        {
+          "fromVersion": "2.1.0",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.2.0-to-3.0.0.yaml",
+          "description": "Schema-only major (unique indexes on Source, AB#5399) \u2014 entry point for 2.1.0",
+          "breaking": false
+        },
+        {
+          "fromVersion": "2.2.0",
+          "toVersion": "3.0.0",
+          "scriptPath": "2.2.0-to-3.0.0.yaml",
+          "description": "Schema-only major (unique indexes on Source, AB#5399) \u2014 entry point for 2.2.0",
+          "breaking": false
+        }
+      ]
+    },
+    "scripts": [
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "1.2.0",
+        "targetVersion": "2.0.0",
+        "description": "Migration from Industry.Logistics 1.2.0 to 2.0.0.\n\nRenames \u0027ExportDate\u0027 to \u0027ExportDay\u0027 on all ExportRun entities. The value is unchanged:\na calendar day (yyyy-MM-dd) in the delivery time zone, used as the bucket key of the\ndelivery-dedup marker. Every other Date attribute in this kit (OrderDate, DeliveryDate,\nShipmentDate) is a DateTime, so the old name read like a timestamp.\n\nA rename is structurally a removal plus an addition, which is why the model takes a\nmajor bump. The RenameAttribute transform carries the stored value over to the new\nattribute name, so an existing marker keeps gating its day across the upgrade.\n\nTenants still installed on 1.1.0 reach this script through the engine\u0027s start-gap\nauto-bridge (1.1.0 -\u003E 1.2.0 is a schema-only no-op); no separate 1.1.0 entry is needed.\n\nBreaking changes:\n- Code, queries and pipeline configurations reading \u0027ExportDate\u0027 on ExportRun must read\n  \u0027ExportDay\u0027.\n",
+        "steps": [
+          {
+            "stepId": "rename-exportdate-to-exportday",
+            "description": "Rename ExportDate attribute to ExportDay on ExportRun entities",
+            "action": "Transform",
+            "target": {
+              "ckTypeId": "Industry.Logistics/ExportRun",
+              "blueprintSourceOnly": false
+            },
+            "transform": {
+              "type": "RenameAttribute",
+              "targetAttribute": "ExportDay",
+              "sourceAttribute": "ExportDate"
+            },
+            "onConflict": "Skip",
+            "continueOnError": false
+          }
+        ],
+        "postValidations": [
+          {
+            "validationId": "every-exportrun-has-exportday",
+            "description": "Ensure every ExportRun entity carries the ExportDay attribute",
+            "type": "NoEntitiesOfType",
+            "target": {
+              "ckTypeId": "Industry.Logistics/ExportRun",
+              "filter": {
+                "attribute": "ExportDay",
+                "operator": "NotExists"
+              },
+              "blueprintSourceOnly": false
+            },
+            "severity": "Warning"
+          }
+        ]
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.2.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from Industry.Logistics 2.x to 3.0.0 (AB#5399). Intentionally empty.\n\n3.0.0 is a major only because the version gate classifies the new UniqueNotDeleted\nindexes on (Source, OrderNumber) and (Source, ExportKind, ExportDay) as a major change.\nEverything else is additive, and the two removed assignments (Order.DeliveryAddress,\nOrderItem.UnitPriceNet) are written and read by no adapter. The data needs no transform:\nexisting records keep Source = Unknown until an adapter states it, and are relabelled per\ntenant by the operator (see the AB#5399 commit message).\n\nWhy the script exists at all (AB#4924 / G3): the CK engine now refuses the post-chain\nschema-only bridge across a major version (CkMigrationMajorVersionGuard). Before this entry\nthe chain ended at 2.0.0, so every tenant on Industry.Logistics 2.x would have been refused\non its upgrade to 3.x. This empty step is the explicit statement that 2.x -\u003E 3.0.0 is\nschema-only, which the guard requires instead of assuming it.\n",
+        "steps": []
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.2.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from Industry.Logistics 2.x to 3.0.0 (AB#5399). Intentionally empty.\n\n3.0.0 is a major only because the version gate classifies the new UniqueNotDeleted\nindexes on (Source, OrderNumber) and (Source, ExportKind, ExportDay) as a major change.\nEverything else is additive, and the two removed assignments (Order.DeliveryAddress,\nOrderItem.UnitPriceNet) are written and read by no adapter. The data needs no transform:\nexisting records keep Source = Unknown until an adapter states it, and are relabelled per\ntenant by the operator (see the AB#5399 commit message).\n\nWhy the script exists at all (AB#4924 / G3): the CK engine now refuses the post-chain\nschema-only bridge across a major version (CkMigrationMajorVersionGuard). Before this entry\nthe chain ended at 2.0.0, so every tenant on Industry.Logistics 2.x would have been refused\non its upgrade to 3.x. This empty step is the explicit statement that 2.x -\u003E 3.0.0 is\nschema-only, which the guard requires instead of assuming it.\n",
+        "steps": []
+      },
+      {
+        "$schema": "https://schemas.meshmakers.cloud/ck-migration.schema.json",
+        "sourceVersion": "2.2.0",
+        "targetVersion": "3.0.0",
+        "description": "Migration from Industry.Logistics 2.x to 3.0.0 (AB#5399). Intentionally empty.\n\n3.0.0 is a major only because the version gate classifies the new UniqueNotDeleted\nindexes on (Source, OrderNumber) and (Source, ExportKind, ExportDay) as a major change.\nEverything else is additive, and the two removed assignments (Order.DeliveryAddress,\nOrderItem.UnitPriceNet) are written and read by no adapter. The data needs no transform:\nexisting records keep Source = Unknown until an adapter states it, and are relabelled per\ntenant by the operator (see the AB#5399 commit message).\n\nWhy the script exists at all (AB#4924 / G3): the CK engine now refuses the post-chain\nschema-only bridge across a major version (CkMigrationMajorVersionGuard). Before this entry\nthe chain ended at 2.0.0, so every tenant on Industry.Logistics 2.x would have been refused\non its upgrade to 3.x. This empty step is the explicit statement that 2.x -\u003E 3.0.0 is\nschema-only, which the guard requires instead of assuming it.\n",
+        "steps": []
+      }
+    ]
+  },
+  "types": [
+    {
+      "isCollectionRoot": false,
+      "typeId": "Article-1",
+      "derivedFromCkTypeId": "Basic@2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Source",
+                "ArticleNumber"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "An article / product master record.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/Source-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ArticleNumber-1",
+          "name": "ArticleNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Ean-1",
+          "name": "Ean",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Weight-1",
+          "name": "Weight",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ArticleType-1",
+          "name": "ArticleType",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ExternalArticleNumber-1",
+          "name": "ExternalArticleNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Unit-1",
+          "name": "Unit",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/PurchasePrice-1",
+          "name": "PurchasePrice",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Currency-1",
+          "name": "Currency",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Discontinued-1",
+          "name": "Discontinued",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Length-1",
+          "name": "Length",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Width-1",
+          "name": "Width",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Height-1",
+          "name": "Height",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/CountryOfOrigin-1",
+          "name": "CountryOfOrigin",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/CustomsTariffNumber-1",
+          "name": "CustomsTariffNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/UnitsPerItem-1",
+          "name": "UnitsPerItem",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/DesiredStock-1",
+          "name": "DesiredStock",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Category1-1",
+          "name": "Category1",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Category2-1",
+          "name": "Category2",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/SourceProductType-1",
+          "name": "SourceProductType",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/VatCategory-1",
+          "name": "VatCategory",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TitleEnglish-1",
+          "name": "TitleEnglish",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/BasicAttributes-1",
+          "name": "BasicAttributes",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/BasicAttributesEnglish-1",
+          "name": "BasicAttributesEnglish",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": false,
+      "typeId": "Customer-1",
+      "derivedFromCkTypeId": "Basic@2/NamedEntity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Source",
+                "CustomerNumber"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A customer who places logistics/fulfillment orders.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/Source-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/CustomerNumber-1",
+          "name": "CustomerNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ExternalCustomerId-1",
+          "name": "ExternalCustomerId",
+          "isOptional": true
+        },
+        {
+          "id": "Basic@2/Contact-1",
+          "name": "Contact",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ExportRun-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "UniqueNotDeleted",
+          "fields": [
+            {
+              "attributePaths": [
+                "Source",
+                "ExportKind",
+                "ExportDay"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One outbound export/delivery run of a dataset (e.g. article master), keyed by source, kind and calendar day. Doubles as the delivery-dedup marker: at most one delivery per source, kind and day.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/Source-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ExportKind-1",
+          "name": "ExportKind",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ExportDay-1",
+          "name": "ExportDay",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ImportRun-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "UniqueNotDeleted",
+          "fields": [
+            {
+              "attributePaths": [
+                "Source",
+                "ImportKind"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "The last complete inbound import run of a dataset (e.g. the article mirror), keyed by source and kind; the inbound counterpart of ExportRun. A consumer reads CompletedAt to tell whether the data comes from a fresh mirror.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/Source-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ImportKind-1",
+          "name": "ImportKind",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/CompletedAt-1",
+          "name": "CompletedAt",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "InboundFile-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "UniqueNotDeleted",
+          "fields": [
+            {
+              "attributePaths": [
+                "FileKey"
+              ]
+            }
+          ]
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One successfully processed inbound file (e.g. an order or stock file fetched from an SFTP source), keyed by FileKey. Doubles as the fetch-dedup marker: a listed file whose FileKey already exists is not processed again, and a unique index rejects a second marker for the same FileKey. Instances are only inserted, never updated; the existence of the instance is the statement.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/FileKey-1",
+          "name": "FileKey",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/SourceName-1",
+          "name": "SourceName",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/SourceDirectory-1",
+          "name": "SourceDirectory",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/FileName-1",
+          "name": "FileName",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/FileSize-1",
+          "name": "FileSize",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/LastWriteUtc-1",
+          "name": "LastWriteUtc",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ProcessedAt-1",
+          "name": "ProcessedAt",
+          "isOptional": false
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Order-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "UniqueNotDeleted",
+          "fields": [
+            {
+              "attributePaths": [
+                "Source",
+                "OrderNumber"
+              ]
+            }
+          ]
+        },
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Source",
+                "TransferState"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "Industry.Logistics-3.4.0/OrderCustomer-1",
+          "targetCkTypeId": "Industry.Logistics-3.4.0/Customer-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A logistics order placed by a customer for fulfillment. Identified by Source and OrderNumber; TransferState records its handover to the fulfilment partner; Unknown means the order predates the handover state or its source does not use it (e.g. a source that writes the order only once it has delivered it, so the instance itself marks the export).",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/Source-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/OrderNumber-1",
+          "name": "OrderNumber",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ExternalOrderNumber-1",
+          "name": "ExternalOrderNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/OrderDate-1",
+          "name": "OrderDate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/DeliveryDate-1",
+          "name": "DeliveryDate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Carrier-1",
+          "name": "Carrier",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ShippingMethod-1",
+          "name": "ShippingMethod",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/OrderStatus-1",
+          "name": "Status",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Currency-1",
+          "name": "Currency",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/NetAmount-1",
+          "name": "NetAmount",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/GrossAmount-1",
+          "name": "GrossAmount",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ShipTo-1",
+          "name": "ShipTo",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/BillTo-1",
+          "name": "BillTo",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/SourceVersion-1",
+          "name": "SourceVersion",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TransferState-1",
+          "name": "TransferState",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TransferredAt-1",
+          "name": "TransferredAt",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TransferError-1",
+          "name": "TransferError",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/InvoiceNumber-1",
+          "name": "InvoiceNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Basic@2/AddressVATnumber-1",
+          "name": "VatId",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Weight-1",
+          "name": "TotalWeight",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TaxRate-1",
+          "name": "TaxRate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/CarrierToken-1",
+          "name": "CarrierToken",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ShipmentDate-1",
+          "name": "ShipmentDate",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "OrderItem-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Logistics-3.4.0/OrderItemOrder-1",
+          "targetCkTypeId": "Industry.Logistics-3.4.0/Order-1"
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/OrderItemArticle-1",
+          "targetCkTypeId": "Industry.Logistics-3.4.0/Article-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A line item of a logistics order: an article line, or the shipping cost as a line of its own (ItemKind). The article number as the source states it is kept on the line (ArticleNumber), so a line without an article link (an article the CK does not know) stays identifiable.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/ItemKind-1",
+          "name": "ItemKind",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/PositionNumber-1",
+          "name": "PositionNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ArticleNumber-1",
+          "name": "ArticleNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Title-1",
+          "name": "Title",
+          "isOptional": true
+        },
+        {
+          "id": "Basic@2/Quantity-1",
+          "name": "Quantity",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/NetAmount-1",
+          "name": "NetAmount",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/GrossAmount-1",
+          "name": "GrossAmount",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TaxRate-1",
+          "name": "TaxRate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Discount-1",
+          "name": "Discount",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/SerialNumber-1",
+          "name": "SerialNumber",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Parcel-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Logistics-3.4.0/ParcelShipment-1",
+          "targetCkTypeId": "Industry.Logistics-3.4.0/Shipment-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A parcel / colli within a shipment; carries tracking and carrier.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/TrackingNumber-1",
+          "name": "TrackingNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/PositionNumber-1",
+          "name": "PositionNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Carrier-1",
+          "name": "Carrier",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/CarrierToken-1",
+          "name": "CarrierToken",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TrackingUrl-1",
+          "name": "TrackingUrl",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/PackagingType-1",
+          "name": "PackagingType",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ServiceType-1",
+          "name": "ServiceType",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Weight-1",
+          "name": "Weight",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Shipment-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Source",
+                "TransferState"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "Industry.Logistics-3.4.0/ShipmentOrder-1",
+          "targetCkTypeId": "Industry.Logistics-3.4.0/Order-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A dispatch / order feedback for an order; carries totals and completeness. TransferState records its handover back to the source.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/Source-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ShipmentNumber-1",
+          "name": "ShipmentNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ShipmentDate-1",
+          "name": "ShipmentDate",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Completeness-1",
+          "name": "Completeness",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ParcelCount-1",
+          "name": "ParcelCount",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Weight-1",
+          "name": "TotalWeight",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Reference-1",
+          "name": "Reference",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TransferState-1",
+          "name": "TransferState",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TransferredAt-1",
+          "name": "TransferredAt",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TransferError-1",
+          "name": "TransferError",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "ShipmentItem-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "associations": [
+        {
+          "id": "Industry.Logistics-3.4.0/ShipmentItemShipment-1",
+          "targetCkTypeId": "Industry.Logistics-3.4.0/Shipment-1"
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ShipmentItemArticle-1",
+          "targetCkTypeId": "Industry.Logistics-3.4.0/Article-1"
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ShipmentItemParcel-1",
+          "targetCkTypeId": "Industry.Logistics-3.4.0/Parcel-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "A dispatched line within a shipment. The article number as the reporting system states it is kept on the line (ArticleNumber), so a line without an article link (an article the CK does not know, a shipping cost) stays identifiable; ItemKind marks shipping-cost lines as on OrderItem.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/PositionNumber-1",
+          "name": "PositionNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ArticleNumber-1",
+          "name": "ArticleNumber",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/ItemKind-1",
+          "name": "ItemKind",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/DeliveredQuantity-1",
+          "name": "DeliveredQuantity",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/OpenQuantity-1",
+          "name": "OpenQuantity",
+          "isOptional": true
+        }
+      ]
+    },
+    {
+      "isCollectionRoot": true,
+      "typeId": "Stock-1",
+      "derivedFromCkTypeId": "System@2/Entity-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "indexes": [
+        {
+          "indexType": "Ascending",
+          "fields": [
+            {
+              "attributePaths": [
+                "Source",
+                "TransferState"
+              ]
+            }
+          ]
+        }
+      ],
+      "associations": [
+        {
+          "id": "Industry.Logistics-3.4.0/StockArticle-1",
+          "targetCkTypeId": "Industry.Logistics-3.4.0/Article-1"
+        }
+      ],
+      "enableChangeStreamPreAndPostImages": false,
+      "description": "One stock line of a stock report: the stock level of an article as reported (Reference names the report). TransferState records its handover back to the source.",
+      "attributes": [
+        {
+          "id": "Industry.Logistics-3.4.0/Source-1",
+          "name": "Source",
+          "isOptional": false
+        },
+        {
+          "id": "Basic@2/Quantity-1",
+          "name": "Quantity",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/StockStatus-1",
+          "name": "Status",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Reference-1",
+          "name": "Reference",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TransferState-1",
+          "name": "TransferState",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TransferredAt-1",
+          "name": "TransferredAt",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/TransferError-1",
+          "name": "TransferError",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "associationRoles": [
+    {
+      "id": "OrderCustomer-1",
+      "inboundName": "Orders",
+      "outboundName": "Customer",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Order -\u003E Customer. Creates Order.Customer (one) and Customer.Orders (many)."
+    },
+    {
+      "id": "OrderItemArticle-1",
+      "inboundName": "OrderItems",
+      "outboundName": "Article",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "OrderItem -\u003E Article. Creates OrderItem.Article (zeroOrOne; a shipping-cost line or an article the CK does not know references no article) and Article.OrderItems (many)."
+    },
+    {
+      "id": "OrderItemOrder-1",
+      "inboundName": "OrderItems",
+      "outboundName": "Order",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "OrderItem -\u003E Order. Creates OrderItem.Order (one) and Order.OrderItems (many)."
+    },
+    {
+      "id": "ParcelShipment-1",
+      "inboundName": "Parcels",
+      "outboundName": "Shipment",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Parcel -\u003E Shipment. Creates Parcel.Shipment (one) and Shipment.Parcels (many)."
+    },
+    {
+      "id": "ShipmentItemArticle-1",
+      "inboundName": "ShipmentItems",
+      "outboundName": "Article",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "ShipmentItem -\u003E Article. Creates ShipmentItem.Article (zeroOrOne; a shipping-cost line or an article the CK does not know references no article) and Article.ShipmentItems (many)."
+    },
+    {
+      "id": "ShipmentItemParcel-1",
+      "inboundName": "ShipmentItems",
+      "outboundName": "Parcel",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "ZeroOrOne",
+      "description": "ShipmentItem -\u003E Parcel. Creates ShipmentItem.Parcel (zeroOrOne) and Parcel.ShipmentItems (many)."
+    },
+    {
+      "id": "ShipmentItemShipment-1",
+      "inboundName": "ShipmentItems",
+      "outboundName": "Shipment",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "ShipmentItem -\u003E Shipment. Creates ShipmentItem.Shipment (one) and Shipment.ShipmentItems (many)."
+    },
+    {
+      "id": "ShipmentOrder-1",
+      "inboundName": "Shipments",
+      "outboundName": "Order",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Shipment -\u003E Order. Creates Shipment.Order (one) and Order.Shipments (many)."
+    },
+    {
+      "id": "StockArticle-1",
+      "inboundName": "Stocks",
+      "outboundName": "Article",
+      "inboundMultiplicity": "N",
+      "outboundMultiplicity": "One",
+      "description": "Stock -\u003E Article. Creates Stock.Article (one) and Article.Stocks (many)."
+    }
+  ],
+  "attributes": [
+    {
+      "id": "AddressLine2-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Second address line as the source system states it."
+    },
+    {
+      "id": "ArticleNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ArticleType-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-3.4.0/ArticleType-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "BasicAttributes-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Basic attributes text of the article (its short characteristics) in the primary language of the source; the adapter decides which language is primary and what it falls back to."
+    },
+    {
+      "id": "BasicAttributesEnglish-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Basic attributes text of the article (its short characteristics) in English; empty when the source has none."
+    },
+    {
+      "id": "BillTo-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Industry.Logistics-3.4.0/PostalAddress-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Whom the invoice addresses."
+    },
+    {
+      "id": "Carrier-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-3.4.0/Carrier-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "CarrierToken-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Carrier reference exactly as the delivering system states it, beside the Carrier enum: on Parcel as the fulfilment partner delivered it (for a shop system: its own carrier id), on Order as the source system identifies the shipping provider (e.g. its provider id)."
+    },
+    {
+      "id": "Category1-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Name of the first category the source system assigns to the article."
+    },
+    {
+      "id": "Category2-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Name of the second category the source system assigns to the article."
+    },
+    {
+      "id": "CompletedAt-1",
+      "valueType": "DateTime",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Point in time the last complete import run of this source and kind finished."
+    },
+    {
+      "id": "Completeness-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-3.4.0/Completeness-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "CountryOfOrigin-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Country of origin of the article as the source system states it."
+    },
+    {
+      "id": "Currency-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "ISO 4217 currency code: of the order\u0027s amounts on Order, of the purchase price on Article."
+    },
+    {
+      "id": "CustomerNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "CustomsTariffNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Customs tariff number of the article (e.g. a TARIC code) as the source system states it."
+    },
+    {
+      "id": "DeliveredQuantity-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "DeliveryDate-1",
+      "valueType": "DateTime",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "DesiredStock-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Stock level the source system aims to keep for the article."
+    },
+    {
+      "id": "Discontinued-1",
+      "valueType": "Boolean",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "True when the source system no longer delivers the article; the instance stays for the orders, shipments and stock lines that reference it."
+    },
+    {
+      "id": "Discount-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Discount of a line in percent as the source system states it.",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "%"
+        }
+      ]
+    },
+    {
+      "id": "Ean-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ExportDay-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Calendar day (yyyy-MM-dd) in the delivery time zone \u2014 bucket key of the dedup marker, not a timestamp."
+    },
+    {
+      "id": "ExportKind-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Kind of export/delivery run (e.g. article master export); the adapter supplies the value."
+    },
+    {
+      "id": "ExternalArticleNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Article number as the source system presents it to people (e.g. the merchant\u0027s article number or SKU), when ArticleNumber carries a source-internal identifier."
+    },
+    {
+      "id": "ExternalCustomerId-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Identifier of the customer in the source system (e.g. a shop\u0027s internal customer id), beside CustomerNumber."
+    },
+    {
+      "id": "ExternalOrderNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Reference number from the source system (shop/ERP)"
+    },
+    {
+      "id": "FileKey-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Identity of the inbound file and the only comparison key of the dedup marker; enforced unique by index. The adapter composes it from source name, remote directory, file name, size in bytes and the listing\u0027s last-write timestamp text, joined by \u0027|\u0027 (e.g. MySftp|/inbound|orders-20260828.txt|430|2026-08-28T07:11:16.0670000Z)."
+    },
+    {
+      "id": "FileName-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "File name as reported by the source listing."
+    },
+    {
+      "id": "FileSize-1",
+      "valueType": "Int64",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Size in bytes as reported by the source listing."
+    },
+    {
+      "id": "GrossAmount-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Gross amount: of the order on Order, of the LINE on OrderItem.",
+      "metaData": [
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "Height-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Height of the article in centimetres; the adapter converts the source\u0027s unit.",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "cm"
+        }
+      ]
+    },
+    {
+      "id": "HouseNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "House number when the source system states it apart from the street; Street still carries the complete street line including the number."
+    },
+    {
+      "id": "ImportKind-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Kind of inbound import run (e.g. the article mirror); the adapter supplies the value."
+    },
+    {
+      "id": "InvoiceNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Invoice number of the order as the source system shows it; the adapter composes it where the source keeps prefix, number and suffix apart."
+    },
+    {
+      "id": "ItemKind-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-3.4.0/OrderItemKind-1",
+      "defaultValues": [
+        "0"
+      ],
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "What a line is: an article, the shipping cost, something else."
+    },
+    {
+      "id": "LastWriteUtc-1",
+      "valueType": "DateTime",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Last-write timestamp (UTC) of the file as reported by the source listing, stored as a date for filtering and sorting; the verbatim listing text is kept inside FileKey."
+    },
+    {
+      "id": "Length-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Length of the article in centimetres; the adapter converts the source\u0027s unit.",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "cm"
+        }
+      ]
+    },
+    {
+      "id": "NameAddition-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Addition to the addressee\u0027s name as the source system states it."
+    },
+    {
+      "id": "NetAmount-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Net amount: of the order on Order, of the LINE on OrderItem (unit prices derive from it).",
+      "metaData": [
+        {
+          "key": "Decimals",
+          "value": "2"
+        }
+      ]
+    },
+    {
+      "id": "OpenQuantity-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Undelivered quantity; negative = over-delivery"
+    },
+    {
+      "id": "OrderDate-1",
+      "valueType": "DateTime",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "OrderNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Primary order identifier"
+    },
+    {
+      "id": "OrderStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-3.4.0/OrderStatus-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PackagingType-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ParcelCount-1",
+      "valueType": "Int",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "PositionNumber-1",
+      "valueType": "Int",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ProcessedAt-1",
+      "valueType": "DateTime",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Point in time the adapter finished processing the file."
+    },
+    {
+      "id": "PurchasePrice-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Purchase price of the article as the source system states it, in the currency stated by Currency on the article (empty Currency = the source\u0027s currency); empty = no price known."
+    },
+    {
+      "id": "Reference-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Reference of the report the instance was read from, as the reporting system names it (e.g. the name of a shipment or stock report file)."
+    },
+    {
+      "id": "SerialNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Serial number of the article on a line as the source system states it."
+    },
+    {
+      "id": "ServiceType-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "ShipTo-1",
+      "valueType": "Record",
+      "valueCkRecordId": "Industry.Logistics-3.4.0/PostalAddress-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Where the goods go."
+    },
+    {
+      "id": "ShipmentDate-1",
+      "valueType": "DateTime",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Point in time the goods were shipped: on Shipment as the fulfilment partner reports it, on Order as the source system states it."
+    },
+    {
+      "id": "ShipmentNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Dispatch / forwarding number"
+    },
+    {
+      "id": "ShippingMethod-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Shipping method as the source system identifies it (a method id or name); the fulfilment partner maps it to its carriers."
+    },
+    {
+      "id": "Source-1",
+      "valueType": "String",
+      "defaultValues": [
+        "Unknown"
+      ],
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Name of the source system a record originates from (e.g. the shop or ERP the adapter reads); part of the identity of orders, export runs and import runs, and the scope of articles, customers, shipments and stock lines when one tenant is fed by more than one source. Unknown until an adapter states it; the default applies to newly created instances only."
+    },
+    {
+      "id": "SourceDirectory-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Remote directory the file was listed in."
+    },
+    {
+      "id": "SourceName-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Name of the source configuration entry the file was fetched from (e.g. the SFTP server configuration name)."
+    },
+    {
+      "id": "SourceProductType-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Product type as the source system states it (e.g. a shop\u0027s product type code), beside the ArticleType enum."
+    },
+    {
+      "id": "SourceVersion-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Change state of the record in the source system (e.g. the source\u0027s version counter) when it was taken over; a different value in the source shows that the record changed there since."
+    },
+    {
+      "id": "StockStatus-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-3.4.0/StockStatus-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false
+    },
+    {
+      "id": "TaxRate-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "VAT rate in percent: of a line on OrderItem; the regular VAT rate of the order on Order.",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "%"
+        }
+      ]
+    },
+    {
+      "id": "Title-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Line text of an order item as the source system states it (article name, service, shipping cost)."
+    },
+    {
+      "id": "TitleEnglish-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "English title of the article as the source system states it; empty when the source has none. The primary title is Name."
+    },
+    {
+      "id": "TrackingNumber-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Parcel / tracking number"
+    },
+    {
+      "id": "TrackingUrl-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "The carrier\u0027s tracking link when the partner delivered one."
+    },
+    {
+      "id": "TransferError-1",
+      "valueType": "String",
+      "ownership": "RuntimeState",
+      "isRuntimeState": true,
+      "description": "Reason the consumer rejected the instance because of a data error (TransferState Rejected); names the affected record and field, never the field content."
+    },
+    {
+      "id": "TransferState-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-3.4.0/TransferState-1",
+      "ownership": "RuntimeState",
+      "isRuntimeState": true,
+      "description": "Handover state of the instance towards the system that consumes it; the consumer writes it."
+    },
+    {
+      "id": "TransferredAt-1",
+      "valueType": "DateTime",
+      "ownership": "RuntimeState",
+      "isRuntimeState": true,
+      "description": "Point in time the consumer recorded the current TransferState."
+    },
+    {
+      "id": "Unit-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Unit of measure the article is stocked and sold in (e.g. piece, box), as the source system states it (a unit name or code)."
+    },
+    {
+      "id": "UnitsPerItem-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Number of units one item of the article contains, as the source system states it."
+    },
+    {
+      "id": "VatCategory-1",
+      "valueType": "Enum",
+      "valueCkEnumId": "Industry.Logistics-3.4.0/VatCategory-1",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "VAT category of the article; the adapter maps the source\u0027s own VAT code or index to it."
+    },
+    {
+      "id": "Weight-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "kg"
+        },
+        {
+          "key": "Decimals",
+          "value": "3"
+        }
+      ]
+    },
+    {
+      "id": "Width-1",
+      "valueType": "Double",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Width of the article in centimetres; the adapter converts the source\u0027s unit.",
+      "metaData": [
+        {
+          "key": "Unit",
+          "value": "cm"
+        }
+      ]
+    },
+    {
+      "id": "Zipcode-1",
+      "valueType": "String",
+      "ownership": "SeedOwned",
+      "isRuntimeState": false,
+      "description": "Postal code as text - leading zeros and letters are part of it."
+    }
+  ],
+  "records": [
+    {
+      "recordId": "PostalAddress-1",
+      "isFinal": false,
+      "isAbstract": false,
+      "description": "Delivery or invoice address: company and/or person, street, postal code as text, city, country code, and the contact details a carrier advises to. A source that states the house number apart from the street writes the complete street line into Street - the street name and, only when the house number is not empty, one blank and the house number - exactly like a source with a combined street field, and the number alone into HouseNumber.",
+      "attributes": [
+        {
+          "id": "Basic@2/CompanyName-1",
+          "name": "CompanyName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic@2/FirstName-1",
+          "name": "FirstName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic@2/LastName-1",
+          "name": "LastName",
+          "isOptional": true
+        },
+        {
+          "id": "Basic@2/AddressStreet-1",
+          "name": "Street",
+          "isOptional": false
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/Zipcode-1",
+          "name": "Zipcode",
+          "isOptional": false
+        },
+        {
+          "id": "Basic@2/AddressCityTown-1",
+          "name": "City",
+          "isOptional": false
+        },
+        {
+          "id": "Basic@2/AddressNationalCode-1",
+          "name": "CountryCode",
+          "isOptional": false
+        },
+        {
+          "id": "Basic@2/TelephoneNumber-1",
+          "name": "Phone",
+          "isOptional": true
+        },
+        {
+          "id": "Basic@2/EMailAddress-1",
+          "name": "Email",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/AddressLine2-1",
+          "name": "Line2",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/NameAddition-1",
+          "name": "NameAddition",
+          "isOptional": true
+        },
+        {
+          "id": "Industry.Logistics-3.4.0/HouseNumber-1",
+          "name": "HouseNumber",
+          "isOptional": true
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "enumId": "ArticleType-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Single",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Serial",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Batch",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "BestBefore",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "Carrier-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "DHL",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "UPS",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "GLS",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "DPD",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Post",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "FedEx",
+          "isExtension": false
+        },
+        {
+          "key": 99,
+          "name": "Other",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "Completeness-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Complete",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Partial",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "OrderItemKind-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Article",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "ShippingCost",
+          "isExtension": false
+        },
+        {
+          "key": 99,
+          "name": "Other",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "OrderStatus-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Offered",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Ordered",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Confirmed",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Paid",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Packed",
+          "isExtension": false
+        },
+        {
+          "key": 6,
+          "name": "InFulfillment",
+          "isExtension": false
+        },
+        {
+          "key": 7,
+          "name": "Shipped",
+          "isExtension": false
+        },
+        {
+          "key": 8,
+          "name": "Complaint",
+          "isExtension": false
+        },
+        {
+          "key": 9,
+          "name": "Deleted",
+          "isExtension": false
+        },
+        {
+          "key": 10,
+          "name": "Completed",
+          "isExtension": false
+        },
+        {
+          "key": 11,
+          "name": "Cancelled",
+          "isExtension": false
+        },
+        {
+          "key": 12,
+          "name": "Archived",
+          "isExtension": false
+        },
+        {
+          "key": 13,
+          "name": "PaymentReminder",
+          "isExtension": false
+        },
+        {
+          "key": 14,
+          "name": "Reminder1",
+          "isExtension": false
+        },
+        {
+          "key": 15,
+          "name": "Reminder2",
+          "isExtension": false
+        },
+        {
+          "key": 16,
+          "name": "Return",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "StockStatus-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Available",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Blocked",
+          "isExtension": false
+        }
+      ]
+    },
+    {
+      "enumId": "TransferState-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "No handover state: the instance predates the handover state, or its source does not use it (e.g. a source that writes an order only once it has delivered it, so the instance itself marks the export).",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Pending",
+          "description": "Waiting for the consumer to transfer it.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Transferred",
+          "description": "The consumer transferred it.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Rejected",
+          "description": "The consumer rejected it because of a data error; TransferError states the reason.",
+          "isExtension": false
+        },
+        {
+          "key": 4,
+          "name": "Checked",
+          "description": "The consumer checked it in check mode, without external effect.",
+          "isExtension": false
+        },
+        {
+          "key": 5,
+          "name": "Superseded",
+          "description": "Overtaken by a newer report before it was transferred (stock lines).",
+          "isExtension": false
+        }
+      ],
+      "description": "Handover state of an instance towards the system that consumes it (an order towards the fulfilment partner, a shipment or stock line back towards its source). The consumer writes it."
+    },
+    {
+      "enumId": "VatCategory-1",
+      "useFlags": false,
+      "isExtensible": true,
+      "values": [
+        {
+          "key": 0,
+          "name": "Unknown",
+          "description": "No VAT category stated.",
+          "isExtension": false
+        },
+        {
+          "key": 1,
+          "name": "Standard",
+          "description": "Standard VAT rate.",
+          "isExtension": false
+        },
+        {
+          "key": 2,
+          "name": "Reduced",
+          "description": "Reduced VAT rate.",
+          "isExtension": false
+        },
+        {
+          "key": 3,
+          "name": "Exempt",
+          "description": "Exempt from VAT.",
+          "isExtension": false
+        }
+      ],
+      "description": "VAT category of an article; the adapter maps the source\u0027s own VAT code or index to it."
+    }
+  ],
+  "modelId": "Industry.Logistics-3.4.0"
+}
