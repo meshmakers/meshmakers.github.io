@@ -1,0 +1,134 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.0.3,3.0)
+
+# Root of the Austrian location tree: Tree "Locations" -> Country AT -> 9 States.
+# The tree root carries rtWellKnownName "Locations" so other blueprints and
+# applications can reference it without knowing the rtId.
+# Data source: the Austrian place directory maintained in
+# energy-community-deployment/data/excel/plz.xlsx (previously imported manually
+# via the OctoMesh Office Add-In).
+# Part of the Locations.Austria blueprint - see blueprint.yaml for the full file list.
+# rtId scheme: 10ca00000000000000<T><SSSSS> - T: 1=Tree 2=Country 3=State
+# 4=District 5=City; SSSSS: hex sequence within the type.
+entities:
+
+- rtId: 10ca00000000000000100001
+  ckTypeId: Basic/Tree-1
+  rtWellKnownName: Locations
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: "Locations"
+  - id: System/Description-1
+    value: "Root of the Austrian location tree (country, states, districts, cities)"
+
+- rtId: 10ca00000000000000200001
+  ckTypeId: Basic/Country-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000100001
+    targetCkTypeId: Basic/Tree-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "AT"
+
+- rtId: 10ca00000000000000300001
+  ckTypeId: Basic/State-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000200001
+    targetCkTypeId: Basic/Country-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Burgenland"
+
+- rtId: 10ca00000000000000300002
+  ckTypeId: Basic/State-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000200001
+    targetCkTypeId: Basic/Country-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Kärnten"
+
+- rtId: 10ca00000000000000300003
+  ckTypeId: Basic/State-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000200001
+    targetCkTypeId: Basic/Country-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Niederösterreich"
+
+- rtId: 10ca00000000000000300004
+  ckTypeId: Basic/State-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000200001
+    targetCkTypeId: Basic/Country-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Oberösterreich"
+
+- rtId: 10ca00000000000000300005
+  ckTypeId: Basic/State-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000200001
+    targetCkTypeId: Basic/Country-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Salzburg"
+
+- rtId: 10ca00000000000000300006
+  ckTypeId: Basic/State-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000200001
+    targetCkTypeId: Basic/Country-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Steiermark"
+
+- rtId: 10ca00000000000000300007
+  ckTypeId: Basic/State-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000200001
+    targetCkTypeId: Basic/Country-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Tirol"
+
+- rtId: 10ca00000000000000300008
+  ckTypeId: Basic/State-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000200001
+    targetCkTypeId: Basic/Country-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Vorarlberg"
+
+- rtId: 10ca00000000000000300009
+  ckTypeId: Basic/State-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 10ca00000000000000200001
+    targetCkTypeId: Basic/Country-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: "Wien"
