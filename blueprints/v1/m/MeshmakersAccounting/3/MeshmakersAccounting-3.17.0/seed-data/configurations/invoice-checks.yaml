@@ -1,0 +1,39 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.4.0,4.0)
+entities:
+  # --- Invoice compliance checks (AB#5773 § 11 UStG, AB#5772 VIES) ---------------
+  # The configuration the Document Analysis pipeline loads per upload ($.invCfg).
+  # Every attribute is isRuntimeState, so these are STARTING values: a value an
+  # operator changes (Refinery Studio - there is no settings page yet) survives
+  # every blueprint re-apply. The thresholds are the statutory ones (§ 11 Abs. 6
+  # and Abs. 1 Z 2 UStG); the pipeline falls back to the same numbers when an
+  # attribute is unset.
+  #
+  # InvoiceCheckEnforce: true = an incoming invoice of a domestic supplier above
+  # the small-amount limit that misses a § 11 mandatory field is parked
+  # INCOMPLETE in the Inbox with the reason "§ 11 field missing: ..." instead of
+  # being created and matched automatically. false = graded only (check tier +
+  # report). Seeded FALSE (decision Gerald 2026-10-09: roll out rating only, switch
+  # parking on per tenant once the hit rate is known). A missing delivery date
+  # never parks a document either way.
+  - rtId: aa0000000000000000005773
+    ckTypeId: Meshmakers.Accounting/InvoiceCheckSettings
+    rtWellKnownName: InvoiceCheckSettings
+    attributes:
+      - id: Meshmakers.Accounting/InvoiceCheckSmallAmountLimit
+        value: 400.0
+      - id: Meshmakers.Accounting/InvoiceCheckRecipientVatIdLimit
+        value: 10000.0
+      - id: Meshmakers.Accounting/InvoiceCheckEnforce
+        value: false
+      # AB#5772: verify the counterparty VAT id of every analysed invoice against the
+      # EU VIES REST service (https://ec.europa.eu/taxation_customs/vies/rest-api/,
+      # POST check-vat-number - outbound HTTPS from the Mesh adapter) and reuse a
+      # VALID/INVALID answer for 30 days (cache: VatIdVerification entities). A VAT id
+      # VIES reports as INVALID parks the upload in the Inbox when InvoiceCheckEnforce
+      # is true; "not verified" (VIES unavailable) never does.
+      - id: Meshmakers.Accounting/VatIdVerificationEnabled
+        value: true
+      - id: Meshmakers.Accounting/VatIdVerificationCacheDays
+        value: 30
