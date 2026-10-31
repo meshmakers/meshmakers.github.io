@@ -1,0 +1,134 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Basic-[2.0.3,3.0)
+  - OctoSdkDemo-[2.1.0,3.0)
+
+# Energy-community demo master data: a Basic/Tree of Salzburg regions carrying
+# OctoSdkDemo OperatingFacilities and their MeteringPoints. The simulation
+# DataFlow in ../data-flows/signal-simulation.yaml writes meter readings onto
+# the two metering points of "Firmianstrasse 31A".
+#
+# The three MeteringPoints below are parented to an OperatingFacility. They
+# used to declare targetCkTypeId: Basic/TreeNode, which made
+# FilterDanglingAssociationsAsync (AB#5005) drop the association without a
+# word - the entities imported, unparented.
+entities:
+  - rtId: 65dc6d24cc529cdc46c84fca
+    ckTypeId: Basic/Tree
+    attributes:
+      - id: System/Name
+        value: Energy community sample
+      - id: System/Description
+        value: Simple simulation data from simulator plug
+  - rtId: 65dc6d24cc529cdc46c84fcb
+    ckTypeId: Basic/TreeNode
+    attributes:
+      - id: System/Name
+        value: Salzburg
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fca
+        targetCkTypeId: Basic/Tree
+
+  - rtId: 65dc6d24cc529cdc46c84fcc
+    ckTypeId: Basic/TreeNode
+    attributes:
+      - id: System/Name
+        value: Salzburg Stadt
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fcb
+        targetCkTypeId: Basic/TreeNode
+        
+  - rtId: 65dc6d24cc529cdc46c84fcd
+    ckTypeId: Basic/TreeNode
+    attributes:
+      - id: System/Name
+        value: Leopoldskroner Moos
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fcc
+        targetCkTypeId: Basic/TreeNode        
+        
+  - rtId: 65dc6d24cc529cdc46c84fce
+    ckTypeId: Basic/TreeNode
+    attributes:
+      - id: System/Name
+        value: Pinzgau
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fcb
+        targetCkTypeId: Basic/TreeNode
+          
+  - rtId: 65dc6d24cc529cdc46c84fd0
+    ckTypeId: Basic/TreeNode
+    attributes:
+      - id: System/Name
+        value: Fusch
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fce
+        targetCkTypeId: Basic/TreeNode
+          
+  - rtId: 65dc6d24cc529cdc46c84fd1
+    ckTypeId: OctoSdkDemo/OperatingFacility
+    attributes:
+      - id: System/Name
+        value: Zeller Fusch 153
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fd0
+        targetCkTypeId: Basic/TreeNode              
+          
+  - rtId: 65dc6d24cc529cdc46c84fd2
+    ckTypeId: OctoSdkDemo/MeteringPoint
+    attributes:
+      - id: System/Name
+        value: Systemnutzung NE 7 - Grundpreispauschale
+      - id: OctoSdkDemo/MeteringPointNumber
+        value: AT0040000567200000000000002257263    
+      - id: OctoSdkDemo/OperatingStatus
+        value: 1        
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fd1
+        targetCkTypeId: OctoSdkDemo/OperatingFacility             
+          
+          
+  - rtId: 65dc6d24cc529cdc46c84fd3
+    ckTypeId: OctoSdkDemo/OperatingFacility
+    attributes:
+      - id: System/Name
+        value: Firmianstraße 31A
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fcd
+        targetCkTypeId: Basic/TreeNode
+
+  - rtId: 65dc6d24cc529cdc46c84fd4
+    ckTypeId: OctoSdkDemo/MeteringPoint
+    attributes:
+      - id: System/Name
+        value: Systemnutzung NE 7 - Grundpreispauschale
+      - id: OctoSdkDemo/MeteringPointNumber
+        value: AT0040000502000000000000005029745
+      - id: OctoSdkDemo/OperatingStatus
+        value: 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fd3
+        targetCkTypeId: OctoSdkDemo/OperatingFacility             
+  - rtId: 65dc6d24cc529cdc46c84fd5
+    ckTypeId: OctoSdkDemo/MeteringPoint
+    attributes:
+      - id: System/Name
+        value: Systemnutzung Strom Einspeiser
+      - id: OctoSdkDemo/MeteringPointNumber
+        value: AT0040000502000000000000010265744
+      - id: OctoSdkDemo/OperatingStatus
+        value: 1
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 65dc6d24cc529cdc46c84fd3
+        targetCkTypeId: OctoSdkDemo/OperatingFacility               
+          
