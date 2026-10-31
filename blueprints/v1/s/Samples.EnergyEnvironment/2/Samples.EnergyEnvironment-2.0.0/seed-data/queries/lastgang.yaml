@@ -1,0 +1,28 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System-[2.2.0,3.0)
+
+# Saved query "load profile" - a System/SimpleRtQuery the dashboard widgets bind to.
+entities:
+- rtId: ee00000000000000000a0002
+  ckTypeId: System/SimpleRtQuery-1
+  associations: []
+  attributes:
+  - id: System/Query.Columns-1
+    value:
+    - timeRange.from
+    - timeRange.to
+    - amount.value
+    - obisCode
+  - id: System/Query.Sorting-1
+    value: []
+  - id: System/Query.FieldFilter-1
+    value: []
+  - id: System/Name-1
+    value: meshboard_energyenvironment_lastgang
+  - id: System/Description-1
+    value: 'Lastgang 15-Min-Werte Gesamtlast'
+  - id: System/Query.CkTypeId-1
+    value: Basic.Energy/EnergyMeasurement
+  - id: System/Query.NavigationFilterMode-1
+    value: 0
