@@ -1,0 +1,936 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# Closing readiness per client and month (AB#5765).
+#
+# ONE pipeline computes, per calendar month, the document coverage of the month's bank
+# transactions (the AB#4393 completeness rule, byte-for-byte the app's reconcileRows /
+# isExceptedTransaction), the reverse side, the open clarification, the bank-feed completeness
+# and the closable verdict, and keeps one Meshmakers.Accounting/ClosingReadiness entity per month.
+#
+# - Which months: the current month and the two previous ones always exist (created when
+#   missing); every other stored month is kept as history and recomputed while it is open; a
+#   CLOSED month is a frozen snapshot and never written (the app closes/reopens it).
+# - When a month is written (the debounce): only when its figures changed (dirty detection by
+#   VALUE - the planner compares the computed figures with the stored ones), when it does not
+#   exist yet, once a day (a month whose ComputedAt lies before today 00:00 UTC - so the first
+#   run after midnight UTC is the nightly full refresh), or when the route forces it. Every
+#   match/unmatch therefore costs nothing on its own: the next quarter-hour run sees the new
+#   figures and writes the month ONCE, however many changes the quarter hour saw, and AB#5709
+#   (FromPipelineTriggerEvent@1 default allowConcurrentExecution: false) collapses cron ticks
+#   that piled up while the adapter slept into a single run.
+# - No FromWatchRtEntity@1: process-bound, it would make the DataFlow undeployable on an
+#   OnDemand Mesh Adapter (AB#4984), and per-row events are exactly the storm to avoid.
+#
+# Route: POST /computeClosingReadiness (AccountingManagement)
+#   body { "force": true }                         rewrite every open month now
+#   body { "force": true, "year": 2026, "month": 7 } (re)compute that month (created if missing;
+#                                                    a future month is ignored, a closed one frozen)
+#   body { "dryRun": true, ... }                    plan and report, write nothing
+# The response and the execution's OutputData carry the summary and every month's figures.
+#
+# The planner (ExecuteCSharp@1 "AB#5765 plan closing readiness") is fixture-tested by
+# scripts/closing_readiness_test.py through scripts/extraction-check-harness, on the SAME fixtures
+# the app's Vitest twin (models/closing-readiness.model.ts) is tested with.
+dependencies:
+  - Meshmakers.Accounting-[3.1.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+  - System.Identity-[2.12.0,3.0)
+  - System.UI-[2.2,3.0)
+entities:
+  - rtId: aa0000000000000000576500
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Closing Readiness
+      - id: System/Description
+        value: Closing readiness per calendar month (AB#5765) - document coverage, open clarification, bank feed and the closable verdict, one ClosingReadiness entity per month
+  - rtId: aa0000000000000000576501
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000576500
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Compute Closing Readiness
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            # Cron PipelineTrigger aa0000000000000000576502 (quarter-hourly; the first run after
+            # 00:00 UTC is the nightly refresh) and the management route for the app.
+            - type: FromPipelineTriggerEvent@1
+            - type: FromHttpRequest@2
+              path: /computeClosingReadiness
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            # --- 0. Request: cron runs have no body -------------------------------------------
+            - type: SetPrimitiveValue@1
+              description: Default mode writes
+              targetPath: $.dryRun
+              value: false
+              valueType: Boolean
+            - type: SetPrimitiveValue@1
+              description: Default is not forced (write changed, missing and stale months only)
+              targetPath: $.crForce
+              value: false
+              valueType: Boolean
+            - type: SetPrimitiveValue@1
+              description: No month requested
+              targetPath: $.crReqYear
+              value: 0
+              valueType: Int
+            - type: SetPrimitiveValue@1
+              description: No month requested
+              targetPath: $.crReqMonth
+              value: 0
+              valueType: Int
+            - type: SelectByPath@1
+              description: Take the caller's options when present
+              selectPath:
+                - path: $.body.dryRun
+                  targetPath: $.dryRun
+                - path: $.body.force
+                  targetPath: $.crForce
+                - path: $.body.year
+                  targetPath: $.crReqYear
+                - path: $.body.month
+                  targetPath: $.crReqMonth
+
+            # --- 1. Load ----------------------------------------------------------------------
+            # Date filters on dynamic CK attributes do not coerce in Mongo (AB#4389), so the month
+            # placement runs in the script and the loads are unfiltered (newest first, same cap as
+            # Assign Fiscal Years).
+            - type: GetRtEntitiesByType@1
+              description: Fiscal years (the month's fiscal year, AB#5624 rule)
+              ckTypeId: Meshmakers.Accounting/FiscalYear
+              targetPath: $.crYears
+              take: 50
+            - type: GetRtEntitiesByType@1
+              description: All bank transactions, newest first
+              ckTypeId: Basic.Accounting/BankTransaction
+              targetPath: $.crTxs
+              take: 50000
+              sortOrders:
+                - sortOrder: Descending
+                  attributeName: RtId
+            - type: If@1
+              description: Transaction count exceeds the load cap - never skip silently
+              path: $.crTxs.TotalCount
+              operator: GreaterThan
+              value: 50000
+              valueType: Int64
+              transformations:
+                - type: Logger@1
+                  message: Compute Closing Readiness cap exceeded - more than 50000 bank transactions; the oldest beyond the cap are NOT counted this run (AB#5765).
+            - type: GetRtEntitiesByType@1
+              description: All accounting documents, newest first
+              ckTypeId: Meshmakers.Accounting/AccountingDocument
+              targetPath: $.crDocs
+              take: 50000
+              sortOrders:
+                - sortOrder: Descending
+                  attributeName: RtId
+            - type: GetRtEntitiesByType@1
+              description: Uploads under clarification (AB#4655)
+              ckTypeId: Meshmakers.Accounting/UploadedDocument
+              targetPath: $.crUpClar
+              take: 5000
+              fieldFilters:
+                - attributePath: InClarification
+                  operator: Equals
+                  comparisonValue: true
+            - type: GetRtEntitiesByType@1
+              description: Uploads stuck in review (INCOMPLETE 3 / FAILED 4)
+              ckTypeId: Meshmakers.Accounting/UploadedDocument
+              targetPath: $.crUpReview
+              take: 5000
+              fieldFilters:
+                - attributePath: ProcessingState
+                  operator: In
+                  comparisonValue: [3, 4]
+            - type: GetRtEntitiesByType@1
+              description: Bank accounts
+              ckTypeId: Basic.Accounting/BankAccount
+              targetPath: $.crAccounts
+              take: 500
+            - type: GetRtEntitiesByType@1
+              description: Bank connections (finAPI LastSuccessfulSync per account)
+              ckTypeId: Basic.Accounting/BankConnection
+              targetPath: $.crConns
+              take: 500
+            - type: GetRtEntitiesByType@1
+              description: The months as they are stored
+              ckTypeId: Meshmakers.Accounting/ClosingReadiness
+              targetPath: $.crExisting
+              take: 1000
+            # Edges: one batched lookup per association (wildcard origin path) - a list of
+            # { OriginRtId, Items } per origin that has edges. An absent result reads as no edge.
+            - type: WriteJson@1
+              description: No document, no transaction-to-document edge
+              targetPath: $.crDocTx
+              jsonString: '[]'
+            - type: If@1
+              description: Documents exist - load their transactions
+              path: $.crDocs.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int64
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: Transactions linked to each document (TransactionToDocument is declared on AccountingDocument)
+                  originRtIdPath: $.crDocs.Items[*].RtId
+                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                  graphDirection: Outbound
+                  targetPath: $.crDocTx
+            - type: GetRtEntitiesByType@1
+              description: Cost categories (the TransactionToCategory edges hang off them)
+              ckTypeId: Meshmakers.Accounting/CostCategory
+              targetPath: $.crCats
+              take: 5000
+            - type: WriteJson@1
+              description: No category, no transaction-to-category edge
+              targetPath: $.crCatTx
+              jsonString: '[]'
+            - type: If@1
+              description: Categories exist - load their transactions
+              path: $.crCats.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int64
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: Transactions assigned to each category
+                  originRtIdPath: $.crCats.Items[*].RtId
+                  originCkTypeId: Meshmakers.Accounting/CostCategory
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: Meshmakers.Accounting/TransactionToCategory
+                  graphDirection: Outbound
+                  targetPath: $.crCatTx
+            - type: WriteJson@1
+              description: No account, no booking per account
+              targetPath: $.crAccTx
+              jsonString: '[]'
+            - type: If@1
+              description: Accounts exist - load their transactions
+              path: $.crAccounts.TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int64
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: Transactions of each account (ParentChild is declared on the transaction, so the account sees them INBOUND)
+                  originRtIdPath: $.crAccounts.Items[*].RtId
+                  originCkTypeId: Basic.Accounting/BankAccount
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: System/ParentChild
+                  graphDirection: Inbound
+                  targetPath: $.crAccTx
+
+            # --- 2. Plan ----------------------------------------------------------------------
+            # AB#5765: tested by scripts/closing_readiness_test.py through
+            # scripts/extraction-check-harness (the node is located by this description).
+            # nowIso and queries are never set here: nowIso is the fixtures' clock (absent = now),
+            # queries the AB#5606/AB#5782 extension point (open submitter queries, absent = 0).
+            - type: ExecuteCSharp@1
+              description: AB#5765 plan closing readiness
+              timeoutMs: 30000
+              usings:
+                - System
+                - System.Linq
+                - System.Text.Json
+                - System.Collections.Generic
+                - System.Globalization
+              returnType: String
+              arguments:
+                - name: nowIso
+                  valuePath: $.crNowIso
+                  dataType: String
+                - name: reqYear
+                  valuePath: $.crReqYear
+                  dataType: Int
+                - name: reqMonth
+                  valuePath: $.crReqMonth
+                  dataType: Int
+                - name: force
+                  valuePath: $.crForce
+                  dataType: Boolean
+                - name: years
+                  valuePath: $.crYears.Items
+                  dataType: RecordArray
+                - name: txs
+                  valuePath: $.crTxs.Items
+                  dataType: RecordArray
+                - name: docs
+                  valuePath: $.crDocs.Items
+                  dataType: RecordArray
+                - name: docTx
+                  valuePath: $.crDocTx
+                  dataType: RecordArray
+                - name: catTx
+                  valuePath: $.crCatTx
+                  dataType: RecordArray
+                - name: cats
+                  valuePath: $.crCats.Items
+                  dataType: RecordArray
+                - name: accTx
+                  valuePath: $.crAccTx
+                  dataType: RecordArray
+                - name: accounts
+                  valuePath: $.crAccounts.Items
+                  dataType: RecordArray
+                - name: conns
+                  valuePath: $.crConns.Items
+                  dataType: RecordArray
+                - name: upClar
+                  valuePath: $.crUpClar.Items
+                  dataType: RecordArray
+                - name: upReview
+                  valuePath: $.crUpReview.Items
+                  dataType: RecordArray
+                - name: queries
+                  valuePath: $.crQueries.Items
+                  dataType: RecordArray
+                - name: existing
+                  valuePath: $.crExisting.Items
+                  dataType: RecordArray
+              targetPath: $.planJson
+              code: |
+                var inv = CultureInfo.InvariantCulture;
+                var styles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal;
+                Func<object, JsonElement> El = o => o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                Func<JsonElement, string, JsonElement> Prop = (e, n) => {
+                  if (e.ValueKind == JsonValueKind.Object)
+                    foreach (var p in e.EnumerateObject())
+                      if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                  return default(JsonElement);
+                };
+                Func<JsonElement, string> Str = e =>
+                  e.ValueKind == JsonValueKind.String ? e.GetString()
+                  : (e.ValueKind == JsonValueKind.Undefined || e.ValueKind == JsonValueKind.Null) ? null
+                  : e.ToString();
+                // UTC day yyyy-MM-dd ("" = absent) - the same day key the app's utcDay() produces.
+                Func<JsonElement, string> Day = e => {
+                  DateTime d; var s = Str(e);
+                  if (s != null && DateTime.TryParse(s, inv, styles, out d)) return d.ToString("yyyy-MM-dd", inv);
+                  return "";
+                };
+                Func<JsonElement, bool> Bool = e => e.ValueKind == JsonValueKind.True
+                  || (e.ValueKind == JsonValueKind.String && string.Equals(e.GetString(), "true", StringComparison.OrdinalIgnoreCase));
+                Func<JsonElement, int?> Int = e => {
+                  if (e.ValueKind == JsonValueKind.Number) { double v; if (e.TryGetDouble(out v)) return (int)v; }
+                  if (e.ValueKind == JsonValueKind.String) { int v; if (int.TryParse(e.GetString(), NumberStyles.Integer, inv, out v)) return v; }
+                  return null;
+                };
+                // Enum attribute: int key, or the value's NAME (resolveEnumValuesToNames reads).
+                Func<JsonElement, string[], int?> Enum = (e, names) => {
+                  var k = Int(e); if (k != null) return k;
+                  var s = Str(e); if (s == null) return null;
+                  for (int i = 0; i < names.Length; i++) if (string.Equals(names[i], s, StringComparison.OrdinalIgnoreCase)) return i;
+                  return null;
+                };
+                var matchNames = new[] { "Unreviewed", "Matched", "Unmatched", "Ignored" };
+                var docStateNames = new[] { "OPEN", "PAID", "PARTIALLYPAID", "CANCELLED", "RECURRING" };
+                var procNames = new[] { "NEW", "PROCESSING", "COMPLETED", "INCOMPLETE", "FAILED", "IGNORED" };
+                Func<object[], IEnumerable<JsonElement>> Items = a => (a ?? new object[0]).Select(El);
+                // GetAssociationTargets groups: origin rtId -> target rtIds.
+                Func<object[], Dictionary<string, List<string>>> Groups = a => {
+                  var r = new Dictionary<string, List<string>>();
+                  foreach (var g in Items(a)) {
+                    var o = Str(Prop(g, "OriginRtId")); var it = Prop(g, "Items");
+                    if (o == null || it.ValueKind != JsonValueKind.Array) continue;
+                    List<string> l; if (!r.TryGetValue(o, out l)) { l = new List<string>(); r[o] = l; }
+                    foreach (var t in it.EnumerateArray()) { var id = Str(Prop(t, "RtId")); if (id != null) l.Add(id); }
+                  }
+                  return r;
+                };
+
+                DateTime now; var nowS = nowIso;
+                if (string.IsNullOrEmpty(nowS) || !DateTime.TryParse(nowS, inv, styles, out now)) now = DateTime.UtcNow;
+                var today = now.ToString("yyyy-MM-dd", inv);
+                var todayStart = new DateTime(now.Year, now.Month, now.Day, 0, 0, 0, DateTimeKind.Utc);
+
+                // --- Inputs ---------------------------------------------------------------------------------
+                var docTxG = Groups(docTx);
+                var txWithDoc = new HashSet<string>(docTxG.Values.SelectMany(v => v));
+                var catTxG = Groups(catTx);
+                var txWithCat = new HashSet<string>(catTxG.Values.SelectMany(v => v));
+                // Receiptless payments count as covered right away - the handover's rule
+                // (decision 2026-10-09; models/accounting-exemptions.model.ts isReceiptlessPayment):
+                // a receiptless category type (PERSONNEL 2, BANKFEES 9, VAT 15, TAXES 16) or a PayPal
+                // funding leg (debit, counterpart "PayPal" or purpose marker "PAYPAL *").
+                var catTypeNames = new[] { "IT", "RENT", "PERSONNEL", "TRAVEL", "OFFICE", "MARKETING", "CONSULTING", "INSURANCE",
+                  "OTHER", "BANKFEES", "ITOPERATION", "FACILITY", "REVENUE", "INTEREST", "OTHERINCOME", "VAT", "TAXES", "GRANTS", "INTERESTEXPENSE" };
+                var receiptlessTypes = new HashSet<int> { 2, 9, 15, 16 };
+                var receiptlessCats = new HashSet<string>();
+                foreach (var e in Items(cats)) {
+                  var id = Str(Prop(e, "RtId")); var ct = Enum(Prop(Prop(e, "Attributes"), "CategoryType"), catTypeNames);
+                  if (id != null && ct != null && receiptlessTypes.Contains(ct.Value)) receiptlessCats.Add(id);
+                }
+                var receiptless = new HashSet<string>();
+                foreach (var kv in catTxG) if (receiptlessCats.Contains(kv.Key)) foreach (var t in kv.Value) receiptless.Add(t);
+                var txAccount = new Dictionary<string, string>();
+                foreach (var kv in Groups(accTx)) foreach (var t in kv.Value) txAccount[t] = kv.Key;
+
+                var T = new List<Tuple<string, string, int?, bool, bool, bool, string>>(); // id, day, ms, clar, doc, cat, account
+                foreach (var e in Items(txs)) {
+                  var id = Str(Prop(e, "RtId")); if (id == null) continue; var a = Prop(e, "Attributes");
+                  string acc; txAccount.TryGetValue(id, out acc);
+                  var amt = Prop(a, "Amount"); double amount = 0;
+                  if (amt.ValueKind == JsonValueKind.Number) amount = amt.GetDouble();
+                  else if (amt.ValueKind == JsonValueKind.String) double.TryParse(amt.GetString(), NumberStyles.Float, inv, out amount);
+                  var cp = Str(Prop(a, "CounterpartName")) ?? ""; var pur = Str(Prop(a, "Purpose")) ?? "";
+                  if (amount < 0 && (cp.IndexOf("paypal", StringComparison.OrdinalIgnoreCase) >= 0
+                      || System.Text.RegularExpressions.Regex.IsMatch(pur, @"paypal\s*\*", System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
+                    receiptless.Add(id);
+                  T.Add(Tuple.Create(id, Day(Prop(a, "BookingDate")), Enum(Prop(a, "MatchState"), matchNames),
+                    Bool(Prop(a, "InClarification")), txWithDoc.Contains(id), txWithCat.Contains(id), acc));
+                }
+                // Capture instant per transaction, for "booked into a closed month after its close".
+                var txCreated = new Dictionary<string, DateTime>();
+                foreach (var e in Items(txs)) {
+                  var id = Str(Prop(e, "RtId")); var c = Str(Prop(e, "RtCreationDateTime")); DateTime cd;
+                  if (id != null && c != null && DateTime.TryParse(c, inv, styles, out cd)) txCreated[id] = cd;
+                }
+                var lateTx = new List<Dictionary<string, object>>();
+                var D = new List<Tuple<string, string, int?, bool, bool, int>>(); // id, day, state, noTxExpected, clar, linked
+                foreach (var e in Items(docs)) {
+                  var id = Str(Prop(e, "RtId")); if (id == null) continue; var a = Prop(e, "Attributes");
+                  List<string> l; docTxG.TryGetValue(id, out l);
+                  D.Add(Tuple.Create(id, Day(Prop(a, "DocumentDate")), Enum(Prop(a, "DocumentState"), docStateNames),
+                    Bool(Prop(a, "NoTransactionExpected")), Bool(Prop(a, "InClarification")), l == null ? 0 : l.Distinct().Count()));
+                }
+                // Uploads in clarification or stuck in review, de-duplicated over the two loads.
+                var U = new Dictionary<string, string>(); // id -> day
+                foreach (var e in Items(upClar).Concat(Items(upReview))) {
+                  var id = Str(Prop(e, "RtId")); if (id == null || U.ContainsKey(id)) continue; var a = Prop(e, "Attributes");
+                  var ps = Enum(Prop(a, "ProcessingState"), procNames);
+                  if (!Bool(Prop(a, "InClarification")) && ps != 3 && ps != 4) continue;
+                  var ex = Prop(a, "Extraction"); var exd = Day(Prop(ex, "DocumentDate"));
+                  if (exd == "") exd = Day(Prop(Prop(ex, "Attributes"), "DocumentDate"));
+                  var day = exd != "" ? exd : Day(Prop(a, "SourceReceivedAt"));
+                  if (day == "") day = Day(Prop(a, "UploadedAt"));
+                  if (day == "") day = Day(Prop(e, "RtCreationDateTime"));
+                  U[id] = day;
+                }
+                var Q = Items(queries).Select(e => Day(Prop(Prop(e, "Attributes"), "Date"))).ToList(); // AB#5606/AB#5782 extension point
+                // finAPI: account.ExternalId in connection.AccountIds -> the connection's LastSuccessfulSync day.
+                var syncByExt = new Dictionary<string, string>();
+                foreach (var e in Items(conns)) {
+                  var a = Prop(e, "Attributes"); var ids = Prop(a, "AccountIds"); var sync = Day(Prop(a, "LastSuccessfulSync"));
+                  if (ids.ValueKind != JsonValueKind.Array) continue;
+                  foreach (var x in ids.EnumerateArray()) {
+                    var k = Str(x); if (k == null) continue;
+                    string prev; if (!syncByExt.TryGetValue(k, out prev) || string.CompareOrdinal(sync, prev) > 0) syncByExt[k] = sync;
+                  }
+                }
+                var A = new List<Tuple<string, string, bool, string>>(); // id, name, finApi, syncDay
+                foreach (var e in Items(accounts)) {
+                  var id = Str(Prop(e, "RtId")); if (id == null) continue; var a = Prop(e, "Attributes");
+                  var ext = Str(Prop(a, "ExternalId")); string sync = null;
+                  var fin = ext != null && syncByExt.TryGetValue(ext, out sync);
+                  A.Add(Tuple.Create(id, Str(Prop(a, "Name")) ?? Str(Prop(a, "BankName")) ?? Str(Prop(a, "Iban")) ?? id, fin, fin ? (sync ?? "") : ""));
+                }
+                var bookings = new Dictionary<string, List<string>>();
+                foreach (var t in T) {
+                  if (t.Item7 == null || t.Item2 == "") continue;
+                  List<string> l; if (!bookings.TryGetValue(t.Item7, out l)) { l = new List<string>(); bookings[t.Item7] = l; }
+                  l.Add(t.Item2);
+                }
+                var fys = new List<Tuple<string, string, string>>();
+                foreach (var e in Items(years)) {
+                  var a = Prop(e, "Attributes"); var s = Day(Prop(a, "StartDate")); var en = Day(Prop(a, "EndDate"));
+                  if (s == "" || en == "" || string.CompareOrdinal(s, en) > 0) continue;
+                  fys.Add(Tuple.Create(Str(Prop(a, "Name")) ?? "", s, en));
+                }
+                fys = fys.OrderBy(f => f.Item2, StringComparer.Ordinal).ToList();
+
+                // Stored months: periodKey -> entity.
+                var stored = new Dictionary<string, JsonElement>();
+                foreach (var e in Items(existing)) {
+                  var a = Prop(e, "Attributes"); var y = Int(Prop(a, "Year")); var m = Int(Prop(a, "Month"));
+                  var key = Str(Prop(a, "PeriodKey"));
+                  if (key == null && y != null && m != null) key = y.Value.ToString("0000", inv) + "-" + m.Value.ToString("00", inv);
+                  if (key != null && !stored.ContainsKey(key)) stored[key] = e;
+                }
+
+                // --- Which months -------------------------------------------------------------------------
+                var months = new SortedSet<string>(StringComparer.Ordinal);
+                for (int i = 0; i < 3; i++) months.Add(new DateTime(now.Year, now.Month, 1).AddMonths(-i).ToString("yyyy-MM", inv));
+                foreach (var k in stored.Keys) months.Add(k);
+                string requested = null; var curKey = now.ToString("yyyy-MM", inv);
+                if (reqYear > 0 && reqMonth >= 1 && reqMonth <= 12) {
+                  requested = reqYear.ToString("0000", inv) + "-" + reqMonth.ToString("00", inv);
+                  if (string.CompareOrdinal(requested, curKey) <= 0) months.Add(requested); else requested = "future";
+                }
+
+                // --- Compute one month (twin of computeMonthReadiness in closing-readiness.model.ts) -------
+                var results = new List<Dictionary<string, object>>();
+                var writes = new List<Dictionary<string, object>>();
+                int inserted = 0, updated = 0, unchanged = 0, frozen = 0;
+                foreach (var key in months.Reverse()) {
+                  int y = int.Parse(key.Substring(0, 4), inv), m = int.Parse(key.Substring(5, 2), inv);
+                  var first = new DateTime(y, m, 1, 0, 0, 0, DateTimeKind.Utc);
+                  var start = first.ToString("yyyy-MM-dd", inv); var end = first.AddMonths(1).AddDays(-1).ToString("yyyy-MM-dd", inv);
+                  Func<string, bool> In = d => d != "" && string.CompareOrdinal(d, start) >= 0 && string.CompareOrdinal(d, end) <= 0;
+                  JsonElement st; var has = stored.TryGetValue(key, out st); var sa = has ? Prop(st, "Attributes") : default(JsonElement);
+                  if (has && Bool(Prop(sa, "Closed"))) {
+                    frozen++;
+                    // Decision 2026-10-09: a booking that arrives in a CLOSED month after its close (late
+                    // import, correction) becomes a clarification case on the transaction - the closed
+                    // figures and the camt statement handed over no longer match it. Only once: a
+                    // transaction already in clarification is left alone.
+                    DateTime closedAt; var late = 0;
+                    if (DateTime.TryParse(Str(Prop(sa, "ClosedAt")) ?? "", inv, styles, out closedAt)) {
+                      foreach (var t in T) {
+                        DateTime cd;
+                        if (!In(t.Item2) || t.Item4 || !txCreated.TryGetValue(t.Item1, out cd) || cd <= closedAt) continue;
+                        late++;
+                        lateTx.Add(new Dictionary<string, object> { { "rtId", t.Item1 },
+                          { "note", "Booked into the closed month " + key + " after its close on " + closedAt.ToString("yyyy-MM-dd", inv) + " - the closed figures and the statements handed over do not contain it (auto)" } });
+                      }
+                    }
+                    results.Add(new Dictionary<string, object> { { "periodKey", key }, { "closed", true }, { "lateBookings", late } });
+                    continue;
+                  }
+
+                  // Coverage + reverse side: the AB#4393 rule (reconcileRows / isExceptedTransaction).
+                  int relevant = 0, missing = 0, clarTx = 0;
+                  foreach (var t in T) {
+                    if (!In(t.Item2)) continue;
+                    if (t.Item4) clarTx++;
+                    if (t.Item3 == 3) continue;                                   // Ignored: not an expense, excepted
+                    relevant++;
+                    var excepted = (t.Item3 == 1 && !t.Item5 && t.Item6)          // Matched + category, no document
+                      || receiptless.Contains(t.Item1);                             // receiptless: covered right away
+                    if (!excepted && !t.Item5) missing++;
+                  }
+                  var covered = relevant - missing;
+                  int reverse = 0, clarDoc = 0;
+                  foreach (var d in D) {
+                    if (!In(d.Item2)) continue;
+                    if (d.Item5) clarDoc++;
+                    if ((d.Item3 == 1 || d.Item3 == 2) && !d.Item4 && d.Item6 == 0) reverse++;
+                  }
+                  var clarUp = U.Values.Count(In);
+                  var sq = Q.Count(In);
+                  var openClar = clarTx + clarDoc + clarUp + sq;
+                  int perMille = relevant <= 0 ? 1000 : (covered * 2000 + relevant) / (2 * relevant);
+                  if (relevant > 0 && covered < relevant && perMille >= 1000) perMille = 999;
+                  var pct = perMille / 10.0;
+
+                  // Bank feed (bankFeedVerdict): see the model for the heuristic.
+                  var ended = string.CompareOrdinal(today, end) > 0;
+                  var dormant = first.AddDays(-92).ToString("yyyy-MM-dd", inv);
+                  var feed = new List<Dictionary<string, object>>(); var sigFeed = new List<string>();
+                  foreach (var acc in A.OrderBy(x => x.Item1, StringComparer.Ordinal)) {
+                    List<string> bl; if (!bookings.TryGetValue(acc.Item1, out bl)) bl = new List<string>();
+                    var earliest = bl.Count == 0 ? "" : bl.Min(StringComparer.Ordinal);
+                    var latest = bl.Count == 0 ? "" : bl.Max(StringComparer.Ordinal);
+                    bool rel;
+                    if (bl.Count == 0) rel = acc.Item3;
+                    else if (string.CompareOrdinal(earliest, end) > 0) rel = false;
+                    else if (acc.Item3) rel = true;
+                    else rel = string.CompareOrdinal(latest, dormant) >= 0;
+                    if (!rel) continue;
+                    var sync = acc.Item4; var by = "none"; var at = string.CompareOrdinal(latest, sync) > 0 ? latest : sync;
+                    if (sync != "" && string.CompareOrdinal(sync, end) > 0) { by = "sync"; at = sync; }
+                    else if (latest != "" && string.CompareOrdinal(latest, end) > 0) { by = "booking"; at = latest; }
+                    feed.Add(new Dictionary<string, object> { { "a", acc.Item2 }, { "id", acc.Item1 }, { "ok", by != "none" }, { "by", by }, { "at", at } });
+                    sigFeed.Add(acc.Item1 + ":" + by);
+                  }
+                  var feedOk = ended && feed.Count > 0 && feed.All(f => (bool)f["ok"]);
+                  var reasons = new List<string>();
+                  if (!ended) reasons.Add("MONTH_NOT_ENDED");
+                  if (missing > 0) reasons.Add("MISSING_DOCUMENTS");
+                  if (openClar > 0) reasons.Add("OPEN_CLARIFICATIONS");
+                  if (ended && feed.Count == 0) reasons.Add("NO_BANK_ACCOUNT");
+                  else if (ended && !feedOk) reasons.Add("BANK_FEED_INCOMPLETE");
+                  var fyName = fys.Where(f => string.CompareOrdinal(f.Item2, start) <= 0 && string.CompareOrdinal(start, f.Item3) <= 0)
+                                  .Select(f => f.Item1).FirstOrDefault() ?? "";
+
+                  // Dirty detection by value: the signature of the figures (the evidence day of the bank feed
+                  // is left out, so a daily sync alone does not rewrite every open month).
+                  Func<int, int, int, double, int, int, int, int, int, bool, string, bool, string, string, string> Sig =
+                    (r1, c1, m1, p1, rv, ct, cd, cu, q1, bf, sf, cl, rs, fy) =>
+                      string.Join("|", r1, c1, m1, p1.ToString("0.0", inv), rv, ct, cd, cu, q1, bf, sf, cl, rs, fy);
+                  var sig = Sig(relevant, covered, missing, pct, reverse, clarTx, clarDoc, clarUp, sq, feedOk,
+                                string.Join(",", sigFeed), reasons.Count == 0, string.Join(",", reasons), fyName);
+                  string storedSig = null; string storedAt = "";
+                  if (has) {
+                    Func<string, int> I0 = n => Int(Prop(sa, n)) ?? -1;
+                    double sp; var spe = Prop(sa, "CoveragePercent");
+                    if (!(spe.ValueKind == JsonValueKind.Number && spe.TryGetDouble(out sp))) sp = -1;
+                    var sfd = new List<string>(); var bfd = Prop(sa, "BankFeedDetail");
+                    try {
+                      var bfs = Str(bfd);
+                      if (!string.IsNullOrEmpty(bfs)) {
+                        using (var doc = JsonDocument.Parse(bfs))
+                          if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                            foreach (var f in doc.RootElement.EnumerateArray()) sfd.Add(Str(Prop(f, "id")) + ":" + Str(Prop(f, "by")));
+                      }
+                    } catch (Exception) { sfd.Add("?"); }
+                    var srs = new List<string>(); var bre = Prop(sa, "BlockingReasons");
+                    if (bre.ValueKind == JsonValueKind.Array) foreach (var x in bre.EnumerateArray()) srs.Add(Str(x));
+                    storedSig = Sig(I0("RelevantTransactions"), I0("CoveredTransactions"), I0("MissingDocuments"), sp,
+                      I0("DocumentsWithoutTransaction"), I0("ClarificationTransactions"), I0("ClarificationDocuments"),
+                      I0("ClarificationUploads"), I0("OpenSubmitterQueries"), Bool(Prop(sa, "BankFeedComplete")),
+                      string.Join(",", sfd), Bool(Prop(sa, "Closable")), string.Join(",", srs), Str(Prop(sa, "FiscalYearName")) ?? "");
+                    DateTime ca; var cas = Str(Prop(sa, "ComputedAt"));
+                    if (cas != null && DateTime.TryParse(cas, inv, styles, out ca) && ca >= todayStart) storedAt = "today";
+                  }
+                  string why = !has ? "missing"
+                    : (force && (requested == null || requested == key)) ? "forced"
+                    : storedSig != sig ? "changed"
+                    : storedAt != "today" ? "nightly"
+                    : null;
+                  var rtId = has ? (Str(Prop(st, "RtId")) ?? "") : "c105e0000000000000" + y.ToString("0000", inv) + m.ToString("00", inv);
+                  var row = new Dictionary<string, object> {
+                    { "rtId", rtId }, { "kind", has ? 1 : 0 }, { "year", y }, { "month", m }, { "periodKey", key },
+                    { "fiscalYearName", fyName }, { "relevant", relevant }, { "covered", covered }, { "missing", missing },
+                    { "coveragePercent", pct }, { "reverse", reverse }, { "clarTx", clarTx }, { "clarDoc", clarDoc },
+                    { "clarUpload", clarUp }, { "submitterQueries", sq }, { "openClarifications", openClar },
+                    { "bankFeedComplete", feedOk }, { "bankFeedDetail", JsonSerializer.Serialize(feed) },
+                    { "closable", reasons.Count == 0 }, { "reasons", reasons }, { "computedAt", now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", inv) },
+                    { "write", why } };
+                  results.Add(row);
+                  if (why == null) { unchanged++; continue; }
+                  if (has) updated++; else inserted++;
+                  writes.Add(row);
+                }
+
+                var summary = new Dictionary<string, object> {
+                  { "now", now.ToString("yyyy-MM-ddTHH:mm:ssZ", inv) }, { "months", results.Count }, { "inserted", inserted },
+                  { "updated", updated }, { "unchanged", unchanged }, { "frozen", frozen }, { "writeCount", writes.Count },
+                  { "transactions", T.Count }, { "documents", D.Count }, { "accounts", A.Count },
+                  { "requested", requested }, { "force", force } };
+                summary["lateBookingCount"] = lateTx.Count;
+                return JsonSerializer.Serialize(new Dictionary<string, object> {
+                  { "summary", summary }, { "months", results }, { "writes", writes }, { "lateTx", lateTx } });
+            - type: WriteJson@1
+              description: Parse the plan
+              targetPath: $.plan
+              jsonStringPath: $.planJson
+            # Release the loads the plan was made from: the write loop below snapshots the
+            # document it iterates under $.full, and needs nothing but $.plan (AB#5651 lesson).
+            - type: SetPrimitiveValue@1
+              description: Release the transaction load
+              targetPath: $.crTxs
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the document load
+              targetPath: $.crDocs
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the document edges
+              targetPath: $.crDocTx
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the category load
+              targetPath: $.crCats
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the category edges
+              targetPath: $.crCatTx
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the account edges
+              targetPath: $.crAccTx
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the upload loads
+              targetPath: $.crUpClar
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the upload loads
+              targetPath: $.crUpReview
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the stored months
+              targetPath: $.crExisting
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              description: Release the plan string
+              targetPath: $.planJson
+              value: ""
+              valueType: String
+
+            # --- 3. Write (skipped on a dry run) ----------------------------------------------
+            # One entity per month, written one by one (a run writes a handful of months). The
+            # month's rtId is fixed (c105e0000000000000yyyyMM), so two overlapping runs (the route
+            # meeting a cron run - cron runs themselves no longer overlap, AB#5709) address the
+            # SAME entity: an Insert that loses the race fails with the entity already there and
+            # is retried once as an Update, uncaptured - a real error then fails the run with the
+            # engine's own message. Closed months never reach this list (the planner skips them);
+            # the Closed* / ReopenLog attributes are never written here.
+            - type: SetPrimitiveValue@1
+              description: Nothing written yet
+              targetPath: $.writeMode
+              value: 'none'
+              valueType: String
+            - type: If@1
+              description: Not a dry run and something to write
+              path: $.dryRun
+              operator: NotEquals
+              value: true
+              valueType: Boolean
+              transformations:
+                # Decision 2026-10-09: late bookings into a closed month become clarification cases
+                # (InClarification + note on the transaction); the month itself stays frozen.
+                - type: If@1
+                  description: Late bookings into closed months - flag them for clarification
+                  path: $.plan.summary.lateBookingCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: ForEach@1
+                      description: One clarification flag per late booking
+                      iterationPath: $.plan.lateTx
+                      targetPath: $._crLate
+                      mergePath: $.lt
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          description: Flag the late booking (single object into the merge path)
+                          targetPath: $.lt
+                          updateKind: Update
+                          ckTypeId: Basic.Accounting/BankTransaction
+                          rtIdPath: $.key.rtId
+                          attributeUpdates:
+                            - attributeName: InClarification
+                              attributeValueType: Boolean
+                              value: true
+                            - attributeName: ClarificationNote
+                              attributeValueType: String
+                              valuePath: $.key.note
+                    - type: ApplyChanges@2
+                      description: Persist the clarification flags
+                      entityUpdatesPath: $._crLate
+                - type: If@1
+                  description: Months to write
+                  path: $.plan.summary.writeCount
+                  operator: GreaterThan
+                  value: 0
+                  valueType: Int64
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      description: Written month by month
+                      targetPath: $.writeMode
+                      value: 'perMonth'
+                      valueType: String
+                    - type: ForEach@1
+                      description: Write each changed / missing / stale month
+                      iterationPath: $.plan.writes
+                      targetPath: $._crEach
+                      maxDegreeOfParallelism: 1
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          description: The month as planned - Insert (0) when new, Update (1) when stored
+                          targetPath: $._upd
+                          targetValueKind: Array
+                          updateKindPath: $.key.kind
+                          rtIdPath: $.key.rtId
+                          ckTypeId: Meshmakers.Accounting/ClosingReadiness
+                          attributeUpdates:
+                            - attributeName: Year
+                              valuePath: $.key.year
+                              attributeValueType: Int
+                            - attributeName: Month
+                              valuePath: $.key.month
+                              attributeValueType: Int
+                            - attributeName: PeriodKey
+                              valuePath: $.key.periodKey
+                              attributeValueType: String
+                            - attributeName: FiscalYearName
+                              valuePath: $.key.fiscalYearName
+                              attributeValueType: String
+                            - attributeName: RelevantTransactions
+                              valuePath: $.key.relevant
+                              attributeValueType: Int
+                            - attributeName: CoveredTransactions
+                              valuePath: $.key.covered
+                              attributeValueType: Int
+                            - attributeName: MissingDocuments
+                              valuePath: $.key.missing
+                              attributeValueType: Int
+                            - attributeName: CoveragePercent
+                              valuePath: $.key.coveragePercent
+                              attributeValueType: Double
+                            - attributeName: DocumentsWithoutTransaction
+                              valuePath: $.key.reverse
+                              attributeValueType: Int
+                            - attributeName: OpenClarifications
+                              valuePath: $.key.openClarifications
+                              attributeValueType: Int
+                            - attributeName: ClarificationTransactions
+                              valuePath: $.key.clarTx
+                              attributeValueType: Int
+                            - attributeName: ClarificationDocuments
+                              valuePath: $.key.clarDoc
+                              attributeValueType: Int
+                            - attributeName: ClarificationUploads
+                              valuePath: $.key.clarUpload
+                              attributeValueType: Int
+                            - attributeName: OpenSubmitterQueries
+                              valuePath: $.key.submitterQueries
+                              attributeValueType: Int
+                            - attributeName: BankFeedComplete
+                              valuePath: $.key.bankFeedComplete
+                              attributeValueType: Boolean
+                            - attributeName: BankFeedDetail
+                              valuePath: $.key.bankFeedDetail
+                              attributeValueType: String
+                            - attributeName: Closable
+                              valuePath: $.key.closable
+                              attributeValueType: Boolean
+                            - attributeName: BlockingReasons
+                              valuePath: $.key.reasons
+                              attributeValueType: StringArray
+                            - attributeName: ComputedAt
+                              valuePath: $.key.computedAt
+                              attributeValueType: DateTime
+                        - type: ForEach@1
+                          description: Persist this month, failure captured
+                          path: $._upd
+                          iterationPath: $._upd
+                          targetPath: $._try
+                          maxDegreeOfParallelism: 1
+                          continueOnError: true
+                          errorsPath: $._err
+                          transformations:
+                            - type: ApplyChanges@2
+                              description: Persist this month
+                              entityUpdatesPath: $._upd
+                        - type: If@1
+                          description: The write failed (a concurrent run inserted the month first) - retry once as an Update, uncaptured
+                          path: $._err[0].index
+                          operator: GreaterEqualsThan
+                          value: 0
+                          valueType: Int64
+                          transformations:
+                            - type: CreateUpdateInfo@1
+                              description: The same month as an Update
+                              targetPath: $._upd
+                              targetValueKind: Array
+                              updateKind: Update
+                              rtIdPath: $.key.rtId
+                              ckTypeId: Meshmakers.Accounting/ClosingReadiness
+                              attributeUpdates:
+                                - attributeName: Year
+                                  valuePath: $.key.year
+                                  attributeValueType: Int
+                                - attributeName: Month
+                                  valuePath: $.key.month
+                                  attributeValueType: Int
+                                - attributeName: PeriodKey
+                                  valuePath: $.key.periodKey
+                                  attributeValueType: String
+                                - attributeName: FiscalYearName
+                                  valuePath: $.key.fiscalYearName
+                                  attributeValueType: String
+                                - attributeName: RelevantTransactions
+                                  valuePath: $.key.relevant
+                                  attributeValueType: Int
+                                - attributeName: CoveredTransactions
+                                  valuePath: $.key.covered
+                                  attributeValueType: Int
+                                - attributeName: MissingDocuments
+                                  valuePath: $.key.missing
+                                  attributeValueType: Int
+                                - attributeName: CoveragePercent
+                                  valuePath: $.key.coveragePercent
+                                  attributeValueType: Double
+                                - attributeName: DocumentsWithoutTransaction
+                                  valuePath: $.key.reverse
+                                  attributeValueType: Int
+                                - attributeName: OpenClarifications
+                                  valuePath: $.key.openClarifications
+                                  attributeValueType: Int
+                                - attributeName: ClarificationTransactions
+                                  valuePath: $.key.clarTx
+                                  attributeValueType: Int
+                                - attributeName: ClarificationDocuments
+                                  valuePath: $.key.clarDoc
+                                  attributeValueType: Int
+                                - attributeName: ClarificationUploads
+                                  valuePath: $.key.clarUpload
+                                  attributeValueType: Int
+                                - attributeName: OpenSubmitterQueries
+                                  valuePath: $.key.submitterQueries
+                                  attributeValueType: Int
+                                - attributeName: BankFeedComplete
+                                  valuePath: $.key.bankFeedComplete
+                                  attributeValueType: Boolean
+                                - attributeName: BankFeedDetail
+                                  valuePath: $.key.bankFeedDetail
+                                  attributeValueType: String
+                                - attributeName: Closable
+                                  valuePath: $.key.closable
+                                  attributeValueType: Boolean
+                                - attributeName: BlockingReasons
+                                  valuePath: $.key.reasons
+                                  attributeValueType: StringArray
+                                - attributeName: ComputedAt
+                                  valuePath: $.key.computedAt
+                                  attributeValueType: DateTime
+                            - type: ApplyChanges@2
+                              description: Retry as an Update - a persistent error fails the run
+                              entityUpdatesPath: $._upd
+
+            # --- 4. Result: the HTTP response is the whole data context - reduce it -----------
+            - type: Project@1
+              description: Keep the mode, the write path, the summary and the months only
+              clear: true
+              fields:
+                - path: $.dryRun
+                  inclusion: true
+                - path: $.writeMode
+                  inclusion: true
+                - path: $.plan.summary
+                  inclusion: true
+                - path: $.plan.months
+                  inclusion: true
+            - type: SetPipelineExecutionResult@1
+              description: Persist the summary as OutputData (visible per cron run)
+              path: $
+  - rtId: aa0000000000000000576502
+    ckTypeId: System.Communication/PipelineTrigger
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000576500
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Triggers
+        targetRtId: aa0000000000000000576501
+        targetCkTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: Closing Readiness Schedule
+      - id: System/Description
+        value: Recomputes the closing readiness every 15 minutes, writing only months whose figures changed; the first run after 00:00 UTC refreshes every open month (nightly). Off the matcher's and the fiscal-year assignment's quarter hours (AB#5765).
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System.Bot/CronExpression
+        value: '11,26,41,56 * * * *'
