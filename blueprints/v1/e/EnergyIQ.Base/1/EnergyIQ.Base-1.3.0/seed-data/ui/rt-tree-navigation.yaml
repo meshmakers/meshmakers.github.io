@@ -1,0 +1,87 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# Per-tenant Runtime Browser / Data-Mappings tree configuration (System.UI/TreeNavigationConfiguration).
+#
+# Roles        (AB#4262): presentation overrides for auto-discovered association roles
+#                         (relabel SpaceSensors/SpaceElements, hide the MapsTo plumbing role).
+# Perspectives (AB#4263): additional switchable tree roots next to the built-in spatial view.
+#                         "Systems" roots on every EnergyIQ/DistributionSystem instance and
+#                         flattens its SystemMembers (heat pump, buffer tank, pumps, terminals,
+#                         ...) directly beneath each circuit. A reversible heat pump that is a
+#                         member of both the heating and the passive-cooling circuit appears
+#                         under both (N:N). Served spaces show one hop deeper under each member
+#                         (equipment -> ServedBy -> Space), by normal auto-discovery.
+#
+# Requires System.UI >= 2.3.0 (the Perspectives record array). System.UI is auto-distributed to
+# the tenant by octo-platform-services; import this AFTER the CK import so the type is present.
+dependencies:
+- System.UI-[2.3,3.0)
+entities:
+- rtId: 6a435768b642bdc0481d7b51
+  ckTypeId: System.UI/TreeNavigationConfiguration
+  rtWellKnownName: TreeNavigation
+  associations: []
+  attributes:
+  - id: System/Name
+    value: Tree Navigation
+  - id: System.UI/TreeNavigationConfiguration.Roles
+    value:
+    - ckRecordId: System.UI/TreeNavigationRoleConfig
+      attributes:
+      - id: System.UI/TreeNavigationRoleConfig.SourceCkTypeId
+        value: EnergyIQ/Space
+      - id: System.UI/TreeNavigationRoleConfig.RoleId
+        value: EnergyIQ/SpaceSensors
+      - id: System.UI/TreeNavigationRoleConfig.DisplayName
+        value: Sensoren
+      - id: System.UI/TreeNavigationRoleConfig.SortIndex
+        value: 1
+    - ckRecordId: System.UI/TreeNavigationRoleConfig
+      attributes:
+      - id: System.UI/TreeNavigationRoleConfig.SourceCkTypeId
+        value: EnergyIQ/Space
+      - id: System.UI/TreeNavigationRoleConfig.RoleId
+        value: EnergyIQ/SpaceElements
+      - id: System.UI/TreeNavigationRoleConfig.DisplayName
+        value: Geräte
+      - id: System.UI/TreeNavigationRoleConfig.SortIndex
+        value: 2
+    - ckRecordId: System.UI/TreeNavigationRoleConfig
+      attributes:
+      - id: System.UI/TreeNavigationRoleConfig.SourceCkTypeId
+        value: EnergyIQ/Space
+      - id: System.UI/TreeNavigationRoleConfig.RoleId
+        value: System.Communication/MapsTo
+      - id: System.UI/TreeNavigationRoleConfig.Visible
+        value: false
+    # In the Systems view a PhotovoltaicSystem is a member of the electrical DistributionSystem;
+    # its own SystemMembers (strings, inverters, battery) show one hop deeper — label them "Komponenten".
+    - ckRecordId: System.UI/TreeNavigationRoleConfig
+      attributes:
+      - id: System.UI/TreeNavigationRoleConfig.SourceCkTypeId
+        value: EnergyIQ/PhotovoltaicSystem
+      - id: System.UI/TreeNavigationRoleConfig.RoleId
+        value: EnergyIQ/SystemMembers
+      - id: System.UI/TreeNavigationRoleConfig.DisplayName
+        value: Komponenten
+      - id: System.UI/TreeNavigationRoleConfig.SortIndex
+        value: 1
+  - id: System.UI/TreeNavigationConfiguration.Perspectives
+    value:
+    - ckRecordId: System.UI/TreePerspectiveConfig
+      attributes:
+      - id: System.UI/TreePerspectiveConfig.Key
+        value: Systems
+      - id: System.UI/TreePerspectiveConfig.DisplayName
+        value: Systems
+      - id: System.UI/TreePerspectiveConfig.SortIndex
+        value: 1
+      - id: System.UI/TreePerspectiveConfig.RootMode
+        value: Type
+      - id: System.UI/TreePerspectiveConfig.RootCkTypeId
+        value: EnergyIQ/DistributionSystem
+      - id: System.UI/TreePerspectiveConfig.PrimaryRoleId
+        value: EnergyIQ/SystemMembers
+      # Members are reached OUTBOUND from the DistributionSystem: the SystemMembers
+      # association is authored on the DistributionSystem (System --SystemMembers--> member).
+      - id: System.UI/TreePerspectiveConfig.PrimaryDirection
+        value: Outbound
