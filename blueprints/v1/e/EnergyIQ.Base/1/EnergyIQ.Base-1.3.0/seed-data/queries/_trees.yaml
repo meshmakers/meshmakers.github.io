@@ -1,0 +1,21 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# _trees: the Runtime Browser query over all Basic/Tree roots (EnergyIQ Sites are Trees).
+# System/SimpleRtQuery since EnergyIQ.Base 1.0.1 (AB#7996): the former abstract System/Query type no
+# longer exists in System 2.8.0, so the old form failed the blueprint install with
+# "RtCkTypeId 'System/Query' not found". Same rtId as before.
+dependencies:
+- System-[2.0,3.0)
+entities:
+- rtId: 682f0020af1fe4dd0f346f3c
+  ckTypeId: System/SimpleRtQuery
+  associations: []
+  attributes:
+  - id: System/Name
+    value: _trees
+  - id: System/Query.CkTypeId
+    value: Basic/Tree
+  - id: System/Query.Columns
+    value:
+    - rtId
+    - name
+    - description
