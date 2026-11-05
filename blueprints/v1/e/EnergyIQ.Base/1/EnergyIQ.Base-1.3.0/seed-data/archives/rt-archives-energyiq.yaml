@@ -1,0 +1,640 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# Stream-data archives for EnergyIQ runtime measurements.
+#
+# In EnergyIQ-2.0.0 measurements live on dedicated Sensor entities (TemperatureSensor,
+# HumiditySensor, CO2Sensor, ...) instead of on Space. We therefore split the previous
+# single "SpaceArchive" (Temperature + Humidity + CO2Level + TemperatureSetpointHeating
+# columns on Space) into one RawArchive per sensor type.
+#
+# AB#3442 extends the set beyond the room sensors: light status (Luminaire),
+# shading status (ShadingDevice), energy consumption (Meter / GridConnection /
+# ChargingStation / Appliance) and energy production + storage (PVString /
+# Inverter / PhotovoltaicSystem / BatteryStorage) — 13 RawArchives total,
+# rtIds 6a0e…0a0001 through 6a0e…0a000d.
+#
+# Imported as Status=Created; call IArchiveLifecycleService.ActivateAsync (or the
+# octo-cli ActivateArchive command) once after import to provision the per-archive
+# CrateDB table. The Path stays in PascalCase here (the engine maps Path -> CrateDB
+# column / camelCase on the storage side).
+#
+# Setpoints / Pset_* design targets are intentionally NOT archived: they are slow-moving
+# configuration, not time-series. Time-series belongs on the sensor that actually
+# reports the measurement. If a use case ever needs to track Pset_* changes over time
+# a dedicated audit archive should be added instead.
+dependencies:
+  - System.StreamData-[1.2,2.0)
+  - EnergyIQ-[2.0,3.0)
+entities:
+  # ============================================================
+  # Temperature time-series (one row per TemperatureSensor update)
+  # ============================================================
+  - rtId: 6a0e000000000000000a0001
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: TemperatureSensorArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/TemperatureSensor
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              # Path = attribute name at the type. On TemperatureSensor the
+              # underlying EnergyIQ/Temperature attribute is exposed as
+              # `CurrentValue` (consistent across all Sensor subtypes).
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: CurrentValue
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # ============================================================
+  # Humidity time-series (one row per HumiditySensor update)
+  # ============================================================
+  - rtId: 6a0e000000000000000a0002
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: HumiditySensorArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/HumiditySensor
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: CurrentValue
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # ============================================================
+  # CO2 time-series (one row per CO2Sensor update)
+  # ============================================================
+  - rtId: 6a0e000000000000000a0003
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: CO2SensorArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/CO2Sensor
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: CurrentValue
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # ============================================================
+  # Room comfort actuators/fixtures (AB#3442)
+  # ============================================================
+  # Light status time-series (one row per Luminaire update)
+  - rtId: 6a0e000000000000000a0004
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: LuminaireArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/Luminaire
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: IsOn
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: DimmingLevel
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # Shading status time-series (one row per ShadingDevice update)
+  - rtId: 6a0e000000000000000a0005
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: ShadingDeviceArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/ShadingDevice
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: Position
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: SlatAngle
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+
+  # ============================================================
+  # Energy metering (AB#3442)
+  # ============================================================
+  # TargetCkTypeId matches EXACTLY (no derived types), so each concrete Meter
+  # subtype gets its own archive: Meter (generic sub-meters), GridConnection,
+  # ChargingStation, Appliance. Keeps per-shape queries simple, too.
+  #
+  # Generic sub-meter consumption (one row per Meter update)
+  - rtId: 6a0e000000000000000a0006
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: MeterArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/Meter
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ActivePower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # Grid coupling point, signed ActivePower (+ import / − export).
+  # ImportPower / ExportPower split the sign into two non-negative computed columns so the
+  # Energiebilanz board integrates them (AggregationType Integral). Never split the sign with a
+  # field filter: a filter drops rows and the step integral then carries the last positive value
+  # across an export period (AB#7919). Formulas use the physical (lower-case) column names.
+  - rtId: 6a0e000000000000000a0007
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: GridConnectionArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/GridConnection
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ActivePower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          # Computed (AB#4189/AB#7925): grid import in kW, >= 0. Integral(ImportPower) = Netzbezug kWh.
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ''
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Name
+                value: ImportPower
+              - id: System.StreamData/CkArchiveColumn.Formula
+                value: 'if(activepower > 0, activepower, 0)'
+              - id: System.StreamData/CkArchiveColumn.ResultType
+                value: 3
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          # Computed (AB#4189/AB#7925): grid feed-in in kW, >= 0. Integral(ExportPower) = Netzeinspeisung kWh.
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ''
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Name
+                value: ExportPower
+              - id: System.StreamData/CkArchiveColumn.Formula
+                value: 'if(activepower < 0, -activepower, 0)'
+              - id: System.StreamData/CkArchiveColumn.ResultType
+                value: 3
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+
+  # Wallbox charging power (one row per ChargingStation update)
+  - rtId: 6a0e000000000000000a0008
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: ChargingStationArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/ChargingStation
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ActivePower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # Large appliance consumption (one row per Appliance update)
+  - rtId: 6a0e000000000000000a0009
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: ApplianceArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/Appliance
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ActivePower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # ============================================================
+  # Energy production + storage (AB#3442)
+  # ============================================================
+  # Per-string PV production (one row per PVString update)
+  - rtId: 6a0e000000000000000a000a
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: PVStringArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/PVString
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: CurrentPower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # Inverter DC/AC power (one row per Inverter update)
+  - rtId: 6a0e000000000000000a000b
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: InverterArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/Inverter
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: DcPower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: AcPower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  # PV system totals (one row per PhotovoltaicSystem update)
+  - rtId: 6a0e000000000000000a000c
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: PhotovoltaicSystemArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/PhotovoltaicSystem
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: TotalCurrentPower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: GridFeedIn
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: SelfConsumption
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+
+  # Battery state of charge + charging/discharging power (one row per BatteryStorage update)
+  - rtId: 6a0e000000000000000a000d
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: BatteryStorageArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/BatteryStorage
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: StateOfCharge
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ChargingPower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          # Computed (AB#4189/AB#7925): charging power in kW, >= 0. Integral(ChargePower) = Batterie geladen kWh.
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ''
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Name
+                value: ChargePower
+              - id: System.StreamData/CkArchiveColumn.Formula
+                value: 'if(chargingpower > 0, chargingpower, 0)'
+              - id: System.StreamData/CkArchiveColumn.ResultType
+                value: 3
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          # Ingested (AB#7925): positive discharging power in kW. Live Loxone sites write
+          # ChargingPower >= 0 and DischargingPower >= 0 as two attributes (rt-pipelines-loxone.yaml,
+          # em-battery / em-battery-discharge); the simulator writes a signed ChargingPower instead.
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: DischargingPower
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          # Computed (AB#4189/AB#7925): discharging power in kW, >= 0, for both conventions — the
+          # negative part of a signed ChargingPower (simulator) or the positive DischargingPower
+          # (live Loxone). Integral(DischargePower) = Batterie entladen kWh.
+          # coalesce() makes a NULL operand count 0 (a Loxone row that carries only one of the two
+          # power attributes), AB#8060. On an already activated archive the formula is changed with
+          # UpdateComputedColumnFormula (backfill), AB#7943.
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ''
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Name
+                value: DischargePower
+              - id: System.StreamData/CkArchiveColumn.Formula
+                value: 'if(coalesce(chargingpower, 0) < 0, -chargingpower, if(coalesce(dischargingpower, 0) > 0, dischargingpower, 0))'
+              - id: System.StreamData/CkArchiveColumn.ResultType
+                value: 3
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+
+  # --- Plant archives for the Heizung & Kühlung MeshBoard (2026-07-06) ---
+  - rtId: 6a0e000000000000000a000e
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: HeatPumpArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/HeatPump
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: SupplyTemp
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ReturnTemp
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: CoolingSupplyTemp
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: SourceInletTemp
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: SourceOutletTemp
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: HotGasTemp
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: PowerConsumption
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+
+  - rtId: 6a0e000000000000000a000f
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: ThermalEnergyStorageArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/ThermalEnergyStorage
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: StorageTempTop
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+
+  - rtId: 6a0e000000000000000a0010
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: PumpArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/Pump
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: Speed
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: FlowRate
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+
+  # Counter values (kWh totals) for all generic sub-meters. Second archive on the
+  # SAME TargetCkTypeId as MeterArchive — the counter column was not part of the
+  # original (already activated) MeterArchive and active archives cannot grow columns.
+  - rtId: 6a0e000000000000000a0011
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: MeterEnergyArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/Meter
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: ImportedEnergy
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+
+  # Status archives for the Beschattung & Beleuchtung MeshBoard (AB#4327):
+  # carry the entity Name as an archive column so GroupingAggregationSdQuery
+  # can GROUP BY name (grouping is restricted to archive columns; rtid-only
+  # grouping would label the bars with raw hex ids). DimmingLevel (0/100 via
+  # rule lightcontroller-level) is the numeric on/off signal - CrateDB cannot
+  # AVG the boolean IsOn column.
+  - rtId: 6a0e000000000000000a0012
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: LuminaireStatusArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/Luminaire
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: Name
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: IsOn
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: false
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: DimmingLevel
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+
+  - rtId: 6a0e000000000000000a0013
+    ckTypeId: System.StreamData/RawArchive
+    rtWellKnownName: ShadingDeviceStatusArchive
+    attributes:
+      - id: System.StreamData/Archive.TargetCkTypeId
+        value: EnergyIQ/ShadingDevice
+      - id: System.StreamData/Archive.Status
+        value: 0
+      - id: System.StreamData/Archive.Columns
+        value:
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: Name
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
+          - ckRecordId: System.StreamData/CkArchiveColumn
+            attributes:
+              - id: System.StreamData/CkArchiveColumn.Path
+                value: Position
+              - id: System.StreamData/CkArchiveColumn.Required
+                value: false
+              - id: System.StreamData/CkArchiveColumn.Indexed
+                value: true
