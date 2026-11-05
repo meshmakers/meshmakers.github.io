@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "EnergyIQ.Base",
+  "majorVersion": 1,
+  "latestVersion": "1.3.0",
+  "description": "EnergyIQ product content for building energy monitoring - the boards, queries,\nstream-data archives and rollups every EnergyIQ tenant shares (AB#7996).\n\nInstalls:\n- the EnergyIQ construction kit model with Basic and Basic.Energy (auto-imported\n  from the catalog)\n- 19 RawArchives, one per measured EnergyIQ type (room sensors, light, shading,\n  meters, grid, wallboxes, appliances, PV, battery, heat pump, storage, pump),\n  including the computed grid/battery columns ImportPower/ExportPower/\n  ChargePower/DischargePower the Energiebilanz board integrates\n- 14 RollupArchives (5-minute AVG/MIN/MAX, 1-hour grid rollup) the\n  resolution-aware line charts and the heatmaps need\n- 5 MeshBoards (Raumtemperaturen, Energie, Energiebilanz, Heizung \u0026 Kuehlung,\n  Beschattung \u0026 Beleuchtung) with 41 widgets and 42 persistent queries; every\n  board picks its site through the \u0022Standort\u0022 selector\n- the process diagram \u0022Energiefluss live\u0022 (grid, PV, battery, wallbox, devices) of\n  the Energie board (AB#7941)\n- the _trees query and the Runtime Browser tree navigation (role labels,\n  \u0022Systems\u0022 perspective on DistributionSystem)\n\nNOT included - this stays tenant data, imported or maintained per tenant:\nsites and their digital twin (Site/Building/rooms/devices, data/bim/*), site\nprice and CO2 values, adapters and deployment sites, Loxone/MQTT/AI\nconfigurations, secrets, and pipelines (no pipeline in this version; every\ncurrent one is bound to a site).\n\nPREREQUISITES: communication and stream data enabled on the tenant\n(octo-cli -c EnableCommunication, octo-cli -c EnableStreamData).\n\nPost-install (manual until AB#7991 activates archives automatically):\n- Activate every archive once - the RawArchives first, then the RollupArchives:\n    octo-cli -c ActivateArchive -id \u003CrtId\u003E\n  The rtIds are listed in seed-data/archives/rt-archives-energyiq.yaml and\n  seed-data/ui/rt-meshboards-energyiq.yaml (and in scripts/om_importrt.ps1).\n  Re-applying the blueprint keeps an activated archive activated\n  (Archive.Status is runtime state).\n- Optional: backfill a new rollup from existing raw data:\n    octo-cli -c BackfillRollup -id \u003CrollupRtId\u003E\n- Import a site (e.g. data/bim/rt-firmianstrasse.yaml) - without a site the\n  boards show their empty state.\n\nRule for archive changes: a change to an existing archive\u0027s columns or to an\nexisting RollupArchive definition (bucket, aggregations, sources) is NOT\nshipped through a blueprint update until AB#7992/AB#7993 (rollups) and\nAB#7997/AB#8002 (columns on an active archive) are done - such a change is a\nnew archive with a new rtId instead. See README \u0022EnergyIQ.Base blueprint\u0022.\n",
+  "versions": [
+    {
+      "version": "1.3.0",
+      "directoryPath": "blueprints/v1/e/EnergyIQ.Base/1/EnergyIQ.Base-1.3.0",
+      "publishedAt": "2026-11-05T17:29:35.3701463Z"
+    }
+  ],
+  "updatedAt": "2026-11-05T17:29:35.370702Z"
+}
