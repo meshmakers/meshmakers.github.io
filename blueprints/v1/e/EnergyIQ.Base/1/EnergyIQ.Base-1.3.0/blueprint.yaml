@@ -1,0 +1,75 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: EnergyIQ.Base-1.3.0
+description: |
+  EnergyIQ product content for building energy monitoring - the boards, queries,
+  stream-data archives and rollups every EnergyIQ tenant shares (AB#7996).
+
+  Installs:
+  - the EnergyIQ construction kit model with Basic and Basic.Energy (auto-imported
+    from the catalog)
+  - 19 RawArchives, one per measured EnergyIQ type (room sensors, light, shading,
+    meters, grid, wallboxes, appliances, PV, battery, heat pump, storage, pump),
+    including the computed grid/battery columns ImportPower/ExportPower/
+    ChargePower/DischargePower the Energiebilanz board integrates
+  - 14 RollupArchives (5-minute AVG/MIN/MAX, 1-hour grid rollup) the
+    resolution-aware line charts and the heatmaps need
+  - 5 MeshBoards (Raumtemperaturen, Energie, Energiebilanz, Heizung & Kuehlung,
+    Beschattung & Beleuchtung) with 41 widgets and 42 persistent queries; every
+    board picks its site through the "Standort" selector
+  - the process diagram "Energiefluss live" (grid, PV, battery, wallbox, devices) of
+    the Energie board (AB#7941)
+  - the _trees query and the Runtime Browser tree navigation (role labels,
+    "Systems" perspective on DistributionSystem)
+
+  NOT included - this stays tenant data, imported or maintained per tenant:
+  sites and their digital twin (Site/Building/rooms/devices, data/bim/*), site
+  price and CO2 values, adapters and deployment sites, Loxone/MQTT/AI
+  configurations, secrets, and pipelines (no pipeline in this version; every
+  current one is bound to a site).
+
+  PREREQUISITES: communication and stream data enabled on the tenant
+  (octo-cli -c EnableCommunication, octo-cli -c EnableStreamData).
+
+  Post-install (manual until AB#7991 activates archives automatically):
+  - Activate every archive once - the RawArchives first, then the RollupArchives:
+      octo-cli -c ActivateArchive -id <rtId>
+    The rtIds are listed in seed-data/archives/rt-archives-energyiq.yaml and
+    seed-data/ui/rt-meshboards-energyiq.yaml (and in scripts/om_importrt.ps1).
+    Re-applying the blueprint keeps an activated archive activated
+    (Archive.Status is runtime state).
+  - Optional: backfill a new rollup from existing raw data:
+      octo-cli -c BackfillRollup -id <rollupRtId>
+  - Import a site (e.g. data/bim/rt-firmianstrasse.yaml) - without a site the
+    boards show their empty state.
+
+  Rule for archive changes: a change to an existing archive's columns or to an
+  existing RollupArchive definition (bucket, aggregations, sources) is NOT
+  shipped through a blueprint update until AB#7992/AB#7993 (rollups) and
+  AB#7997/AB#8002 (columns on an active archive) are done - such a change is a
+  new archive with a new rtId instead. See README "EnergyIQ.Base blueprint".
+
+# The blueprint engine installs each dependency's range FLOOR as the exact version, and
+# transitive CK dependencies are NOT resolved on install: Basic and Basic.Energy are listed
+# explicitly and BEFORE EnergyIQ (install order = list order). The floors are the versions
+# EnergyIQ-2.15.0 was compiled against (ck-energyiq-2.yaml: Basic-2.5.0, Basic.Energy-1.10.0);
+# raise them together with src/EnergyIqCkModel/ConstructionKit/ckModel.yaml. The System.*
+# floors are satisfied by the service-managed models already on the tenant (no-op).
+ckModelDependencies:
+- System-[2.0,3.0)
+- System.StreamData-[1.2,2.0)
+# 2.3 carries the Perspectives record array of TreeNavigationConfiguration.
+- System.UI-[2.3,3.0)
+- Basic-[2.5.0,3.0)
+- Basic.Energy-[1.10.0,2.0)
+# 2.15.0 (AB#7947): Site EnergyPrice/Co2Factor, read by the site comparison.
+- EnergyIQ-[2.15.0,3.0)
+# Every listed file is merged into one runtime model before the import. The rtIds are the
+# ones the former ImportRt files used, so installing on a tenant that already has the content
+# adopts it (upsert by rtId) instead of duplicating it. scripts/om_importrt.ps1 imports the
+# same files for the dev loop - there is exactly one copy of each file.
+seedDataPaths:
+- seed-data/archives/rt-archives-energyiq.yaml
+- seed-data/ui/rt-process-diagrams-energyiq.yaml
+- seed-data/ui/rt-meshboards-energyiq.yaml
+- seed-data/ui/rt-tree-navigation.yaml
+- seed-data/queries/_trees.yaml
