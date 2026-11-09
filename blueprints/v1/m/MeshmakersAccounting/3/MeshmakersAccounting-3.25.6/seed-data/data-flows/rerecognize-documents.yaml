@@ -1,0 +1,740 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# Re-recognize Documents (AB#8057, Feature AB#5957).
+#
+# "USt prüfen" lists documents whose VAT treatment could not be derived. Many of them are receipts recognised before
+# the improved extraction prompts (r1.0.147: 4.9 %, row countries, zero-total confirmation) and carry only a gross total
+# ("Only a gross total printed - no net, tax or rate"). This pipeline runs the recognition AGAIN over the stored original
+# of existing documents and updates ONLY a whitelist of fields, then hands each document to the VAT derivation.
+#
+# What is reused, not rebuilt:
+#   - the extraction: the OCR node, the company-profile load and the AnthropicAiQuery@1 node are COPIES of the nodes of
+#     the Document Analysis pipeline (document-analysis.yaml), kept byte-identical between the markers below by
+#     scripts/rerecognize_sync_nodes.py; scripts/rerecognize_documents_test.py fails when they drift. A prompt change in
+#     Document Analysis is therefore one command away from this pipeline, and never silently missing.
+#   - the tax rows: built with the same rules as the Document Analysis check script (complete blocks only, AB#8010 row
+#     country, the row identities with the same tolerances); the test runs both scripts over the same blocks.
+#   - the VAT derivation: the event door of the Derive VAT Treatment pipeline (same DataFlow, ToPipelineDataEvent@1),
+#     exactly like Document Analysis does for a new document. MANUAL treatments are never touched by it.
+#
+# The whitelist (and nothing else is ever written to a document here): GrossTotal, NetTotal, TaxTotal, TaxBreakdown
+# (incl. the row CountryCode of AB#8010), Currency, DocumentDate, DueDate - plus ExtractionHistory (CK 3.19.0) and the
+# fields the derivation writes (VatTreatment, VatTreatmentSource, VatTreatmentReason, ReverseChargeRate). Links to
+# transactions, the document state (PAID / CANCELLED), MANUAL VAT treatments, comments, todos, SourcePages and the split
+# structure (AB#8003) are never written: no CreateAssociationUpdate@1, no other attribute (pinned by the test).
+# A new value never clears a stored one: an absent amount, date, currency or rows keep the stored value. A new document
+# date outside the document's fiscal year is not taken (the link to the fiscal year must stay right). A document that is
+# PAID or linked to a bank transaction keeps its stored GrossTotal (PO decision, PR #134): the new rows / net / tax are
+# taken only when they add up to the stored gross, otherwise nothing changes and the document is reported GROSS_DIFFERS.
+#
+# History and undo: before a write the previous values of the changed fields AND the VAT fields go into
+# ExtractionHistory (compact JSON, newest first, at most 10 entries) together with the new values; the app shows it on
+# the document page and undoes the newest entry from it (only while the document still carries the new values).
+#
+# Skipped (nothing read, nothing written): CANCELLED / RECURRING documents, documents of a CLOSED fiscal year (by the
+# DocumentToFiscalYear link, else by the document date - the app's AB#7982 rule), documents without a stored original.
+#
+# Route: POST /reRecognizeDocuments (AccountingManagement only), body { "documentRtIds": ["<rtId>", ...] }; at most FIVE
+# documents per call, analysed one after the other (the AI quota and the adapter memory - same batch as Document
+# Analysis' take: 5); the app sends the selection in chunks of five, one call after the other. Response:
+#   { "results": [ { id, number, gate, status, code, changed, notes, vatTreatment, vatStatus } ], "iterationErrors": [...] }
+# gate = skip code (STATE_SKIPPED / CLOSED_YEAR / NO_FILE) or ""; status = updated / unchanged / failed; code = why a
+# document failed (NO_TEXT, AI_FAILED, NO_INVOICE, PART_UNKNOWN, NO_GROSS, ROWS_CONTRADICTORY, TOTALS_CONTRADICTORY,
+# GROSS_DIFFERS) or why it stayed unchanged (NO_ROWS = still no tax rate read, SAME_VALUES = the stored values were read
+# again); notes = values kept on purpose (DATE_OTHER_YEAR, GROSS_KEPT). Every result line names its reason - the app shows
+# one line per document (AB#8070). A document whose iteration crashed has no result and is listed in iterationErrors.
+#
+# AB#8070: an original whose text recognition reads (almost) nothing - e.g. a thumbnail-sized photo wrapped into a PDF -
+# is reported NO_TEXT and never written, whatever the AI answered for the empty text (it must not invent values).
+dependencies:
+  - Meshmakers.Accounting-[3.19.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+entities:
+  - rtId: aa0000000000000000805701
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: aa0000000000000000000300
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+      # The AI node needs BOTH its apiKeyConfigurationName AND this Uses association (as in Document Analysis).
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7003
+        targetCkTypeId: System.Communication/AiConfiguration
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Re-recognize Documents
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /reRecognizeDocuments
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            # --- 0. The request: at most five documents, read with the caller's data permissions --------------
+            - type: GetRtEntitiesById@1
+              description: AB#8057 - the requested documents (at most five per call)
+              ckTypeId: Meshmakers.Accounting/AccountingDocument
+              rtIdsPath: $.body.documentRtIds
+              take: 5
+              targetPath: $.docs
+            - type: GetRtEntitiesByType@1
+              description: AB#8057 - the fiscal years (closed years are skipped, a new date must stay in its year)
+              ckTypeId: Meshmakers.Accounting/FiscalYear
+              take: 100
+              targetPath: $.years
+            - type: GetRtEntitiesByType@1
+              description: AB#8057 - cached VIES verdicts per VAT id, handed to the derivation like its route does
+              ckTypeId: Meshmakers.Accounting/VatIdVerification
+              take: 5000
+              targetPath: $.viesLoad
+            - type: DateTime@1
+              description: AB#8057 - time of the re-recognition (history entry)
+              operation: Now
+              targetPath: $.now
+            - type: SetPrimitiveValue@1
+              description: AB#8057 - default author of the history entry
+              targetPath: $.by
+              valueType: String
+              value: ""
+            - type: SelectByPath@1
+              description: AB#8057 - the calling user names the history entry
+              selectPath:
+                - path: $.principal.name
+                  targetPath: $.by
+
+            # --- 1. One document after the other -----------------------------------------------------------------
+            # continueOnError + errorsPath: a crashed iteration (e.g. a dangling file) must not cost the other four
+            # their result; it is reported in the response instead of failing the whole call.
+            - type: ForEach@1
+              description: AB#8057 - re-recognize each requested document, one after the other
+              iterationPath: $.docs.Items
+              targetPath: $.results
+              mergePath: $.res
+              maxDegreeOfParallelism: 1
+              continueOnError: true
+              errorsPath: $.iterationErrors
+              transformations:
+                - type: GetAssociationTargets@1
+                  description: AB#8057 - the fiscal year the document is assigned to
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  targetCkTypeId: Meshmakers.Accounting/FiscalYear
+                  associationRoleId: Meshmakers.Accounting/DocumentToFiscalYear
+                  graphDirection: Outbound
+                  targetPath: $.fyGroups
+                - type: GetAssociationTargets@1
+                  description: AB#8057 - the stored original (FileSystemItem)
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  targetCkTypeId: System.Files/FileSystemItem
+                  associationRoleId: System/Related
+                  graphDirection: Outbound
+                  targetPath: $.fileGroups
+                # PO decision (PR #134): a PAID or linked document keeps its gross - read the links (TransactionToDocument
+                # is declared on the document, outbound to the bank transaction; read only, never written here).
+                - type: GetAssociationTargets@1
+                  description: AB#8057 - the bank transactions linked to the document
+                  originRtIdPath: $.key.RtId
+                  originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                  targetCkTypeId: Basic.Accounting/BankTransaction
+                  associationRoleId: Meshmakers.Accounting/TransactionToDocument
+                  graphDirection: Outbound
+                  targetPath: $.txGroups
+                # Tested by scripts/rerecognize_documents_test.py (located by this description).
+                - type: ExecuteCSharp@1
+                  description: AB#8057 re-recognition gate
+                  usings:
+                    - System
+                    - System.Linq
+                    - System.Text.Json
+                    - System.Globalization
+                  returnType: String
+                  arguments:
+                    - name: doc
+                      valuePath: $.key
+                      dataType: Record
+                    - name: fyLinked
+                      valuePath: $.fyGroups
+                      dataType: Record
+                    - name: years
+                      valuePath: $.full.years
+                      dataType: Record
+                    - name: files
+                      valuePath: $.fileGroups
+                      dataType: Record
+                  targetPath: $.gate
+                  code: |
+                    var inv = CultureInfo.InvariantCulture;
+                    var styles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal;
+                    Func<object, JsonElement> El = o => o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                    Func<JsonElement, string, JsonElement> Prop = (e, n) => {
+                      if (e.ValueKind == JsonValueKind.Object)
+                        foreach (var p in e.EnumerateObject())
+                          if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                      return default(JsonElement);
+                    };
+                    Func<JsonElement, string> Str = e =>
+                      e.ValueKind == JsonValueKind.String ? e.GetString()
+                      : (e.ValueKind == JsonValueKind.Undefined || e.ValueKind == JsonValueKind.Null) ? null
+                      : e.ToString();
+                    Func<JsonElement, JsonElement> Rec = e => { var at = Prop(e, "Attributes"); return at.ValueKind == JsonValueKind.Object ? at : e; };
+                    Func<JsonElement, string> Day = e => {
+                      DateTime t; var s = Str(e);
+                      return s != null && DateTime.TryParse(s, inv, styles, out t) ? t.ToString("yyyy-MM-dd", inv) : "";
+                    };
+                    Func<JsonElement, bool> True = e => e.ValueKind == JsonValueKind.True
+                      || (e.ValueKind == JsonValueKind.String && string.Equals(e.GetString(), "true", StringComparison.OrdinalIgnoreCase));
+                    // Items of a result set ({TotalCount, Items}) or of the first group of an association read ([{...}]).
+                    Func<JsonElement, JsonElement[]> Items = e => {
+                      if (e.ValueKind == JsonValueKind.Array) {
+                        var first = e.GetArrayLength() > 0 ? e[0] : default(JsonElement);
+                        e = first;
+                      }
+                      var it = Prop(e, "Items");
+                      return it.ValueKind == JsonValueKind.Array ? it.EnumerateArray().ToArray() : new JsonElement[0];
+                    };
+                    var a = Rec(El(doc));
+                    var states = new[] { "OPEN", "PAID", "PARTIALLYPAID", "CANCELLED", "RECURRING" };
+                    var st = Prop(a, "DocumentState"); var state = "";
+                    int k;
+                    if (st.ValueKind == JsonValueKind.Number && st.TryGetInt32(out k) && k >= 0 && k < states.Length) state = states[k];
+                    else { var s = (Str(st) ?? "").Trim().ToUpperInvariant(); state = int.TryParse(s, NumberStyles.Integer, inv, out k) && k >= 0 && k < states.Length ? states[k] : s; }
+                    if (state == "CANCELLED" || state == "RECURRING") return "STATE_SKIPPED";
+                    var linked = Items(El(fyLinked));
+                    var day = Day(Prop(a, "DocumentDate"));
+                    if (linked.Length > 0) {
+                      if (True(Prop(Rec(linked[0]), "IsClosed"))) return "CLOSED_YEAR";
+                    } else if (day != "") {
+                      foreach (var y in Items(El(years))) {
+                        var ya = Rec(y);
+                        var from = Day(Prop(ya, "StartDate")); var to = Day(Prop(ya, "EndDate"));
+                        if (True(Prop(ya, "IsClosed")) && from != "" && to != "" && string.CompareOrdinal(day, from) >= 0 && string.CompareOrdinal(day, to) <= 0)
+                          return "CLOSED_YEAR";
+                      }
+                    }
+                    if (Items(El(files)).Length == 0) return "NO_FILE";
+                    return "";
+                - type: If@1
+                  description: AB#8057 - the document may be re-recognized
+                  path: $.gate
+                  operator: Equals
+                  value: ""
+                  valueType: String
+                  transformations:
+                    - type: GetFileSystemContent@1
+                      description: AB#8057 - load the stored original
+                      rtIdPath: $.fileGroups[0].Items[0].RtId
+                      targetPath: $.pdf.data
+                    # >>> AB#8057 synced from document-analysis.yaml - do not edit here, run scripts/rerecognize_sync_nodes.py
+                    - type: PdfOcrExtraction@1
+                      description: Extract text from PDF
+                      path: $.pdf.data
+                      targetPath: $.ocr.result
+                      language: de
+                      maxFileSizeBytes: 10000000
+                      continueOnError: true
+                    - type: GetRtEntitiesByType@1
+                      description: Load our own company profile for invoice direction detection
+                      ckTypeId: Meshmakers.Accounting/CompanyProfile
+                      take: 1
+                      targetPath: $.company
+                    - type: AnthropicAiQuery@1
+                      description: Extract document metadata + detect direction
+                      apiKeyConfigurationName: AnthropicAiConfig
+                      path: $.ocr.result
+                      dataPaths:
+                        - $.company
+                      responseFormat: json
+                      temperature: 0.1
+                      question: >-
+                        Extract accounting document information from the text in "Main Content". "Additional Context" contains OUR OWN company master data (name, address, VAT id, email) — the company this bookkeeping is done for; it may be empty. The file may contain ONE invoice or SEVERAL independent invoices concatenated into a single PDF (typical: an Amazon marketplace order produces one invoice per seller for the same order; a scan batch combines several receipts). A new invoice starts ONLY where a new invoice number appears — a multi-page invoice is still ONE invoice; never split by page. Output "invoices" as an array with exactly one element per invoice found and "invoiceCount" as the number of elements. Per invoice also output "pageFrom" and "pageTo" (the 1-based first and last PDF page of that invoice) when the page boundaries are recognizable from the text (page markers, "Seite X von Y", repeated per-invoice headers); OMIT both keys when unsure. Apply ALL of the following rules to EACH invoice element independently. Every invoice has two parties: the ISSUER/SELLER (who sent the invoice and receives the money) and the RECIPIENT/BUYER (who is billed). ALWAYS put the issuer/seller into "vendor" and the recipient/buyer into "customer", regardless of which one is us. AB#8579 - OUR company is NEVER the vendor of an INCOMING invoice: when OUR company is the recipient/buyer (billed to, "Rechnung an", "Kunde"), the vendor is the OTHER party printed on the document - the company in the letterhead, the footer or legal block with its VAT id, or the holder of the bank account to pay to - and our company goes into "customer". Report the parties exactly as printed and never guess: an INCOMING result that still names OUR company as the vendor is not booked, it goes to the document inbox for a human to confirm the parties. Determine "documentType": if OUR company (from Additional Context) is the issuer/seller, set it to "OUTGOING"; if OUR company is the recipient/buyer, set it to "INCOMING"; OUR company is ONLY the legal entity named in Additional Context - a natural person who merely shares a surname or first name with our management or owners, or a company whose name is merely similar, is NOT our company, and an invoice or fee note (Honorarnote) issued by such a person TO our company is "INCOMING"; if Additional Context is empty or you cannot decide, use "INCOMING". Output documentType as exactly "INCOMING" or "OUTGOING". Set "extractionComplete" to true ONLY if you could extract documentNumber AND documentDate AND grossTotal for that invoice; otherwise false. A till receipt (Kassenbon, Kassabon, supermarket, restaurant or fuel receipt) usually prints no invoice number; for such a document the documentNumber is, in this order of preference: (1) a labelled receipt or invoice number ("Rechnung", "Rechnungsnummer", "Beleg-Nr.", "Belegnummer", "Bon-Nr.", "Bill", "Invoice No."); (2) the long numeric cash-register receipt identifier printed on its own line next to the RKSV / QR / "Registrierkassensicherheitsverordnung" text (Austria: typically 20 to 30 digits, e.g. 264200023330012510241330119650 - unique per receipt); (3) the till and receipt counters combined exactly as printed, e.g. "Kassa 001 Bon 9650". NEVER use a card payment reference (Trx Seq-Nr, Trx Ref. Nr, Autorisierungs-Nr, Trm-Id, AID, Acq-Id) or the receipt date as the document number, and never a booking, reservation, accommodation or folio number (e.g. "Accommodation 105697") when a labelled bill or invoice number ("BILL 55525") is printed on the document. OMIT documentNumber only when none of these is printed. Determine the ISO 4217 currency code of the invoice amounts (from the currency symbol or code printed next to the totals, e.g. "$"/"USD", "£"/"GBP", "CHF") and output it as "currency" ONLY when it is NOT euro; OMIT "currency" entirely for euro (€/EUR) invoices. IMPORTANT for date fields (documentDate, dueDate): use ISO format yyyy-MM-dd, and if a date is not present on the document, OMIT that key entirely — never output an empty string "" for a date. Apply this postal-address rule to BOTH vendor and customer independently: if street, zipcode AND city are clearly present for that party, put them in that party's "address" object and set that party's "addressComplete" to true. For address.countryCode use the ISO 3166-1 alpha-2 country code printed on the document; if none is printed, INFER it from the address, language or currency (default "AT" for an Austrian address) — whenever you emit an address you MUST also output a non-empty 2-letter countryCode, never leave it blank. If street, zipcode OR city is missing for a party, OMIT that party's "address" object entirely (set its addressComplete to false). Additionally, for the VENDOR only, when its address is incomplete put the full sender address exactly as printed on the document into "vendor.addressNotes" (omit vendor.addressNotes too if no address is visible at all). Emit "iban" for a party only when an IBAN is printed for it (this is usually the vendor's). Additionally, from the payment/bank-details section (the IBAN block, typically labelled "Account name", "Kontoinhaber" or "Konto lautend auf"), extract the bank ACCOUNT HOLDER name into that party's "accountName". This is the name under which the bank account is held; it is often a trading or brand name that DIFFERS from the letterhead companyName and it is what shows up on the bank statement as the counterpart. Omit "accountName" if no account holder name is printed in the bank section. For BOTH parties independently, extract the printed VAT identification number (UID, USt-IdNr., VAT Reg No, e.g. "ATU12345678", "DE123456789") into that party's "vatId" WITHOUT inner spaces; assign each VAT id to the correct party (the vendor's UID is usually in its letterhead, footer or legal block; the customer's next to the billing address); OMIT "vatId" when none is printed for that party. The amounts of ONE invoice must be internally consistent: netTotal + taxTotal MUST equal grossTotal, and in the tax-rate breakdown the netAmounts MUST sum to netTotal, the taxAmounts to taxTotal, and netAmount * taxRate/100 MUST equal taxAmount in every element. These identities are a CHECK on what you read, never a formula to fill a gap: copy every amount exactly as PRINTED, NEVER compute, derive or adjust a netTotal, taxTotal or grossTotal to make them hold, and OMIT a figure that is not printed. grossTotal is the final amount payable - the figure labelled "Summe", "Gesamt", "Gesamtbetrag", "Total", "zu zahlen", "Rechnungsbetrag" or the amount in the payment section (card, cash, Lieferando, PayPal) - never a net or a tax figure. AB#7999 - "zeroTotalConfirmed": output it as true ONLY when grossTotal is 0 because the document itself prints a final total payable of 0,00 (e.g. "Summe 0,00", "zu zahlen 0,00 EUR", "Total 0.00") or because a voucher, credit or prepayment printed on the document settles the full amount; OMIT the key in every other case (per invoice element). A grossTotal of 0 is NEVER a fallback for an amount you could not read: when no total is legible, OMIT grossTotal (and set extractionComplete to false) instead of writing 0, and never output zeroTotalConfirmed for it. Receipts commonly print a VAT table with one row per rate under column headings such as "MwSt | Netto | Steuer | Brutto" (the order varies, "USt"/"MwSt" may head either the rate or the tax column): assign each number of a row to the heading at the SAME position in the heading line, counting from the left, because OCR text often loses the column alignment; the row whose Brutto equals the printed total confirms the assignment. When the numbers you read do not satisfy the identities, re-read the totals block and the VAT table instead of changing a number. ALWAYS output "taxBreakdown" as an array with exactly one element per tax rate of that invoice. The COMMON case is an invoice with ONE tax rate (e.g. "zzgl. 20 % USt", "MwSt 20 %", "USt 165,00"): it MUST yield exactly ONE element carrying that rate, netTotal as "netAmount" and taxTotal as "taxAmount" - a one-element array is REQUIRED here, never omit it. A restaurant bill with food at 10 % and drinks at 20 % yields two elements, a supermarket receipt with 10 %/13 %/20 % lines three. AB#8007 - Austrian VAT rates are 20 %, 13 % and 10 %, and for documents dated from 1 July 2026 also 4.9 % for selected foods (milk, eggs, bread, some fruit and vegetables; printed e.g. as "4,9 %", "4,9" or "C 4,9%"): copy such a row with taxRate 4.9 exactly - never round it to 5 or 10 and never merge it into the 10 % row; a supermarket receipt from July 2026 on often prints 4.9 %/10 %/20 % rows. Each element carries "taxRate" (the rate in percent), "netAmount" and "taxAmount" exactly as printed for that rate. AB#8010 - a fuel, toll or service-card statement (UNION TANK, DKV, Shell, ASFINAG, toll operators) often lists the VAT of SEVERAL COUNTRIES in one document, one block per country (e.g. "AUT 20 % ... HRV 25 % ..."): output one element per country AND rate and add "countryCode" (ISO 3166-1 alpha-2, convert "AUT" to "AT", "HRV" to "HR", "DEU" to "DE" etc.) to every element of such a statement, exactly as the country is printed next to the rows; never merge rows of different countries, and OMIT "countryCode" when the document does not print a country per row (the normal single-country invoice). Deposit returns, empties, returned goods, vouchers and other credits (Pfand, Leergut, Leergutbon, Gutschrift, Rabatt, Retoure) are NEGATIVE amounts and belong to the invoice: keep their minus sign, keep a rate row whose amounts are negative (a returned-empties row at 0 % or 20 % is common on a supermarket receipt), and compute netTotal and taxTotal as the SIGNED sum over ALL rows including the negative ones - NEVER take a single positive row as netTotal when the table prints more than one row, and NEVER drop a negative row because its amounts are small or negative. The grossTotal is the amount actually payable after those credits (the printed "Summe"/total), so netTotal + taxTotal must equal that reduced figure. Whenever you output netTotal or taxTotal you MUST also output "taxBreakdown" with at least one element - a tax amount or a tax rate printed anywhere on the invoice, even as a single line, IS the one rate block. There is NO flat tax-rate field on the invoice - the rate(s) live in the breakdown only. The ONLY case in which "taxBreakdown" is omitted: the document prints NEITHER a tax rate NOR a tax amount anywhere (a bare gross-only receipt with just a total). Never derive a breakdown from line items when no rate and no tax amount is printed. NEVER combine a net, tax or gross figure read on one page of the file with figures read on another page — an image-only PDF assembled from several phone photos puts a different receipt on every page. Read the total block of ONE invoice as a unit, and OMIT a figure you cannot find in that same block rather than substituting one from elsewhere in the file. AB#5773 - the Austrian invoice requirements (Paragraph 11 UStG) need the following additional keys per invoice; OMIT every one of them that is not printed, never invent or derive one. "serviceDescription": a short description of the delivered goods or the rendered service as printed (the customary trade name of the goods or the kind of service, e.g. "Beratungsleistung März 2026", "Büromaterial", "Speisen und Getränke"), at most 200 characters. "serviceQuantity": the quantity of the goods or the extent of the service exactly as printed (e.g. "3 Stk", "12,5 h", "1 Pauschale"); for several line items the quantity of the first item is enough. "deliveryDate": the date of the delivery or service (Lieferdatum, Leistungsdatum) in yyyy-MM-dd; when a service PERIOD is printed (Leistungszeitraum, "März 2026", "01.03.-31.03.2026") output "deliveryPeriod": { "from": "yyyy-MM-dd", "to": "yyyy-MM-dd" } instead. NEVER copy the invoice date into deliveryDate: when the document states that the delivery or service date equals the invoice date (e.g. "Lieferdatum = Rechnungsdatum", "Leistungsdatum entspricht Rechnungsdatum", "Liefer-/Leistungsdatum: siehe Rechnungsdatum") put that statement as printed into "deliveryDateNote". "reverseChargeNote": the printed note that the tax liability passes to the recipient or that an intra-community supply is tax-exempt (e.g. "Übergang der Steuerschuld auf den Leistungsempfänger", "Reverse Charge", "steuerfreie innergemeinschaftliche Lieferung") exactly as printed. "taxExemptionNote": a printed statement that the invoice carries no VAT for another reason (e.g. "Kleinunternehmer gem. § 6 Abs. 1 Z 27 UStG", "umsatzsteuerbefreit") exactly as printed. "vendor.countryCode" (AB#7512; a key of the "vendor" object itself, next to companyName and vatId, NOT inside "address"): the ISO 3166-1 alpha-2 country of the ISSUER/SELLER, output ALWAYS when it is printed or can be inferred - even when the vendor "address" object is omitted because street, zipcode or city is missing: the country printed in the sender address or letterhead, else the country of the vendor VAT id prefix (e.g. "DE123456789" -> "DE", "IE6388047V" -> "IE"), else inferred from the address, language or currency; OMIT it only when nothing at all points to a country - never guess "AT" without a clue. It is the country of the issuer, not of the recipient. AB#7512 - VAT facts: copy "reverseChargeNote" and "taxExemptionNote" exactly as printed whenever they are on the document (e.g. "Reverse Charge", "Tax to be paid on reverse charge basis", "Steuerschuldnerschaft des Leistungsempfängers", "Übergang der Steuerschuld", "Kleinunternehmer", an exemption note) - they are stored on the document. AB#7512 - tax amounts: airline and travel "taxes, fees and charges" (e.g. "Steuern, Gebühren und Entgelte", "Taxes/Fees/Charges", airport, security and fuel surcharges) are NOT value added tax: never put them into the taxAmount of a tax-rate row or into taxTotal; a row with taxRate 0 (a 0 % row, a tax-exempt or reverse-charge row) NEVER carries a taxAmount other than 0. Only an explicitly labelled VAT / MwSt / USt / UID amount is a tax amount. Put the recipient/buyer name into customer.companyName (a person's name when the recipient is a person) whenever a recipient is printed. AB#7856 - "cashDiscount": when the payment terms grant a cash discount for early payment (Skonto, "cash discount", "prompt payment discount"; e.g. "Terms: 14 Days From Invoice Date 3 % Skonto", "zahlbar innerhalb 14 Tagen mit 3 % Skonto", "10 Tage 2 % Skonto, 30 Tage netto") output "cashDiscount": { "percent": <the discount in percent as a number, e.g. 3>, "days": <the number of days after the invoice date within which the discount applies, as an integer, e.g. 14> }. With several discount tiers take the first tier (the shortest period). OMIT "cashDiscount" when the document prints no cash discount, only a net payment term ("30 Tage netto", "due on receipt"), a discount amount without a percent, or no number of days; never derive the discount from a difference of amounts and never output a percent of 0.
+                      jsonFormatSample: '{ "invoiceCount": 1, "invoices": [ { "extractionComplete": true, "documentType": "INCOMING", "documentNumber": "RE-2026-001", "documentDate": "2026-03-01", "dueDate": "2026-03-31", "pageFrom": 1, "pageTo": 2, "vendor": { "companyName": "Supplier GmbH", "iban": "AT123456789012345678", "accountName": "Supplier Trading Ltd", "vatId": "ATU12345678", "countryCode": "AT", "address": { "street": "Hauptstrasse 1", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "customer": { "companyName": "Our Company GmbH", "vatId": "ATU87654321", "address": { "street": "Firmianstrasse 31A", "zipcode": "5020", "city": "Salzburg", "countryCode": "AT" }, "addressComplete": true }, "grossTotal": 1160.00, "netTotal": 1000.00, "taxTotal": 160.00, "taxBreakdown": [ { "taxRate": 10.0, "netAmount": 400.00, "taxAmount": 40.00 }, { "taxRate": 20.0, "netAmount": 600.00, "taxAmount": 120.00 } ], "serviceDescription": "Consulting services", "serviceQuantity": "10 h", "deliveryPeriod": { "from": "2026-02-01", "to": "2026-02-28" }, "currency": "USD", "cashDiscount": { "percent": 3, "days": 14 } } ] }'
+                      targetPath: $.ai.result
+                      continueOnError: true
+                    # <<< AB#8057 synced
+                    # The base64 original is not needed any more and would otherwise stay for the rest of the call.
+                    - type: SetPrimitiveValue@1
+                      description: AB#8057 - release the original
+                      targetPath: $.pdf.data
+                      valueType: String
+                      value: ""
+                    # Tested by scripts/rerecognize_documents_test.py (located by this description).
+                    - type: ExecuteCSharp@1
+                      description: AB#8057 re-recognition whitelist - pick the part, rows, compare, history
+                      timeoutMs: 30000
+                      usings:
+                        - System
+                        - System.Linq
+                        - System.Text.Json
+                        - System.Collections.Generic
+                        - System.Globalization
+                      returnType: String
+                      arguments:
+                        - name: doc
+                          valuePath: $.key
+                          dataType: Record
+                        - name: ai
+                          valuePath: $.ai.result
+                          dataType: Record
+                        - name: ocr
+                          valuePath: $.ocr.result
+                          dataType: String
+                        - name: fyLinked
+                          valuePath: $.fyGroups
+                          dataType: Record
+                        - name: txLinks
+                          valuePath: $.txGroups
+                          dataType: Record
+                        - name: years
+                          valuePath: $.full.years
+                          dataType: Record
+                        - name: vies
+                          valuePath: $.full.viesLoad
+                          dataType: Record
+                        - name: by
+                          valuePath: $.full.by
+                          dataType: String
+                        - name: now
+                          valuePath: $.full.now
+                          dataType: String
+                      targetPath: $.mergeJson
+                      code: |
+                        var inv = CultureInfo.InvariantCulture;
+                        var styles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal;
+                        Func<object, JsonElement> El = o => o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                        Func<JsonElement, string, JsonElement> Prop = (e, n) => {
+                          if (e.ValueKind == JsonValueKind.Object)
+                            foreach (var p in e.EnumerateObject())
+                              if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                          return default(JsonElement);
+                        };
+                        Func<JsonElement, string> Str = e =>
+                          e.ValueKind == JsonValueKind.String ? e.GetString()
+                          : (e.ValueKind == JsonValueKind.Undefined || e.ValueKind == JsonValueKind.Null) ? null
+                          : e.ToString();
+                        Func<JsonElement, JsonElement> Rec = e => { var at = Prop(e, "Attributes"); return at.ValueKind == JsonValueKind.Object ? at : e; };
+                        Func<JsonElement, double?> Num = e => {
+                          double v;
+                          if (e.ValueKind == JsonValueKind.Number && e.TryGetDouble(out v)) return v;
+                          if (e.ValueKind == JsonValueKind.String && double.TryParse(e.GetString(), NumberStyles.Float, inv, out v)) return v;
+                          return null;
+                        };
+                        Func<JsonElement, string> Day = e => {
+                          DateTime t; var s = Str(e);
+                          return s != null && DateTime.TryParse(s, inv, styles, out t) ? t.ToString("yyyy-MM-dd", inv) : "";
+                        };
+                        Func<JsonElement, bool> True = e => e.ValueKind == JsonValueKind.True
+                          || (e.ValueKind == JsonValueKind.String && string.Equals(e.GetString(), "true", StringComparison.OrdinalIgnoreCase));
+                        Func<JsonElement, string[], string> EnumName = (e, names) => {
+                          int i;
+                          if (e.ValueKind == JsonValueKind.Number) return e.TryGetInt32(out i) && i >= 0 && i < names.Length ? names[i] : "";
+                          var s = (Str(e) ?? "").Trim().ToUpperInvariant();
+                          if (s == "") return "";
+                          if (int.TryParse(s, NumberStyles.Integer, inv, out i)) return i >= 0 && i < names.Length ? names[i] : "";
+                          return names.Contains(s) ? s : "";
+                        };
+                        Func<JsonElement, JsonElement[]> Arr = e => e.ValueKind == JsonValueKind.Array ? e.EnumerateArray().ToArray() : new JsonElement[0];
+                        Func<JsonElement, JsonElement[]> Items = e => {
+                          if (e.ValueKind == JsonValueKind.Array) e = e.GetArrayLength() > 0 ? e[0] : default(JsonElement);
+                          return Arr(Prop(e, "Items"));
+                        };
+                        Func<double, double> R2 = v => Math.Round(v, 2, MidpointRounding.AwayFromZero);
+                        Func<string, string> NormNo = s => new string((s ?? "").ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+                        Func<string, string> NormVat = s => new string((s ?? "").ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+                        Func<string, Dictionary<string, object>> Fail = code => new Dictionary<string, object> { { "status", "failed" }, { "code", code } };
+                        Func<Dictionary<string, object>, string> Out = o => JsonSerializer.Serialize(o);
+
+                        // AB#8010 row country - the SAME mapping as the Document Analysis check script (RowCountry).
+                        Func<JsonElement, string> RowCountry = e => {
+                          var pv = Prop(e, "countryCode");
+                          if (pv.ValueKind != JsonValueKind.String) return "";
+                          var c = (pv.GetString() ?? "").Trim().ToUpperInvariant();
+                          if (c.Length == 3) {
+                            var a3 = "AUT=AT,BEL=BE,BGR=BG,HRV=HR,CYP=CY,CZE=CZ,DNK=DK,EST=EE,FIN=FI,FRA=FR,DEU=DE,GRC=GR,HUN=HU,IRL=IE,ITA=IT,LVA=LV,LTU=LT,LUX=LU,MLT=MT,NLD=NL,POL=PL,PRT=PT,ROU=RO,SVK=SK,SVN=SI,ESP=ES,SWE=SE,CHE=CH,GBR=GB,NOR=NO,LIE=LI";
+                            var at = a3.IndexOf(c + "=", StringComparison.Ordinal);
+                            return at >= 0 ? a3.Substring(at + 4, 2) : "";
+                          }
+                          if (c.Length != 2 || !char.IsLetter(c[0]) || !char.IsLetter(c[1])) return "";
+                          return c == "EL" ? "GR" : c == "UK" ? "GB" : c;
+                        };
+                        // A tax row: rate, net, tax, country ("" = Austria / the document's country).
+                        Func<double, double, double, string, Tuple<double, double, double, string>> Row = (r, n, t, c) => Tuple.Create(r, n, t, c);
+                        Func<IEnumerable<Tuple<double, double, double, string>>, string> RowsKey = rows => string.Join("|", rows
+                          .Select(x => (x.Item4 == "AT" ? "" : x.Item4) + ";" + x.Item1.ToString("0.00", inv) + ";" + x.Item2.ToString("0.00", inv) + ";" + x.Item3.ToString("0.00", inv))
+                          .OrderBy(x => x, StringComparer.Ordinal));
+                        Func<List<Tuple<double, double, double, string>>, object> RowsPlain = rows => rows.Count == 0 ? null : (object)rows.Select(x => {
+                          var o = new Dictionary<string, object> { { "taxRate", x.Item1 }, { "netAmount", x.Item2 }, { "taxAmount", x.Item3 } };
+                          if (x.Item4 != "") o["countryCode"] = x.Item4;
+                          return o;
+                        }).ToList();
+
+                        var d = El(doc); var a = Rec(d);
+                        var number = Str(Prop(a, "DocumentNumber")) ?? "";
+
+                        // --- 0. was there anything to read (AB#8070) ---------------------------------------------
+                        // An original the OCR reads (almost) nothing from - a thumbnail-sized photo in a PDF, a blank
+                        // scan, a failed OCR - gives the AI no text; whatever it answers is not read from the document.
+                        // 20 letters/digits: a real receipt has hundreds, the observed unreadable photos had 3 characters.
+                        const int MinTextChars = 20;
+                        if ((ocr ?? "").Count(char.IsLetterOrDigit) < MinTextChars) return Out(Fail("NO_TEXT"));
+                        // The AI node continues on error: no answer at all is a failed AI call, not "no invoice".
+                        var aiEl = El(ai);
+                        if (aiEl.ValueKind != JsonValueKind.Object) return Out(Fail("AI_FAILED"));
+
+                        // --- 1. which part of the file is this document ------------------------------------------
+                        var invoices = Arr(Prop(aiEl, "invoices")).Where(x => x.ValueKind == JsonValueKind.Object).ToArray();
+                        if (invoices.Length == 0) return Out(Fail("NO_INVOICE"));
+                        var srcPages = (Str(Prop(a, "SourcePages")) ?? "").Trim();
+                        Func<JsonElement, bool> SameNumber = x => NormNo(number) != "" && NormNo(Str(Prop(x, "documentNumber"))) == NormNo(number);
+                        JsonElement pick = default(JsonElement);
+                        if (invoices.Length == 1) {
+                          // A split part (SourcePages set) whose file now reads as ONE invoice of another number is not this part.
+                          if (srcPages != "" && !SameNumber(invoices[0])) return Out(Fail("PART_UNKNOWN"));
+                          pick = invoices[0];
+                        } else {
+                          Func<double?, double?, JsonElement[]> ByPages = (pf, pt) => pf == null ? new JsonElement[0]
+                            : invoices.Where(x => Num(Prop(x, "pageFrom")) == pf && (Num(Prop(x, "pageTo")) ?? Num(Prop(x, "pageFrom"))) == (pt ?? pf)).ToArray();
+                          JsonElement[] hits = new JsonElement[0];
+                          if (srcPages != "") {
+                            var parts = srcPages.Split('-');
+                            double pf, pt;
+                            if (double.TryParse(parts[0], NumberStyles.Integer, inv, out pf))
+                              hits = ByPages(pf, parts.Length > 1 && double.TryParse(parts[1], NumberStyles.Integer, inv, out pt) ? pt : pf);
+                          }
+                          if (hits.Length != 1) hits = ByPages(Num(Prop(a, "PageFrom")), Num(Prop(a, "PageTo")));
+                          if (hits.Length != 1) hits = invoices.Where(SameNumber).ToArray();
+                          if (hits.Length != 1) {
+                            var g0 = Num(Prop(a, "GrossTotal"));
+                            hits = g0 == null ? new JsonElement[0] : invoices.Where(x => { var gx = Num(Prop(x, "grossTotal")); return gx != null && Math.Abs(gx.Value - g0.Value) <= 0.005; }).ToArray();
+                          }
+                          if (hits.Length != 1) return Out(Fail("PART_UNKNOWN"));
+                          pick = hits[0];
+                        }
+
+                        // --- 2. the new values -------------------------------------------------------------------
+                        var gross = Num(Prop(pick, "grossTotal"));
+                        // AB#7999: a 0 counts only when the extraction confirms the printed zero.
+                        if (gross == null || (gross.Value == 0 && !True(Prop(pick, "zeroTotalConfirmed")))) return Out(Fail("NO_GROSS"));
+                        var net = Num(Prop(pick, "netTotal"));
+                        var tax = Num(Prop(pick, "taxTotal"));
+                        // Rows: the rules of the Document Analysis check script (AB#5403): only complete blocks are rows,
+                        // tolerances 0.05 (rate, rows' gross) and 0.02 (rows' net); the sums are judged only when EVERY
+                        // block is complete and the total was extracted.
+                        const double SumTol = 0.02, RateTol = 0.05, GrossTol = 0.05;
+                        var rows = new List<Tuple<double, double, double, string>>();
+                        int blocks = 0; double sNet = 0, sTax = 0, sGross = 0; var rateOff = false;
+                        foreach (var b in Arr(Prop(pick, "taxBreakdown"))) {
+                          if (b.ValueKind != JsonValueKind.Object) continue;
+                          blocks++;
+                          var r = Num(Prop(b, "taxRate")); var n = Num(Prop(b, "netAmount")); var t = Num(Prop(b, "taxAmount"));
+                          if (r == null || n == null || t == null) continue;
+                          rows.Add(Row(r.Value, n.Value, t.Value, RowCountry(b)));
+                          sNet += n.Value; sTax += t.Value; sGross += n.Value + t.Value;
+                          if (Math.Abs(n.Value * r.Value / 100.0 - t.Value) > RateTol) rateOff = true;
+                        }
+                        var allComplete = blocks > 0 && rows.Count == blocks;
+                        // PO decision (Frigg, PR #134): a document that is PAID or linked to a bank transaction keeps its stored gross - the
+                        // payment was matched against it. The new rows / net / tax are taken only when they add up to the STORED gross
+                        // (same tolerances); otherwise nothing changes and the document is reported GROSS_DIFFERS.
+                        var linkedTx = Items(El(txLinks)).Length > 0;
+                        var storedGross = Num(Prop(a, "GrossTotal"));
+                        var paid = EnumName(Prop(a, "DocumentState"), new[] { "OPEN", "PAID", "PARTIALLYPAID", "CANCELLED", "RECURRING" }) == "PAID";
+                        var grossKept = (linkedTx || paid) && storedGross != null && Math.Abs(storedGross.Value - gross.Value) > 0.004;
+                        if (grossKept) {
+                          gross = storedGross;
+                          if (rows.Count == 0 && (net == null || tax == null)) return Out(Fail("GROSS_DIFFERS"));
+                        }
+                        var netOff = allComplete && net != null && net.Value != 0 && Math.Abs(sNet - net.Value) > SumTol;
+                        var grossOff = allComplete && gross.Value != 0 && Math.Abs(sGross - gross.Value) > GrossTol;
+                        if (rows.Count > 0 && (rateOff || netOff || grossOff)) return Out(Fail(grossKept ? "GROSS_DIFFERS" : "ROWS_CONTRADICTORY"));
+                        if (allComplete) {
+                          if (net == null) net = R2(sNet);
+                          if (tax == null) tax = R2(sTax);
+                        }
+                        // Identity (a) of Document Analysis: net + tax = gross.
+                        if (net != null && tax != null && Math.Abs(net.Value + tax.Value - gross.Value) > SumTol) return Out(Fail(grossKept ? "GROSS_DIFFERS" : "TOTALS_CONTRADICTORY"));
+                        var curRaw = (Str(Prop(pick, "currency")) ?? "").Trim().ToUpperInvariant();
+                        var newCurrency = curRaw.Length == 3 && curRaw.All(char.IsLetter) ? curRaw : "";
+                        DateTime dt;
+                        Func<string, string> IsoDay = s => s != null && DateTime.TryParseExact(s.Trim(), "yyyy-MM-dd", inv, styles, out dt) ? dt.ToString("yyyy-MM-dd", inv) : "";
+                        var newDate = IsoDay(Str(Prop(pick, "documentDate")));
+                        var newDue = IsoDay(Str(Prop(pick, "dueDate")));
+
+                        // --- 3. the stored values ----------------------------------------------------------------
+                        var oldGross = Num(Prop(a, "GrossTotal")); var oldNet = Num(Prop(a, "NetTotal")); var oldTax = Num(Prop(a, "TaxTotal"));
+                        var oldRows = new List<Tuple<double, double, double, string>>();
+                        foreach (var e in Arr(Prop(a, "TaxBreakdown"))) {
+                          var ra = Rec(e);
+                          var r = Num(Prop(ra, "TaxRate")); var n = Num(Prop(ra, "NetAmount")); var t = Num(Prop(ra, "TaxAmount"));
+                          if (r == null && n == null && t == null) continue;
+                          oldRows.Add(Row(r ?? 0, n ?? 0, t ?? 0, RowCountry(ra)));
+                        }
+                        var oldCurrencyRaw = Str(Prop(a, "Currency"));
+                        var oldCurrency = string.IsNullOrWhiteSpace(oldCurrencyRaw) ? "EUR" : oldCurrencyRaw.Trim().ToUpperInvariant();
+                        var oldDate = Day(Prop(a, "DocumentDate")); var oldDue = Day(Prop(a, "DueDate"));
+
+                        // --- 4. what changes (never a clear: an absent new value keeps the stored one) -------------
+                        var changed = new List<string>(); var notes = new List<string>();
+                        if (grossKept) notes.Add("GROSS_KEPT");
+                        var prev = new Dictionary<string, object>(); var next = new Dictionary<string, object>();
+                        var write = new Dictionary<string, object>();
+                        Func<double?, double?, bool> Differs = (o, n) => n != null && (o == null || Math.Abs(o.Value - n.Value) > 0.004);
+                        Action<string, double?, double?> Amount = (field, o, n) => {
+                          if (!Differs(o, n)) return;
+                          changed.Add(field); prev[field] = o; next[field] = R2(n.Value); write[field] = R2(n.Value);
+                        };
+                        Amount("GrossTotal", oldGross, gross);
+                        Amount("NetTotal", oldNet, net);
+                        Amount("TaxTotal", oldTax, tax);
+                        if (rows.Count > 0 && RowsKey(rows) != RowsKey(oldRows)) {
+                          changed.Add("TaxBreakdown"); prev["TaxBreakdown"] = RowsPlain(oldRows); next["TaxBreakdown"] = RowsPlain(rows);
+                          write["TaxBreakdown"] = rows.Select(x => {
+                            var at = new Dictionary<string, object> { { "TaxRate", x.Item1 }, { "NetAmount", x.Item2 }, { "TaxAmount", x.Item3 } };
+                            if (x.Item4 != "") at["CountryCode"] = x.Item4;
+                            return new Dictionary<string, object> { { "CkRecordId", "Meshmakers.Accounting/TaxBreakdownEntry" }, { "Attributes", at } };
+                          }).ToList();
+                        }
+                        // The AI omits the currency for EUR; an omitted currency never turns a foreign document into EUR.
+                        if (newCurrency != "" && newCurrency != oldCurrency) {
+                          changed.Add("Currency"); prev["Currency"] = string.IsNullOrWhiteSpace(oldCurrencyRaw) ? null : oldCurrencyRaw; next["Currency"] = newCurrency; write["Currency"] = newCurrency;
+                        }
+                        if (newDate != "" && newDate != oldDate) {
+                          // The document stays in its fiscal year: the linked year's range, else no closed year.
+                          var ok = true;
+                          var linked = Items(El(fyLinked));
+                          if (linked.Length > 0) {
+                            var la = Rec(linked[0]); var lf = Day(Prop(la, "StartDate")); var lt = Day(Prop(la, "EndDate"));
+                            ok = lf != "" && lt != "" && string.CompareOrdinal(newDate, lf) >= 0 && string.CompareOrdinal(newDate, lt) <= 0;
+                          } else {
+                            foreach (var y in Items(El(years))) {
+                              var ya = Rec(y); var yf = Day(Prop(ya, "StartDate")); var yt = Day(Prop(ya, "EndDate"));
+                              if (True(Prop(ya, "IsClosed")) && yf != "" && yt != "" && string.CompareOrdinal(newDate, yf) >= 0 && string.CompareOrdinal(newDate, yt) <= 0) ok = false;
+                            }
+                          }
+                          if (ok) { changed.Add("DocumentDate"); prev["DocumentDate"] = oldDate == "" ? null : oldDate; next["DocumentDate"] = newDate; write["DocumentDate"] = newDate + "T00:00:00Z"; }
+                          else notes.Add("DATE_OTHER_YEAR");
+                        }
+                        if (newDue != "" && newDue != oldDue) {
+                          changed.Add("DueDate"); prev["DueDate"] = oldDue == "" ? null : oldDue; next["DueDate"] = newDue; write["DueDate"] = newDue + "T00:00:00Z";
+                        }
+
+                        // --- 5. the VIES verdict the derivation reads (its route loads the same cache) ---------------
+                        var outgoing = EnumName(Prop(a, "DocumentType"), new[] { "INCOMING", "OUTGOING" }) == "OUTGOING";
+                        var cpVat = NormVat(Str(Prop(Rec(Prop(a, outgoing ? "Customer" : "Vendor")), "TaxIdentificationNumber")));
+                        Dictionary<string, object> viesOut = null;
+                        if (cpVat != "") {
+                          foreach (var v in Items(El(vies))) {
+                            var va = Rec(v);
+                            if (NormVat(Str(Prop(va, "VatIdNormalized"))) != cpVat) continue;
+                            var vs = EnumName(Prop(va, "VatIdStatus"), new[] { "VALID", "INVALID", "NOTVERIFIED" });
+                            if (vs != "") viesOut = new Dictionary<string, object> { { "Status", vs }, { "Party", outgoing ? "customer" : "vendor" } };
+                            break;
+                          }
+                        }
+
+                        var result = new Dictionary<string, object> { { "changed", changed }, { "notes", notes } };
+                        if (viesOut != null) result["vies"] = viesOut;
+                        if (changed.Count == 0) {
+                          // AB#8070: say why nothing changed - still no tax rate read (the reason the document stays in
+                          // "USt prüfen"), or the stored values were read again.
+                          result["status"] = "unchanged";
+                          result["code"] = rows.Count == 0 ? "NO_ROWS" : "SAME_VALUES";
+                          return Out(result);
+                        }
+
+                        // --- 6. the history entry: previous values of the changed fields + the VAT fields ------------
+                        // The enum values as stored (key or name) - the app normalises them; the rule engine's names stay in
+                        // derive-vat-treatment.yaml only (one copy of the rules).
+                        Func<JsonElement, object> Raw = e => {
+                          int i;
+                          if (e.ValueKind == JsonValueKind.Number) return e.TryGetInt32(out i) ? (object)i : null;
+                          var s = Str(e); return string.IsNullOrWhiteSpace(s) ? null : s;
+                        };
+                        prev["VatTreatment"] = Raw(Prop(a, "VatTreatment"));
+                        prev["VatTreatmentSource"] = Raw(Prop(a, "VatTreatmentSource"));
+                        prev["VatTreatmentReason"] = Str(Prop(a, "VatTreatmentReason"));
+                        prev["ReverseChargeRate"] = Num(Prop(a, "ReverseChargeRate"));
+                        var entries = new List<object> {
+                          new Dictionary<string, object> { { "at", now ?? "" }, { "by", by ?? "" }, { "source", "rerecognize" }, { "changed", changed }, { "previous", prev }, { "next", next } }
+                        };
+                        try {
+                          var hist = Str(Prop(a, "ExtractionHistory"));
+                          if (!string.IsNullOrWhiteSpace(hist))
+                            using (var hd = JsonDocument.Parse(hist))
+                              foreach (var e in Arr(Prop(hd.RootElement, "entries")))
+                                if (entries.Count < 10) entries.Add(e.Clone());
+                        } catch (JsonException) { /* an unreadable history is replaced, never a reason to fail */ }
+                        write["ExtractionHistory"] = JsonSerializer.Serialize(new Dictionary<string, object> { { "v", 1 }, { "entries", entries } });
+                        result["status"] = "updated";
+                        result["write"] = write;
+                        return Out(result);
+                    - type: WriteJson@1
+                      description: AB#8057 - parse the whitelist result
+                      targetPath: $.rr
+                      jsonStringPath: $.mergeJson
+
+                    # --- 2. Write ONLY the whitelisted fields (an absent path skips the attribute) ---------------
+                    - type: If@1
+                      description: AB#8057 - something changed - write the whitelisted fields and the history
+                      path: $.rr.status
+                      operator: Equals
+                      value: updated
+                      valueType: String
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          description: AB#8057 - the whitelisted fields of this document
+                          targetPath: $.rrUpdate
+                          targetValueKind: Array
+                          targetValueWriteMode: Overwrite
+                          updateKind: Update
+                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                          rtIdPath: $.key.RtId
+                          attributeUpdates:
+                            - attributeName: GrossTotal
+                              attributeValueType: Double
+                              valuePath: $.rr.write.GrossTotal
+                            - attributeName: NetTotal
+                              attributeValueType: Double
+                              valuePath: $.rr.write.NetTotal
+                            - attributeName: TaxTotal
+                              attributeValueType: Double
+                              valuePath: $.rr.write.TaxTotal
+                            - attributeName: TaxBreakdown
+                              attributeValueType: RecordArray
+                              valuePath: $.rr.write.TaxBreakdown
+                            - attributeName: Currency
+                              attributeValueType: String
+                              valuePath: $.rr.write.Currency
+                            - attributeName: DocumentDate
+                              attributeValueType: DateTime
+                              valuePath: $.rr.write.DocumentDate
+                            - attributeName: DueDate
+                              attributeValueType: DateTime
+                              valuePath: $.rr.write.DueDate
+                            - attributeName: ExtractionHistory
+                              attributeValueType: String
+                              valuePath: $.rr.write.ExtractionHistory
+                        - type: ApplyChanges@2
+                          description: AB#8057 - persist the whitelisted fields
+                          entityUpdatesPath: $.rrUpdate
+
+                    # --- 3. The VAT derivation for this document (event door, like Document Analysis) ------------
+                    # Not after a failed recognition (nothing new to derive from). The document is re-read so the rules
+                    # see exactly what is stored now; MANUAL treatments come back as "manual" and are not written.
+                    - type: If@1
+                      description: AB#8057 - the recognition produced a result - derive the VAT treatment
+                      path: $.rr.status
+                      operator: NotEquals
+                      value: failed
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          description: AB#8057 - wrap the rtId into an array for GetRtEntitiesById
+                          targetPath: $.rrIds
+                          valuePath: $.key.RtId
+                          valueType: String
+                          targetValueKind: Array
+                        - type: GetRtEntitiesById@1
+                          description: AB#8057 - re-read the document as stored now
+                          ckTypeId: Meshmakers.Accounting/AccountingDocument
+                          rtIdsPath: $.rrIds
+                          targetPath: $.current
+                        - type: SelectByPath@1
+                          description: AB#8057 - the stored document and its VIES verdict for the rule engine
+                          selectPath:
+                            - path: $.current.Items[0]
+                              targetPath: $.vatIn.document
+                            - path: $.rr.vies
+                              targetPath: $.vatIn.document.Vies
+                        - type: SetPrimitiveValue@1
+                          description: AB#8057 - tell the rule engine this is the event door (one document)
+                          targetPath: $.vatIn.mode
+                          value: event
+                          valueType: String
+                        - type: ToPipelineDataEvent@1
+                          description: AB#8057 - derive the VAT treatment (Derive VAT Treatment pipeline of this DataFlow)
+                          targetPipelineRtId: aa0000000000000000751301
+                          path: $.vatIn
+                          targetPath: $.input
+                          awaitResult: true
+                          timeoutSeconds: 60
+                          resultTargetPath: $.vatOut
+                        # The same write as the route of the Derive VAT Treatment pipeline: only when the answer carries
+                        # a write (an absent path skips the attribute, a JSON null clears it).
+                        - type: If@1
+                          description: AB#8057 - the derivation changes the derived fields
+                          path: $.vatOut.vat.summary.writeCount
+                          operator: GreaterThan
+                          value: 0
+                          valueType: Int64
+                          transformations:
+                            - type: CreateUpdateInfo@1
+                              description: AB#8057 - the derived VAT fields of this document
+                              targetPath: $.vatUpdate
+                              targetValueKind: Array
+                              targetValueWriteMode: Overwrite
+                              updateKind: Update
+                              ckTypeId: Meshmakers.Accounting/AccountingDocument
+                              rtIdPath: $.key.RtId
+                              attributeUpdates:
+                                - attributeName: VatTreatment
+                                  attributeValueType: Enum
+                                  valuePath: $.vatOut.vat.writes[0].treatment
+                                - attributeName: VatTreatmentSource
+                                  attributeValueType: Enum
+                                  valuePath: $.vatOut.vat.writes[0].source
+                                - attributeName: VatTreatmentReason
+                                  attributeValueType: String
+                                  valuePath: $.vatOut.vat.writes[0].reason
+                                - attributeName: ReverseChargeRate
+                                  attributeValueType: Double
+                                  valuePath: $.vatOut.vat.writes[0].rate
+                            - type: ApplyChanges@2
+                              description: AB#8057 - persist the derived VAT fields
+                              entityUpdatesPath: $.vatUpdate
+
+                # --- 4. The result of this document ---------------------------------------------------------------
+                - type: SelectByPath@1
+                  description: AB#8057 - the result line of this document
+                  selectPath:
+                    - path: $.key.RtId
+                      targetPath: $.res.id
+                    - path: $.key.Attributes.DocumentNumber
+                      targetPath: $.res.number
+                    - path: $.gate
+                      targetPath: $.res.gate
+                    - path: $.rr.status
+                      targetPath: $.res.status
+                    - path: $.rr.code
+                      targetPath: $.res.code
+                    - path: $.rr.changed
+                      targetPath: $.res.changed
+                    - path: $.rr.notes
+                      targetPath: $.res.notes
+                    - path: $.vatOut.vat.results[0].treatment
+                      targetPath: $.res.vatTreatment
+                    - path: $.vatOut.vat.results[0].status
+                      targetPath: $.res.vatStatus
+
+            # --- 5. The HTTP response is the whole data context - reduce it ---------------------------------------
+            - type: Project@1
+              description: AB#8057 - keep the result lines and the crashed iterations only
+              clear: true
+              fields:
+                - path: $.results
+                  inclusion: true
+                - path: $.iterationErrors
+                  inclusion: true
+            - type: SetPipelineExecutionResult@1
+              description: AB#8057 - persist the report as OutputData
+              path: $
