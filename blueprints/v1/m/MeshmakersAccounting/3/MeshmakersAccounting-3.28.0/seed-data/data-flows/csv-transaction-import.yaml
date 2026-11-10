@@ -1,0 +1,1023 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.1.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+  - System.Identity-[3.0,4.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipelines: import-csv-transactions ---
+  - rtId: 67d4a2f0b2e4d8c3a1f00050
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: CSV Transaction Import
+      - id: System/Description
+        value: Imports bank transactions from Austrian bank CSV exports (UTF-16LE, comma-delimited, German date/number format), PayPal activity CSVs and myPayLife card CSVs (AB#8644)
+  - rtId: 67d4a2f0b2e4d8c3a1f00051
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00050
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: CSV Transaction Import Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /importCsvTransactions
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: ImportFromCsv@1
+              description: Parse uploaded CSV file with Austrian bank format
+              fileIndex: 0
+              delimiter: ","
+              encoding: utf-16le
+              hasHeaderRow: true
+              targetPath: $.csvRows
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              columnMappings:
+                - sourceColumn: Buchungsdatum
+                  targetProperty: bookingDate
+                  dataType: DateTime
+                  dateFormat: dd.MM.yyyy
+                - sourceColumn: Valutadatum
+                  targetProperty: valueDate
+                  dataType: DateTime
+                  dateFormat: dd.MM.yyyy
+                - sourceColumn: Betrag
+                  targetProperty: amount
+                  dataType: Double
+                  numberCulture: de-AT
+                - sourceColumn: "W\u00E4hrung"
+                  targetProperty: currency
+                  dataType: String
+                - sourceColumn: Buchungs-Details
+                  targetProperty: purpose
+                  dataType: String
+                - sourceColumn: Buchungsreferenz
+                  targetProperty: transactionId
+                  dataType: String
+                - sourceColumn: Partnername
+                  targetProperty: counterpartName
+                  dataType: String
+                - sourceColumn: Partner IBAN
+                  targetProperty: counterpartIban
+                  dataType: String
+                - sourceColumn: BIC/SWIFT
+                  targetProperty: counterpartBic
+                  dataType: String
+                - sourceColumn: Zahlungsreferenz
+                  targetProperty: paymentReference
+                  dataType: String
+                - sourceColumn: Mandats ID
+                  targetProperty: mandateReference
+                  dataType: String
+                - sourceColumn: Creditor ID
+                  targetProperty: creditorId
+                  dataType: String
+                - sourceColumn: Eigene IBAN
+                  targetProperty: ownerIban
+                  dataType: String
+            - type: ForEach@1
+              description: Upsert BankTransaction entities from CSV rows (idempotent by TransactionId)
+              iterationPath: $.csvRows
+              targetPath: $._updateItems
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: GetOrCreateRtEntitiesByType@1
+                  description: Resolve the existing BankTransaction by TransactionId or generate a new id
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  fieldFilters:
+                    - attributePath: TransactionId
+                      operator: Equals
+                      comparisonValuePath: $.key.transactionId
+                  rtIdTargetPath: $._txRtId
+                  ckTypeIdTargetPath: $._txCkTypeId
+                  modOperationPath: $._txModOp
+                - type: If@1
+                  description: Only insert new transactions — re-importing the same CSV is a no-op
+                  path: $._txModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    # AB#5091: card bookings print the DATE OF THE PURCHASE in the purpose as
+                    # "K<n> dd.mm." - e.g. "E-COMM 180,00 US K2 18.07. 06:37 ANTHROPIC* CLAUDE SUB"
+                    # or "POS 59,69 AT K1 15.07. 12:01 SPAR 2361" - while the BOOKING date is 1-3
+                    # days later. That purchase date is the invoice date of the receipt, so the
+                    # matcher uses it as a first-class key; persist it here instead of re-parsing
+                    # the purpose in every pass. The year comes from the booking date with a
+                    # rollover at the turn of the year (card month 12 + booking month 1 => previous
+                    # year, card month 1 + booking month 12 => next year). The helper returns null
+                    # when the pattern is absent or the day/month is malformed; the If@1 below then
+                    # leaves $.key._cardTxDateOk ABSENT, and CreateUpdateInfo@1 silently skips an
+                    # attribute whose valuePath does not exist - which is what keeps the optional
+                    # attribute unwritten instead of written as null.
+                    # The code is byte-identical in finapi.yaml, csv-transaction-import.yaml (both
+                    # write points) and camt-053-import.yaml - keep it that way.
+                    - type: ExecuteCSharp@1
+                      description: Card transaction date parsed from the purpose ("K<n> dd.mm."), null when absent
+                      code: 'if (string.IsNullOrWhiteSpace(purpose) || string.IsNullOrWhiteSpace(bookingDate)) return null; var m = Regex.Match(purpose, @"\bK\d\s+(\d{2})\.(\d{2})\."); if (!m.Success) return null; int cd; int cm; if (!int.TryParse(m.Groups[1].Value, out cd) || !int.TryParse(m.Groups[2].Value, out cm)) return null; if (cm < 1 || cm > 12 || cd < 1 || cd > 31) return null; var st = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal; DateTime b; if (!DateTime.TryParse(bookingDate, CultureInfo.InvariantCulture, st, out b)) return null; var y = b.Year; if (cm == 12 && b.Month == 1) y = y - 1; else if (cm == 1 && b.Month == 12) y = y + 1; if (cd > DateTime.DaysInMonth(y, cm)) return null; return new DateTime(y, cm, cd, 0, 0, 0, DateTimeKind.Utc).ToString("yyyy-MM-dd") + "T00:00:00Z";'
+                      usings:
+                        - System
+                        - System.Globalization
+                        - System.Text.RegularExpressions
+                      returnType: String
+                      arguments:
+                        - name: purpose
+                          valuePath: $.key.purpose
+                          dataType: String
+                        - name: bookingDate
+                          valuePath: $.key.bookingDate
+                          dataType: String
+                      targetPath: $.key._cardTxDate
+                    - type: If@1
+                      description: Publish the parsed card date only when there is one (CardTransactionDate is optional)
+                      path: $.key._cardTxDate
+                      operator: RegexMatch
+                      value: .+
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.key._cardTxDateOk
+                          valuePath: $.key._cardTxDate
+                          valueType: String
+                    - type: SetPrimitiveValue@1
+                      description: Default direction Credit (incoming)
+                      targetPath: $._direction
+                      value: 0
+                      valueType: Int
+                    - type: If@1
+                      description: Negative amount means Debit (outgoing)
+                      path: $.key.amount
+                      operator: LessThan
+                      value: 0
+                      valueType: Double
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $._direction
+                          value: 1
+                          valueType: Int
+                    - type: GetRtEntitiesByType@1
+                      description: Find the BankAccount by the CSV owner IBAN
+                      ckTypeId: Basic.Accounting/BankAccount
+                      targetPath: $._account
+                      take: 1
+                      fieldFilters:
+                        - attributePath: Iban
+                          operator: Equals
+                          comparisonValuePath: $.key.ownerIban
+                    - type: CreateUpdateInfo@1
+                      targetPath: $._txUpdate
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Insert
+                      ckTypeId: Basic.Accounting/BankTransaction
+                      rtIdPath: $._txRtId
+                      rtWellKnownNamePath: $.key.transactionId
+                      attributeUpdates:
+                        - attributeName: TransactionId
+                          attributeValueType: String
+                          valuePath: $.key.transactionId
+                        - attributeName: Amount
+                          attributeValueType: Double
+                          valuePath: $.key.amount
+                        - attributeName: Currency
+                          attributeValueType: String
+                          valuePath: $.key.currency
+                        - attributeName: BookingDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.bookingDate
+                        - attributeName: ValueDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.valueDate
+                        - attributeName: Purpose
+                          attributeValueType: String
+                          valuePath: $.key.purpose
+                        - attributeName: CardTransactionDate
+                          attributeValueType: DateTime
+                          valuePath: $.key._cardTxDateOk
+                        - attributeName: CounterpartName
+                          attributeValueType: String
+                          valuePath: $.key.counterpartName
+                        - attributeName: CounterpartIban
+                          attributeValueType: String
+                          valuePath: $.key.counterpartIban
+                        - attributeName: CounterpartBic
+                          attributeValueType: String
+                          valuePath: $.key.counterpartBic
+                        - attributeName: PaymentReference
+                          attributeValueType: String
+                          valuePath: $.key.paymentReference
+                        - attributeName: MandateReference
+                          attributeValueType: String
+                          valuePath: $.key.mandateReference
+                        - attributeName: CreditorId
+                          attributeValueType: String
+                          valuePath: $.key.creditorId
+                        - attributeName: Direction
+                          attributeValueType: Int
+                          valuePath: $._direction
+                        - attributeName: MatchState
+                          attributeValueType: Enum
+                          value: Unreviewed
+                    - type: If@1
+                      description: Link the transaction to its bank account when known
+                      path: $._account.TotalCount
+                      operator: GreaterThan
+                      value: 0
+                      valueType: Int64
+                      transformations:
+                        - type: CreateAssociationUpdate@1
+                          description: BankTransaction -> BankAccount via ParentChild
+                          targetPath: $._assocUpdate
+                          targetValueKind: Array
+                          targetValueWriteMode: Append
+                          updateKind: Create
+                          originRtIdPath: $._txRtId
+                          originCkTypeId: Basic.Accounting/BankTransaction
+                          targetRtIdPath: $._account.Items[0].RtId
+                          targetCkTypeId: Basic.Accounting/BankAccount
+                          associationRoleId: System/ParentChild
+                    - type: ApplyChanges@2
+                      description: Persist transaction and association
+                      entityUpdatesPath: $._txUpdate
+                      associationUpdatesPath: $._assocUpdate
+            # Security: the HTTP response body is the whole data context. Reduce
+            # it to a minimal acknowledgement so it can never echo the caller's
+            # request headers/Authorization or the raw uploaded CSV.
+            - type: SetPrimitiveValue@1
+              targetPath: $.done
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
+  # PayPal activity CSV import (AB#4459, fixed AB#4593): PayPal exports have a
+  # completely different shape than the Austrian bank CSV above — UTF-8 with
+  # BOM, columns Datum/Name/Typ/Status/Brutto/Gebühr/Netto/Transaktionscode/
+  # "Auswirkung auf Guthaben", and both an authorization hold ("Allgemeine
+  # Autorisierung", Memo) and a balancing credit-card funding counter-row
+  # ("Allgemeine Gutschrift auf Kreditkarte", Haben) next to almost every
+  # payment. Only rows whose "Auswirkung auf Guthaben" is Soll (a real balance
+  # debit) and completed are imported — this excludes the Memo authorization
+  # holds (which would duplicate each payment) and Haben credits; the currency-
+  # conversion debit legs are excluded by type. The amount comes from Brutto
+  # (NOT "Betrag", which does not exist in this export). The PayPal account
+  # carries no IBAN, so the target BankAccount rtId is passed by the frontend
+  # as the multipart form field `accountRtId` (the ParentChild association is
+  # mandatory — rows without it would fail).
+  - rtId: 67d4a2f0b2e4d8c3a1f00052
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00050
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: PayPal CSV Transaction Import Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: >-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /importPayPalCsvTransactions
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: ImportFromCsv@1
+              description: Parse uploaded PayPal activity CSV (UTF-8, German date/number format)
+              fileIndex: 0
+              delimiter: ","
+              encoding: utf-8
+              hasHeaderRow: true
+              targetPath: $.csvRows
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              columnMappings:
+                - sourceColumn: Datum
+                  targetProperty: bookingDate
+                  dataType: DateTime
+                  dateFormat: dd.MM.yyyy
+                - sourceColumn: Name
+                  targetProperty: counterpartName
+                  dataType: String
+                - sourceColumn: Typ
+                  targetProperty: paymentType
+                  dataType: String
+                - sourceColumn: Status
+                  targetProperty: status
+                  dataType: String
+                - sourceColumn: "Währung"
+                  targetProperty: currency
+                  dataType: String
+                # PayPal activity exports name the transaction amount "Brutto"
+                # (alongside "Gebühr"/"Netto"), NOT "Betrag" (AB#4593). On
+                # outgoing payments Gebühr is 0, so Brutto is the full cash
+                # impact. A wrong column name is only a warning in ImportFromCsv
+                # (the mapping is skipped), so mapping "Betrag" left amount null
+                # and every row was filtered out — a silent zero-row import.
+                - sourceColumn: Brutto
+                  targetProperty: amount
+                  dataType: Double
+                  numberCulture: de-AT
+                # "Auswirkung auf Guthaben" = impact on balance: Soll (debit),
+                # Haben (credit), Memo (authorization hold — no cash movement).
+                # Only Soll rows are real payments; the Memo "Allgemeine
+                # Autorisierung" hold mirrors each card payment and would
+                # otherwise be imported as a duplicate (AB#4593).
+                - sourceColumn: "Auswirkung auf Guthaben"
+                  targetProperty: balanceImpact
+                  dataType: String
+                - sourceColumn: Empfangsnummer
+                  targetProperty: paymentReference
+                  dataType: String
+                - sourceColumn: Transaktionscode
+                  targetProperty: transactionId
+                  dataType: String
+                - sourceColumn: Artikelbezeichnung
+                  targetProperty: transactionText
+                  dataType: String
+            - type: ForEach@1
+              description: Insert one BankTransaction per completed negative PayPal payment (idempotent by TransactionId)
+              iterationPath: $.csvRows
+              targetPath: $._rowResults
+              documentMode: Extend
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: If@1
+                  description: Only completed rows
+                  path: $.key.status
+                  operator: Equals
+                  value: Abgeschlossen
+                  valueType: String
+                  transformations:
+                    - type: If@1
+                      description: Skip balancing credit-card funding rows
+                      path: $.key.paymentType
+                      operator: NotEquals
+                      value: Allgemeine Gutschrift auf Kreditkarte
+                      valueType: String
+                      transformations:
+                        - type: If@1
+                          description: Skip currency conversion pairs
+                          path: $.key.paymentType
+                          operator: NotEquals
+                          value: "Allgemeine Währungsumrechnung"
+                          valueType: String
+                          transformations:
+                            - type: If@1
+                              description: Only real balance debits (Soll) — excludes Memo authorization holds that duplicate each payment and Haben credits (AB#4593)
+                              path: $.key.balanceImpact
+                              operator: Equals
+                              value: Soll
+                              valueType: String
+                              transformations:
+                                - type: GetOrCreateRtEntitiesByType@1
+                                  description: Resolve the existing BankTransaction by TransactionId or generate a new id
+                                  ckTypeId: Basic.Accounting/BankTransaction
+                                  fieldFilters:
+                                    - attributePath: TransactionId
+                                      operator: Equals
+                                      comparisonValuePath: $.key.transactionId
+                                  rtIdTargetPath: $._txRtId
+                                  ckTypeIdTargetPath: $._txCkTypeId
+                                  modOperationPath: $._txModOp
+                                - type: If@1
+                                  description: Only insert new transactions — re-importing the same CSV is a no-op
+                                  path: $._txModOp
+                                  operator: Equals
+                                  value: 0
+                                  valueType: Enum
+                                  transformations:
+                                    # AB#5091: card bookings print the DATE OF THE PURCHASE in the purpose as
+                                    # "K<n> dd.mm." - e.g. "E-COMM 180,00 US K2 18.07. 06:37 ANTHROPIC* CLAUDE SUB"
+                                    # or "POS 59,69 AT K1 15.07. 12:01 SPAR 2361" - while the BOOKING date is 1-3
+                                    # days later. That purchase date is the invoice date of the receipt, so the
+                                    # matcher uses it as a first-class key; persist it here instead of re-parsing
+                                    # the purpose in every pass. The year comes from the booking date with a
+                                    # rollover at the turn of the year (card month 12 + booking month 1 => previous
+                                    # year, card month 1 + booking month 12 => next year). The helper returns null
+                                    # when the pattern is absent or the day/month is malformed; the If@1 below then
+                                    # leaves $.key._cardTxDateOk ABSENT, and CreateUpdateInfo@1 silently skips an
+                                    # attribute whose valuePath does not exist - which is what keeps the optional
+                                    # attribute unwritten instead of written as null.
+                                    # The code is byte-identical in finapi.yaml, csv-transaction-import.yaml (both
+                                    # write points) and camt-053-import.yaml - keep it that way.
+                                    - type: ExecuteCSharp@1
+                                      description: Card transaction date parsed from the purpose ("K<n> dd.mm."), null when absent
+                                      code: 'if (string.IsNullOrWhiteSpace(purpose) || string.IsNullOrWhiteSpace(bookingDate)) return null; var m = Regex.Match(purpose, @"\bK\d\s+(\d{2})\.(\d{2})\."); if (!m.Success) return null; int cd; int cm; if (!int.TryParse(m.Groups[1].Value, out cd) || !int.TryParse(m.Groups[2].Value, out cm)) return null; if (cm < 1 || cm > 12 || cd < 1 || cd > 31) return null; var st = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal; DateTime b; if (!DateTime.TryParse(bookingDate, CultureInfo.InvariantCulture, st, out b)) return null; var y = b.Year; if (cm == 12 && b.Month == 1) y = y - 1; else if (cm == 1 && b.Month == 12) y = y + 1; if (cd > DateTime.DaysInMonth(y, cm)) return null; return new DateTime(y, cm, cd, 0, 0, 0, DateTimeKind.Utc).ToString("yyyy-MM-dd") + "T00:00:00Z";'
+                                      usings:
+                                        - System
+                                        - System.Globalization
+                                        - System.Text.RegularExpressions
+                                      returnType: String
+                                      arguments:
+                                        - name: purpose
+                                          valuePath: $.key.paymentType
+                                          dataType: String
+                                        - name: bookingDate
+                                          valuePath: $.key.bookingDate
+                                          dataType: String
+                                      targetPath: $.key._cardTxDate
+                                    - type: If@1
+                                      description: Publish the parsed card date only when there is one (CardTransactionDate is optional)
+                                      path: $.key._cardTxDate
+                                      operator: RegexMatch
+                                      value: .+
+                                      valueType: String
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.key._cardTxDateOk
+                                          valuePath: $.key._cardTxDate
+                                          valueType: String
+                                    - type: CreateUpdateInfo@1
+                                      targetPath: $._txUpdate
+                                      targetValueKind: Array
+                                      targetValueWriteMode: Append
+                                      updateKind: Insert
+                                      ckTypeId: Basic.Accounting/BankTransaction
+                                      rtIdPath: $._txRtId
+                                      rtWellKnownNamePath: $.key.transactionId
+                                      attributeUpdates:
+                                        - attributeName: TransactionId
+                                          attributeValueType: String
+                                          valuePath: $.key.transactionId
+                                        - attributeName: Amount
+                                          attributeValueType: Double
+                                          valuePath: $.key.amount
+                                        - attributeName: Currency
+                                          attributeValueType: String
+                                          valuePath: $.key.currency
+                                        - attributeName: BookingDate
+                                          attributeValueType: DateTime
+                                          valuePath: $.key.bookingDate
+                                        - attributeName: ValueDate
+                                          attributeValueType: DateTime
+                                          valuePath: $.key.bookingDate
+                                        - attributeName: Purpose
+                                          attributeValueType: String
+                                          valuePath: $.key.paymentType
+                                        - attributeName: CardTransactionDate
+                                          attributeValueType: DateTime
+                                          valuePath: $.key._cardTxDateOk
+                                        - attributeName: TransactionText
+                                          attributeValueType: String
+                                          valuePath: $.key.transactionText
+                                        - attributeName: CounterpartName
+                                          attributeValueType: String
+                                          valuePath: $.key.counterpartName
+                                        - attributeName: PaymentReference
+                                          attributeValueType: String
+                                          valuePath: $.key.paymentReference
+                                        - attributeName: Direction
+                                          attributeValueType: Int
+                                          value: 1
+                                        - attributeName: MatchState
+                                          attributeValueType: Enum
+                                          value: Unreviewed
+                                    - type: CreateAssociationUpdate@1
+                                      description: BankTransaction -> BankAccount selected in the import dialog
+                                      targetPath: $._assocUpdate
+                                      targetValueKind: Array
+                                      targetValueWriteMode: Append
+                                      updateKind: Create
+                                      originRtIdPath: $._txRtId
+                                      originCkTypeId: Basic.Accounting/BankTransaction
+                                      targetRtIdPath: $.full.formData.accountRtId
+                                      targetCkTypeId: Basic.Accounting/BankAccount
+                                      associationRoleId: System/ParentChild
+                                    - type: ApplyChanges@2
+                                      description: Persist transaction and association
+                                      entityUpdatesPath: $._txUpdate
+                                      associationUpdatesPath: $._assocUpdate
+            # Security: the HTTP response body is the whole data context. Reduce
+            # it to a minimal acknowledgement so it can never echo the caller's
+            # request headers/Authorization or the raw uploaded CSV.
+            - type: SetPrimitiveValue@1
+              targetPath: $.done
+              value: true
+              valueType: Boolean
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
+  # PayLife card CSV import (AB#8644): the myPayLife portal ("Meine Transaktionen")
+  # exports the card transactions of one card as UTF-8 with BOM, ';'-delimited,
+  # CRLF, header
+  #   Buchungsdatum;Umsatzdatum;Abrechnungsdatum;Buchungstext;Kartennummer;
+  #   Fremdwährung;Betrag in Fremdwährung;Wechselkurs;Währung;Betrag in EUR
+  # ISO dates (yyyy-MM-dd), German decimals ("-19,14", "1,10723"), a purchase is
+  # NEGATIVE and a credit (refund, payment received) positive. Abrechnungsdatum is
+  # "Offen" until the monthly statement settles the row and a date afterwards.
+  # The card number is masked (6 digits, 6 X, 4 digits). A foreign-currency purchase
+  # carries the original amount (negative), its currency and the rate (foreign
+  # units per EUR); the exchange handling fee is a SEPARATE row
+  # ("MANIPULATIONSENTGELT"). finAPI does not integrate PayLife (2026-11-09), so this
+  # is the only feed of the card account.
+  #
+  # The target account is the CreditCard BankAccount picked in the import dialog
+  # (form field `accountRtId`, as for PayPal); the pipeline refuses any other
+  # account type, an unknown account and a file that is not this export.
+  #
+  # TransactionId (the dedup key) - the export has NO reference column, and the
+  # lesson of AB#8646 is that a non-unique reference must never be the key alone:
+  #   PAYLIFE-<first 20 hex of SHA-256 over the row content>-<ordinal>
+  # The content is booking date | purchase date | Buchungstext (trimmed, blanks
+  # collapsed) | card number | foreign currency | foreign amount in cents | EUR
+  # amount in cents. Abrechnungsdatum is deliberately NOT part of it: it changes
+  # from "Offen" to the statement date when the row is settled, and a re-import of
+  # a later export must find the row it imported while it was still open. The
+  # ordinal (1, 2, ...) counts rows with the SAME content in file order, so two
+  # identical purchases on one day (two tickets at 9,90) stay two transactions,
+  # and an overlapping export, which covers whole days, numbers them the same way.
+  # Re-importing the same or an overlapping file therefore inserts nothing twice.
+  #
+  # Monthly settlement: the payment that clears the statement on the card side is
+  # the mirror of the AB#8643 debit on the current account, i.e. a transfer between
+  # own accounts and never income. A CREDIT whose Buchungstext reads like such a
+  # payment (EINZUG, LASTSCHRIFT, ZAHLUNG [DANKE|ERHALTEN|EINGANG], ZAHLUNGSEINGANG,
+  # EINZAHLUNG, UEBERWEISUNG) is imported as Ignored + ExclusionReason TRANSFER with
+  # the AB#8643 comment "Credit card settlement to own card account (auto)". Any
+  # other credit (a merchant refund) is imported as a normal Credit.
+  #
+  # Response: { done, imported, duplicates, errors, settlements, errorRows[] } -
+  # errorRows names the file row (header = row 1) and the reason of every row that
+  # was not imported because it is malformed (no silent drop). A refused file
+  # answers { statusCode: 400, message } in the same shape the dialog already reads.
+  # Tested by scripts/paylife_csv_import_test.py (synthetic fixture
+  # scripts/fixtures/paylife/paylife-sample.csv, same format as the real export).
+  - rtId: 67d4a2f0b2e4d8c3a1f00053
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00050
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: PayLife CSV Transaction Import Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /importPayLifeCsvTransactions
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+          transformations:
+            - type: WriteJson@1
+              description: No rows unless the file has data lines
+              targetPath: $.csvRows
+              jsonString: '[]'
+            - type: ImportFromCsv@1
+              description: Parse the uploaded myPayLife export (UTF-8 with BOM, semicolon, ISO dates, German decimals) - every column as text, the next node validates
+              fileIndex: 0
+              delimiter: ";"
+              encoding: utf-8
+              hasHeaderRow: true
+              targetPath: $.csvRows
+              targetValueWriteMode: Overwrite
+              targetValueKind: Simple
+              documentMode: Extend
+              columnMappings:
+                - sourceColumn: Buchungsdatum
+                  targetProperty: bookingDate
+                  dataType: String
+                - sourceColumn: Umsatzdatum
+                  targetProperty: purchaseDate
+                  dataType: String
+                - sourceColumn: Abrechnungsdatum
+                  targetProperty: settlementDate
+                  dataType: String
+                - sourceColumn: Buchungstext
+                  targetProperty: text
+                  dataType: String
+                - sourceColumn: Kartennummer
+                  targetProperty: card
+                  dataType: String
+                - sourceColumn: "Fremdwährung"
+                  targetProperty: fxCurrency
+                  dataType: String
+                - sourceColumn: "Betrag in Fremdwährung"
+                  targetProperty: fxAmount
+                  dataType: String
+                - sourceColumn: Wechselkurs
+                  targetProperty: fxRate
+                  dataType: String
+                - sourceColumn: "Währung"
+                  targetProperty: currency
+                  dataType: String
+                - sourceColumn: Betrag in EUR
+                  targetProperty: amountEur
+                  dataType: String
+            - type: FormatString@1
+              description: Target account rtId as a single-element JSON array
+              format: '["{$.formData.accountRtId}"]'
+              targetPath: $.plAcctIdJson
+            - type: WriteJson@1
+              jsonStringPath: $.plAcctIdJson
+              targetPath: $.plAcctIds
+            - type: GetRtEntitiesById@1
+              description: Load the target bank account picked in the dialog
+              ckTypeId: Basic.Accounting/BankAccount
+              rtIdsPath: $.plAcctIds
+              targetPath: $.plAcct
+            # AB#8644: tested by scripts/paylife_csv_import_test.py through
+            # scripts/extraction-check-harness (the node is located by this description).
+            - type: ExecuteCSharp@1
+              description: AB#8644 PayLife rows - validate, normalise and key every row
+              timeoutMs: 30000
+              usings:
+                - System
+                - System.Linq
+                - System.Text
+                - System.Text.Json
+                - System.Text.RegularExpressions
+                - System.Collections.Generic
+                - System.Globalization
+                - System.Security.Cryptography
+              returnType: String
+              arguments:
+                - name: rows
+                  valuePath: $.csvRows
+                  dataType: RecordArray
+                - name: account
+                  valuePath: $.plAcct.Items
+                  dataType: RecordArray
+              targetPath: $.plJson
+              code: |
+                var styles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal;
+                var nf = new NumberFormatInfo { NumberDecimalSeparator = ",", NumberGroupSeparator = "." };
+                Func<object, JsonElement> El = o => o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                Func<JsonElement, string, JsonElement> Prop = (e, n) => {
+                  if (e.ValueKind == JsonValueKind.Object)
+                    foreach (var p in e.EnumerateObject())
+                      if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                  return default(JsonElement);
+                };
+                Func<JsonElement, string> Str = e => {
+                  var s = e.ValueKind == JsonValueKind.String ? e.GetString()
+                    : (e.ValueKind == JsonValueKind.Undefined || e.ValueKind == JsonValueKind.Null) ? null : e.ToString();
+                  if (s == null) return null; s = s.Trim(); return s.Length == 0 ? null : s;
+                };
+                Func<string, DateTime?> Day = s => {
+                  DateTime d;
+                  if (s != null && DateTime.TryParseExact(s, new[] { "yyyy-MM-dd", "dd.MM.yyyy", "d.M.yyyy" },
+                      CultureInfo.InvariantCulture, styles, out d)) return d;
+                  return null;
+                };
+                Func<string, decimal?> Num = s => {
+                  if (s == null) return null; decimal v;
+                  var t = s.Replace(" ", "").Replace(" ", "");
+                  if (decimal.TryParse(t, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowThousands, nf, out v)) return v;
+                  return null;
+                };
+                Func<DateTime, string> Iso = d => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T00:00:00Z";
+                Func<string, string> Hex = s => {
+                  using (var h = SHA256.Create())
+                    return string.Concat(h.ComputeHash(Encoding.UTF8.GetBytes(s)).Select(b => b.ToString("x2"))).Substring(0, 20);
+                };
+                var settleRe = new Regex(@"\b(EINZUG\w*|LASTSCHRIFT|ZAHLUNG(\s+(DANKE|ERHALTEN|EINGANG))?|ZAHLUNGSEINGANG|EINZAHLUNG|UEBERWEISUNG|ÜBERWEISUNG)\b",
+                  RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+                var outRows = new List<Dictionary<string, object>>();
+                var keys = new List<string>();
+                var settlementKeys = new List<string>();
+                var invalid = new List<Dictionary<string, object>>();
+                string error = "";
+
+                // The account picked in the dialog must exist and be a credit card account.
+                var acc = (account ?? new object[0]).Select(El).FirstOrDefault(a => Str(Prop(a, "RtId")) != null);
+                if (acc.ValueKind == JsonValueKind.Undefined) error = "The selected bank account was not found.";
+                else {
+                  var at = Str(Prop(Prop(acc, "Attributes"), "AccountType"));
+                  if (at == null || !(at == "2" || string.Equals(at, "CreditCard", StringComparison.OrdinalIgnoreCase)))
+                    error = "PayLife transactions belong to a credit card account - the selected account is not of type CreditCard.";
+                }
+
+                var list = (rows ?? new object[0]).Select(El).ToList();
+                if (error.Length == 0 && list.Count > 0 && !list.Any(r => Str(Prop(r, "bookingDate")) != null && Str(Prop(r, "amountEur")) != null))
+                  error = "This file is not a myPayLife transaction export (expected the semicolon-separated columns Buchungsdatum ... Betrag in EUR).";
+
+                var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+                for (int i = 0; error.Length == 0 && i < list.Count; i++) {
+                  var r = list[i]; var rowNo = i + 2;
+                  var bdS = Str(Prop(r, "bookingDate")); var pdS = Str(Prop(r, "purchaseDate"));
+                  var text = Str(Prop(r, "text")); var card = Str(Prop(r, "card")) ?? "";
+                  var amtS = Str(Prop(r, "amountEur")); var cur = Str(Prop(r, "currency"));
+                  var fxCur = Str(Prop(r, "fxCurrency")); var fxAmtS = Str(Prop(r, "fxAmount")); var fxRate = Str(Prop(r, "fxRate"));
+                  var bd = Day(bdS); var pd = Day(pdS); var amt = Num(amtS);
+                  string reason = null;
+                  if (bdS == null) reason = "booking date (Buchungsdatum) missing";
+                  else if (bd == null) reason = "booking date (Buchungsdatum) '" + bdS + "' is not a date";
+                  else if (pdS != null && pd == null) reason = "purchase date (Umsatzdatum) '" + pdS + "' is not a date";
+                  else if (text == null) reason = "booking text (Buchungstext) missing";
+                  else if (amtS == null) reason = "amount (Betrag in EUR) missing";
+                  else if (amt == null) reason = "amount (Betrag in EUR) '" + amtS + "' is not a number";
+                  else if (amt.Value == 0m) reason = "amount (Betrag in EUR) is zero";
+                  else if (cur != null && !string.Equals(cur, "EUR", StringComparison.OrdinalIgnoreCase)) reason = "currency (Währung) '" + cur + "' is not EUR";
+                  if (reason != null) { invalid.Add(new Dictionary<string, object> { { "row", rowNo }, { "reason", reason } }); continue; }
+
+                  var normText = Regex.Replace(text, @"\s+", " ");
+                  var fxAmt = Num(fxAmtS);
+                  var hasFx = fxCur != null && !string.Equals(fxCur, "EUR", StringComparison.OrdinalIgnoreCase) && fxAmt != null && fxAmt.Value != 0m;
+                  var fxCents = hasFx ? decimal.Round(fxAmt.Value * 100m).ToString("0", CultureInfo.InvariantCulture) : "";
+                  var amtCents = decimal.Round(amt.Value * 100m).ToString("0", CultureInfo.InvariantCulture);
+                  var baseKey = string.Join("|", Iso(bd.Value), pd == null ? "" : Iso(pd.Value), normText, card,
+                    hasFx ? fxCur.ToUpperInvariant() : "", fxCents, amtCents);
+                  int ord; seen.TryGetValue(baseKey, out ord); ord++; seen[baseKey] = ord;
+                  var id = "PAYLIFE-" + Hex(baseKey) + "-" + ord.ToString(CultureInfo.InvariantCulture);
+
+                  // The original amount goes into the purpose in the "<amount> <CUR>" form the
+                  // AB#4590 foreign-currency card pass reads, with the rate as "KURS:".
+                  var purpose = normText;
+                  if (hasFx) {
+                    purpose += " " + Math.Abs(fxAmt.Value).ToString("#,##0.00", nf) + " " + fxCur.ToUpperInvariant();
+                    var rate = Num(fxRate);
+                    if (rate != null && rate.Value != 0m) purpose += " KURS: " + fxRate;
+                  }
+                  var settlement = amt.Value > 0m && settleRe.IsMatch(normText);
+                  var row = new Dictionary<string, object> {
+                    { "transactionId", id }, { "bookingDate", Iso(bd.Value) },
+                    { "amount", amt.Value }, { "currency", "EUR" }, { "purpose", purpose },
+                    { "text", normText }, { "counterpartName", normText },
+                    { "direction", amt.Value < 0m ? 1 : 0 },
+                    { "matchState", settlement ? "Ignored" : "Unreviewed" }, { "row", rowNo } };
+                  if (pd != null) row["cardTxDate"] = Iso(pd.Value);
+                  if (settlement) {
+                    row["exclusionReason"] = "TRANSFER";
+                    row["matchComment"] = "Credit card settlement to own card account (auto)";
+                    settlementKeys.Add(id);
+                  }
+                  outRows.Add(row); keys.Add(id);
+                }
+                return JsonSerializer.Serialize(new Dictionary<string, object> {
+                  { "error", error }, { "total", list.Count }, { "validCount", outRows.Count },
+                  { "rows", error.Length == 0 ? outRows : new List<Dictionary<string, object>>() },
+                  { "keys", error.Length == 0 ? keys : new List<string>() },
+                  { "settlementKeys", error.Length == 0 ? settlementKeys : new List<string>() },
+                  { "invalid", invalid.Take(50).ToList() }, { "invalidCount", invalid.Count } });
+            - type: WriteJson@1
+              description: Parse the normalised rows
+              targetPath: $.pl
+              jsonStringPath: $.plJson
+            - type: SetPrimitiveValue@1
+              description: Release the raw rows and the row string
+              targetPath: $.csvRows
+              value: ""
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.plJson
+              value: ""
+              valueType: String
+            - type: WriteJson@1
+              description: No existing transactions unless the lookup finds some
+              targetPath: $.plExisting
+              jsonString: '{"Items":[],"TotalCount":0}'
+            - type: If@1
+              description: Valid rows - look up the ones imported before (one query for the whole file)
+              path: $.pl.validCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int64
+              transformations:
+                - type: GetRtEntitiesByType@1
+                  description: Existing BankTransactions with one of this file's TransactionIds
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  targetPath: $.plExisting
+                  take: 10000
+                  fieldFilters:
+                    - attributePath: TransactionId
+                      operator: In
+                      comparisonValuePath: $.pl.keys
+            - type: ExecuteCSharp@1
+              description: AB#8644 PayLife counts - imported, duplicates and new settlement credits
+              usings:
+                - System
+                - System.Linq
+                - System.Text.Json
+                - System.Collections.Generic
+              returnType: String
+              arguments:
+                - name: keys
+                  valuePath: $.pl.keys
+                  dataType: StringArray
+                - name: settlementKeys
+                  valuePath: $.pl.settlementKeys
+                  dataType: StringArray
+                - name: existing
+                  valuePath: $.plExisting.Items
+                  dataType: RecordArray
+              targetPath: $.plCountsJson
+              code: |
+                var have = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var o in existing ?? new object[0]) {
+                  var e = o is JsonElement je ? je : JsonSerializer.SerializeToElement(o);
+                  if (e.ValueKind != JsonValueKind.Object) continue;
+                  foreach (var p in e.EnumerateObject())
+                    if (string.Equals(p.Name, "Attributes", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Object)
+                      foreach (var a in p.Value.EnumerateObject())
+                        if (string.Equals(a.Name, "TransactionId", StringComparison.OrdinalIgnoreCase) && a.Value.ValueKind == JsonValueKind.String)
+                          have.Add(a.Value.GetString());
+                }
+                var k = keys ?? new string[0];
+                var s = settlementKeys ?? new string[0];
+                return JsonSerializer.Serialize(new Dictionary<string, int> {
+                  { "imported", k.Count(x => !have.Contains(x)) },
+                  { "duplicates", k.Count(x => have.Contains(x)) },
+                  { "settlements", s.Count(x => !have.Contains(x)) } });
+            - type: WriteJson@1
+              targetPath: $.plCounts
+              jsonStringPath: $.plCountsJson
+            - type: ForEach@1
+              description: Insert one BankTransaction per new PayLife row (idempotent by TransactionId)
+              iterationPath: $.pl.rows
+              targetPath: $._rowResults
+              documentMode: Extend
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: GetOrCreateRtEntitiesByType@1
+                  description: Resolve the existing BankTransaction by TransactionId or generate a new id
+                  ckTypeId: Basic.Accounting/BankTransaction
+                  fieldFilters:
+                    - attributePath: TransactionId
+                      operator: Equals
+                      comparisonValuePath: $.key.transactionId
+                  rtIdTargetPath: $._txRtId
+                  ckTypeIdTargetPath: $._txCkTypeId
+                  modOperationPath: $._txModOp
+                - type: If@1
+                  description: Only insert new transactions - re-importing the same or an overlapping export is a no-op
+                  path: $._txModOp
+                  operator: Equals
+                  value: 0
+                  valueType: Enum
+                  transformations:
+                    # cardTxDate (Umsatzdatum), exclusionReason and matchComment exist only
+                    # when the row has them; CreateUpdateInfo@1 skips an attribute whose
+                    # valuePath does not exist, so they stay unwritten otherwise.
+                    - type: CreateUpdateInfo@1
+                      targetPath: $._txUpdate
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Insert
+                      ckTypeId: Basic.Accounting/BankTransaction
+                      rtIdPath: $._txRtId
+                      rtWellKnownNamePath: $.key.transactionId
+                      attributeUpdates:
+                        - attributeName: TransactionId
+                          attributeValueType: String
+                          valuePath: $.key.transactionId
+                        - attributeName: Amount
+                          attributeValueType: Double
+                          valuePath: $.key.amount
+                        - attributeName: Currency
+                          attributeValueType: String
+                          valuePath: $.key.currency
+                        - attributeName: BookingDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.bookingDate
+                        - attributeName: ValueDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.bookingDate
+                        - attributeName: CardTransactionDate
+                          attributeValueType: DateTime
+                          valuePath: $.key.cardTxDate
+                        - attributeName: Purpose
+                          attributeValueType: String
+                          valuePath: $.key.purpose
+                        - attributeName: TransactionText
+                          attributeValueType: String
+                          valuePath: $.key.text
+                        - attributeName: CounterpartName
+                          attributeValueType: String
+                          valuePath: $.key.counterpartName
+                        - attributeName: Direction
+                          attributeValueType: Int
+                          valuePath: $.key.direction
+                        - attributeName: MatchState
+                          attributeValueType: Enum
+                          valuePath: $.key.matchState
+                        - attributeName: ExclusionReason
+                          attributeValueType: Enum
+                          valuePath: $.key.exclusionReason
+                        - attributeName: MatchComment
+                          attributeValueType: String
+                          valuePath: $.key.matchComment
+                    - type: CreateAssociationUpdate@1
+                      description: BankTransaction -> credit card BankAccount selected in the import dialog
+                      targetPath: $._assocUpdate
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: Create
+                      originRtIdPath: $._txRtId
+                      originCkTypeId: Basic.Accounting/BankTransaction
+                      targetRtIdPath: $.full.formData.accountRtId
+                      targetCkTypeId: Basic.Accounting/BankAccount
+                      associationRoleId: System/ParentChild
+                    - type: ApplyChanges@2
+                      description: Persist transaction and association
+                      entityUpdatesPath: $._txUpdate
+                      associationUpdatesPath: $._assocUpdate
+            # Security: the HTTP response body is the whole data context. Reduce it to the
+            # counts so it can never echo the caller's request headers/Authorization or the
+            # raw uploaded CSV.
+            - type: SetPrimitiveValue@1
+              targetPath: $.done
+              value: true
+              valueType: Boolean
+            - type: SetPrimitiveValue@1
+              description: Default status - the file was accepted
+              targetPath: $.statusCode
+              value: 200
+              valueType: Int
+            - type: SelectByPath@1
+              description: Counts and the malformed rows to the top level of the response
+              selectPath:
+                - path: $.plCounts.imported
+                  targetPath: $.imported
+                - path: $.plCounts.duplicates
+                  targetPath: $.duplicates
+                - path: $.plCounts.settlements
+                  targetPath: $.settlements
+                - path: $.pl.invalidCount
+                  targetPath: $.errors
+                - path: $.pl.invalid
+                  targetPath: $.errorRows
+                - path: $.pl.error
+                  targetPath: $.message
+            - type: If@1
+              description: Refused file (unknown or non-credit-card account, not a myPayLife export)
+              path: $.pl.error
+              operator: NotEquals
+              value: ""
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.statusCode
+                  value: 400
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $.done
+                  value: false
+                  valueType: Boolean
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $.done
+                  inclusion: true
+                - path: $.statusCode
+                  inclusion: true
+                - path: $.message
+                  inclusion: true
+                - path: $.imported
+                  inclusion: true
+                - path: $.duplicates
+                  inclusion: true
+                - path: $.settlements
+                  inclusion: true
+                - path: $.errors
+                  inclusion: true
+                - path: $.errorRows
+                  inclusion: true
