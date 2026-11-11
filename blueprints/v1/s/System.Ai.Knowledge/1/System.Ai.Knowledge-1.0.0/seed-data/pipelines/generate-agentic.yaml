@@ -1,0 +1,361 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.7,5.0)
+  - System.Communication-[4.0,5.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Stage 2 (silver), DEFAULT variant: agentic generation. The model reads in its AnthropicAiQuery@1
+  # tool loop (knowledge_search, knowledge_get as knowledge-reader, at most 6 tool rounds) and returns
+  # schema-valid JSON; it never writes. Generic entity reads (query_entities, get_entity_by_id) are
+  # deliberately NOT offered (Odin 2026-11-10): a manipulated source document could use prompt
+  # injection to copy data the reader identity can see into a tenant-wide readable page. They come
+  # back only with model-declared read/write channels (AB#8574).
+  # Input at $.body (from knowledge-source-artifact, or POST /knowledge-capture/generate-agentic):
+  #   { "artifactRtIds": [...], "slug": "<page slug>" }
+  # Steps: guards (slug, artifacts found, 50,000-character limit - before any LLM call) -> generation
+  # (JSON schema enforced, bounded repair, otherwise the node fails) -> verification pass
+  # (HallucinationFlags) -> Markdown normalisation -> knowledge-write-page (McpToolCall@1 ->
+  # knowledge_upsert_page as knowledge-curator; Origin Ingest, Draft, run data on the new
+  # KnowledgePageVersion). The pipeline itself runs as knowledge-reader (its only service-account
+  # Uses edge: a linked ServiceAccountConfiguration is the identity of the WHOLE pipeline). Cache tokens
+  # are counted into inputTokens of the version; the split (cache read / cache write) stays in the
+  # execution result ($.result.usage). The write tail is identical in both generation pipelines
+  # (unit test).
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c25'
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: knowledge-generate-agentic
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c05'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c06'
+        targetCkTypeId: System.Communication/AiConfiguration
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c03'
+        targetCkTypeId: System.Communication/AiConfiguration
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c02'
+        targetCkTypeId: System.Communication/ServiceAccountConfiguration
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c13'
+        targetCkTypeId: System.Ai/AiPromptTemplate
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c12'
+        targetCkTypeId: System.Ai/AiPromptTemplate
+    attributes:
+      - id: System/Name
+        value: Knowledge - Generate Page (agentic, default)
+      - id: System/Description
+        value: >-
+          Agentic generation with read-only MCP tools as knowledge-reader, verification pass, Markdown normalisation, then knowledge-write-page (Draft).
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/IsDebuggingEnabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromPipelineDataEvent@1
+            - type: FromHttpRequest@2
+              method: POST
+              path: /knowledge-capture/generate-agentic
+              allowAnonymous: false
+              requiredRoles:
+                - FileManagement
+              description: 'Body: { "artifactRtIds": ["<SourceArtifact rtId>", "..."], "slug": "<page slug>" } - one page from all listed artifacts'
+          transformations:
+            - type: GetRtEntitiesById@1
+              description: The source artifacts named in the request (bronze)
+              ckTypeId: System.Ai/SourceArtifact
+              rtIdsPath: $.body.artifactRtIds
+              targetPath: $.artifacts
+            - type: ExecuteCSharp@1
+              description: Refuse a request without a valid slug or without source artifacts
+              arguments:
+                - name: slug
+                  valuePath: $.body.slug
+                  dataType: String
+                - name: count
+                  valuePath: $.artifacts.TotalCount
+                  dataType: Int
+              returnType: Int
+              targetPath: $.artifactCount
+              code: |-
+                // knowledge-request-guard (AB#8486)
+                if (string.IsNullOrWhiteSpace(slug) || !System.Text.RegularExpressions.Regex.IsMatch(slug, "^[a-z0-9][a-z0-9._-]{1,119}$"))
+                    throw new InvalidOperationException("Knowledge generation: 'slug' is missing or not a valid page slug (lower-case letters, digits, '-', '.', '_'; 2-120 characters).");
+                if (count < 1)
+                    throw new InvalidOperationException("Knowledge generation: none of the requested SourceArtifacts was found.");
+                return count;
+            - type: ForEach@1
+              description: Never truncate silently - a source above the tool-result limit (50,000 characters) fails here, before any LLM call
+              iterationPath: $.artifacts.Items
+              targetPath: $._sizeCheck
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: ExecuteCSharp@1
+                  arguments:
+                    - name: content
+                      valuePath: $.key.Attributes.Content
+                      dataType: String
+                    - name: name
+                      valuePath: $.key.Attributes.Name
+                      dataType: String
+                  returnType: Int
+                  targetPath: $.key.contentLength
+                  code: |-
+                    // knowledge-size-guard (AB#8486): 50,000 = the node's MCP tool-result cap; a larger source would be cut when the model reads it through a tool.
+                    const int maxChars = 50000;
+                    var length = (content ?? string.Empty).Length;
+                    if (length > maxChars)
+                        throw new InvalidOperationException("Knowledge generation: source '" + name + "' has " + length + " characters, above the limit of " + maxChars + ". It was not sent to the model and no page was written. Split the document into smaller files and ingest them separately.");
+                    return length;
+            - type: GetRtEntitiesByType@1
+              description: The page this slug addresses, if it exists (before any LLM call)
+              ckTypeId: System.Ai/KnowledgePage
+              take: 1
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.body.slug
+              targetPath: $.existingPage
+            - type: ExecuteCSharp@1
+              description: Ingest never overwrites a page that a person, a filed-back answer or a blueprint owns
+              arguments:
+                - name: count
+                  valuePath: $.existingPage.TotalCount
+                  dataType: Int
+                - name: origin
+                  valuePath: $.existingPage.Items[0].Attributes.Origin
+                  dataType: Int
+                - name: slug
+                  valuePath: $.body.slug
+                  dataType: String
+              returnType: Boolean
+              targetPath: $.pageExists
+              code: |-
+                // knowledge-page-origin-guard (AB#8486): KnowledgePageOrigin 0 = Ingest, 1 = Query, 2 = Manual, 3 = Blueprint.
+                if (count > 0 && origin != 0)
+                {
+                    var names = new[] { "Ingest", "Query", "Manual", "Blueprint" };
+                    var name = origin >= 0 && origin < names.Length ? names[origin] : origin.ToString();
+                    throw new InvalidOperationException("Knowledge generation: the page '" + slug + "' exists with Origin " + name + "; ingest only updates pages it created (Origin Ingest). Nothing was written. Rename the source document or pass another slug.");
+                }
+                return count > 0;
+            - type: AnthropicAiQuery@1
+              description: Agentic generation (wiki-prompt-agentic) - read-only tools as knowledge-reader, schema-valid JSON
+              apiKeyConfigurationName: knowledge-llm-mcp
+              promptTemplateName: wiki-prompt-agentic
+              path: $.artifacts.Items
+              cacheSource: true
+              responseFormat: json
+              jsonSchema: '{"type":"object","properties":{"title":{"type":"string"},"sections":{"type":"array","minItems":1,"items":{"type":"object","properties":{"heading":{"type":"string"},"sectionContent":{"type":"string"},"sortOrder":{"type":"integer"}},"required":["heading","sectionContent","sortOrder"],"additionalProperties":false}},"citations":{"type":"array","items":{"type":"object","properties":{"sectionRef":{"type":"string"},"sourceQuote":{"type":"string"},"sourceAnchor":{"type":"string"},"sourceRtId":{"type":"string"}},"required":["sectionRef","sourceQuote","sourceAnchor","sourceRtId"],"additionalProperties":false}}},"required":["title","sections","citations"],"additionalProperties":false}'
+              maxJsonRepairAttempts: 1
+              mcpToolNames:
+                - knowledge_search
+                - knowledge_get
+              mcpServiceAccountConfigName: knowledge-reader
+              maxToolRounds: 6
+              usageOutputPath: $.usage.generate
+              targetPath: $.draft
+            - type: AnthropicAiQuery@1
+              description: Verification pass before the write (wiki-prompt-verification); reviewer rounds of the same node read the source from the cache
+              apiKeyConfigurationName: knowledge-llm
+              promptTemplateName: wiki-prompt-verification
+              path: $.artifacts.Items
+              dataPaths:
+                - $.draft
+              cacheSource: true
+              responseFormat: json
+              jsonSchema: '{"type":"object","properties":{"flags":{"type":"array","items":{"type":"object","properties":{"claim":{"type":"string"},"reason":{"type":"string"}},"required":["claim","reason"],"additionalProperties":false}}},"required":["flags"],"additionalProperties":false}'
+              maxJsonRepairAttempts: 1
+              usageOutputPath: $.usage.verify
+              targetPath: $.review
+            - type: ForEach@1
+              description: Deterministic Markdown normalisation before the write (thesis Kap. 5.4.1)
+              iterationPath: $.draft.sections
+              targetPath: $.args.sections
+              mergePath: $.key
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: ExecuteCSharp@1
+                  arguments:
+                    - name: markdown
+                      valuePath: $.key.sectionContent
+                      dataType: String
+                  returnType: String
+                  targetPath: $.key.sectionContent
+                  usings:
+                    - System.Collections.Generic
+                  code: |-
+                    // knowledge-markdown-normalize (AB#8486): a table row ('|' first) that follows a non-blank,
+                    // non-table line gets a blank line before it, so CommonMark/GFM renders a table instead of
+                    // one paragraph. Lines inside ``` / ~~~ fences are never touched. Idempotent.
+                    if (string.IsNullOrEmpty(markdown)) return markdown ?? string.Empty;
+                    var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+                    var result = new List<string>(lines.Length + 4);
+                    var inFence = false;
+                    string fence = null;
+                    for (var i = 0; i < lines.Length; i++)
+                    {
+                        var line = lines[i];
+                        var trimmed = line.TrimStart();
+                        if (trimmed.StartsWith("```") || trimmed.StartsWith("~~~"))
+                        {
+                            var marker = trimmed.Substring(0, 3);
+                            if (!inFence) { inFence = true; fence = marker; }
+                            else if (marker == fence) { inFence = false; fence = null; }
+                            result.Add(line);
+                            continue;
+                        }
+                        if (!inFence && trimmed.StartsWith("|") && result.Count > 0)
+                        {
+                            var previous = result[result.Count - 1].Trim();
+                            if (previous.Length > 0 && !previous.StartsWith("|"))
+                                result.Add(string.Empty);
+                        }
+                        result.Add(line);
+                    }
+                    return string.Join("\n", result);
+            - type: ExecuteCSharp@1
+              description: Prompt tokens of the run (uncached + cache read + cache write, both calls)
+              arguments:
+                - name: gIn
+                  valuePath: $.usage.generate.inputTokens
+                  dataType: Int
+                - name: gRead
+                  valuePath: $.usage.generate.cacheReadInputTokens
+                  dataType: Int
+                - name: gWrite
+                  valuePath: $.usage.generate.cacheCreationInputTokens
+                  dataType: Int
+                - name: vIn
+                  valuePath: $.usage.verify.inputTokens
+                  dataType: Int
+                - name: vRead
+                  valuePath: $.usage.verify.cacheReadInputTokens
+                  dataType: Int
+                - name: vWrite
+                  valuePath: $.usage.verify.cacheCreationInputTokens
+                  dataType: Int
+              returnType: Int
+              targetPath: $.args.inputTokens
+              code: return gIn + gRead + gWrite + vIn + vRead + vWrite;
+            - type: ExecuteCSharp@1
+              description: Output tokens of the run (both calls)
+              arguments:
+                - name: gOut
+                  valuePath: $.usage.generate.outputTokens
+                  dataType: Int
+                - name: vOut
+                  valuePath: $.usage.verify.outputTokens
+                  dataType: Int
+              returnType: Int
+              targetPath: $.args.outputTokens
+              code: return gOut + vOut;
+            - type: ExecuteCSharp@1
+              description: Estimated cost of the run in USD (both calls; adapter list prices)
+              arguments:
+                - name: gCost
+                  valuePath: $.usage.generate.estimatedCostUsd
+                  dataType: Double
+                - name: vCost
+                  valuePath: $.usage.verify.estimatedCostUsd
+                  dataType: Double
+              returnType: Double
+              targetPath: $.args.cost
+              code: return Math.Round(gCost + vCost, 6);
+            - type: SelectByPath@1
+              description: knowledge_upsert_page arguments from the generation JSON (unchanged keys)
+              selectPath:
+                - path: $.body.slug
+                  targetPath: $.args.slug
+                - path: $.draft.title
+                  targetPath: $.args.title
+                - path: $.draft.citations
+                  targetPath: $.args.citations
+                - path: $.review.flags
+                  targetPath: $.args.hallucinationFlags
+                - path: $.body.artifactRtIds
+                  targetPath: $.args.sourceRtIds
+                - path: $.usage.generate.model
+                  targetPath: $.args.modelId
+            - type: SetPrimitiveValue@1
+              value: Ingest
+              targetPath: $.args.origin
+              valueType: String
+            - type: SetPrimitiveValue@1
+              value: wiki-prompt-agentic
+              targetPath: $.args.promptName
+              valueType: String
+            - type: SetPrimitiveValue@1
+              value: 4
+              targetPath: $.args.promptVersion
+              valueType: Int
+            - type: SetPrimitiveValue@1
+              value: 1
+              targetPath: $.args.reviewerRounds
+              valueType: Int
+            - type: SetPrimitiveValue@1
+              value: 'knowledge ingest (agentic)'
+              targetPath: $.args.changeNote
+              valueType: String
+            - type: FormatString@1
+              description: Run reference (interim, see README - the execution id is not reachable from the run)
+              format: 'knowledge-generate-agentic/{$.body.artifactRtIds[0]}'
+              targetPath: $.args.runRef
+            - type: ToPipelineDataEvent@1
+              description: Hand the page to knowledge-write-page, the only member of the data flow that runs as knowledge-curator and calls knowledge_upsert_page
+              path: $.args
+              targetPath: $.args
+              targetPipelineRtId: '67a1000000000000000b1c27'
+              awaitResult: true
+              timeoutSeconds: 120
+              resultTargetPath: $.written
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.written.write
+                  targetPath: $.write
+            - type: ExecuteCSharp@1
+              description: A refused write (content guard, invalid input) fails the run
+              arguments:
+                - name: isSuccess
+                  valuePath: $.write.isSuccess
+                  dataType: Boolean
+                - name: errorMessage
+                  valuePath: $.write.errorMessage
+                  dataType: String
+                - name: message
+                  valuePath: $.write.message
+                  dataType: String
+              returnType: String
+              targetPath: $.result.message
+              code: |-
+                // knowledge-write-check (AB#8486): knowledge_upsert_page answers a refusal as a result, not as an MCP error.
+                if (!isSuccess)
+                    throw new InvalidOperationException("knowledge_upsert_page refused the page: " + (errorMessage ?? "no reason given"));
+                return message ?? string.Empty;
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.write.page
+                  targetPath: $.result.page
+                - path: $.usage
+                  targetPath: $.result.usage
+                - path: $.review.flags
+                  targetPath: $.result.hallucinationFlags
+            - type: SetPipelineExecutionResult@1
+              path: $.result
+            - type: Project@1
+              description: Answer an HTTP caller with the result only
+              path: $
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
