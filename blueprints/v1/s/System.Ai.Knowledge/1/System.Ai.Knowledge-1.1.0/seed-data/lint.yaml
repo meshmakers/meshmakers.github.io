@@ -1,0 +1,976 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.8,5.0)
+  - System.Bot-[3.1,4.0)
+  - System.Communication-[4.0,5.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Knowledge lint (AB#8488, Feature AB#8450). One pipeline, knowledge-lint, in its own data flow
+  # knowledge-maintenance, so that deploying the ingest never switches the lint on (and the other
+  # way round). It runs nightly at 02:30 UTC once its trigger is enabled (seeded DISABLED) or on
+  # demand over HTTP.
+  #
+  # Checks (README "Knowledge lint"):
+  #   rules, no LLM, over every page that is not Rejected:
+  #     Orphan              no other page links to it and it has no source (Blueprint pages excepted)
+  #     Stale               a newer SourceArtifact with the same SourceUri and another ContentHash exists
+  #                         than the one the page was generated from
+  #     MissingLink         the page mentions the title of another page without linking to it
+  #     CitationNotInSource a citation quote does not occur in the cited source artifact
+  #   LLM, at most knowledge-lint-max-pages pages per run (tenant setting, default 5; the pages
+  #   compiled after the cursor VerifiedThrough of the last report, oldest first):
+  #     UnsupportedClaim    one call per page with the verification prompt of the ingest
+  #                         (wiki-prompt-verification, unchanged); its citation flags are dropped,
+  #                         citations are checked by the rule above
+  #     Contradiction       one call over the checked pages and their neighbours (links, shared
+  #                         sources), at most twice the page limit, prompt knowledge-lint-contradiction
+  # The report goes through McpToolCall@1 -> knowledge_write_lint_report as knowledge-linter (content
+  # guard, always unvalidated). The model never sees a token: both LLM calls use knowledge-llm, which
+  # has no McpServerUrl, so no MCP tool reaches the model.
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c07'
+    ckTypeId: System.Communication/DataFlow
+    rtWellKnownName: knowledge-maintenance
+    attributes:
+      - id: System/Name
+        value: Knowledge Maintenance
+      - id: System/Description
+        value: >-
+          Knowledge maintenance (System.Ai.Knowledge, AB#8488) - the knowledge lint: orphan, stale, missing-link and citation checks
+          over all pages, unsupported-claim and contradiction checks with the LLM over a few pages per run,
+          one unvalidated KnowledgeLintReport through knowledge_write_lint_report.
+
+  # Identity of knowledge-lint (a ServiceAccountConfiguration linked with Uses is the identity of the
+  # WHOLE pipeline). Same construction as knowledge-reader/-curator: no roles beyond the platform
+  # baseline, no delegation; its token is used only by the McpToolCall@1 of knowledge-lint, whose
+  # allowlist holds only knowledge_write_lint_report (the pipeline reads with its own nodes, so no
+  # knowledge read tool is needed).
+  - rtId: '67a1000000000000000b1c08'
+    ckTypeId: System.Communication/ServiceAccountConfiguration
+    rtWellKnownName: knowledge-linter
+    attributes:
+      - id: System.Communication/ClientId
+        value: knowledge-linter
+      - id: System.Communication/AssignedRoleNames
+        value: []
+      - id: System.Communication/AllowDelegation
+        value: false
+
+  # 🔴 SeedOwned like the ingest prompts: a blueprint update overwrites an edited template.
+  - rtId: '67a1000000000000000b1c14'
+    ckTypeId: System.Ai/AiPromptTemplate
+    rtWellKnownName: knowledge-lint-contradiction
+    attributes:
+      - id: System.Ai/Name
+        value: Contradiction check (knowledge lint)
+      - id: System.Ai/AppliesTo
+        value: 4   # FreeForm; never used for sessions (PromptPurpose KnowledgeGeneration)
+      - id: System.Ai/PromptPurpose
+        value: 1   # KnowledgeGeneration
+      - id: System.Ai/TemplateVersion
+        value: 1
+      - id: System.Ai/DefaultModelId
+        value: claude-sonnet-4-6
+      - id: System.Ai/Temperature
+        value: 0.0
+      - id: System.Ai/MaxTokens
+        value: 2048
+      - id: System.Ai/SystemPromptFragment
+        value: |-
+          You are a meticulous reviewer of a company knowledge base. You compare knowledge pages with each other. Use only the provided pages; do not use outside knowledge. Keep output minimal: no preamble. Output must be strictly valid JSON.
+      - id: System.Ai/UserTemplate
+        value: |-
+          The main content lists knowledge pages, each with slug, title, summary and sections.
+
+          Find every pair of pages that state facts which cannot both be true: different numbers, versions, dates, names, decisions or instructions for the same thing.
+          - Report only real contradictions. A page that is more detailed, newer in scope or about a different subject does not contradict another page.
+          - Report each pair once; pageA and pageB are slugs from the main content, never the same page.
+          - detail names both statements in one sentence.
+          - If there is no contradiction, return an empty list.
+
+          Return JSON: {"contradictions": [{"pageA": string, "pageB": string, "detail": string}]}. Never emit an unescaped double quote inside a string value — use single quotes when quoting.
+
+  - rtId: '67a1000000000000000b1c28'
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: knowledge-lint
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c07'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c03'
+        targetCkTypeId: System.Communication/AiConfiguration
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c06'
+        targetCkTypeId: System.Communication/AiConfiguration
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c08'
+        targetCkTypeId: System.Communication/ServiceAccountConfiguration
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c12'
+        targetCkTypeId: System.Ai/AiPromptTemplate
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c14'
+        targetCkTypeId: System.Ai/AiPromptTemplate
+    attributes:
+      - id: System/Name
+        value: Knowledge - Lint (knowledge-linter)
+      - id: System/Description
+        value: >-
+          Rule checks over all pages, LLM checks over a few pages per run, one unvalidated KnowledgeLintReport
+          through knowledge_write_lint_report.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/IsDebuggingEnabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromPipelineTriggerEvent@1
+            - type: FromHttpRequest@2
+              method: POST
+              path: /knowledge-capture/lint
+              allowAnonymous: false
+              requiredRoles:
+                - FileManagement
+              description: 'Runs the knowledge lint now (no body). Costs LLM tokens for at most knowledge-lint-max-pages pages.'
+          transformations:
+            - type: ExecuteCSharp@1
+              description: Start of the run
+              returnType: DateTime
+              targetPath: $.report.startedAt
+              code: return DateTime.UtcNow;
+            - type: GetRtEntitiesByType@1
+              description: Every knowledge page, oldest compiled first (rule checks run over all of them; above 1,000 pages the newest are not loaded and the result says so)
+              ckTypeId: System.Ai/KnowledgePage
+              take: 1000
+              sortOrders:
+                - attributeName: CompiledAt
+                  sortOrder: Ascending
+              targetPath: $.pages
+            - type: GetAssociationTargets@1
+              description: LinksTo of every page
+              originCkTypeId: System.Ai/KnowledgePage
+              originRtIdPath: $.pages.Items[*].RtId
+              associationRoleId: System.Ai/LinksTo
+              graphDirection: Outbound
+              targetCkTypeId: System.Ai/KnowledgePage
+              targetPath: $.links
+            - type: GetAssociationTargets@1
+              description: GeneratedFrom of every page (the source artifacts it was compiled from)
+              originCkTypeId: System.Ai/KnowledgePage
+              originRtIdPath: $.pages.Items[*].RtId
+              associationRoleId: System.Ai/GeneratedFrom
+              graphDirection: Outbound
+              targetCkTypeId: System.Ai/SourceArtifact
+              targetPath: $.pageSources
+            - type: GetRtEntitiesByType@1
+              description: Source artifacts, newest first (newer versions of a source for the stale check; above 2,000 the oldest are not loaded)
+              ckTypeId: System.Ai/SourceArtifact
+              take: 2000
+              sortOrders:
+                - attributeName: CapturedAt
+                  sortOrder: Descending
+              targetPath: $.artifacts
+            - type: GetRtEntitiesByType@1
+              description: The latest lint report (its VerifiedThrough is the cursor of the LLM check)
+              ckTypeId: System.Ai/KnowledgeLintReport
+              take: 1
+              sortOrders:
+                - attributeName: StartedAt
+                  sortOrder: Descending
+              targetPath: $.lastReport
+            - type: GetRtEntitiesByType@1
+              description: Tenant setting knowledge-lint-max-pages (not seeded; absent = 5)
+              ckTypeId: System/TenantConfiguration
+              take: 1
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValue: knowledge-lint-max-pages
+              targetPath: $.maxPagesSetting
+            - type: ExecuteCSharp@1
+              description: Number of pages the run checks (every page that is not Rejected)
+              arguments:
+                - name: pages
+                  valuePath: $.pages.Items
+                  dataType: RecordArray
+              returnType: Int
+              targetPath: $.report.pagesChecked
+              usings:
+                - System.Linq
+                - System.Text.Json
+              code: |-
+                // knowledge-lint-pages-checked (AB#8488): VerificationStatus 3 = Rejected is not checked.
+                return (pages ?? new object[0]).Select(p => p is JsonElement j ? j : JsonSerializer.SerializeToElement(p))
+                    .Count(p => !(p.TryGetProperty("Attributes", out var a) && a.ValueKind == JsonValueKind.Object &&
+                                  a.TryGetProperty("VerificationStatus", out var v) && v.ToString() == "3"));
+            - type: ExecuteCSharp@1
+              description: True when not every page or source artifact was loaded (reported in the execution result)
+              arguments:
+                - name: pageTotal
+                  valuePath: $.pages.TotalCount
+                  dataType: Int
+                - name: pages
+                  valuePath: $.pages.Items
+                  dataType: RecordArray
+                - name: artifactTotal
+                  valuePath: $.artifacts.TotalCount
+                  dataType: Int
+                - name: artifacts
+                  valuePath: $.artifacts.Items
+                  dataType: RecordArray
+              returnType: Boolean
+              targetPath: $.result.truncated
+              code: |-
+                // knowledge-lint-truncated (AB#8488)
+                return pageTotal > (pages ?? new object[0]).Length || artifactTotal > (artifacts ?? new object[0]).Length;
+            - type: ExecuteCSharp@1
+              description: 'Rule checks without LLM: Orphan, Stale, MissingLink, CitationNotInSource'
+              timeoutMs: 30000
+              arguments:
+                - name: pages
+                  valuePath: $.pages.Items
+                  dataType: RecordArray
+                - name: links
+                  valuePath: $.links
+                  dataType: RecordArray
+                - name: sources
+                  valuePath: $.pageSources
+                  dataType: RecordArray
+                - name: artifacts
+                  valuePath: $.artifacts.Items
+                  dataType: RecordArray
+              returnType: RecordArray
+              targetPath: $.ruleFindings
+              usings:
+                - System.Collections.Generic
+                - System.Globalization
+                - System.Linq
+                - System.Text
+                - System.Text.Json
+              code: |-
+                // knowledge-lint-rules (AB#8488)
+                JsonElement El(object o) => o is JsonElement j ? j : JsonSerializer.SerializeToElement(o);
+                JsonElement? Prop(JsonElement e, string name)
+                {
+                    if (e.ValueKind != JsonValueKind.Object) return null;
+                    foreach (var p in e.EnumerateObject())
+                        if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                    return null;
+                }
+                JsonElement Attrs(JsonElement e) => Prop(e, "Attributes") is JsonElement a && a.ValueKind == JsonValueKind.Object ? a : e;
+                string Str(JsonElement e, string name)
+                {
+                    var v = Prop(e, name);
+                    if (v == null || v.Value.ValueKind == JsonValueKind.Null || v.Value.ValueKind == JsonValueKind.Undefined) return null;
+                    return v.Value.ValueKind == JsonValueKind.String ? v.Value.GetString() : v.Value.ToString();
+                }
+                IEnumerable<JsonElement> Items(JsonElement? e) => e != null && e.Value.ValueKind == JsonValueKind.Array ? e.Value.EnumerateArray() : Enumerable.Empty<JsonElement>();
+                string Cut(string s, int n) => s == null ? string.Empty : (s.Length <= n ? s : s.Substring(0, n) + "...");
+                DateTime? Time(string s) => DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var t) ? t : (DateTime?)null;
+                string Norm(string s)
+                {
+                    if (string.IsNullOrEmpty(s)) return string.Empty;
+                    var sb = new StringBuilder(s.Length);
+                    var space = false;
+                    foreach (var c0 in s.ToLowerInvariant())
+                    {
+                        var c = c0;
+                        if ("\"`‘’‚“”„«»".IndexOf(c) >= 0) c = '\'';
+                        else if (c == '–' || c == '—') c = '-';
+                        if (c == '*' || c == '_') continue;
+                        if (char.IsWhiteSpace(c)) { space = true; continue; }
+                        if (space && sb.Length > 0) sb.Append(' ');
+                        space = false;
+                        sb.Append(c);
+                    }
+                    return sb.ToString();
+                }
+                Dictionary<string, List<JsonElement>> Targets(object[] groups)
+                {
+                    var d = new Dictionary<string, List<JsonElement>>();
+                    foreach (var g in (groups ?? new object[0]).Where(x => x != null).Select(El))
+                    {
+                        var origin = Str(g, "OriginRtId");
+                        if (origin == null) continue;
+                        if (!d.TryGetValue(origin, out var list)) d[origin] = list = new List<JsonElement>();
+                        list.AddRange(Items(Prop(g, "Items")));
+                    }
+                    return d;
+                }
+
+                // KnowledgePageOrigin 3 = Blueprint; VerificationStatus 3 = Rejected (not checked at all).
+                var all = (pages ?? new object[0]).Where(x => x != null).Select(El).ToList();
+                var live = all.Where(p => Str(Attrs(p), "VerificationStatus") != "3").ToList();
+                var liveIds = new HashSet<string>(live.Select(p => Str(p, "RtId")));
+                var linkMap = Targets(links);
+                var sourceMap = Targets(sources);
+                var artifactList = (artifacts ?? new object[0]).Where(x => x != null).Select(El).ToList();
+                var findings = new List<Dictionary<string, object>>();
+                void Add(string kind, string page, string related, string detail)
+                {
+                    var f = new Dictionary<string, object> { ["kind"] = kind, ["pageRef"] = page, ["detail"] = Cut(detail, 1900) };
+                    if (related != null) f["relatedPageRef"] = related;
+                    findings.Add(f);
+                }
+
+                var inbound = new Dictionary<string, int>();
+                foreach (var kv in linkMap)
+                    foreach (var t in kv.Value)
+                    {
+                        var id = Str(t, "RtId");
+                        if (id != null && id != kv.Key && liveIds.Contains(kv.Key)) inbound[id] = (inbound.TryGetValue(id, out var n) ? n : 0) + 1;
+                    }
+
+                foreach (var page in live)
+                {
+                    var a = Attrs(page);
+                    var id = Str(page, "RtId");
+                    var slug = Str(page, "RtWellKnownName");
+                    if (slug == null) continue;
+                    var pageSources = sourceMap.TryGetValue(id, out var ps) ? ps : new List<JsonElement>();
+                    var outbound = new HashSet<string>((linkMap.TryGetValue(id, out var ls) ? ls : new List<JsonElement>()).Select(t => Str(t, "RtId")));
+
+                    // Orphan
+                    if (!inbound.ContainsKey(id) && pageSources.Count == 0 && Str(a, "Origin") != "3")
+                        Add("Orphan", slug, null, "No other page links to this page and it was generated from no source.");
+
+                    // Stale
+                    foreach (var s in pageSources)
+                    {
+                        var sa = Attrs(s);
+                        var uri = Str(sa, "SourceUri");
+                        var hash = Str(sa, "ContentHash");
+                        if (string.IsNullOrWhiteSpace(uri) || hash == null) continue;
+                        var since = Time(Str(sa, "CapturedAt")) ?? Time(Str(s, "RtCreationDateTime"));
+                        var newer = artifactList
+                            .Where(x => Str(x, "RtId") != Str(s, "RtId"))
+                            .Where(x => string.Equals(Str(Attrs(x), "SourceUri"), uri, StringComparison.Ordinal))
+                            .Where(x => Str(Attrs(x), "ContentHash") != null && Str(Attrs(x), "ContentHash") != hash)
+                            .Where(x => !pageSources.Any(y => Str(y, "RtId") == Str(x, "RtId")))
+                            .Select(x => new { X = x, T = Time(Str(Attrs(x), "CapturedAt")) ?? Time(Str(x, "RtCreationDateTime")) })
+                            .Where(x => since == null || (x.T != null && x.T > since))
+                            .OrderByDescending(x => x.T)
+                            .FirstOrDefault();
+                        if (newer != null)
+                            Add("Stale", slug, null, "Source '" + Cut(Str(sa, "Name"), 120) + "' (" + Cut(uri, 200) + ") changed: SourceArtifact " + Str(newer.X, "RtId") +
+                                (newer.T == null ? "" : " of " + newer.T.Value.ToString("yyyy-MM-dd HH:mm'Z'", CultureInfo.InvariantCulture)) +
+                                " has another content hash than the version the page was compiled from.");
+                    }
+
+                    // CitationNotInSource
+                    foreach (var c in Items(Prop(a, "Citations")).Select(Attrs))
+                    {
+                        var quote = Str(c, "SourceQuote");
+                        if (string.IsNullOrWhiteSpace(quote)) continue;
+                        var sourceId = Str(c, "SourceRtId");
+                        var source = pageSources.FirstOrDefault(s => Str(s, "RtId") == sourceId);
+                        var section = Cut(Str(c, "SectionRef"), 80);
+                        if (source.ValueKind == JsonValueKind.Undefined)
+                        {
+                            Add("CitationNotInSource", slug, null, "Citation in section '" + section + "' names source " + Cut(sourceId ?? "(none)", 40) + ", which is not a source of this page.");
+                            continue;
+                        }
+                        var content = Norm(Str(Attrs(source), "Content"));
+                        var parts = Norm(quote).Replace("…", "...").Split(new[] { "..." }, StringSplitOptions.RemoveEmptyEntries)
+                            .Select(x => x.Trim().Trim('\'', ' ', '.', ',')).Where(x => x.Length > 0).ToList();
+                        var at = 0;
+                        var found = parts.Count > 0;
+                        foreach (var part in parts)
+                        {
+                            var i = content.IndexOf(part, at, StringComparison.Ordinal);
+                            if (i < 0) { found = false; break; }
+                            at = i + part.Length;
+                        }
+                        if (!found)
+                            Add("CitationNotInSource", slug, null, "Citation in section '" + section + "': the quote '" + Cut(quote, 300) + "' does not occur in source '" + Cut(Str(Attrs(source), "Name"), 120) + "'.");
+                    }
+
+                    // MissingLink: the title (or the slug as words) of another page occurs in this page's text.
+                    var text = Norm(string.Join("\n", new[] { Str(a, "Title"), Str(a, "Summary") }
+                        .Concat(Items(Prop(a, "Sections")).Select(Attrs).Select(x => Str(x, "SectionContent")))
+                        .Where(x => x != null)));
+                    var missing = 0;
+                    foreach (var other in live)
+                    {
+                        var otherId = Str(other, "RtId");
+                        var otherSlug = Str(other, "RtWellKnownName");
+                        if (otherId == id || otherSlug == null || outbound.Contains(otherId)) continue;
+                        var title = Norm(Str(Attrs(other), "Title"));
+                        var slugWords = otherSlug.Replace('-', ' ').Replace('_', ' ').Replace('.', ' ');
+                        var hit = (title.Length >= 12 && text.Contains(title)) ||
+                                  (slugWords.Contains(' ') && slugWords.Length >= 8 && text.Contains(slugWords));
+                        if (!hit) continue;
+                        Add("MissingLink", slug, otherSlug, "The page mentions '" + Cut(Str(Attrs(other), "Title"), 120) + "' but does not link to that page.");
+                        if (++missing >= 5) break;
+                    }
+                }
+                return findings;
+            - type: ExecuteCSharp@1
+              description: Cursor of this run (VerifiedThrough of the latest report; none = from the beginning)
+              arguments:
+                - name: cursor
+                  valuePath: $.lastReport.Items[0].Attributes.VerifiedThrough
+                  dataType: String
+              returnType: DateTime
+              targetPath: $.cursorFrom
+              usings:
+                - System.Globalization
+              code: |-
+                // knowledge-lint-start-cursor (AB#8488)
+                return DateTime.TryParse(cursor, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var t)
+                    ? t : new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            - type: GetRtEntitiesByType@1
+              description: 'Candidates of the LLM check, read on their own: compiled after the cursor, oldest first, at most 50 (the hard cap)'
+              ckTypeId: System.Ai/KnowledgePage
+              take: 50
+              fieldFilters:
+                - attributePath: CompiledAt
+                  operator: GreaterThan
+                  comparisonValuePath: $.cursorFrom
+              sortOrders:
+                - attributeName: CompiledAt
+                  sortOrder: Ascending
+              targetPath: $.candidates
+            - type: GetAssociationTargets@1
+              description: GeneratedFrom of the candidates
+              originCkTypeId: System.Ai/KnowledgePage
+              originRtIdPath: $.candidates.Items[*].RtId
+              associationRoleId: System.Ai/GeneratedFrom
+              graphDirection: Outbound
+              targetCkTypeId: System.Ai/SourceArtifact
+              targetPath: $.candidateSources
+            - type: ExecuteCSharp@1
+              description: 'Pages for the LLM check: of the candidates, at most knowledge-lint-max-pages with sources (default 5, max 50); every candidate up to that point is listed so the cursor moves past it'
+              timeoutMs: 30000
+              arguments:
+                - name: pages
+                  valuePath: $.candidates.Items
+                  dataType: RecordArray
+                - name: sources
+                  valuePath: $.candidateSources
+                  dataType: RecordArray
+                - name: cursor
+                  valuePath: $.lastReport.Items[0].Attributes.VerifiedThrough
+                  dataType: String
+                - name: maxPages
+                  valuePath: $.maxPagesSetting.Items[0].Attributes.ConfigurationValue
+                  dataType: String
+              returnType: RecordArray
+              targetPath: $.selected
+              usings:
+                - System.Collections.Generic
+                - System.Globalization
+                - System.Linq
+                - System.Text.Json
+              code: |-
+                // knowledge-lint-select (AB#8488)
+                JsonElement El(object o) => o is JsonElement j ? j : JsonSerializer.SerializeToElement(o);
+                JsonElement? Prop(JsonElement e, string name)
+                {
+                    if (e.ValueKind != JsonValueKind.Object) return null;
+                    foreach (var p in e.EnumerateObject())
+                        if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                    return null;
+                }
+                JsonElement Attrs(JsonElement e) => Prop(e, "Attributes") is JsonElement a && a.ValueKind == JsonValueKind.Object ? a : e;
+                string Str(JsonElement e, string name)
+                {
+                    var v = Prop(e, name);
+                    if (v == null || v.Value.ValueKind == JsonValueKind.Null || v.Value.ValueKind == JsonValueKind.Undefined) return null;
+                    return v.Value.ValueKind == JsonValueKind.String ? v.Value.GetString() : v.Value.ToString();
+                }
+                IEnumerable<JsonElement> Items(JsonElement? e) => e != null && e.Value.ValueKind == JsonValueKind.Array ? e.Value.EnumerateArray() : Enumerable.Empty<JsonElement>();
+                DateTime? Time(string s) => DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var t) ? t : (DateTime?)null;
+
+                // 50,000 characters of source per page = the size limit of the ingest; a larger page is skipped
+                // (no LLM call, skipReason SourcesTooLarge) and the cursor still moves past it.
+                const int maxSourceChars = 50000;
+                var max = int.TryParse(maxPages, NumberStyles.Integer, CultureInfo.InvariantCulture, out var m) && m > 0 ? Math.Min(m, 50) : 5;
+                var after = Time(cursor);
+                var sourceMap = new Dictionary<string, List<JsonElement>>();
+                foreach (var g in (sources ?? new object[0]).Where(x => x != null).Select(El))
+                {
+                    var origin = Str(g, "OriginRtId");
+                    if (origin == null) continue;
+                    if (!sourceMap.TryGetValue(origin, out var list)) sourceMap[origin] = list = new List<JsonElement>();
+                    list.AddRange(Items(Prop(g, "Items")));
+                }
+                var candidates = (pages ?? new object[0]).Where(x => x != null).Select(El)
+                    .Select(p => new { P = p, A = Attrs(p), Compiled = Time(Str(Attrs(p), "CompiledAt")), Sources = sourceMap.TryGetValue(Str(p, "RtId") ?? "", out var s) ? s : new List<JsonElement>() })
+                    .Where(x => x.Compiled != null && Str(x.P, "RtWellKnownName") != null)
+                    .Where(x => after == null || x.Compiled > after)
+                    .OrderBy(x => x.Compiled).ThenBy(x => Str(x.P, "RtWellKnownName"), StringComparer.Ordinal)
+                    .ToList();
+                // Walk the candidates in cursor order. A Rejected page or one without sources is listed as skipped (no LLM
+                // call) so the cursor moves past it. Stop after max pages to check; pages that share the CompiledAt of the
+                // last one are still taken (the cursor is a time), but never more than 50 checks in one run (hard cap).
+                const int hardCap = 50;
+                var result = new List<Dictionary<string, object>>();
+                var checks = 0;
+                DateTime? stopAt = null;
+                foreach (var x in candidates)
+                {
+                    if (stopAt != null && (x.Compiled != stopAt || checks >= hardCap)) break;
+                    var reason = Str(x.A, "VerificationStatus") == "3" ? "Rejected" : x.Sources.Count == 0 ? "NoSources" : null;
+                    var chars = x.Sources.Sum(s => (Str(Attrs(s), "Content") ?? "").Length);
+                    if (reason == null && chars > maxSourceChars) reason = "SourcesTooLarge";
+                    if (reason == null)
+                    {
+                        checks++;
+                        if (checks >= max && stopAt == null) stopAt = x.Compiled;
+                    }
+                    var draft = new Dictionary<string, object>
+                    {
+                        ["title"] = Str(x.A, "Title") ?? "",
+                        ["sections"] = Items(Prop(x.A, "Sections")).Select(Attrs).Select(s => new Dictionary<string, object>
+                        {
+                            ["heading"] = Str(s, "Heading") ?? "",
+                            ["sectionContent"] = Str(s, "SectionContent") ?? "",
+                            ["sortOrder"] = int.TryParse(Str(s, "SortOrder"), out var o) ? o : 0
+                        }).ToList(),
+                        ["citations"] = Items(Prop(x.A, "Citations")).Select(Attrs).Select(c => new Dictionary<string, object>
+                        {
+                            ["sectionRef"] = Str(c, "SectionRef") ?? "",
+                            ["sourceQuote"] = Str(c, "SourceQuote") ?? "",
+                            ["sourceAnchor"] = Str(c, "SourceAnchor") ?? "",
+                            ["sourceRtId"] = Str(c, "SourceRtId") ?? ""
+                        }).ToList()
+                    };
+                    result.Add(new Dictionary<string, object>
+                    {
+                        ["slug"] = Str(x.P, "RtWellKnownName"),
+                        ["compiledAt"] = x.Compiled.Value.ToString("o", CultureInfo.InvariantCulture),
+                        ["sourceChars"] = chars,
+                        ["skipped"] = reason != null,
+                        ["skipReason"] = reason,
+                        ["draft"] = draft,
+                        ["sources"] = reason == null ? x.Sources : new List<JsonElement>()
+                    });
+                }
+                // A full window of the candidate query (50 rows) that the walk ran through without reaching the limit may have
+                // cut a group of pages with the same CompiledAt; drop that trailing group so the next run (strictly after the
+                // cursor) reads it whole.
+                if (stopAt == null && (pages ?? new object[0]).Length >= hardCap && result.Count == candidates.Count && result.Count > 0)
+                {
+                    var last = (string)result[result.Count - 1]["compiledAt"];
+                    var keep = result.Where(r => (string)r["compiledAt"] != last).ToList();
+                    if (keep.Count > 0) result = keep;
+                }
+                return result;
+            - type: ForEach@1
+              description: 'UnsupportedClaim: one verification call per selected page (wiki-prompt-verification, unchanged)'
+              iterationPath: $.selected
+              targetPath: $.checked
+              mergePath: $.key
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: If@1
+                  path: $.key.skipped
+                  operator: Equal
+                  value: false
+                  valueType: Boolean
+                  transformations:
+                    - type: AnthropicAiQuery@1
+                      description: Verification of one page against its sources
+                      apiKeyConfigurationName: knowledge-llm
+                      promptTemplateName: wiki-prompt-verification
+                      path: $.key.sources
+                      dataPaths:
+                        - $.key.draft
+                      cacheSource: true
+                      responseFormat: json
+                      jsonSchema: '{"type":"object","properties":{"flags":{"type":"array","items":{"type":"object","properties":{"claim":{"type":"string"},"reason":{"type":"string"}},"required":["claim","reason"],"additionalProperties":false}}},"required":["flags"],"additionalProperties":false}'
+                      maxJsonRepairAttempts: 1
+                      usageOutputPath: $.key.usage
+                      targetPath: $.key.review
+            - type: ExecuteCSharp@1
+              description: 'Pages for the contradiction call: the checked pages and their neighbours (links, shared sources), at most twice the page limit and 60,000 characters'
+              timeoutMs: 30000
+              arguments:
+                - name: selected
+                  valuePath: $.selected
+                  dataType: RecordArray
+                - name: pages
+                  valuePath: $.pages.Items
+                  dataType: RecordArray
+                - name: links
+                  valuePath: $.links
+                  dataType: RecordArray
+                - name: sources
+                  valuePath: $.pageSources
+                  dataType: RecordArray
+                - name: maxPages
+                  valuePath: $.maxPagesSetting.Items[0].Attributes.ConfigurationValue
+                  dataType: String
+              returnType: RecordArray
+              targetPath: $.contradictionSet
+              usings:
+                - System.Collections.Generic
+                - System.Globalization
+                - System.Linq
+                - System.Text.Json
+              code: |-
+                // knowledge-lint-contradiction-set (AB#8488)
+                JsonElement El(object o) => o is JsonElement j ? j : JsonSerializer.SerializeToElement(o);
+                JsonElement? Prop(JsonElement e, string name)
+                {
+                    if (e.ValueKind != JsonValueKind.Object) return null;
+                    foreach (var p in e.EnumerateObject())
+                        if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                    return null;
+                }
+                JsonElement Attrs(JsonElement e) => Prop(e, "Attributes") is JsonElement a && a.ValueKind == JsonValueKind.Object ? a : e;
+                string Str(JsonElement e, string name)
+                {
+                    var v = Prop(e, name);
+                    if (v == null || v.Value.ValueKind == JsonValueKind.Null || v.Value.ValueKind == JsonValueKind.Undefined) return null;
+                    return v.Value.ValueKind == JsonValueKind.String ? v.Value.GetString() : v.Value.ToString();
+                }
+                IEnumerable<JsonElement> Items(JsonElement? e) => e != null && e.Value.ValueKind == JsonValueKind.Array ? e.Value.EnumerateArray() : Enumerable.Empty<JsonElement>();
+                Dictionary<string, HashSet<string>> Targets(object[] groups)
+                {
+                    var d = new Dictionary<string, HashSet<string>>();
+                    foreach (var g in (groups ?? new object[0]).Where(x => x != null).Select(El))
+                    {
+                        var origin = Str(g, "OriginRtId");
+                        if (origin == null) continue;
+                        if (!d.TryGetValue(origin, out var set)) d[origin] = set = new HashSet<string>();
+                        foreach (var t in Items(Prop(g, "Items"))) { var id = Str(t, "RtId"); if (id != null) set.Add(id); }
+                    }
+                    return d;
+                }
+
+                const int maxChars = 60000;
+                var max = (int.TryParse(maxPages, NumberStyles.Integer, CultureInfo.InvariantCulture, out var m) && m > 0 ? Math.Min(m, 50) : 5) * 2;
+                var live = (pages ?? new object[0]).Where(x => x != null).Select(El)
+                    .Where(p => Str(Attrs(p), "VerificationStatus") != "3" && Str(p, "RtWellKnownName") != null).ToList();
+                var bySlug = live.GroupBy(p => Str(p, "RtWellKnownName")).ToDictionary(g => g.Key, g => g.First());
+                var linkMap = Targets(links);
+                var sourceMap = Targets(sources);
+                var order = new List<string>();
+                var chosen = (selected ?? new object[0]).Where(x => x != null).Select(El).Where(s => Str(s, "skipReason") == null || Str(s, "skipReason") == "SourcesTooLarge")
+                    .Select(s => Str(s, "slug")).Where(s => s != null && bySlug.ContainsKey(s)).Distinct().ToList();
+                order.AddRange(chosen);
+                foreach (var slug in chosen)
+                {
+                    var id = Str(bySlug[slug], "RtId");
+                    var mine = sourceMap.TryGetValue(id, out var ms) ? ms : new HashSet<string>();
+                    foreach (var other in live)
+                    {
+                        var otherId = Str(other, "RtId");
+                        if (otherId == id) continue;
+                        var linked = (linkMap.TryGetValue(id, out var o) && o.Contains(otherId)) || (linkMap.TryGetValue(otherId, out var i) && i.Contains(id));
+                        var shared = sourceMap.TryGetValue(otherId, out var os) && os.Overlaps(mine);
+                        if (linked || shared) order.Add(Str(other, "RtWellKnownName"));
+                    }
+                }
+                var result = new List<Dictionary<string, object>>();
+                var total = 0;
+                foreach (var slug in order.Distinct())
+                {
+                    if (result.Count >= max) break;
+                    var a = Attrs(bySlug[slug]);
+                    var sections = Items(Prop(a, "Sections")).Select(Attrs).Select(s => new Dictionary<string, object>
+                    {
+                        ["heading"] = Str(s, "Heading") ?? "",
+                        ["sectionContent"] = Str(s, "SectionContent") ?? ""
+                    }).ToList();
+                    var size = (Str(a, "Title") ?? "").Length + (Str(a, "Summary") ?? "").Length + sections.Sum(s => ((string)s["heading"]).Length + ((string)s["sectionContent"]).Length);
+                    if (total + size > maxChars && result.Count > 0) break;
+                    total += size;
+                    result.Add(new Dictionary<string, object>
+                    {
+                        ["slug"] = slug,
+                        ["title"] = Str(a, "Title") ?? "",
+                        ["summary"] = Str(a, "Summary") ?? "",
+                        ["sections"] = sections
+                    });
+                }
+                return result;
+            - type: ExecuteCSharp@1
+              arguments:
+                - name: set
+                  valuePath: $.contradictionSet
+                  dataType: RecordArray
+              returnType: Int
+              targetPath: $.contradictionCount
+              code: 'return set == null ? 0 : set.Length;'
+            - type: If@1
+              description: 'Contradiction: one call over the set when it holds two pages or more'
+              path: $.contradictionCount
+              operator: GreaterEqualsThan
+              value: 2
+              valueType: Int
+              transformations:
+                - type: AnthropicAiQuery@1
+                  description: Contradictions between the pages of the set (knowledge-lint-contradiction)
+                  apiKeyConfigurationName: knowledge-llm
+                  promptTemplateName: knowledge-lint-contradiction
+                  path: $.contradictionSet
+                  responseFormat: json
+                  jsonSchema: '{"type":"object","properties":{"contradictions":{"type":"array","items":{"type":"object","properties":{"pageA":{"type":"string"},"pageB":{"type":"string"},"detail":{"type":"string"}},"required":["pageA","pageB","detail"],"additionalProperties":false}}},"required":["contradictions"],"additionalProperties":false}'
+                  maxJsonRepairAttempts: 1
+                  usageOutputPath: $.usage.contradiction
+                  targetPath: $.contradictionResult
+            - type: ExecuteCSharp@1
+              description: 'All findings of the run, most important first, at most 500'
+              timeoutMs: 30000
+              arguments:
+                - name: rules
+                  valuePath: $.ruleFindings
+                  dataType: RecordArray
+                - name: checkedPages
+                  valuePath: $.checked
+                  dataType: RecordArray
+                - name: contradictions
+                  valuePath: $.contradictionResult.contradictions
+                  dataType: RecordArray
+                - name: set
+                  valuePath: $.contradictionSet
+                  dataType: RecordArray
+              returnType: RecordArray
+              targetPath: $.report.findings
+              usings:
+                - System.Collections.Generic
+                - System.Linq
+                - System.Text
+                - System.Text.Json
+              code: |-
+                // knowledge-lint-assemble (AB#8488)
+                JsonElement El(object o) => o is JsonElement j ? j : JsonSerializer.SerializeToElement(o);
+                JsonElement? Prop(JsonElement e, string name)
+                {
+                    if (e.ValueKind != JsonValueKind.Object) return null;
+                    foreach (var p in e.EnumerateObject())
+                        if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                    return null;
+                }
+                string Str(JsonElement e, string name)
+                {
+                    var v = Prop(e, name);
+                    if (v == null || v.Value.ValueKind == JsonValueKind.Null || v.Value.ValueKind == JsonValueKind.Undefined) return null;
+                    return v.Value.ValueKind == JsonValueKind.String ? v.Value.GetString() : v.Value.ToString();
+                }
+                IEnumerable<JsonElement> Items(JsonElement? e) => e != null && e.Value.ValueKind == JsonValueKind.Array ? e.Value.EnumerateArray() : Enumerable.Empty<JsonElement>();
+                string Cut(string s, int n) => s == null ? string.Empty : (s.Length <= n ? s : s.Substring(0, n) + "...");
+                string Norm(string s)
+                {
+                    if (string.IsNullOrEmpty(s)) return string.Empty;
+                    var sb = new StringBuilder(s.Length);
+                    var space = false;
+                    foreach (var c0 in s.ToLowerInvariant())
+                    {
+                        var c = c0;
+                        if ("\"`‘’‚“”„«»".IndexOf(c) >= 0) c = '\'';
+                        else if (c == '–' || c == '—') c = '-';
+                        if (c == '*' || c == '_') continue;
+                        if (char.IsWhiteSpace(c)) { space = true; continue; }
+                        if (space && sb.Length > 0) sb.Append(' ');
+                        space = false;
+                        sb.Append(c);
+                    }
+                    return sb.ToString().Trim('\'', ' ', '.');
+                }
+                Dictionary<string, object> F(string kind, string page, string related, string detail)
+                {
+                    var f = new Dictionary<string, object> { ["kind"] = kind, ["pageRef"] = page, ["detail"] = Cut(detail, 1900) };
+                    if (related != null) f["relatedPageRef"] = related;
+                    return f;
+                }
+
+                var findings = new List<Dictionary<string, object>>();
+                foreach (var r in (rules ?? new object[0]).Where(x => x != null).Select(El))
+                    findings.Add(F(Str(r, "kind"), Str(r, "pageRef"), Str(r, "relatedPageRef"), Str(r, "detail")));
+
+                // UnsupportedClaim: the verification flags of each checked page. A flag about a citation quote is
+                // dropped - citations are judged by the rule check (CitationNotInSource), not by the model.
+                foreach (var page in (checkedPages ?? new object[0]).Where(x => x != null).Select(El))
+                {
+                    var slug = Str(page, "slug");
+                    var quotes = Items(Prop(Prop(page, "draft") ?? default, "citations"))
+                        .Select(c => Norm(Str(c, "sourceQuote"))).Where(q => q.Length >= 8).ToList();
+                    foreach (var flag in Items(Prop(Prop(page, "review") ?? default, "flags")))
+                    {
+                        var claim = Str(flag, "claim");
+                        if (string.IsNullOrWhiteSpace(claim)) continue;
+                        var n = Norm(claim);
+                        if (quotes.Any(q => n.Contains(q) || (n.Length >= 8 && q.Contains(n)))) continue;
+                        findings.Add(F("UnsupportedClaim", slug, null, "Claim '" + Cut(claim, 400) + "' is not supported by the sources: " + Cut(Str(flag, "reason"), 400)));
+                    }
+                }
+
+                // Contradiction: only pairs of two different pages of the set, each pair once.
+                var valid = new HashSet<string>((set ?? new object[0]).Where(x => x != null).Select(El).Select(s => Str(s, "slug")).Where(s => s != null));
+                var seen = new HashSet<string>();
+                foreach (var c in (contradictions ?? new object[0]).Where(x => x != null).Select(El))
+                {
+                    var a = Str(c, "pageA");
+                    var b = Str(c, "pageB");
+                    if (a == null || b == null || a == b || !valid.Contains(a) || !valid.Contains(b)) continue;
+                    var key = string.CompareOrdinal(a, b) < 0 ? a + "|" + b : b + "|" + a;
+                    if (!seen.Add(key)) continue;
+                    findings.Add(F("Contradiction", a, b, Cut(Str(c, "detail"), 1200)));
+                }
+
+                var rank = new[] { "Contradiction", "Stale", "CitationNotInSource", "UnsupportedClaim", "MissingLink", "Orphan" };
+                return findings.Where(f => f["kind"] != null && f["pageRef"] != null)
+                    .Select((f, i) => new { F = f, I = i })
+                    .OrderBy(x => Array.IndexOf(rank, (string)x.F["kind"]) < 0 ? 99 : Array.IndexOf(rank, (string)x.F["kind"])).ThenBy(x => x.I)
+                    .Take(500).Select(x => x.F).ToList();
+            - type: ExecuteCSharp@1
+              description: 'Tokens and estimated cost of the run (uncached + cache read + cache write, all LLM calls)'
+              arguments:
+                - name: checkedPages
+                  valuePath: $.checked
+                  dataType: RecordArray
+                - name: contradiction
+                  valuePath: $.usage.contradiction
+                  dataType: Record
+              returnType: Record
+              targetPath: $.totals
+              usings:
+                - System.Collections.Generic
+                - System.Linq
+                - System.Text.Json
+              code: |-
+                // knowledge-lint-usage (AB#8488)
+                JsonElement El(object o) => o is JsonElement j ? j : JsonSerializer.SerializeToElement(o);
+                double Num(JsonElement e, string name)
+                {
+                    if (e.ValueKind != JsonValueKind.Object) return 0;
+                    foreach (var p in e.EnumerateObject())
+                        if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Number) return p.Value.GetDouble();
+                    return 0;
+                }
+                JsonElement Usage(JsonElement e)
+                {
+                    if (e.ValueKind != JsonValueKind.Object) return default;
+                    foreach (var p in e.EnumerateObject())
+                        if (string.Equals(p.Name, "usage", StringComparison.OrdinalIgnoreCase)) return p.Value;
+                    return default;
+                }
+                var usages = (checkedPages ?? new object[0]).Where(x => x != null).Select(El).Select(Usage).ToList();
+                if (contradiction != null) usages.Add(El(contradiction));
+                var input = usages.Sum(u => Num(u, "inputTokens") + Num(u, "cacheReadInputTokens") + Num(u, "cacheCreationInputTokens"));
+                var output = usages.Sum(u => Num(u, "outputTokens"));
+                var cost = usages.Sum(u => Num(u, "estimatedCostUsd"));
+                return new Dictionary<string, object>
+                {
+                    ["inputTokens"] = (int)input,
+                    ["outputTokens"] = (int)output,
+                    ["cost"] = Math.Round(cost, 6),
+                    ["llmCalls"] = usages.Count(u => u.ValueKind == JsonValueKind.Object)
+                };
+            - type: ExecuteCSharp@1
+              description: 'Cursor for the next run: the latest CompiledAt of the pages selected now, else the old cursor'
+              arguments:
+                - name: selected
+                  valuePath: $.selected
+                  dataType: RecordArray
+                - name: cursor
+                  valuePath: $.lastReport.Items[0].Attributes.VerifiedThrough
+                  dataType: String
+              returnType: String
+              targetPath: $.report.verifiedThrough
+              usings:
+                - System.Linq
+                - System.Text.Json
+              code: |-
+                // knowledge-lint-cursor (AB#8488)
+                var latest = (selected ?? new object[0]).OfType<JsonElement>()
+                    .Select(s => s.TryGetProperty("compiledAt", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null)
+                    .Where(s => s != null).OrderBy(s => s, StringComparer.Ordinal).LastOrDefault();
+                return latest ?? (string.IsNullOrWhiteSpace(cursor) ? null : cursor);
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.totals.inputTokens
+                  targetPath: $.report.inputTokens
+                - path: $.totals.outputTokens
+                  targetPath: $.report.outputTokens
+                - path: $.totals.cost
+                  targetPath: $.report.cost
+            - type: FormatString@1
+              description: Run reference (interim, like the ingest - the execution id is not reachable from the run)
+              format: 'knowledge-lint/{$.report.startedAt}'
+              targetPath: $.report.runRef
+            - type: ExecuteCSharp@1
+              description: End of the run
+              returnType: DateTime
+              targetPath: $.report.completedAt
+              code: return DateTime.UtcNow;
+            - type: McpToolCall@1
+              description: The only write - knowledge_write_lint_report as knowledge-linter (content guard, unvalidated)
+              allowedTools:
+                - knowledge_write_lint_report
+              toolName: knowledge_write_lint_report
+              argumentsPath: $.report
+              aiConfigurationName: knowledge-llm-mcp
+              mcpServiceAccountConfigName: knowledge-linter
+              targetPath: $.write
+            - type: ExecuteCSharp@1
+              description: A refused report (content guard, invalid input) fails the run
+              arguments:
+                - name: isSuccess
+                  valuePath: $.write.isSuccess
+                  dataType: Boolean
+                - name: errorMessage
+                  valuePath: $.write.errorMessage
+                  dataType: String
+                - name: message
+                  valuePath: $.write.message
+                  dataType: String
+              returnType: String
+              targetPath: $.result.message
+              code: |-
+                // knowledge-lint-write-check (AB#8488): the tool answers a refusal as a result, not as an MCP error.
+                if (!isSuccess)
+                    throw new InvalidOperationException("knowledge_write_lint_report refused the report: " + (errorMessage ?? "no reason given"));
+                return message ?? string.Empty;
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.write.rtId
+                  targetPath: $.result.reportRtId
+                - path: $.write.findingsByKind
+                  targetPath: $.result.findingsByKind
+                - path: $.totals
+                  targetPath: $.result.usage
+                - path: $.report.verifiedThrough
+                  targetPath: $.result.verifiedThrough
+            - type: SetPipelineExecutionResult@1
+              path: $.result
+            - type: Project@1
+              description: Answer an HTTP caller with the result only
+              path: $
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
+
+  # Nightly at 02:30 UTC. Seeded DISABLED (decision 2026-11-11): the lint costs LLM tokens and its
+  # precision is not measured yet. Enable it (System/Enabled true) after the data flow is deployed.
+  - rtId: '67a1000000000000000b1c29'
+    ckTypeId: System.Communication/PipelineTrigger
+    rtWellKnownName: knowledge-lint-nightly
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c07'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Triggers
+        targetRtId: '67a1000000000000000b1c28'
+        targetCkTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: knowledge-lint-nightly
+      - id: System/Enabled
+        value: false
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System.Bot/CronExpression
+        value: 0 30 2 * * *
