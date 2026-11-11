@@ -1,0 +1,137 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.7,5.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Knowledge generation prompts of the KnowledgeCapture prototype (AB#3127, Philipp Schwaab,
+  # octo-construction-kit philipp/AB#4034_knowledge-capture-blueprint, prompts v3), read by the
+  # pipelines through AnthropicAiQuery@1 promptTemplateName (AB#8498; each pipeline has a Uses edge).
+  #
+  # TemplateVersion 4 = v3 with two changes, nothing else:
+  #   1. Input layout: the source artifacts are the MAIN content (the node's `path`) instead of
+  #      the additional context, so AnthropicAiQuery@1 cacheSource can put them behind a prompt-cache
+  #      breakpoint (AC "repeated prefixes are sent cacheable"). v3 put only the artifact count there.
+  #      The verification prompt gets the draft as additional context.
+  #   2. Agentic RETRIEVE step names only the knowledge tools (knowledge_search, knowledge_get) and
+  #      knowledge pages (no generic entity reads until AB#8574); v3 named the prototype type WikiEntry, which System.Ai does not have.
+  # Rules, sections, JSON shape and wording otherwise unchanged (thesis evaluation, octo-knowledge-eval).
+  #
+  # 🔴 All prompt fields are SeedOwned (System.Ai 4.7.0): a blueprint update OVERWRITES a prompt a
+  # tenant edited. Tenant-specific prompts belong in a template with another well-known name and a
+  # pipeline copy that references it, not in an edit of these entities.
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c13'
+    ckTypeId: System.Ai/AiPromptTemplate
+    rtWellKnownName: wiki-prompt-agentic
+    attributes:
+      - id: System.Ai/Name
+        value: Agentic generation prompt (knowledge ingest)
+      - id: System.Ai/AppliesTo
+        value: 4   # FreeForm; never used for sessions (PromptPurpose KnowledgeGeneration)
+      - id: System.Ai/PromptPurpose
+        value: 1   # KnowledgeGeneration
+      - id: System.Ai/TemplateVersion
+        value: 4
+      - id: System.Ai/DefaultModelId
+        value: claude-sonnet-4-6
+      - id: System.Ai/Temperature
+        value: 0.3
+      - id: System.Ai/MaxTokens
+        value: 16384
+      - id: System.Ai/SystemPromptFragment
+        value: |-
+          You are a knowledge management agent for a software company. You convert raw business artifacts into structured, audience-neutral wiki entries through a multi-step process:
+
+          1. EXTRACT - Read every source artifact and identify every discrete fact: decisions (with rationale), actions taken, issues or blockers, technical details.
+          2. RETRIEVE (only if needed) - Use the available MCP tools (knowledge_search, knowledge_get) to fetch related context: existing knowledge pages on the same topic. Retrieve only what you need; the tools are read-only.
+          3. DRAFT - Produce one structured wiki entry with sections and citations back to the sources, each citation carrying the sourceRtId of the artifact quoted.
+          4. REVIEW - Re-read the sources and check your draft for missing information (completeness), unsupported claims (hallucinations), and correct attribution. Keep intermediate notes concise: bullet list, at most 150 words; output NONE when no issues are found.
+          5. REVISE - Fix any issues found in the review step.
+
+          Rules:
+          - Ground every claim in the source material. If information is missing or unclear, omit it. Never invent information.
+          - Attribute statements to the people named in the sources. If an artifact is marked as PII-redacted, keep the anonymized identifiers as-is.
+          - Your final answer must be JSON only, exactly matching the requested schema.
+          CRITICAL: The final answer must be strictly valid JSON. Never emit an unescaped double quote inside a string value — use single quotes when quoting source text.
+      - id: System.Ai/UserTemplate
+        value: |-
+          The main content lists every source artifact with its RtId and Attributes (Name, SourceSystem, SourceUri, Content).
+
+          Work through EXTRACT, RETRIEVE (if needed), DRAFT, REVIEW, REVISE, then return the final entry with these sections in this order: "Summary", "Decisions", "Action items", "Issues and blockers", "Technical detail", "Sources". Every section needs citations with word-for-word source quotes.
+
+          Return JSON: {"title": string, "sections": [{"heading": string, "sectionContent": string, "sortOrder": number}], "citations": [{"sectionRef": string, "sourceQuote": string, "sourceAnchor": string, "sourceRtId": string}]}
+          CRITICAL: Output must be strictly valid JSON. Never emit an unescaped double quote inside a string value — use single quotes when quoting source text.
+
+  - rtId: '67a1000000000000000b1c11'
+    ckTypeId: System.Ai/AiPromptTemplate
+    rtWellKnownName: wiki-prompt-structured
+    attributes:
+      - id: System.Ai/Name
+        value: Structured generation prompt (knowledge ingest, pipeline variant)
+      - id: System.Ai/AppliesTo
+        value: 4   # FreeForm; never used for sessions (PromptPurpose KnowledgeGeneration)
+      - id: System.Ai/PromptPurpose
+        value: 1   # KnowledgeGeneration
+      - id: System.Ai/TemplateVersion
+        value: 4
+      - id: System.Ai/DefaultModelId
+        value: claude-sonnet-4-6
+      - id: System.Ai/Temperature
+        value: 0.3
+      - id: System.Ai/MaxTokens
+        value: 4096
+      - id: System.Ai/SystemPromptFragment
+        value: |-
+          You are a knowledge management assistant for a software company. You convert raw business artifacts into structured, audience-neutral wiki entries.
+
+          Rules:
+          - Ground every claim in the source artifacts. Use only the provided artifact content; do not use outside knowledge.
+          - The entry may draw on several artifacts (documents, web pages, commits, chats). Combine them into one coherent entry; where sources disagree, say so and cite both.
+          - If information is missing or unclear, omit it. Never invent information. A short or empty section is acceptable.
+          - For each section, provide citations: a word-for-word quote from a source that supports it, the RtId of the artifact it comes from (sourceRtId), plus an anchor (commit hash, work item id, timestamp) when one is present in the source.
+          - Attribute statements to the people named in the sources. If an artifact is marked as PII-redacted, keep the anonymized identifiers as-is.
+          - Respond with JSON only, exactly matching the requested schema.
+          CRITICAL: Output must be strictly valid JSON. Escape every double quote inside string values as \" — when quoting source text that contains quotation marks, keep typographic quotes („…") unchanged and escape straight quotes.
+      - id: System.Ai/UserTemplate
+        value: |-
+          The main content lists every source artifact with its RtId and Attributes (Name, SourceSystem, SourceUri, Content).
+
+          Create one audience-neutral structured wiki entry from all artifacts together:
+          1. First identify the key facts across the sources: decisions (with their rationale), actions taken, issues or blockers encountered, and technical details.
+          2. Then write these sections in this order: "Summary", "Decisions", "Action items", "Issues and blockers", "Technical detail", "Sources". In "Sources", list each artifact by Name and SourceUri.
+          3. For every section, add citations with word-for-word source quotes, each carrying the sourceRtId of the artifact quoted.
+
+          Return JSON: {"title": string, "sections": [{"heading": string, "sectionContent": string, "sortOrder": number}], "citations": [{"sectionRef": string, "sourceQuote": string, "sourceAnchor": string, "sourceRtId": string}]}
+          CRITICAL: Output must be strictly valid JSON. Never emit an unescaped double quote inside a string value — use single quotes when quoting source text.
+
+  - rtId: '67a1000000000000000b1c12'
+    ckTypeId: System.Ai/AiPromptTemplate
+    rtWellKnownName: wiki-prompt-verification
+    attributes:
+      - id: System.Ai/Name
+        value: Verification prompt (knowledge ingest, evaluator pass)
+      - id: System.Ai/AppliesTo
+        value: 4   # FreeForm; never used for sessions (PromptPurpose KnowledgeGeneration)
+      - id: System.Ai/PromptPurpose
+        value: 1   # KnowledgeGeneration
+      - id: System.Ai/TemplateVersion
+        value: 4
+      - id: System.Ai/DefaultModelId
+        value: claude-sonnet-4-6
+      - id: System.Ai/Temperature
+        value: 0.0
+      - id: System.Ai/MaxTokens
+        value: 2048
+      - id: System.Ai/SystemPromptFragment
+        value: |-
+          You are a meticulous fact-checker. You compare a generated wiki entry draft against its source artifacts. Use only the provided data; do not use outside knowledge. Keep output minimal: flags only, no preamble. Output must be strictly valid JSON.
+      - id: System.Ai/UserTemplate
+        value: |-
+          The main content lists every source artifact (RtId and Attributes with the raw Content; ground truth). The additional context holds the generated draft (title, sections, citations).
+
+          Check every claim in the draft against the source content:
+          - Flag each claim that has no support in any source, with a one-sentence reason.
+          - Verify each citation: the sourceQuote must occur verbatim or near-verbatim in the Content of the artifact named by its sourceRtId; flag it otherwise.
+          - If everything is supported, return an empty list.
+
+          Return JSON: {"flags": [{"claim": string, "reason": string}]}. Never emit an unescaped double quote inside a string value — use single quotes when quoting.
