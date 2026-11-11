@@ -1,0 +1,77 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: System.Ai.Knowledge-1.1.1
+description: |
+  Opt-in knowledge ingest for the tenant knowledge base (AB#8486, Feature AB#8450). A document
+  in the tenant's Knowledge folder (System.Files root "Knowledge"), or a text or PDF posted to
+  the HTTP endpoints, becomes a SourceArtifact and then a Draft knowledge page.
+
+  Not service-managed: System.Ai.Default (applied on EnableAi to every AI tenant) carries no
+  ingest pipeline and no LLM call. Only a tenant that installs this blueprint gets them, and
+  until the per-tenant cost cap AB#8659 exists it is installed only locally and on one opt-in
+  test-2 tenant with a dedicated API key whose provider-side spend limit is the hard cap.
+
+  Seeds:
+  - the Knowledge folder root (System.Files/FolderRoot "Knowledge")
+  - AiConfiguration knowledge-llm (calls without tools) and knowledge-llm-mcp (agentic loop and
+    page write; carries McpServerUrl) - set the same ApiKey on both after the install and before
+    the data flow is deployed
+  - ServiceAccountConfiguration knowledge-reader (read tools of the generation loop) and
+    knowledge-curator (the page write in McpToolCall@1 only); no extra roles, no delegation
+  - the three KnowledgeCapture prompts (AB#3127) as AiPromptTemplate, PromptPurpose
+    KnowledgeGeneration: wiki-prompt-agentic, wiki-prompt-structured, wiki-prompt-verification
+    (TemplateVersion 4 = Philipp's v3 with the source as the cacheable main content)
+  - data flow knowledge-ingest with seven pipelines, all seeded Undeployed:
+    knowledge-ingest-file (Knowledge folder watch), knowledge-ingest-text (HTTP text),
+    knowledge-ingest-pdf (HTTP PDF), knowledge-source-artifact (bronze, hash dedupe),
+    knowledge-generate-agentic (default), knowledge-generate (pipeline variant) and
+    knowledge-write-page (the only pipeline that runs as knowledge-curator)
+
+  Write path W1: the model only reads (knowledge_search, knowledge_get; no generic entity
+  reads until AB#8574) and returns schema-valid JSON; the pipeline verifies, normalises the
+  Markdown and hands the page to knowledge-write-page, which writes through McpToolCall@1 ->
+  knowledge_upsert_page as knowledge-curator, with run data on the new page version. Pages
+  start as Draft.
+
+  Knowledge lint (1.1.0, AB#8488): data flow knowledge-maintenance with the pipeline knowledge-lint
+  (service account knowledge-linter, prompt knowledge-lint-contradiction, trigger
+  knowledge-lint-nightly at 02:30 UTC seeded DISABLED, HTTP POST /knowledge-capture/lint). Rule
+  checks (orphan, stale, missing link, citation not in source) over all pages; LLM checks
+  (unsupported claim, contradiction) over at most knowledge-lint-max-pages pages per run (tenant
+  setting, default 5). The report is written through McpToolCall@1 -> knowledge_write_lint_report
+  and is always unvalidated until the lint's precision is measured.
+
+  Page metadata (1.1.1, AB#8719; found by the first live ingest on test-2 kb-test): every ingest version
+  carries latencySeconds (start of the generation pipeline to the hand-over of the write; needs
+  octo-mcp-service with the latencySeconds parameter of knowledge_upsert_page), the page summary is
+  taken from the generated Summary section (plain text, at most two sentences / 400 characters), and
+  only confirmed hallucination flags are stored: wiki-prompt-verification TemplateVersion 5 returns
+  flags with "confirmed", and the pipelines and the lint drop flags the verification withdrew itself.
+
+  Set the API key on knowledge-llm and knowledge-llm-mcp BEFORE deploying the data flows, or redeploy
+  them afterwards: the adapter reads the AiConfiguration when the pipeline is deployed.
+
+  Setup, settings and limits: src/SystemAiCkModel/README.md, section "System.Ai.Knowledge".
+
+# The seed needs System.Ai 4.8 (4.7: SourceArtifact, KnowledgePage, AiPromptTemplate.PromptPurpose,
+# ExtractedFrom; 4.8: KnowledgeLintReport.IsValidated/VerifiedThrough, CitationNotInSource), System.Bot 3.x
+# (PipelineTrigger CronExpression of the lint), the System.Communication 4.x line (AiConfiguration.McpServerUrl,
+# ServiceAccountConfiguration.AssignedRoleNames/AllowDelegation, Pipeline/DataFlow) and
+# System.Files 1.x (FolderRoot). All four are service-managed and already on an AI tenant.
+ckModelDependencies:
+  - System.Ai-[4.8,5.0)
+  - System.Bot-[3.1,4.0)
+  - System.Communication-[4.0,5.0)
+  - System.Files-[1.0,2.0)
+
+# One file per concern; the engine merges them before importing.
+seedDataPaths:
+  - seed-data/configurations.yaml
+  - seed-data/prompt-templates.yaml
+  - seed-data/pipelines/ingest-file.yaml
+  - seed-data/pipelines/ingest-text.yaml
+  - seed-data/pipelines/ingest-pdf.yaml
+  - seed-data/pipelines/source-artifact.yaml
+  - seed-data/pipelines/generate-agentic.yaml
+  - seed-data/pipelines/generate.yaml
+  - seed-data/pipelines/write-page.yaml
+  - seed-data/lint.yaml
