@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "blueprintId": "System.Ai.Builder",
+  "majorVersion": 1,
+  "latestVersion": "1.0.0",
+  "description": "Opt-in app-building know-how for the tenant knowledge base (AB#8779, Feature AB#8777). Installs\n23 knowledge pages that answer how to build an OctoMesh app: the build sequence, HTTP API\npipelines, blueprint authoring, operator-deployed web apps, pipeline basics and DataContext,\nentity updates, the Mesh Adapter and SDK pipeline nodes, and worked pipeline examples. An MCP\nclient finds them with knowledge_search / knowledge_get and cites them as [slug].\n\nThe pages are generated from the skills octo-app-builder and pipeline-expert of\nocto-claude-skills by tools/SkillPages (AB#8490); never edit the seed by hand\n(docs/skill-pages.md). Every page has kind Skill, origin Blueprint and status Verified, its\nfirst KnowledgePageVersion (author blueprint:System.Ai.Builder-\u003Cversion\u003E, DeclaredLinks = the\npage\u0027s LinksTo) and LinksTo associations to the pages it mentions.\n\nPages only: no pipeline, no LLM call, no service account, no client. The builder agent, its\nmandate and its client are AB#8495. Not service-managed: the AI service applies only\nSystem.Ai.Default; a tenant gets these pages only with InstallBlueprint, and\nUninstallBlueprint removes them again.\n\nUpdates: the page content is TenantOwned, so a later version of this blueprint brings only new\nKnowledgePageVersion entities; it never overwrites a page (AB#8778). The knowledge maintenance\nof System.Ai.Knowledge 1.2.0 (AB#8780) switches an unedited page to the newest version and\nreports an edited one as PlatformUpdateAvailable. This blueprint does not depend on\nSystem.Ai.Knowledge on purpose (that blueprint carries the LLM ingest pipelines and needs an\nAPI key); without it a person adopts a newer version with knowledge_restore_version.\n\nSetup, updates and limits: src/SystemAiCkModel/README.md, section \u0022Blueprint System.Ai.Builder\u0022.\n",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "directoryPath": "blueprints/v1/s/System.Ai.Builder/1/System.Ai.Builder-1.0.0",
+      "publishedAt": "2026-11-13T02:08:05.0413745Z"
+    }
+  ],
+  "updatedAt": "2026-11-13T02:08:05.0419058Z"
+}
