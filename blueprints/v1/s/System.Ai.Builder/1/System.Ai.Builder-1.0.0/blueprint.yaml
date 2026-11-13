@@ -1,0 +1,37 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: System.Ai.Builder-1.0.0
+description: |
+  Opt-in app-building know-how for the tenant knowledge base (AB#8779, Feature AB#8777). Installs
+  23 knowledge pages that answer how to build an OctoMesh app: the build sequence, HTTP API
+  pipelines, blueprint authoring, operator-deployed web apps, pipeline basics and DataContext,
+  entity updates, the Mesh Adapter and SDK pipeline nodes, and worked pipeline examples. An MCP
+  client finds them with knowledge_search / knowledge_get and cites them as [slug].
+
+  The pages are generated from the skills octo-app-builder and pipeline-expert of
+  octo-claude-skills by tools/SkillPages (AB#8490); never edit the seed by hand
+  (docs/skill-pages.md). Every page has kind Skill, origin Blueprint and status Verified, its
+  first KnowledgePageVersion (author blueprint:System.Ai.Builder-<version>, DeclaredLinks = the
+  page's LinksTo) and LinksTo associations to the pages it mentions.
+
+  Pages only: no pipeline, no LLM call, no service account, no client. The builder agent, its
+  mandate and its client are AB#8495. Not service-managed: the AI service applies only
+  System.Ai.Default; a tenant gets these pages only with InstallBlueprint, and
+  UninstallBlueprint removes them again.
+
+  Updates: the page content is TenantOwned, so a later version of this blueprint brings only new
+  KnowledgePageVersion entities; it never overwrites a page (AB#8778). The knowledge maintenance
+  of System.Ai.Knowledge 1.2.0 (AB#8780) switches an unedited page to the newest version and
+  reports an edited one as PlatformUpdateAvailable. This blueprint does not depend on
+  System.Ai.Knowledge on purpose (that blueprint carries the LLM ingest pipelines and needs an
+  API key); without it a person adopts a newer version with knowledge_restore_version.
+
+  Setup, updates and limits: src/SystemAiCkModel/README.md, section "Blueprint System.Ai.Builder".
+
+# The seed needs System.Ai 4.10: KnowledgePage, KnowledgePageVersion, LinksTo/VersionOf (4.7) and
+# KnowledgePageVersion.DeclaredLinks (4.10, AB#8780). System.Ai is service-managed and already on an
+# AI tenant; the floor equals the seed's own dependency (tools/SkillPages/page-plan.yaml), tested by
+# tests/SkillPages.UnitTests (CommittedSeedTests.Manifest_*).
+ckModelDependencies:
+  - System.Ai-[4.10,5.0)
+
+seedDataPath: seed-data/knowledge-pages.yaml
