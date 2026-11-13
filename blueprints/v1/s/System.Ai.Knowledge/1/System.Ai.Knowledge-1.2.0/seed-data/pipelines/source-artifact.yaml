@@ -1,0 +1,361 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.7,5.0)
+  - System.Communication-[4.0,5.0)
+  - System.Files-[1.0,2.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Stage 1 common part (bronze). Input from the three ingest pipelines at $.source:
+  #   { name, content, artifactType?, sourceSystem?, sourceUri?, contentPreview?, isPiiRedacted?,
+  #     capturedAt?, extractionTier?, fileRtId? }
+  # 1. SHA-256 of the extracted text -> ContentHash. A SourceArtifact with that hash already exists
+  #    = unchanged source: nothing further happens (no SourceArtifact, no LLM call, no page version) -
+  #    UNLESS no page was generated from it yet (GeneratedFrom), e.g. because the earlier generation
+  #    failed (no API key, size limit, LLM error, refused write), and the artifact is older than 15
+  #    minutes (a younger one may still be generating: status "generating"): then the generation is
+  #    started again for the existing artifact (status "regenerating"), so a re-upload is the retry.
+  # 2. Otherwise insert the SourceArtifact (append-only bronze; a changed file gets a NEW artifact),
+  #    linked ExtractedFrom the System.Files item when it came from the Knowledge folder.
+  # 3. Slug of the page = the source name in slug form (file extension dropped), so a changed file
+  #    updates the same page (new KnowledgePageVersion) instead of creating a second page.
+  # 4. Hand over to the generation variant chosen by the tenant setting (see README):
+  #    System/TenantConfiguration with rtWellKnownName knowledge-generation-mode,
+  #    ConfigurationValue "Pipeline" -> knowledge-generate; absent or anything else ->
+  #    knowledge-generate-agentic (the default). The setting is NOT seeded, so a blueprint
+  #    update never resets it.
+  # The SourceArtifact is written with ApplyChanges@2 under the adapter's identity: there is no MCP
+  # write tool for SourceArtifacts and the generic entity tools refuse the knowledge types. Knowledge
+  # PAGES are never written here - only through knowledge_upsert_page (W1).
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c24'
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: knowledge-source-artifact
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c05'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Knowledge - Source Artifact (bronze)
+      - id: System/Description
+        value: >-
+          Hashes the extracted text, drops unchanged sources, stores the SourceArtifact
+          (ExtractedFrom the file) and starts the page generation.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/IsDebuggingEnabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromPipelineDataEvent@1
+          transformations:
+            - type: ExecuteCSharp@1
+              description: Refuse an empty extraction with a clear error
+              arguments:
+                - name: content
+                  valuePath: $.source.content
+                  dataType: String
+                - name: name
+                  valuePath: $.source.name
+                  dataType: String
+              returnType: Int
+              targetPath: $.source.contentLength
+              code: |-
+                // knowledge-content-guard (AB#8486)
+                if (string.IsNullOrWhiteSpace(content))
+                    throw new InvalidOperationException("Knowledge ingest: no text could be extracted from '" + name + "'. Nothing was stored.");
+                return content.Length;
+            - type: Hash@1
+              path: $.source
+              sourcePath: $.content
+              targetPath: $.contentHash
+              algorithm: Sha256
+            - type: ExecuteCSharp@1
+              description: Page slug from the source name
+              arguments:
+                - name: name
+                  valuePath: $.source.name
+                  dataType: String
+                - name: hash
+                  valuePath: $.source.contentHash
+                  dataType: String
+              returnType: String
+              targetPath: $.source.slug
+              code: |-
+                // knowledge-slug (AB#8486): lower-case words joined by hyphens, file extension (suffix starting with a letter) dropped,
+                // 2-120 characters; falls back to "source-<hash>" when the name has no usable character.
+                var raw = (name ?? string.Empty).Trim().Replace("ß", "ss");
+                var dot = raw.LastIndexOf('.');
+                if (dot > 0 && raw.Length - dot <= 10 && dot + 1 < raw.Length && char.IsLetter(raw[dot + 1])) raw = raw.Substring(0, dot);
+                var sb = new System.Text.StringBuilder();
+                var dash = false;
+                foreach (var ch in raw.Normalize(System.Text.NormalizationForm.FormD).ToLowerInvariant())
+                {
+                    if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) == System.Globalization.UnicodeCategory.NonSpacingMark) continue;
+                    if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) { sb.Append(ch); dash = false; }
+                    else if (sb.Length > 0 && !dash) { sb.Append('-'); dash = true; }
+                }
+                var slug = sb.ToString().Trim('-');
+                if (slug.Length > 120) slug = slug.Substring(0, 120).Trim('-');
+                if (slug.Length < 2) slug = "source-" + (hash ?? "unknown").Substring(0, Math.Min(12, (hash ?? "unknown").Length)).ToLowerInvariant();
+                return slug;
+            - type: CheckDuplicate@1
+              description: Unchanged source = a SourceArtifact with the same ContentHash exists
+              ckTypeId: System.Ai/SourceArtifact
+              attributeName: ContentHash
+              valuePath: $.source.contentHash
+              existingEntityPath: $.existing
+              targetPath: $.isDuplicate
+            - type: SetPrimitiveValue@1
+              value: false
+              targetPath: $.needsGeneration
+              valueType: Boolean
+            - type: If@1
+              description: Unchanged source - generate only if no page was generated from it yet
+              path: $.isDuplicate
+              operator: Equal
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: SetPrimitiveValue@1
+                  valuePath: $.existing.RtId
+                  targetPath: $.artifactRtId
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  value: unchanged
+                  targetPath: $.result.status
+                  valueType: String
+                - type: GetAssociationTargets@1
+                  description: Pages already generated from this artifact (GeneratedFrom points from the page to the artifact)
+                  graphDirection: Inbound
+                  originRtIdPath: $.artifactRtId
+                  originCkTypeId: System.Ai/SourceArtifact
+                  targetCkTypeId: System.Ai/KnowledgePage
+                  associationRoleId: System.Ai/GeneratedFrom
+                  targetPath: $.generatedPages
+                - type: ExecuteCSharp@1
+                  description: Retry window - a generation of an artifact younger than 15 minutes may still be running
+                  arguments:
+                    - name: pages
+                      valuePath: $.generatedPages[0].TotalCount
+                      dataType: Int
+                    - name: createdAt
+                      valuePath: $.existing.RtCreationDateTime
+                      dataType: DateTime
+                  returnType: String
+                  targetPath: $.retryDecision
+                  code: |-
+                    // knowledge-retry-window (AB#8486): "no page generated from the artifact yet" means "the earlier
+                    // generation failed" only once that generation cannot still be running. A run (guards, two LLM
+                    // calls, write) stays well below 15 minutes; inside the window a second event for the same text
+                    // (a quick re-upload, Insert followed by Update) must not start a second paid run.
+                    if (pages > 0) return "unchanged";
+                    var age = DateTime.UtcNow - createdAt.ToUniversalTime();
+                    return age >= TimeSpan.FromMinutes(15) ? "regenerating" : "generating";
+                - type: SetPrimitiveValue@1
+                  valuePath: $.retryDecision
+                  targetPath: $.result.status
+                  valueType: String
+                - type: If@1
+                  description: No page yet and outside the retry window - the earlier generation failed; retry it
+                  path: $.retryDecision
+                  operator: Equal
+                  value: regenerating
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: true
+                      targetPath: $.needsGeneration
+                      valueType: Boolean
+            - type: If@1
+              description: New or changed source - store it
+              path: $.isDuplicate
+              operator: Equal
+              value: false
+              valueType: Boolean
+              transformations:
+                - type: SetPrimitiveValue@1
+                  value: Document
+                  targetPath: $.artifactType
+                  valueType: String
+                - type: If@1
+                  path: $.source.artifactType
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      valuePath: $.source.artifactType
+                      targetPath: $.artifactType
+                      valueType: String
+                - type: SetPrimitiveValue@1
+                  value: false
+                  targetPath: $.isPiiRedacted
+                  valueType: Boolean
+                - type: If@1
+                  path: $.source.isPiiRedacted
+                  operator: Equal
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: true
+                      targetPath: $.isPiiRedacted
+                      valueType: Boolean
+                - type: GetOrCreateRtEntitiesByType@1
+                  description: RtId of the new SourceArtifact (generated up front so the hand-over and ExtractedFrom can reference it)
+                  ckTypeId: System.Ai/SourceArtifact
+                  fieldFilters:
+                    - attributePath: ContentHash
+                      operator: Equals
+                      comparisonValuePath: $.source.contentHash
+                  rtIdTargetPath: $.artifactRtId
+                  modOperationPath: $.artifactModOperation
+                - type: CreateUpdateInfo@1
+                  description: Insert the SourceArtifact (bronze, append-only)
+                  targetPath: $._updateItems
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                  updateKind: INSERT
+                  ckTypeId: System.Ai/SourceArtifact
+                  rtIdPath: $.artifactRtId
+                  attributeUpdates:
+                    - attributeName: Name
+                      attributeValueType: String
+                      valuePath: $.source.name
+                    - attributeName: ArtifactType
+                      attributeValueType: Enum
+                      valuePath: $.artifactType
+                    - attributeName: SourceSystem
+                      attributeValueType: String
+                      valuePath: $.source.sourceSystem
+                    - attributeName: SourceUri
+                      attributeValueType: String
+                      valuePath: $.source.sourceUri
+                    - attributeName: Content
+                      attributeValueType: String
+                      valuePath: $.source.content
+                    - attributeName: ContentPreview
+                      attributeValueType: String
+                      valuePath: $.source.contentPreview
+                    - attributeName: ContentHash
+                      attributeValueType: String
+                      valuePath: $.source.contentHash
+                    - attributeName: IsPiiRedacted
+                      attributeValueType: Boolean
+                      valuePath: $.isPiiRedacted
+                    - attributeName: CapturedAt
+                      attributeValueType: DateTime
+                      valuePath: $.source.capturedAt
+                    - attributeName: ExtractionTier
+                      attributeValueType: Enum
+                      valuePath: $.source.extractionTier
+                - type: If@1
+                  description: Link the artifact to the file it was extracted from
+                  path: $.source.fileRtId
+                  operator: NotEquals
+                  valueType: String
+                  transformations:
+                    - type: CreateAssociationUpdate@1
+                      targetPath: $._assocItems
+                      targetValueKind: Array
+                      targetValueWriteMode: Append
+                      updateKind: CREATE
+                      originRtIdPath: $.artifactRtId
+                      originCkTypeId: System.Ai/SourceArtifact
+                      targetRtIdPath: $.source.fileRtId
+                      targetCkTypeId: System.Files/FileSystemItem
+                      associationRoleId: System.Ai/ExtractedFrom
+                - type: ApplyChanges@2
+                  description: Persist the SourceArtifact (and ExtractedFrom)
+                  entityUpdatesPath: $._updateItems
+                  associationUpdatesPath: $._assocItems
+                - type: SetPrimitiveValue@1
+                  value: true
+                  targetPath: $.needsGeneration
+                  valueType: Boolean
+                - type: SetPrimitiveValue@1
+                  value: ingested
+                  targetPath: $.result.status
+                  valueType: String
+            - type: If@1
+              description: Start the page generation
+              path: $.needsGeneration
+              operator: Equal
+              value: true
+              valueType: Boolean
+              transformations:
+                - type: SetPrimitiveValue@1
+                  valuePath: $.artifactRtId
+                  targetPath: $.gen.artifactRtIds
+                  valueType: String
+                  targetValueKind: Array
+                  targetValueWriteMode: Append
+                - type: SetPrimitiveValue@1
+                  valuePath: $.source.slug
+                  targetPath: $.gen.slug
+                  valueType: String
+                - type: GetRtEntitiesByType@1
+                  description: Tenant setting knowledge-generation-mode (not seeded; absent = Agentic)
+                  ckTypeId: System/TenantConfiguration
+                  take: 1
+                  fieldFilters:
+                    - attributePath: RtWellKnownName
+                      operator: Equals
+                      comparisonValue: knowledge-generation-mode
+                  targetPath: $.mode
+                - type: SetPrimitiveValue@1
+                  value: Agentic
+                  targetPath: $.generationMode
+                  valueType: String
+                - type: If@1
+                  path: $.mode.Items[0].Attributes.ConfigurationValue
+                  operator: Equal
+                  value: Pipeline
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      value: Pipeline
+                      targetPath: $.generationMode
+                      valueType: String
+                - type: Switch@1
+                  path: $.generationMode
+                  valueType: String
+                  cases:
+                    - value: Pipeline
+                      transformations:
+                        - type: ToPipelineDataEvent@1
+                          description: To knowledge-generate (pipeline variant)
+                          path: $.gen
+                          targetPath: $.body
+                          targetPipelineRtId: '67a1000000000000000b1c26'
+                  default:
+                    - type: ToPipelineDataEvent@1
+                      description: To knowledge-generate-agentic (default)
+                      path: $.gen
+                      targetPath: $.body
+                      targetPipelineRtId: '67a1000000000000000b1c25'
+                - type: SetPrimitiveValue@1
+                  valuePath: $.generationMode
+                  targetPath: $.result.generationMode
+                  valueType: String
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.artifactRtId
+                  targetPath: $.result.sourceArtifactRtId
+                - path: $.source.slug
+                  targetPath: $.result.slug
+            - type: SetPipelineExecutionResult@1
+              path: $.result
+            - type: Project@1
+              description: The awaiting ingest pipeline gets only the result, never the extracted text
+              path: $
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
