@@ -1,0 +1,1120 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic.Energy-[2.0,3.0)
+- EnergyCommunity-[5.0,6.0)
+- System.Communication-[4.5,5.0)
+- System.Bot-[3.1,4.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.EdaIntegration blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _eda/request-missing-consumption-reports-pipeline.yaml
+- rtId: 69c249a14f1e21ff43bfb1c2
+  rtCreationDateTime: 2026-03-24T08:21:54.0310000Z
+  rtChangedDateTime: 2026-03-26T13:55:37.0760000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 69c249764f1e21ff43bfb1c1
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '686e0f17196fcd3c42ed8c77'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  # AB#5511 (former AB#5743 part 2): GetPipelineConfigByWellKnownName@1 builds its
+  # GlobalConfiguration from the pipeline's Uses associations; without it a fresh tenant fails
+  # with 'EnergyCommunityConfiguration' not found (same fix as Billing 2.1.2, AB#4633).
+  - roleId: System.Communication/Uses-1
+    targetRtId: 69775cca547399077ac963a1
+    targetCkTypeId: System.Communication/EnergyCommunityConfiguration-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: request_missing_consumption_reports - Mesh
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        # Daily run: PipelineTrigger request-missing-consumption-reports (ec0000000000000000000d17),
+        # shipped DISABLED (System/Enabled false, AB#5511 AC 7). The route stays for a manual run and a
+        # dry run; both run the same steps below.
+        - type: FromPipelineTriggerEvent@1
+        - type: FromHttpRequest@2
+          path: /requestMissingConsumptionReports
+          method: POST
+          # AB#5627 phase A: a valid token of this tenant is required. Phase B adds the
+          # required role once the roles are assigned in every productive tenant.
+          allowAnonymous: false
+          requiredRoles: []
+      transformations:
+        # Gap detection and re-request (AB#5511, Feature AB#6021). Rules: src/blueprints/CLAUDE.md
+        # "Gap days of the energy community" and README "request-missing-consumption-reports".
+        #
+        # A day is a Europe/Vienna calendar day (UTC bounds from the Vienna midnights, 23/25 h on the
+        # clock-change days). A participating metering point has a gap on day D as soon as one expected
+        # quarter-hour value of one of its billing registers (1-1:2.9.0 G.03, G.01T, P.01T) is missing,
+        # or when it has no billing register (anchor) at all. Participation: Vienna date of From <= D <=
+        # Vienna date of To (To inclusive, both stored forms; AB#8375). One CR_REQ_PT per gap day,
+        # oldest day first, at most maxRequestsPerRun per run, the rest is deferred.
+        #
+        # Open requests (AB#8137): a gap day is NOT requested again while a CR_REQ_PT of its metering point
+        # is open (Finished = false) and its requested range covers the day, whoever started it (a run,
+        # the route, the metering point page). Such a gap is "open" and does not count against the cap.
+        # No maximum of attempts, no timeout, nothing stored: the state is derived in every run. Each entry
+        # carries AgeDays (Vienna today minus the day) and Unresolved ('1' from unresolvedMinAgeDays on).
+        #
+        # Reads: the anchors (query ec0000000000000000000d16), the participation periods (query
+        # 69c230e44f1e21ff43bfb1be), the open requests (query ec0000000000000000000d18, filtered on the
+        # server) and ONE coverage scan (GetStreamData@1 gapsOnly) of the raw archive
+        # over the whole window, paged over anchors only above 100,000 expected rows. No stream-data read
+        # per day or per metering point.
+        #
+        # Safety net (AB#8961, Markus Roider 2026-11-13): gaps are the exception in normal operation; after
+        # 5 days every metering point should have at least L3 values. The run looks at the days
+        # today-30 .. today-5 and answers with a bounded result: full entries for request, open and failed,
+        # at most maxDeferredEntries deferred ones, the rest only counted (summary, per receiver).
+        #
+        # Run input (route body; the scheduled run has none):
+        #   { "dryRun": true, "lookbackDays": 30, "delayDays": 5, "maxRequestsPerRun": 50,
+        #     "unresolvedMinAgeDays": 10, "referenceTime": "2026-11-12T06:00:00Z" }
+        # dryRun computes the whole result and starts nothing; referenceTime replaces "now" (tests).
+
+        # ─── Configuration: the ONLY place for the defaults (README "Window and defaults") ───
+        - type: SetPrimitiveValue@1
+          description: "Look-back window in days: a safety net for the last month, not a backfill"
+          targetPath: $.config.lookbackDays
+          value: 30
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Most recent days that are not checked (EDA has L3 values after 5 days); today is never checked"
+          targetPath: $.config.delayDays
+          value: 5
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Flood protection: CR_REQ_PT started per run at most"
+          targetPath: $.config.maxRequestsPerRun
+          value: 50
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "A gap this many days old or older is Unresolved (keep it at least 7 below lookbackDays)"
+          targetPath: $.config.unresolvedMinAgeDays
+          value: 10
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Deferred gaps listed in full at most (oldest first); the others are only counted"
+          targetPath: $.config.maxDeferredEntries
+          value: 100
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Open requests a run accepts; a run that finds more fails (never a partial check)"
+          targetPath: $.config.maxOpenRequests
+          value: 2000
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Expected rows of one coverage scan page (anchors x days x 96)"
+          targetPath: $.config.pageRows
+          value: 100000
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          targetPath: $.config.dryRun
+          value: false
+          valueType: Boolean
+
+        # ─── Run input overrides the configuration ───
+        - type: If@1
+          description: "Input: dryRun"
+          path: $.body.dryRun
+          operator: NotEquals
+          value: null
+          valueType: Boolean
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.config.dryRun
+              valuePath: $.body.dryRun
+              valueType: Boolean
+        - type: If@1
+          description: "Input: lookbackDays"
+          path: $.body.lookbackDays
+          operator: NotEquals
+          value: null
+          valueType: Int
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.config.lookbackDays
+              valuePath: $.body.lookbackDays
+              valueType: Int
+        - type: If@1
+          description: "Input: delayDays"
+          path: $.body.delayDays
+          operator: NotEquals
+          value: null
+          valueType: Int
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.config.delayDays
+              valuePath: $.body.delayDays
+              valueType: Int
+        - type: If@1
+          description: "Input: maxRequestsPerRun"
+          path: $.body.maxRequestsPerRun
+          operator: NotEquals
+          value: null
+          valueType: Int
+          transformations:
+            - type: ExecuteCSharp@1
+              description: "input cap"
+              targetPath: $.config.maxRequestsPerRun
+              returnType: Int
+              timeoutMs: 1000
+              arguments:
+                - name: requested
+                  dataType: Int
+                  valuePath: $.body.maxRequestsPerRun
+                - name: ceiling
+                  dataType: Int
+                  valuePath: $.config.maxRequestsPerRun
+              code: |
+                // Flood protection: the run input may lower the cap, never lift it above the configured one.
+                return Math.Min(Math.Max(requested, 0), ceiling);
+        - type: If@1
+          description: "Input: unresolvedMinAgeDays"
+          path: $.body.unresolvedMinAgeDays
+          operator: NotEquals
+          value: null
+          valueType: Int
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.config.unresolvedMinAgeDays
+              valuePath: $.body.unresolvedMinAgeDays
+              valueType: Int
+        - type: If@1
+          description: "Input: referenceTime (tests)"
+          path: $.body.referenceTime
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.config.referenceTime
+              valuePath: $.body.referenceTime
+              valueType: String
+
+        # ─── Window: the Vienna days to check and the UTC range of the scan ───
+        - type: ExecuteCSharp@1
+          description: "gap window"
+          targetPath: $.window
+          returnType: RecordArray
+          timeoutMs: 5000
+          usings:
+            - System.Collections.Generic
+            - System.Linq
+          arguments:
+            - name: referenceTime
+              dataType: String
+              valuePath: $.config.referenceTime
+            - name: lookbackDays
+              dataType: Int
+              valuePath: $.config.lookbackDays
+            - name: delayDays
+              dataType: Int
+              valuePath: $.config.delayDays
+          code: |
+            // Days today-lookbackDays .. today-delayDays (Europe/Vienna), never today, at most 92 days.
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var vienna = TimeZoneInfo.FindSystemTimeZoneById("Europe/Vienna");
+            var now = string.IsNullOrEmpty(referenceTime)
+                ? DateTime.UtcNow
+                : DateTimeOffset.Parse(referenceTime, inv).UtcDateTime;
+            var today = TimeZoneInfo.ConvertTimeFromUtc(now, vienna).Date;
+            var lookback = Math.Min(Math.Max(lookbackDays, 0), 92);
+            var lastDay = today.AddDays(-Math.Max(delayDays, 1));
+            var firstDay = today.AddDays(-lookback);
+            var dayCount = Math.Max(0, (int)(lastDay - firstDay).TotalDays + 1);
+            string Utc(DateTime viennaMidnight) => TimeZoneInfo
+                .ConvertTimeToUtc(DateTime.SpecifyKind(viennaMidnight, DateTimeKind.Unspecified), vienna)
+                .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv);
+            return new object[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["Today"] = today.ToString("yyyy-MM-dd", inv),
+                    ["FirstDay"] = firstDay.ToString("yyyy-MM-dd", inv),
+                    ["LastDay"] = lastDay.ToString("yyyy-MM-dd", inv),
+                    ["DayCount"] = dayCount,
+                    ["LookbackDays"] = lookback,
+                    ["From"] = Utc(firstDay),
+                    ["To"] = Utc(dayCount > 0 ? lastDay.AddDays(1) : firstDay)
+                }
+            };
+
+        - type: GetPipelineConfigByWellKnownName@1
+          wellKnownName: "EnergyCommunityConfiguration"
+          targetPath: $.conf
+        - type: SetPrimitiveValue@1
+          description: partner id (sender of every request)
+          targetPath: $.config.partnerId
+          valuePath: $.conf.partnerId
+          valueType: String
+        - type: Project@1
+          fields:
+            - path: $.conf
+
+        # ─── Reads: anchors, participation periods, one coverage scan ───
+        - type: GetQueryById@1
+          identity: ServiceAccount  # AB#5627: run as the pipeline service account, not as the route caller
+          description: "Billing anchors (G.03, G.01T, P.01T) with the number of their metering point"
+          queryRtId: ec0000000000000000000d16
+          take: 100000
+          targetPath: $.anchors
+          fieldFilters:
+            - attributePath: obisCode
+              operator: In
+              comparisonValue: ["1-1:2.9.0 G.03", "1-1:2.9.0 G.01T", "1-1:2.9.0 P.01T"]
+        - type: GetQueryById@1
+          identity: ServiceAccount  # AB#5627: run as the pipeline service account, not as the route caller
+          description: "Participation periods (all; the script decides per day)"
+          queryRtId: 69c230e44f1e21ff43bfb1be
+          take: 100000
+          targetPath: $.periods
+
+        - type: ExecuteCSharp@1
+          description: "coverage scan pages"
+          targetPath: $.pages
+          returnType: RecordArray
+          timeoutMs: 5000
+          usings:
+            - System.Collections.Generic
+            - System.Linq
+          arguments:
+            - name: anchors
+              dataType: RecordArray
+              valuePath: $.anchors.Rows
+            - name: dayCount
+              dataType: Int
+              valuePath: $.window[0].DayCount
+            - name: from
+              dataType: String
+              valuePath: $.window[0].From
+            - name: to
+              dataType: String
+              valuePath: $.window[0].To
+            - name: pageRows
+              dataType: Int
+              valuePath: $.config.pageRows
+          code: |
+            // One page when anchors x days x 96 <= pageRows, else pages of whole anchors (AB#5511 AC 11).
+            var ids = (anchors ?? new object[0])
+                .OfType<System.Text.Json.JsonElement>()
+                .Where(r => r.ValueKind == System.Text.Json.JsonValueKind.Object
+                            && r.TryGetProperty("RtId", out var id) && id.ValueKind == System.Text.Json.JsonValueKind.String)
+                .Select(r => r.GetProperty("RtId").GetString())
+                .Distinct()
+                .ToArray();
+            var pages = new List<object>();
+            if (dayCount <= 0) return pages;
+            var size = Math.Max(1, pageRows / (dayCount * 96));
+            for (var i = 0; i < ids.Length; i += size)
+            {
+                pages.Add(new Dictionary<string, object>
+                {
+                    ["RtIds"] = ids.Skip(i).Take(size).ToArray(),
+                    ["From"] = from,
+                    ["To"] = to
+                });
+            }
+            return pages;
+
+        # Each page is one GetStreamData@1 coverage scan of its anchors over the whole window. rtIds
+        # name the expected set, so an anchor without any row comes back as a series without
+        # coverage. Only kWh rows count (Amount.Unit = 1, integer key; filter on the scan itself, see
+        # CLAUDE.md "Only kWh counts"). A scan above maxGapScanRows fails the run: never a partial result.
+        - type: ForEach@1
+          description: "Coverage scan, one page of anchors per iteration"
+          maxDegreeOfParallelism: 1
+          iterationPath: $.pages
+          mergePath: $.gaps.Series
+          targetPath: $.scans
+          transformations:
+            - type: GetStreamData@1
+              description: "Coverage of the anchors of this page (15-minute values)"
+              archiveRtId: ec0000000000000000000a01
+              rtIdsPath: $.key.RtIds[*]
+              fromPath: $.key.From
+              toPath: $.key.To
+              fieldFilters:
+                - attributePath: Amount.Unit
+                  operator: Equals
+                  comparisonValue: 1
+              expectedInterval: "00:15:00"
+              maxGapScanRows: 200000
+              gapsOnly: true
+              gapsTargetPath: $.gaps
+              # Never written while gapsOnly is set; named so the default ("$") cannot clobber the key.
+              targetPath: $.unusedGapScan
+        - type: Flatten@1
+          description: "Series of all pages"
+          path: $.scans[*][*]
+          targetPath: $.series
+
+        # ─── Open requests (AB#8137): CR_REQ_PT not finished, filtered on the server ───
+        # Normally none or a few: EDA answers within days and handle-cr-req-pt sets Finished. The query
+        # selects only what the check needs (metering point number, planned, stored message). take is
+        # maxOpenRequests + 1 (a node field takes no path), so a run that finds more than maxOpenRequests
+        # fails in the script below instead of checking against a cut list, which would request covered
+        # gaps a second time.
+        - type: GetQueryById@1
+          identity: ServiceAccount  # AB#5627: run as the pipeline service account, not as the route caller
+          description: "Open requests: CR_REQ_PT with Finished = false (metering point, planned, stored message)"
+          queryRtId: ec0000000000000000000d18
+          take: 2001
+          targetPath: $.openProcesses
+          fieldFilters:
+            - attributePath: name
+              operator: Equals
+              comparisonValue: CR_REQ_PT
+            - attributePath: finished
+              operator: Equals
+              comparisonValue: false
+        - type: ExecuteCSharp@1
+          description: "open requests"
+          targetPath: $.open
+          returnType: RecordArray
+          timeoutMs: 10000
+          usings:
+            - System.Collections.Generic
+            - System.Linq
+          arguments:
+            - name: processes
+              dataType: RecordArray
+              valuePath: $.openProcesses.Rows
+            - name: maxOpenRequests
+              dataType: Int
+              valuePath: $.config.maxOpenRequests
+          code: |
+            // The requested range of every open CR_REQ_PT (AB#8137), from the stored message:
+            // ProcessDirectory.Extension.DateTimeFromLocal.Value / DateTimeToLocal.Value (with an offset or
+            // Z; a value without a zone is read as UTC). Not an open request: a planned process, a process
+            // without a readable range, a process whose stored message is not valid JSON (listed in
+            // Unreadable; the pipeline logs it). More than maxOpenRequests fail the run: never a partial check.
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var rows = (processes ?? new object[0]).OfType<System.Text.Json.JsonElement>().ToArray();
+            if (rows.Length > maxOpenRequests)
+            {
+                throw new InvalidOperationException("open requests: more than " + maxOpenRequests
+                    + " CR_REQ_PT are open; close the hanging processes (README, EdaIntegration 3.1.1) and run again");
+            }
+            System.Text.Json.JsonElement Prop(System.Text.Json.JsonElement e, string name)
+            {
+                if (e.ValueKind != System.Text.Json.JsonValueKind.Object) return default;
+                foreach (var p in e.EnumerateObject())
+                {
+                    if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                }
+                return default;
+            }
+            System.Text.Json.JsonElement At(System.Text.Json.JsonElement row, int i)
+            {
+                var values = Prop(row, "Values");
+                return values.ValueKind == System.Text.Json.JsonValueKind.Array && values.GetArrayLength() > i ? values[i] : default;
+            }
+            string Str(System.Text.Json.JsonElement e) => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString() : null;
+            DateTime? Utc(System.Text.Json.JsonElement e)
+            {
+                var s = Str(e);
+                if (string.IsNullOrEmpty(s)) return null;
+                return DateTimeOffset.TryParse(s, inv,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var t)
+                    ? t.UtcDateTime : null;
+            }
+            var ranges = new List<object>();
+            var unreadable = new List<object>();
+            foreach (var row in rows)
+            {
+                var number = Str(At(row, 0));
+                if (string.IsNullOrEmpty(number)) continue;
+                if (At(row, 1).ValueKind == System.Text.Json.JsonValueKind.True) continue; // planned: not a request
+                var raw = Str(At(row, 2));
+                if (string.IsNullOrWhiteSpace(raw)) continue; // no stored message: no range
+                System.Text.Json.JsonElement message;
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(raw);
+                    message = doc.RootElement.Clone();
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    unreadable.Add(Str(Prop(row, "RtId")) ?? number);
+                    continue;
+                }
+                var extension = Prop(Prop(message, "ProcessDirectory"), "Extension");
+                var from = Utc(Prop(Prop(extension, "DateTimeFromLocal"), "Value"));
+                var to = Utc(Prop(Prop(extension, "DateTimeToLocal"), "Value"));
+                if (from == null || to == null || to.Value <= from.Value) continue; // no readable range
+                ranges.Add(new Dictionary<string, object>
+                {
+                    ["MeteringPointNumber"] = number,
+                    ["From"] = from.Value.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv),
+                    ["To"] = to.Value.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv)
+                });
+            }
+            return new object[] { new Dictionary<string, object> { ["Ranges"] = ranges, ["Unreadable"] = unreadable } };
+        - type: If@1
+          description: "An open request whose stored message is not valid JSON"
+          path: $.open[0].Unreadable[0]
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: Logger@1
+              message: "request-missing-consumption-reports (AB#8137): the stored message of an open CR_REQ_PT is not valid JSON; it does not hold its gap (the rtIds are in unreadableRequests of the execution result)"
+        - type: Project@1
+          description: "Drop the open processes; their ranges are in $.open"
+          fields:
+            - path: $.openProcesses
+
+        # ─── Gap days: participation rule, completeness rule, open requests, order and cap ───
+        - type: ExecuteCSharp@1
+          description: "gap days"
+          targetPath: $.plan
+          returnType: RecordArray
+          timeoutMs: 30000
+          usings:
+            - System.Collections.Generic
+            - System.Linq
+          arguments:
+            - name: series
+              dataType: RecordArray
+              valuePath: $.series
+            - name: anchors
+              dataType: RecordArray
+              valuePath: $.anchors.Rows
+            - name: periods
+              dataType: RecordArray
+              valuePath: $.periods.Rows
+            - name: firstDay
+              dataType: String
+              valuePath: $.window[0].FirstDay
+            - name: dayCount
+              dataType: Int
+              valuePath: $.window[0].DayCount
+            - name: maxRequestsPerRun
+              dataType: Int
+              valuePath: $.config.maxRequestsPerRun
+            - name: sender
+              dataType: String
+              valuePath: $.config.partnerId
+            - name: openRanges
+              dataType: RecordArray
+              valuePath: $.open[0].Ranges
+            - name: today
+              dataType: String
+              valuePath: $.window[0].Today
+            - name: unresolvedMinAgeDays
+              dataType: Int
+              valuePath: $.config.unresolvedMinAgeDays
+            - name: maxDeferredEntries
+              dataType: Int
+              valuePath: $.config.maxDeferredEntries
+          code: |
+            // The rules of src/blueprints/CLAUDE.md "Gap days of the energy community" (AB#5511, AB#8137):
+            // participation From..To with To INCLUSIVE (Vienna dates, both stored forms of To), strict
+            // completeness over the billing anchors, oldest day first, then metering point number. A gap
+            // whose day an open request of its metering point covers is "open" and not counted; of the
+            // others the first maxRequestsPerRun are "request", the rest "deferred". AgeDays = Vienna
+            // today minus the day, Unresolved "1" from unresolvedMinAgeDays on. Bounded (AB#8961): the
+            // oldest maxDeferredEntries deferred gaps are listed, the others only counted per receiver
+            // (Omitted), so neither the data context nor the answer grows with a large backlog.
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var vienna = TimeZoneInfo.FindSystemTimeZoneById("Europe/Vienna");
+            System.Text.Json.JsonElement Prop(System.Text.Json.JsonElement e, string name) =>
+                e.ValueKind == System.Text.Json.JsonValueKind.Object && e.TryGetProperty(name, out var v) ? v : default;
+            System.Text.Json.JsonElement At(System.Text.Json.JsonElement row, int i)
+            {
+                var values = Prop(row, "Values");
+                return values.ValueKind == System.Text.Json.JsonValueKind.Array && values.GetArrayLength() > i ? values[i] : default;
+            }
+            string Str(System.Text.Json.JsonElement e) => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString() : null;
+            // Dates arrive as ISO 8601 text. Anything else fails the run: a period or gap read wrongly
+            // would hide gaps without a word.
+            DateTime? Utc(System.Text.Json.JsonElement e)
+            {
+                if (e.ValueKind == System.Text.Json.JsonValueKind.Undefined || e.ValueKind == System.Text.Json.JsonValueKind.Null) return null;
+                var s = Str(e);
+                if (s == null || s.Length < 19 || s[4] != '-' || s[7] != '-' || s[10] != 'T')
+                    throw new InvalidOperationException("gap days: not an ISO 8601 date: " + e.GetRawText());
+                return DateTimeOffset.Parse(s, inv, System.Globalization.DateTimeStyles.AssumeUniversal).UtcDateTime;
+            }
+            DateTime ViennaDate(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(utc, vienna).Date;
+            DateTime ViennaMidnightUtc(DateTime day) =>
+                TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(day, DateTimeKind.Unspecified), vienna);
+            IEnumerable<System.Text.Json.JsonElement> Elements(object[] items) =>
+                (items ?? new object[0]).OfType<System.Text.Json.JsonElement>();
+
+            // Participation: number -> [first day, last day (null = open)]
+            var participation = new Dictionary<string, List<(DateTime First, DateTime? Last)>>(StringComparer.Ordinal);
+            foreach (var row in Elements(periods))
+            {
+                var number = Str(At(row, 0));
+                var from = Utc(At(row, 1));
+                if (string.IsNullOrEmpty(number) || from == null) continue;
+                var to = Utc(At(row, 2));
+                if (!participation.TryGetValue(number, out var list)) participation[number] = list = new List<(DateTime, DateTime?)>();
+                list.Add((ViennaDate(from.Value), to == null ? null : ViennaDate(to.Value)));
+            }
+
+            // Billing anchors: number -> anchor rtIds
+            var anchorsOf = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            foreach (var row in Elements(anchors))
+            {
+                var number = Str(At(row, 0));
+                var rtId = Str(Prop(row, "RtId"));
+                if (string.IsNullOrEmpty(number) || string.IsNullOrEmpty(rtId)) continue;
+                if (!anchorsOf.TryGetValue(number, out var list)) anchorsOf[number] = list = new List<string>();
+                list.Add(rtId);
+            }
+
+            // Coverage: anchor rtId -> uncovered ranges (UTC)
+            var gapsOf = new Dictionary<string, List<(DateTime From, DateTime To)>>(StringComparer.Ordinal);
+            foreach (var s in Elements(series))
+            {
+                var rtId = Str(Prop(s, "RtId"));
+                if (string.IsNullOrEmpty(rtId)) continue;
+                var list = new List<(DateTime, DateTime)>();
+                var gaps = Prop(s, "Gaps");
+                if (gaps.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var g in gaps.EnumerateArray())
+                    {
+                        var gf = Utc(Prop(g, "From"));
+                        var gt = Utc(Prop(g, "To"));
+                        if (gf != null && gt != null && gt > gf) list.Add((gf.Value, gt.Value));
+                    }
+                }
+                gapsOf[rtId] = list;
+            }
+
+            // Open requests: number -> requested ranges (UTC)
+            var openOf = new Dictionary<string, List<(DateTime From, DateTime To)>>(StringComparer.Ordinal);
+            foreach (var r in Elements(openRanges))
+            {
+                var number = Str(Prop(r, "MeteringPointNumber"));
+                var rf = Utc(Prop(r, "From"));
+                var rt = Utc(Prop(r, "To"));
+                if (string.IsNullOrEmpty(number) || rf == null || rt == null) continue;
+                if (!openOf.TryGetValue(number, out var list)) openOf[number] = list = new List<(DateTime, DateTime)>();
+                list.Add((rf.Value, rt.Value));
+            }
+
+            var start = DateTime.ParseExact(firstDay, "yyyy-MM-dd", inv);
+            var todayDate = DateTime.ParseExact(today, "yyyy-MM-dd", inv);
+            var entries = new List<(string Day, string Number, int Missing, string From, string To, int Age, bool Open)>();
+            for (var d = 0; d < dayCount; d++)
+            {
+                var day = start.AddDays(d);
+                var dayFrom = ViennaMidnightUtc(day);
+                var dayTo = ViennaMidnightUtc(day.AddDays(1));
+                var expected = (int)Math.Round((dayTo - dayFrom).TotalSeconds / 900.0);
+                foreach (var pair in participation)
+                {
+                    if (!pair.Value.Any(p => p.First <= day && (p.Last == null || day <= p.Last.Value))) continue;
+                    var missing = 0;
+                    if (!anchorsOf.TryGetValue(pair.Key, out var rtIds))
+                    {
+                        missing = expected; // no billing register at all: the day has no value
+                    }
+                    else
+                    {
+                        foreach (var rtId in rtIds)
+                        {
+                            if (!gapsOf.TryGetValue(rtId, out var gaps))
+                            {
+                                missing += expected; // not covered by the scan: counted as missing, never as complete
+                                continue;
+                            }
+                            foreach (var g in gaps)
+                            {
+                                var from = g.From > dayFrom ? g.From : dayFrom;
+                                var to = g.To < dayTo ? g.To : dayTo;
+                                if (to > from) missing += (int)Math.Ceiling((to - from).TotalSeconds / 900.0);
+                            }
+                        }
+                    }
+                    if (missing > 0)
+                    {
+                        var open = openOf.TryGetValue(pair.Key, out var requested)
+                                   && requested.Any(r => r.From <= dayFrom && r.To >= dayTo);
+                        entries.Add((day.ToString("yyyy-MM-dd", inv), pair.Key, missing,
+                            dayFrom.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv), dayTo.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv),
+                            (int)Math.Round((todayDate - day).TotalDays), open));
+                    }
+                }
+            }
+
+            var cap = Math.Max(maxRequestsPerRun, 0);
+            var listedCap = Math.Max(maxDeferredEntries, 0);
+            var gapList = new List<object>();
+            var requests = new List<object>();
+            var omitted = new SortedDictionary<string, int[]>(StringComparer.Ordinal); // receiver -> [deferred, unresolved]
+            var index = 0;
+            var deferredSeen = 0;
+            foreach (var e in entries.OrderBy(x => x.Day, StringComparer.Ordinal).ThenBy(x => x.Number, StringComparer.Ordinal))
+            {
+                var action = e.Open ? "open" : index++ < cap ? "request" : "deferred";
+                var receiver = e.Number.Length >= 8 ? e.Number.Substring(0, 8) : e.Number;
+                var unresolved = e.Age >= unresolvedMinAgeDays;
+                if (action == "deferred" && deferredSeen++ >= listedCap)
+                {
+                    if (!omitted.TryGetValue(receiver, out var counts)) omitted[receiver] = counts = new int[2];
+                    counts[0]++;
+                    if (unresolved) counts[1]++;
+                    continue;
+                }
+                var entry = new Dictionary<string, object>
+                {
+                    ["MeteringPointNumber"] = e.Number,
+                    ["Day"] = e.Day,
+                    ["MissingValues"] = e.Missing,
+                    ["From"] = e.From,
+                    ["To"] = e.To,
+                    ["Receiver"] = receiver,
+                    ["AgeDays"] = e.Age,
+                    ["Unresolved"] = unresolved ? "1" : "0",
+                    ["Action"] = action
+                };
+                gapList.Add(entry);
+                if (action == "request")
+                {
+                    requests.Add(new Dictionary<string, object>(entry) { ["Sender"] = sender, ["Key"] = e.Number + "|" + e.Day });
+                }
+            }
+            var omittedList = omitted
+                .Select(p => (object)new Dictionary<string, object> { ["Receiver"] = p.Key, ["Deferred"] = p.Value[0], ["Unresolved"] = p.Value[1] })
+                .ToList();
+            return new object[] { new Dictionary<string, object> { ["Gaps"] = gapList, ["Requests"] = requests, ["Omitted"] = omittedList } };
+
+        - type: Project@1
+          description: "Drop the reads; the plan holds everything that follows"
+          fields:
+            - path: $.anchors
+            - path: $.periods
+            - path: $.pages
+            - path: $.scans
+            - path: $.series
+
+        # ─── Requests: one CR_REQ_PT per planned gap day (not in a dry run, not without partner id) ───
+        - type: ExecuteCSharp@1
+          description: "run mode"
+          targetPath: $.config.mode
+          returnType: String
+          timeoutMs: 1000
+          arguments:
+            - name: dryRun
+              dataType: Boolean
+              valuePath: $.config.dryRun
+            - name: partnerId
+              dataType: String
+              valuePath: $.config.partnerId
+          code: |
+            // send = start the requests; dryRun = start nothing; noPartner = start nothing, report failed
+            // (the seed ships partnerId as an empty string, so null and "" both mean "not configured").
+            return dryRun ? "dryRun" : string.IsNullOrWhiteSpace(partnerId) ? "noPartner" : "send";
+        - type: If@1
+          description: "No network partner id configured: nothing is started"
+          path: $.config.mode
+          operator: Equals
+          value: noPartner
+          valueType: String
+          transformations:
+            - type: Logger@1
+              message: "request-missing-consumption-reports (AB#5511): no partnerId in EnergyCommunityConfiguration; no CR_REQ_PT is started, every planned request is reported as failed"
+        - type: If@1
+          description: "Requests are started"
+          path: $.config.mode
+          operator: Equals
+          value: send
+          valueType: String
+          transformations:
+            - type: ForEach@1
+              description: "One CR_REQ_PT per planned gap day"
+              maxDegreeOfParallelism: 1
+              iterationPath: $.plan[0].Requests
+              mergePath: $.outcome
+              targetPath: $.outcomes
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.outcome.Key
+                  valuePath: $.key.Key
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.outcome.Action
+                  value: failed
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.requestData.processName
+                  value: "CR_REQ_PT"
+                  valueType: String
+                - type: FormatString@1
+                  targetPath: $.requestData.comment
+                  format: "Request missing consumption data for {$.key.MeteringPointNumber} on {$.key.Day} (gap detection, AB#5511)"
+                - type: SetPrimitiveValue@1
+                  targetPath: $.requestData.processData.receiver
+                  valuePath: $.key.Receiver
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.requestData.processData.sender
+                  valuePath: $.key.Sender
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.requestData.processData.meteringPoint
+                  valuePath: $.key.MeteringPointNumber
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.requestData.processData.from
+                  valuePath: $.key.From
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.requestData.processData.to
+                  valuePath: $.key.To
+                  valueType: String
+                - type: EdaStartProcess@1
+                  path: $.requestData
+                  targetPath: $.request
+                - type: If@1
+                  description: "EDA accepted the request: store it as EdaProcess of the metering point"
+                  path: $.request.IsSuccess
+                  operator: Equals
+                  value: true
+                  valueType: Boolean
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.outcome.Action
+                      value: request
+                      valueType: String
+                    - type: CreateUpdateInfo@1
+                      targetPath: $.update
+                      targetValueKind: Array
+                      updateKind: INSERT
+                      ckTypeId: Basic.Energy/EdaProcess
+                      rtIdPath: $.rtId
+                      generateRtId: true
+                      attributeUpdates:
+                        - attributeName: Name
+                          attributeValueType: String
+                          value: "CR_REQ_PT"
+                        - attributeName: Description
+                          attributeValueType: String
+                          valuePath: $.requestData.comment
+                        - attributeName: ConversationId
+                          attributeValueType: String
+                          valuePath: $.request.Message.ProcessDirectory.ConversationId
+                        - attributeName: Finished
+                          attributeValueType: Boolean
+                          value: false
+                        - attributeName: StartTime
+                          attributeValueType: DateTime
+                          valuePath: $.request.Message.MarketParticipantDirectory.RoutingHeader.DocumentCreationDateTime
+                        - attributeName: Sender
+                          attributeValueType: String
+                          valuePath: $.requestData.processData.sender
+                        - attributeName: Receiver
+                          attributeValueType: String
+                          valuePath: $.requestData.processData.receiver
+                        - attributeName: MeteringPointNumber
+                          attributeValueType: String
+                          valuePath: $.requestData.processData.meteringPoint
+                        - attributeName: Planned
+                          attributeValueType: Boolean
+                          value: false
+                        - attributeName: RawMessage
+                          attributeValueType: String
+                          valuePath: $.request.Message
+                    - type: GetRtEntitiesByType@1
+                      description: The metering point the process is about
+                      identity: ServiceAccount
+                      ckTypeId: Basic.Energy/MeteringPoint
+                      targetPath: $.meteringPoint
+                      take: 2
+                      fieldFilters:
+                        - attributePath: MeteringPointNumber
+                          operator: Equals
+                          comparisonValuePath: $.requestData.processData.meteringPoint
+                    - type: If@1
+                      description: exactly one metering point carries the number
+                      path: $.meteringPoint.Items[1].RtId
+                      operator: Equals
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: If@1
+                          description: a metering point carries the number
+                          path: $.meteringPoint.Items[0].RtId
+                          operator: NotEquals
+                          value: null
+                          valueType: String
+                          transformations:
+                            - type: CreateAssociationUpdate@1
+                              description: Relate the process to its metering point
+                              targetPath: $.relation
+                              targetValueKind: Array
+                              updateKind: CREATE
+                              originRtIdPath: $.update[0].RtEntity.RtId
+                              originCkTypeId: Basic.Energy/EdaProcess
+                              targetRtIdPath: $.meteringPoint.Items[0].RtId
+                              targetCkTypeIdPath: $.meteringPoint.Items[0].CkTypeId
+                              associationRoleId: System/Related
+                    - type: ApplyChanges@2
+                      identity: ServiceAccount
+                      entityUpdatesPath: $.update
+                      associationUpdatesPath: $.relation
+                - type: If@1
+                  description: "EDA refused the request: no process; the day is found again in the next run"
+                  path: $.outcome.Action
+                  operator: Equals
+                  value: failed
+                  valueType: String
+                  transformations:
+                    - type: Logger@1
+                      message: "request-missing-consumption-reports (AB#5511): EDA did not accept a CR_REQ_PT; the metering point and day are listed with Action failed in the execution result"
+
+        # ─── Result: one entry per gap with its final Action, and the summary ───
+        - type: ExecuteCSharp@1
+          description: "gap result"
+          targetPath: $.result
+          returnType: RecordArray
+          timeoutMs: 10000
+          usings:
+            - System.Collections.Generic
+            - System.Linq
+          arguments:
+            - name: gaps
+              dataType: RecordArray
+              valuePath: $.plan[0].Gaps
+            - name: outcomes
+              dataType: RecordArray
+              valuePath: $.outcomes
+            - name: mode
+              dataType: String
+              valuePath: $.config.mode
+            - name: omitted
+              dataType: RecordArray
+              valuePath: $.plan[0].Omitted
+          code: |
+            // Planned "request" entries take the outcome of their request ("request" or "failed"); a dry run
+            // keeps the plan, a run without partner id reports them failed. "open" and "deferred" stay.
+            // The summary counts every gap, also the deferred ones the plan did not list (omitted, AB#8961),
+            // in total and per receiver; DeferredListed is the number of deferred entries in Gaps.
+            System.Text.Json.JsonElement Prop(System.Text.Json.JsonElement e, string name) =>
+                e.ValueKind == System.Text.Json.JsonValueKind.Object && e.TryGetProperty(name, out var v) ? v : default;
+            string Str(System.Text.Json.JsonElement e) => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString() : null;
+            int Int(System.Text.Json.JsonElement e) => e.ValueKind == System.Text.Json.JsonValueKind.Number ? e.GetInt32() : 0;
+            var outcomeOf = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var o in (outcomes ?? new object[0]).OfType<System.Text.Json.JsonElement>())
+            {
+                var key = Str(Prop(o, "Key"));
+                if (key != null) outcomeOf[key] = Str(Prop(o, "Action")) ?? "failed";
+            }
+            // receiver -> [Gaps, Requested, Open, Deferred, Failed, Unresolved]
+            var perReceiver = new SortedDictionary<string, int[]>(StringComparer.Ordinal);
+            int[] CountsOf(string receiver)
+            {
+                receiver ??= "";
+                if (!perReceiver.TryGetValue(receiver, out var c)) perReceiver[receiver] = c = new int[6];
+                return c;
+            }
+            var list = new List<object>();
+            foreach (var g in (gaps ?? new object[0]).OfType<System.Text.Json.JsonElement>())
+            {
+                var number = Str(Prop(g, "MeteringPointNumber"));
+                var day = Str(Prop(g, "Day"));
+                var action = Str(Prop(g, "Action"));
+                if (action == "request" && mode == "send")
+                {
+                    action = outcomeOf.TryGetValue(number + "|" + day, out var outcome) ? outcome : "failed";
+                }
+                else if (action == "request" && mode == "noPartner")
+                {
+                    action = "failed";
+                }
+                var receiver = Str(Prop(g, "Receiver"));
+                var flag = Str(Prop(g, "Unresolved")) ?? "0";
+                var c = CountsOf(receiver);
+                c[0]++;
+                if (action == "request") c[1]++;
+                else if (action == "open") c[2]++;
+                else if (action == "deferred") c[3]++;
+                else c[4]++;
+                if (flag == "1") c[5]++;
+                list.Add(new Dictionary<string, object>
+                {
+                    ["MeteringPointNumber"] = number,
+                    ["Day"] = day,
+                    ["MissingValues"] = Int(Prop(g, "MissingValues")),
+                    ["From"] = Str(Prop(g, "From")),
+                    ["To"] = Str(Prop(g, "To")),
+                    ["Receiver"] = receiver,
+                    ["AgeDays"] = Int(Prop(g, "AgeDays")),
+                    ["Unresolved"] = flag,
+                    ["Action"] = action
+                });
+            }
+            var deferredListed = perReceiver.Values.Sum(c => c[3]);
+            foreach (var o in (omitted ?? new object[0]).OfType<System.Text.Json.JsonElement>())
+            {
+                var c = CountsOf(Str(Prop(o, "Receiver")));
+                var n = Int(Prop(o, "Deferred"));
+                c[0] += n;
+                c[3] += n;
+                c[5] += Int(Prop(o, "Unresolved"));
+            }
+            var receivers = perReceiver
+                .Select(p => (object)new Dictionary<string, object>
+                {
+                    ["Receiver"] = p.Key,
+                    ["Gaps"] = p.Value[0],
+                    ["Requested"] = p.Value[1],
+                    ["Open"] = p.Value[2],
+                    ["Deferred"] = p.Value[3],
+                    ["Failed"] = p.Value[4],
+                    ["Unresolved"] = p.Value[5]
+                })
+                .ToList();
+            var summary = new Dictionary<string, object>
+            {
+                ["Gaps"] = perReceiver.Values.Sum(c => c[0]),
+                ["Requested"] = perReceiver.Values.Sum(c => c[1]),
+                ["Open"] = perReceiver.Values.Sum(c => c[2]),
+                ["Deferred"] = perReceiver.Values.Sum(c => c[3]),
+                ["DeferredListed"] = deferredListed,
+                ["Failed"] = perReceiver.Values.Sum(c => c[4]),
+                ["Unresolved"] = perReceiver.Values.Sum(c => c[5]),
+                ["Receivers"] = receivers
+            };
+            return new object[] { new Dictionary<string, object> { ["Gaps"] = list, ["Summary"] = summary } };
+
+        # AB#5627: the adapter answers the HTTP call with the final data context verbatim. Reduce it to
+        # the result; SetPipelineExecutionResult@1 stores the same as OutputData of the execution.
+        - type: SetPrimitiveValue@1
+          targetPath: $.status
+          value: ok
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.message
+          value: "Gap days of the window; Action request = CR_REQ_PT started (or would be, in a dry run), open = an open CR_REQ_PT covers the day (nothing started), deferred = beyond maxRequestsPerRun, failed = not accepted by EDA. Unresolved 1 = AgeDays >= unresolvedMinAgeDays. gaps lists at most maxDeferredEntries deferred gaps (the oldest); summary counts all, also per receiver."
+          valueType: String
+        - type: If@1
+          description: "No partner id"
+          path: $.config.mode
+          operator: Equals
+          value: noPartner
+          valueType: String
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.status
+              value: error
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.message
+              value: "No partnerId in EnergyCommunityConfiguration: no CR_REQ_PT was started."
+              valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.dryRun
+          valuePath: $.config.dryRun
+          valueType: Boolean
+        - type: SetPrimitiveValue@1
+          targetPath: $.firstDay
+          valuePath: $.window[0].FirstDay
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.lastDay
+          valuePath: $.window[0].LastDay
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.maxRequestsPerRun
+          valuePath: $.config.maxRequestsPerRun
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          targetPath: $.unresolvedMinAgeDays
+          valuePath: $.config.unresolvedMinAgeDays
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          targetPath: $.maxDeferredEntries
+          valuePath: $.config.maxDeferredEntries
+          valueType: Int
+        - type: SelectByPath@1
+          description: Lift summary, gaps and the unreadable open requests to the response
+          selectPath:
+            - path: $.result[0].Summary
+              targetPath: $.summary
+            - path: $.result[0].Gaps
+              targetPath: $.gaps
+            - path: $.open[0].Unreadable
+              targetPath: $.unreadableRequests
+        - type: Project@1
+          description: Shape the HTTP response body and the execution result
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.dryRun
+              inclusion: true
+            - path: $.firstDay
+              inclusion: true
+            - path: $.lastDay
+              inclusion: true
+            - path: $.maxRequestsPerRun
+              inclusion: true
+            - path: $.unresolvedMinAgeDays
+              inclusion: true
+            - path: $.maxDeferredEntries
+              inclusion: true
+            - path: $.unreadableRequests
+              inclusion: true
+            - path: $.summary
+              inclusion: true
+            - path: $.gaps
+              inclusion: true
+        - type: SetPipelineExecutionResult@1
+          path: $
+- rtId: 69c249764f1e21ff43bfb1c1
+  rtCreationDateTime: 2026-03-24T08:21:10.4100000Z
+  rtChangedDateTime: 2026-03-25T06:13:59.4980000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: request-missing-consumption-reports
+  - id: System/Description-1
+    value: Finds the days with missing quarter-hour values of the participating metering points and requests them from EDA (CR_REQ_PT, AB#5511)
+
+# AB#5511: daily run of the gap detection. Ships DISABLED: System/Enabled is owned by the
+# tenant, so neither a fresh install nor UpdateBlueprint -m Merge switches it on; the operator
+# enables it per tenant after the reviewed dry run (README, request-missing-consumption-reports
+# "First run"). 05:30 = after request-low-quality-data (05:00). The hour is read in the local
+# time of the bot service host.
+- rtId: ec0000000000000000000d17
+  ckTypeId: System.Communication/PipelineTrigger-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 69c249764f1e21ff43bfb1c1
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Triggers-1
+    targetRtId: 69c249a14f1e21ff43bfb1c2
+    targetCkTypeId: System.Communication/Pipeline-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: request-missing-consumption-reports
+  - id: System/Enabled-1
+    value: false
+  - id: System.Bot/CronExpression-1
+    value: 0 30 5 * * *
