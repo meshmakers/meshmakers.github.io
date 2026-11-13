@@ -1,0 +1,891 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.5,3.0)
+- Basic.Energy-[2.0,3.0)
+- EnergyCommunity-[5.0,6.0)
+- System.Communication-[3.26,5.0)
+- System.StreamData-[1.13,2.0)
+- System.UI-[2.4,3.0)
+
+# The customer statistics MeshBoards (AB#5791), shown read-only on the Statistics tab of a
+# customer in the EC app. Part of the EnergyCommunity.Base blueprint - see blueprint.yaml.
+#
+# Three boards with the same nine widgets; they differ only in their one hidden entity
+# selector, which the app picks through the route data `entitySelectors`:
+#   energy-community-customer-statistics        selector customer       (ec00...0c0a-0c13)
+#   energy-community-facility-statistics        selector facility       (ec00...0c14-0c1d)
+#   energy-community-metering-point-statistics  selector meteringPoint  (ec00...0c1e-0c27)
+# The app shows the narrowest board for the facility and metering-point filters of the tab.
+# The widgets read the same queries as the energy-statistics board (a22 KPIs, a21 line
+# chart), so a customer total equals the sum of its metering points; the app spec
+# customer-statistics-boards.spec.ts fails when the boards drift apart or from that board.
+# The line charts name their lines through `seriesLabels`, the same register-name map as the
+# energy-statistics board (Base 3.2.2, AB#5307); register-names.spec.ts compares all copies.
+entities:
+
+# ─── energy-community-customer-statistics - scoped to the customer: Customer -AssociatedFacilities (out)-> OperatingFacility -ParentChild (in)-> MeteringPoint -ParentChild (in)-> EnergyMeasurement
+- rtId: ec0000000000000000000c0a
+  ckTypeId: System.UI/Dashboard-1
+  rtWellKnownName: energy-community-customer-statistics
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Customer energy statistics
+  - id: System/Description-1
+    value: |-
+      ---MESHBOARD_VARIABLES---
+      {"timeZoneMode":"Europe/Vienna","timeFilter":{"enabled":true,"defaultSelection":{"type":"custom","customFrom":"2026-06-30T22:00:00.000Z","customTo":"2026-07-31T22:00:00.000Z"},"selection":{"type":"custom","customFrom":"2026-06-30T22:00:00.000Z","customTo":"2026-07-31T22:00:00.000Z"}},"entitySelectors":[{"id":"customer","label":"Kunde","ckTypeId":"EnergyCommunity/Customer","attributeMappings":[],"showInToolbar":false,"childScope":{"path":[{"roleId":"EnergyCommunity/AssociatedFacilities","direction":"out","targetCkTypeId":"Basic.Energy/OperatingFacility"},{"roleId":"System/ParentChild","direction":"in","targetCkTypeId":"Basic.Energy/MeteringPoint"},{"roleId":"System/ParentChild","direction":"in","targetCkTypeId":"Basic.Energy/EnergyMeasurement"}]}}]}
+  - id: System.UI/Dashboard.Columns-1
+    value: 4
+  - id: System.UI/Dashboard.RowHeight-1
+    value: 200
+  - id: System.UI/Dashboard.Gap-1
+    value: 16
+
+# Widget: Verbrauch - consumption as measured, 1-1:1.9.0 G.01.
+- rtId: ec0000000000000000000c0b
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c0a
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Verbrauch
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","outputVariableName":"consumption","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:1.9.0 G.01","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"customer"}'
+
+# Widget: Verbrauch laut Teilnahmefaktor - consumption according to the participation factor, 1-1:1.9.0 G.01T.
+- rtId: ec0000000000000000000c0c
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c0a
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Verbrauch laut Teilnahmefaktor
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 2
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:1.9.0 G.01T","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"customer"}'
+
+# Widget: Anteil Erzeugung - share of the community generation, 1-1:2.9.0 G.02.
+- rtId: ec0000000000000000000c0d
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c0a
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Anteil Erzeugung
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.02","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"customer"}'
+
+# Widget: Eigendeckung - consumption covered by the community, 1-1:2.9.0 G.03.
+- rtId: ec0000000000000000000c0e
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c0a
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Eigendeckung
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 4
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","comparisonText":"aus der Gemeinschaft gedeckt","outputVariableName":"covered","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.03","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"customer"}'
+
+# Widget: Erzeugung gemessen - generation as measured, 1-1:2.9.0 G.01.
+- rtId: ec0000000000000000000c0f
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c0a
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeugung gemessen
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.01","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"customer"}'
+
+# Widget: Erzeugung - generation offered to the community, 1-1:2.9.0 G.01T.
+- rtId: ec0000000000000000000c10
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c0a
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeugung
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 2
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","outputVariableName":"creation","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.01T","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"customer"}'
+
+# Widget: Überschuss - surplus the community did not use, 1-1:2.9.0 P.01T.
+- rtId: ec0000000000000000000c11
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c0a
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Überschuss
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","outputVariableName":"surplus","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 P.01T","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"customer"}'
+
+# Widget: Erzeugung in EEG - generation used inside the community, Erzeugung minus Überschuss.
+- rtId: ec0000000000000000000c12
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c0a
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeugung in EEG
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 4
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: static
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ''
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","valueMode":"formula","formula":"${creation} - ${surplus}"}'
+
+# Widget: Energy over time - one line per OBIS code summed over the scope, as ec0000000000000000000c06, without 1-1:2.9.0 G.03R.
+- rtId: ec0000000000000000000c13
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c0a
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy over time
+  - id: System.UI/DashboardWidget.Type-1
+    value: lineChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 3
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 4
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a21
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"line","categoryField":"window_start","seriesGroupField":"obisCode","valueField":"amount.value","unitField":"amount.unit","showLegend":true,"legendPosition":"right","showMarkers":false,"showDataBadge":true,"queryFamily":"streamData","queryName":"energy_measurements","queryRtId":"ec0000000000000000000a21","resolutionAware":true,"requiredAggregation":"SUM","aggregateSeriesByGroup":true,"excludedSeriesGroupValues":["1-1:2.9.0 G.03R"],"seriesLabels":{"1-1:1.9.0 G.01":"Verbrauch lt. Messung","1-1:1.9.0 G.01T":"Verbrauch lt. Teilnahmefaktor","1-1:2.9.0 G.02":"Anteil an der Erzeugung","1-1:2.9.0 G.03":"Eigendeckung","1-1:2.9.0 G.03R":"Eigendeckung (erneuerbar)","1-1:2.9.0 G.01":"Erzeugung lt. Messung","1-1:2.9.0 G.01T":"Erzeugung lt. Teilnahmefaktor","1-1:2.9.0 P.01":"Gemeinschaftsüberschuss","1-1:2.9.0 P.01T":"Restüberschuss"},"entitySelectorId":"customer"}'
+
+# ─── energy-community-facility-statistics - scoped to one operating facility of the customer: OperatingFacility -ParentChild (in)-> MeteringPoint -ParentChild (in)-> EnergyMeasurement
+- rtId: ec0000000000000000000c14
+  ckTypeId: System.UI/Dashboard-1
+  rtWellKnownName: energy-community-facility-statistics
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Facility energy statistics
+  - id: System/Description-1
+    value: |-
+      ---MESHBOARD_VARIABLES---
+      {"timeZoneMode":"Europe/Vienna","timeFilter":{"enabled":true,"defaultSelection":{"type":"custom","customFrom":"2026-06-30T22:00:00.000Z","customTo":"2026-07-31T22:00:00.000Z"},"selection":{"type":"custom","customFrom":"2026-06-30T22:00:00.000Z","customTo":"2026-07-31T22:00:00.000Z"}},"entitySelectors":[{"id":"facility","label":"Anlage","ckTypeId":"Basic.Energy/OperatingFacility","attributeMappings":[],"showInToolbar":false,"childScope":{"path":[{"roleId":"System/ParentChild","direction":"in","targetCkTypeId":"Basic.Energy/MeteringPoint"},{"roleId":"System/ParentChild","direction":"in","targetCkTypeId":"Basic.Energy/EnergyMeasurement"}]}}]}
+  - id: System.UI/Dashboard.Columns-1
+    value: 4
+  - id: System.UI/Dashboard.RowHeight-1
+    value: 200
+  - id: System.UI/Dashboard.Gap-1
+    value: 16
+
+# Widget: Verbrauch - consumption as measured, 1-1:1.9.0 G.01.
+- rtId: ec0000000000000000000c15
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c14
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Verbrauch
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","outputVariableName":"consumption","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:1.9.0 G.01","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"facility"}'
+
+# Widget: Verbrauch laut Teilnahmefaktor - consumption according to the participation factor, 1-1:1.9.0 G.01T.
+- rtId: ec0000000000000000000c16
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c14
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Verbrauch laut Teilnahmefaktor
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 2
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:1.9.0 G.01T","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"facility"}'
+
+# Widget: Anteil Erzeugung - share of the community generation, 1-1:2.9.0 G.02.
+- rtId: ec0000000000000000000c17
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c14
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Anteil Erzeugung
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.02","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"facility"}'
+
+# Widget: Eigendeckung - consumption covered by the community, 1-1:2.9.0 G.03.
+- rtId: ec0000000000000000000c18
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c14
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Eigendeckung
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 4
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","comparisonText":"aus der Gemeinschaft gedeckt","outputVariableName":"covered","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.03","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"facility"}'
+
+# Widget: Erzeugung gemessen - generation as measured, 1-1:2.9.0 G.01.
+- rtId: ec0000000000000000000c19
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c14
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeugung gemessen
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.01","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"facility"}'
+
+# Widget: Erzeugung - generation offered to the community, 1-1:2.9.0 G.01T.
+- rtId: ec0000000000000000000c1a
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c14
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeugung
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 2
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","outputVariableName":"creation","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.01T","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"facility"}'
+
+# Widget: Überschuss - surplus the community did not use, 1-1:2.9.0 P.01T.
+- rtId: ec0000000000000000000c1b
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c14
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Überschuss
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","outputVariableName":"surplus","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 P.01T","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"facility"}'
+
+# Widget: Erzeugung in EEG - generation used inside the community, Erzeugung minus Überschuss.
+- rtId: ec0000000000000000000c1c
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c14
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeugung in EEG
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 4
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: static
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ''
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","valueMode":"formula","formula":"${creation} - ${surplus}"}'
+
+# Widget: Energy over time - one line per OBIS code summed over the scope, as ec0000000000000000000c06, without 1-1:2.9.0 G.03R.
+- rtId: ec0000000000000000000c1d
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c14
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy over time
+  - id: System.UI/DashboardWidget.Type-1
+    value: lineChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 3
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 4
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a21
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"line","categoryField":"window_start","seriesGroupField":"obisCode","valueField":"amount.value","unitField":"amount.unit","showLegend":true,"legendPosition":"right","showMarkers":false,"showDataBadge":true,"queryFamily":"streamData","queryName":"energy_measurements","queryRtId":"ec0000000000000000000a21","resolutionAware":true,"requiredAggregation":"SUM","aggregateSeriesByGroup":true,"excludedSeriesGroupValues":["1-1:2.9.0 G.03R"],"seriesLabels":{"1-1:1.9.0 G.01":"Verbrauch lt. Messung","1-1:1.9.0 G.01T":"Verbrauch lt. Teilnahmefaktor","1-1:2.9.0 G.02":"Anteil an der Erzeugung","1-1:2.9.0 G.03":"Eigendeckung","1-1:2.9.0 G.03R":"Eigendeckung (erneuerbar)","1-1:2.9.0 G.01":"Erzeugung lt. Messung","1-1:2.9.0 G.01T":"Erzeugung lt. Teilnahmefaktor","1-1:2.9.0 P.01":"Gemeinschaftsüberschuss","1-1:2.9.0 P.01T":"Restüberschuss"},"entitySelectorId":"facility"}'
+
+# ─── energy-community-metering-point-statistics - scoped to one metering point of the customer: MeteringPoint -ParentChild (in)-> EnergyMeasurement
+- rtId: ec0000000000000000000c1e
+  ckTypeId: System.UI/Dashboard-1
+  rtWellKnownName: energy-community-metering-point-statistics
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: Metering point energy statistics
+  - id: System/Description-1
+    value: |-
+      ---MESHBOARD_VARIABLES---
+      {"timeZoneMode":"Europe/Vienna","timeFilter":{"enabled":true,"defaultSelection":{"type":"custom","customFrom":"2026-06-30T22:00:00.000Z","customTo":"2026-07-31T22:00:00.000Z"},"selection":{"type":"custom","customFrom":"2026-06-30T22:00:00.000Z","customTo":"2026-07-31T22:00:00.000Z"}},"entitySelectors":[{"id":"meteringPoint","label":"Zählpunkt","ckTypeId":"Basic.Energy/MeteringPoint","attributeMappings":[],"showInToolbar":false,"childScope":{"targetCkTypeId":"Basic.Energy/EnergyMeasurement","roleId":"System/ParentChild","direction":"in"}}]}
+  - id: System.UI/Dashboard.Columns-1
+    value: 4
+  - id: System.UI/Dashboard.RowHeight-1
+    value: 200
+  - id: System.UI/Dashboard.Gap-1
+    value: 16
+
+# Widget: Verbrauch - consumption as measured, 1-1:1.9.0 G.01.
+- rtId: ec0000000000000000000c1f
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c1e
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Verbrauch
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","outputVariableName":"consumption","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:1.9.0 G.01","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"meteringPoint"}'
+
+# Widget: Verbrauch laut Teilnahmefaktor - consumption according to the participation factor, 1-1:1.9.0 G.01T.
+- rtId: ec0000000000000000000c20
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c1e
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Verbrauch laut Teilnahmefaktor
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 2
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:1.9.0 G.01T","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"meteringPoint"}'
+
+# Widget: Anteil Erzeugung - share of the community generation, 1-1:2.9.0 G.02.
+- rtId: ec0000000000000000000c21
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c1e
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Anteil Erzeugung
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.02","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"meteringPoint"}'
+
+# Widget: Eigendeckung - consumption covered by the community, 1-1:2.9.0 G.03.
+- rtId: ec0000000000000000000c22
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c1e
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Eigendeckung
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 4
+  - id: System.UI/DashboardWidget.Row-1
+    value: 1
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","comparisonText":"aus der Gemeinschaft gedeckt","outputVariableName":"covered","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.03","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"meteringPoint"}'
+
+# Widget: Erzeugung gemessen - generation as measured, 1-1:2.9.0 G.01.
+- rtId: ec0000000000000000000c23
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c1e
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeugung gemessen
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.01","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"meteringPoint"}'
+
+# Widget: Erzeugung - generation offered to the community, 1-1:2.9.0 G.01T.
+- rtId: ec0000000000000000000c24
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c1e
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeugung
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 2
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","outputVariableName":"creation","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 G.01T","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"meteringPoint"}'
+
+# Widget: Überschuss - surplus the community did not use, 1-1:2.9.0 P.01T.
+- rtId: ec0000000000000000000c25
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c1e
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Überschuss
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 3
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a22
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","outputVariableName":"surplus","queryMode":"groupedAggregation","queryValueField":"amountvalue_sum","queryCategoryField":"obiscode","queryCategoryValue":"1-1:2.9.0 P.01T","queryName":"energy-measurements-aggregation-by-obiscode","queryRtId":"ec0000000000000000000a22","queryFamily":"streamData","entitySelectorId":"meteringPoint"}'
+
+# Widget: Erzeugung in EEG - generation used inside the community, Erzeugung minus Überschuss.
+- rtId: ec0000000000000000000c26
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c1e
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Erzeugung in EEG
+  - id: System.UI/DashboardWidget.Type-1
+    value: kpi
+  - id: System.UI/DashboardWidget.Col-1
+    value: 4
+  - id: System.UI/DashboardWidget.Row-1
+    value: 2
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 1
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: static
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ''
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"valueAttribute":"","suffix":"kWh","icon":"chart","valueMode":"formula","formula":"${creation} - ${surplus}"}'
+
+# Widget: Energy over time - one line per OBIS code summed over the scope, as ec0000000000000000000c06, without 1-1:2.9.0 G.03R.
+- rtId: ec0000000000000000000c27
+  ckTypeId: System.UI/DashboardWidget-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000c1e
+    targetCkTypeId: System.UI/Dashboard-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: Energy over time
+  - id: System.UI/DashboardWidget.Type-1
+    value: lineChart
+  - id: System.UI/DashboardWidget.Col-1
+    value: 1
+  - id: System.UI/DashboardWidget.Row-1
+    value: 3
+  - id: System.UI/DashboardWidget.ColSpan-1
+    value: 4
+  - id: System.UI/DashboardWidget.RowSpan-1
+    value: 2
+  - id: System.UI/DashboardWidget.DataSourceType-1
+    value: systemQuery
+  - id: System.UI/DashboardWidget.DataSourceCkTypeId-1
+    value: ''
+  - id: System.UI/DashboardWidget.DataSourceRtId-1
+    value: ec0000000000000000000a21
+  - id: System.UI/DashboardWidget.Config-1
+    value: '{"chartType":"line","categoryField":"window_start","seriesGroupField":"obisCode","valueField":"amount.value","unitField":"amount.unit","showLegend":true,"legendPosition":"right","showMarkers":false,"showDataBadge":true,"queryFamily":"streamData","queryName":"energy_measurements","queryRtId":"ec0000000000000000000a21","resolutionAware":true,"requiredAggregation":"SUM","aggregateSeriesByGroup":true,"excludedSeriesGroupValues":["1-1:2.9.0 G.03R"],"seriesLabels":{"1-1:1.9.0 G.01":"Verbrauch lt. Messung","1-1:1.9.0 G.01T":"Verbrauch lt. Teilnahmefaktor","1-1:2.9.0 G.02":"Anteil an der Erzeugung","1-1:2.9.0 G.03":"Eigendeckung","1-1:2.9.0 G.03R":"Eigendeckung (erneuerbar)","1-1:2.9.0 G.01":"Erzeugung lt. Messung","1-1:2.9.0 G.01T":"Erzeugung lt. Teilnahmefaktor","1-1:2.9.0 P.01":"Gemeinschaftsüberschuss","1-1:2.9.0 P.01T":"Restüberschuss"},"entitySelectorId":"meteringPoint"}'
