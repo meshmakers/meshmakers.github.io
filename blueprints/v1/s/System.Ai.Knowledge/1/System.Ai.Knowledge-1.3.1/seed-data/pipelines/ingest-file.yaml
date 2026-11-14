@@ -1,0 +1,151 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.7,5.0)
+  - System.Communication-[4.0,5.0)
+  - System.Files-[1.0,2.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Stage 1a (bronze): a file in the Knowledge folder. Watches System.Files items, keeps only direct
+  # children of the Knowledge root (rtId 67a1000000000000000b1c04, configurations.yaml), reads the
+  # bytes (never writes them: the raw file stays immutable), extracts the text (PDF: text layer, OCR
+  # for scanned pages; text/markdown: UTF-8) and hands it to knowledge-source-artifact.
+  # Unsupported file types are skipped with a log line. Insert and Update both trigger; an unchanged
+  # text is dropped by the hash check of knowledge-source-artifact, so a rename or a metadata change
+  # costs no LLM call.
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c21'
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: knowledge-ingest-file
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c05'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Knowledge - Ingest File (Knowledge folder)
+      - id: System/Description
+        value: >-
+          Bronze ingest of a file dropped into the Knowledge folder: PDF (text layer, OCR for
+          scanned pages) or text/markdown -> knowledge-source-artifact. The file is only read.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/IsDebuggingEnabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromWatchRtEntity@1
+              updateTypes: Insert, Update, Replace
+              ckTypeId: System.Files/FileSystemItem
+          transformations:
+            - type: GetAssociationTargets@1
+              description: Parent folder root of the file, if it is the Knowledge root (one result entry per origin, hence [0])
+              graphDirection: Outbound
+              originRtIdPath: $.Document.RtId
+              originCkTypeId: System.Files/FileSystemItem
+              targetCkTypeId: System.Files/FolderRoot
+              associationRoleId: System/ParentChild
+              fieldFilters:
+                - attributePath: RtId
+                  operator: Equals
+                  comparisonValue: '67a1000000000000000b1c04'
+              targetPath: $.knowledgeRoot
+            - type: If@1
+              description: Only files directly in the Knowledge folder
+              path: $.knowledgeRoot[0].TotalCount
+              operator: GreaterThan
+              value: 0
+              valueType: Int
+              transformations:
+                - type: GetFileSystemContent@1
+                  description: Read the bytes (read only - the raw file is never modified)
+                  rtIdPath: $.Document.RtId
+                  targetPath: $.file.data
+                  fileNameTargetPath: $.file.fileName
+                  contentTypeTargetPath: $.file.contentType
+                  contentLengthTargetPath: $.file.length
+                - type: ExecuteCSharp@1
+                  description: Classify the file by content type and extension (pdf, text, unsupported)
+                  arguments:
+                    - name: fileName
+                      valuePath: $.file.fileName
+                      dataType: String
+                    - name: contentType
+                      valuePath: $.file.contentType
+                      dataType: String
+                  returnType: String
+                  targetPath: $.file.kind
+                  code: |-
+                    // knowledge-file-kind (AB#8486)
+                    var ct = (contentType ?? string.Empty).Trim().ToLowerInvariant();
+                    var name = (fileName ?? string.Empty).Trim().ToLowerInvariant();
+                    if (ct == "application/pdf" || name.EndsWith(".pdf")) return "pdf";
+                    if (ct.StartsWith("text/") || name.EndsWith(".md") || name.EndsWith(".markdown") || name.EndsWith(".txt")) return "text";
+                    return "unsupported";
+                - type: Switch@1
+                  path: $.file.kind
+                  valueType: String
+                  cases:
+                    - value: pdf
+                      transformations:
+                        - type: PdfOcrExtraction@1
+                          description: Text layer for born-digital PDFs, OCR for scanned pages
+                          language: en
+                          maxFileSizeBytes: 20000000
+                          preferTextLayer: true
+                          continueOnError: false
+                          path: $.file.data
+                          targetPath: $.source.content
+                    - value: text
+                      transformations:
+                        - type: Base64Decode@1
+                          path: $.file
+                          sourcePath: $.data
+                          targetPath: $.text
+                        - type: SetPrimitiveValue@1
+                          valuePath: $.file.text
+                          targetPath: $.source.content
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          value: NativeText
+                          targetPath: $.source.extractionTier
+                          valueType: String
+                  default:
+                    - type: Logger@1
+                      message: 'knowledge-ingest-file: unsupported file type skipped (PDF, text and markdown are ingested)'
+                - type: If@1
+                  description: Hand the extracted text to the bronze stage
+                  path: $.file.kind
+                  operator: NotEqual
+                  value: unsupported
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      valuePath: $.file.fileName
+                      targetPath: $.source.name
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      value: Document
+                      targetPath: $.source.artifactType
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      value: System.Files
+                      targetPath: $.source.sourceSystem
+                      valueType: String
+                    - type: FormatString@1
+                      format: 'files://Knowledge/{$.file.fileName}'
+                      targetPath: $.source.sourceUri
+                    - type: SetPrimitiveValue@1
+                      valuePath: $.Document.RtId
+                      targetPath: $.source.fileRtId
+                      valueType: String
+                    - type: ToPipelineDataEvent@1
+                      description: To knowledge-source-artifact
+                      path: $.source
+                      targetPath: $.source
+                      targetPipelineRtId: '67a1000000000000000b1c24'
