@@ -1,0 +1,105 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: System.Ai.Knowledge-1.3.1
+description: |
+  Opt-in knowledge ingest for the tenant knowledge base (AB#8486, Feature AB#8450). A document
+  in the tenant's Knowledge folder (System.Files root "Knowledge"), or a text or PDF posted to
+  the HTTP endpoints, becomes a SourceArtifact and then a Draft knowledge page.
+
+  Not service-managed: System.Ai.Default (applied on EnableAi to every AI tenant) carries no
+  ingest pipeline and no LLM call. Only a tenant that installs this blueprint gets them, and
+  until the per-tenant cost cap AB#8659 exists it is installed only locally and on one opt-in
+  test-2 tenant with a dedicated API key whose provider-side spend limit is the hard cap.
+
+  Seeds:
+  - the Knowledge folder root (System.Files/FolderRoot "Knowledge")
+  - AiConfiguration knowledge-llm (calls without tools) and knowledge-llm-mcp (agentic loop and
+    page write; carries McpServerUrl) - set the same ApiKey on both after the install and before
+    the data flow is deployed
+  - ServiceAccountConfiguration knowledge-reader (read tools of the generation loop) and
+    knowledge-curator (the page write in McpToolCall@1 only); no extra roles, no delegation
+  - the three KnowledgeCapture prompts (AB#3127) as AiPromptTemplate, PromptPurpose
+    KnowledgeGeneration: wiki-prompt-agentic, wiki-prompt-structured, wiki-prompt-verification
+    (TemplateVersion 4 = Philipp's v3 with the source as the cacheable main content)
+  - data flow knowledge-ingest with seven pipelines, all seeded Undeployed:
+    knowledge-ingest-file (Knowledge folder watch), knowledge-ingest-text (HTTP text),
+    knowledge-ingest-pdf (HTTP PDF), knowledge-source-artifact (bronze, hash dedupe),
+    knowledge-generate-agentic (default), knowledge-generate (pipeline variant) and
+    knowledge-write-page (the only pipeline that runs as knowledge-curator)
+
+  Write path W1: the model only reads (knowledge_search, knowledge_get; no generic entity
+  reads until AB#8574) and returns schema-valid JSON; the pipeline verifies, normalises the
+  Markdown and hands the page to knowledge-write-page, which writes through McpToolCall@1 ->
+  knowledge_upsert_page as knowledge-curator, with run data on the new page version. Pages
+  start as Draft.
+
+  Knowledge lint (1.1.0, AB#8488): data flow knowledge-maintenance with the pipeline knowledge-lint
+  (service account knowledge-linter, prompt knowledge-lint-contradiction, trigger
+  knowledge-lint-nightly at 02:30 UTC seeded DISABLED, HTTP POST /knowledge-capture/lint). Rule
+  checks (orphan, stale, missing link, citation not in source) over all pages; LLM checks
+  (unsupported claim, contradiction) over at most knowledge-lint-max-pages pages per run (tenant
+  setting, default 5). The report is written through McpToolCall@1 -> knowledge_write_lint_report
+  and is always unvalidated until the lint's precision is measured.
+
+  Page metadata (1.1.1, AB#8719; found by the first live ingest on test-2 kb-test): every ingest version
+  carries latencySeconds (start of the generation pipeline to the hand-over of the write; needs
+  octo-mcp-service with the latencySeconds parameter of knowledge_upsert_page), the page summary is
+  taken from the generated Summary section (plain text, at most two sentences / 400 characters), and
+  only confirmed hallucination flags are stored: wiki-prompt-verification TemplateVersion 5 returns
+  flags with "confirmed", and the pipelines and the lint drop flags the verification withdrew itself.
+
+  Platform updates (1.2.0, AB#8780): a blueprint update (System.Ai.Builder, System.Ai.Default) brings new
+  KnowledgePageVersion entities but never refreshes an existing page (AB#8778). The pipeline
+  knowledge-platform-updates (data flow knowledge-maintenance, trigger knowledge-platform-updates-nightly at
+  02:15 UTC seeded ENABLED - no LLM cost; HTTP POST /knowledge-capture/platform-updates) calls
+  knowledge_adopt_platform_updates as knowledge-linter: an unedited page (its current version is a Blueprint
+  version) is switched to the newest Blueprint version - content and status from that version, no new version,
+  LinksTo follows the version's DeclaredLinks, AdoptedByRun = the run reference. Edited pages keep their
+  content; the lint reports PlatformUpdateAvailable (knowledge_list_platform_updates), and a person restores the
+  version (knowledge_restore_version, octo-cli) or dismisses it (knowledge_dismiss_platform_update). Deleted pages
+  stay deleted. Needs System.Ai 4.10.0 and octo-mcp-service with the AB#8780 tools.
+
+  On-demand runs (1.3.0, AB#8780 reopen): knowledge-platform-updates and knowledge-lint also start on
+  FromExecutePipelineCommand@1 (octo-cli ExecutePipeline), so they run on tenants whose Mesh Adapter has no
+  HTTP ingress. The nightly triggers and the HTTP endpoints stay as they are. Edited pages are detected by the
+  version history (octo-mcp-service follows BaseVersion and RestoredFromVersion): with System.Ai 4.11.0 an edit
+  written on an older version after a newer Blueprint version arrived is reported, not lost. A version written
+  before 4.11.0 (or by octo-cli SetKnowledgePageStatus) has no BaseVersion and ends the chain; the Blueprint
+  versions above the page's first version are then reported (a finding to adopt or dismiss, never a silent loss).
+
+  Quiet runs (1.3.1, AB#8973): knowledge-lint looks up the links and sources of the pages and of the LLM
+  candidates only when there is at least one, so a run without a page compiled since the last report (or on a
+  tenant without pages) succeeds and writes a report without LLM findings. The report's runRef is the lint's own
+  pipeline execution id (McpToolCall@1 executionIdArgument, AB#8703) instead of the former
+  knowledge-lint/<startedAt>. Install 1.3.1 only where the Mesh Adapter is r3.5.73 or later: an older adapter
+  rejects executionIdArgument and knowledge-lint does not load.
+
+  Set the API key on knowledge-llm and knowledge-llm-mcp BEFORE deploying the data flows, or redeploy
+  them afterwards: the adapter reads the AiConfiguration when the pipeline is deployed.
+
+  Setup, settings and limits: src/SystemAiCkModel/README.md, section "System.Ai.Knowledge".
+
+# The seed needs System.Ai 4.10 (4.7: SourceArtifact, KnowledgePage, AiPromptTemplate.PromptPurpose,
+# ExtractedFrom; 4.8: KnowledgeLintReport.IsValidated/VerifiedThrough, CitationNotInSource; 4.10:
+# PlatformUpdateAvailable, KnowledgePage.DismissedBlueprintVersion/AdoptedByRun, KnowledgePageVersion.DeclaredLinks), System.Bot 3.x
+# (PipelineTrigger CronExpression of the lint), the System.Communication 4.x line (AiConfiguration.McpServerUrl,
+# ServiceAccountConfiguration.AssignedRoleNames/AllowDelegation, Pipeline/DataFlow) and
+# System.Files 1.x (FolderRoot). All four are service-managed and already on an AI tenant.
+ckModelDependencies:
+  - System.Ai-[4.10,5.0)
+  - System.Bot-[3.1,4.0)
+  - System.Communication-[4.0,5.0)
+  - System.Files-[1.0,2.0)
+
+# One file per concern; the engine merges them before importing.
+seedDataPaths:
+  - seed-data/configurations.yaml
+  - seed-data/prompt-templates.yaml
+  - seed-data/pipelines/ingest-file.yaml
+  - seed-data/pipelines/ingest-text.yaml
+  - seed-data/pipelines/ingest-pdf.yaml
+  - seed-data/pipelines/source-artifact.yaml
+  - seed-data/pipelines/generate-agentic.yaml
+  - seed-data/pipelines/generate.yaml
+  - seed-data/pipelines/write-page.yaml
+  - seed-data/lint.yaml
+  - seed-data/platform-updates.yaml
