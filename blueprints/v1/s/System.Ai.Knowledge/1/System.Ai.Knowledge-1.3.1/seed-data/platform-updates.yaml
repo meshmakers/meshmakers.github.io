@@ -1,0 +1,176 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.10,5.0)
+  - System.Bot-[3.1,4.0)
+  - System.Communication-[4.0,5.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Platform updates of Blueprint knowledge pages (AB#8780, Feature AB#8777; Odin's decision on AB#8777,
+  # 2026-11-11). A blueprint update (System.Ai.Builder, System.Ai.Default) brings new KnowledgePageVersion
+  # entities but never refreshes an existing page: page content is TenantOwned, CurrentVersion is
+  # RuntimeState, and pages with LinksTo are skipped by the engine (AB#8778). This pipeline completes the
+  # rule in System.Ai, in the data flow knowledge-maintenance next to the lint:
+  #
+  #   unedited page (its current version is a Blueprint version - the tenant never wrote one)
+  #     -> switched to the newest Blueprint version: content and status from that version, no new version,
+  #        LinksTo follows the version's DeclaredLinks, AdoptedByRun = the run reference of this run
+  #   edited page (its current version was written in the tenant)
+  #     -> never changed; the lint reports PlatformUpdateAvailable, a person restores the version
+  #        (knowledge_restore_version / octo-cli) or dismisses it (knowledge_dismiss_platform_update)
+  #   deleted page -> stays deleted
+  #
+  # The rule is decided by the MCP tool (octo-mcp-service KnowledgePlatformUpdates), not here: one place,
+  # also used by knowledge_list_platform_updates in the lint. No LLM call, no API key cost. A run without a
+  # new Blueprint version writes nothing.
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c2a'
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: knowledge-platform-updates
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c07'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c06'
+        targetCkTypeId: System.Communication/AiConfiguration
+      # Same identity as the lint (no roles beyond the platform baseline, no delegation); its token is used only
+      # by the McpToolCall@1 below, whose allowlist holds only knowledge_adopt_platform_updates.
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c08'
+        targetCkTypeId: System.Communication/ServiceAccountConfiguration
+    attributes:
+      - id: System/Name
+        value: Knowledge - Platform updates (knowledge-linter)
+      - id: System/Description
+        value: >-
+          Switches unedited Blueprint knowledge pages to the newest Blueprint version a blueprint update brought
+          (knowledge_adopt_platform_updates); edited pages keep their content and are reported by the lint.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/IsDebuggingEnabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromPipelineTriggerEvent@1
+            # 1.3.0 (AB#8780): on demand without an HTTP ingress (octo-cli ExecutePipeline; kb-test2 has ingressEnabled=false).
+            - type: FromExecutePipelineCommand@1
+            - type: FromHttpRequest@2
+              method: POST
+              path: /knowledge-capture/platform-updates
+              allowAnonymous: false
+              requiredRoles:
+                - FileManagement
+              description: 'Adopts the platform updates of unedited Blueprint knowledge pages now (no body, no LLM cost).'
+          transformations:
+            - type: ExecuteCSharp@1
+              description: Start of the run
+              returnType: DateTime
+              targetPath: $.run.startedAt
+              code: return DateTime.UtcNow;
+            - type: FormatString@1
+              description: Run reference (interim, like the lint - the execution id is not reachable from the run); stored on every switched page as AdoptedByRun
+              format: 'knowledge-platform-updates/{$.run.startedAt}'
+              targetPath: $.adoptArguments.runRef
+            - type: McpToolCall@1
+              description: The only write - knowledge_adopt_platform_updates as knowledge-linter (rule, content guard and links in the tool)
+              allowedTools:
+                - knowledge_adopt_platform_updates
+              toolName: knowledge_adopt_platform_updates
+              argumentsPath: $.adoptArguments
+              aiConfigurationName: knowledge-llm-mcp
+              mcpServiceAccountConfigName: knowledge-linter
+              targetPath: $.adopt
+            - type: ExecuteCSharp@1
+              description: Result of the run; a refused call fails the run, skipped pages are listed
+              arguments:
+                - name: isSuccess
+                  valuePath: $.adopt.isSuccess
+                  dataType: Boolean
+                - name: errorMessage
+                  valuePath: $.adopt.errorMessage
+                  dataType: String
+                - name: runRef
+                  valuePath: $.adoptArguments.runRef
+                  dataType: String
+                - name: adopted
+                  valuePath: $.adopt.adopted
+                  dataType: RecordArray
+                - name: skipped
+                  valuePath: $.adopt.skipped
+                  dataType: RecordArray
+                - name: available
+                  valuePath: $.adopt.available
+                  dataType: RecordArray
+              returnType: Record
+              targetPath: $.result
+              usings:
+                - System.Collections.Generic
+                - System.Linq
+                - System.Text.Json
+              code: |-
+                // knowledge-platform-updates-result (AB#8780): the tool answers a refusal as a result, not as an MCP error.
+                if (!isSuccess)
+                    throw new InvalidOperationException("knowledge_adopt_platform_updates refused the run: " + (errorMessage ?? "no reason given"));
+                JsonElement El(object o) => o is JsonElement j ? j : JsonSerializer.SerializeToElement(o);
+                string Str(JsonElement e, string name)
+                {
+                    if (e.ValueKind != JsonValueKind.Object) return null;
+                    foreach (var p in e.EnumerateObject())
+                        if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
+                            return p.Value.ValueKind == JsonValueKind.Null ? null : p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : p.Value.ToString();
+                    return null;
+                }
+                List<string> Lines(object[] items, Func<JsonElement, string> line) =>
+                    (items ?? new object[0]).Where(x => x != null).Select(El).Select(line).ToList();
+                var adoptedLines = Lines(adopted, a => Str(a, "slug") + ": version " + Str(a, "fromVersion") + " -> " + Str(a, "toVersion") +
+                    " (" + (Str(a, "blueprint") ?? "blueprint") + ")");
+                var skippedLines = Lines(skipped, a => Str(a, "slug") + ": " + (Str(a, "reason") ?? "skipped"));
+                var availableLines = Lines(available, a => Str(a, "slug") + ": edited at version " + Str(a, "currentVersion") +
+                    ", Blueprint version " + Str(a, "newerVersion") + " is newer");
+                return new Dictionary<string, object>
+                {
+                    ["runRef"] = runRef,
+                    ["adopted"] = adoptedLines,
+                    ["skipped"] = skippedLines,
+                    ["available"] = availableLines,
+                    ["message"] = "Adopted " + adoptedLines.Count + " page(s), skipped " + skippedLines.Count + "; " + availableLines.Count +
+                        " edited page(s) keep their content (reported by the lint as PlatformUpdateAvailable)."
+                };
+            - type: SetPipelineExecutionResult@1
+              path: $.result
+            - type: Project@1
+              description: Answer an HTTP caller with the result only
+              path: $
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
+
+  # Nightly at 02:15 UTC, before the lint (02:30), so the lint sees the adopted pages. Seeded ENABLED: the run
+  # costs no LLM tokens and writes only Blueprint content onto pages the tenant never edited; it runs only once
+  # the data flow knowledge-maintenance is deployed. Disable it (System/Enabled false) to adopt by hand over HTTP.
+  - rtId: '67a1000000000000000b1c2b'
+    ckTypeId: System.Communication/PipelineTrigger
+    rtWellKnownName: knowledge-platform-updates-nightly
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c07'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Triggers
+        targetRtId: '67a1000000000000000b1c2a'
+        targetCkTypeId: System.Communication/Pipeline
+    attributes:
+      - id: System/Name
+        value: knowledge-platform-updates-nightly
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System.Bot/CronExpression
+        value: 0 15 2 * * *
