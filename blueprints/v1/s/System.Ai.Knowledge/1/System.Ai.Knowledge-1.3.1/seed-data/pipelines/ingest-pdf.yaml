@@ -1,0 +1,85 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.7,5.0)
+  - System.Communication-[4.0,5.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Stage 1c (bronze): PDF over HTTP (prototype ingest-pdf). POST multipart/form-data:
+  #   file=<pdf>, optional form fields sourceSystem, sourceUri, artifactType.
+  # PdfOcrExtraction@1 as on main: text layer for born-digital PDFs, OCR for scanned pages. The
+  # per-page extraction ladder that reports ExtractionTier is parked (AB#8498), so the tier stays
+  # empty for PDFs. Requires FileManagement.
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c23'
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: knowledge-ingest-pdf
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c05'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Knowledge - Ingest PDF (HTTP)
+      - id: System/Description
+        value: >-
+          Bronze ingest of an uploaded PDF: multipart upload -> text layer / OCR ->
+          knowledge-source-artifact. The original stays in its system of record (sourceUri).
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/IsDebuggingEnabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromHttpRequest@2
+              method: POST
+              path: /knowledge-capture/ingest-pdf
+              allowAnonymous: false
+              requiredRoles:
+                - FileManagement
+              description: 'multipart/form-data: file=<pdf>, optional form fields sourceSystem, sourceUri, artifactType.'
+          transformations:
+            - type: PdfOcrExtraction@1
+              description: Text layer for born-digital PDFs, OCR for scanned pages
+              language: en
+              maxFileSizeBytes: 20000000
+              preferTextLayer: true
+              continueOnError: false
+              path: $.files[0].data
+              targetPath: $.source.content
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.files[0].fileName
+                  targetPath: $.source.name
+                - path: $.formData.sourceSystem
+                  targetPath: $.source.sourceSystem
+                - path: $.formData.sourceUri
+                  targetPath: $.source.sourceUri
+                - path: $.formData.artifactType
+                  targetPath: $.source.artifactType
+            - type: ToPipelineDataEvent@1
+              description: To knowledge-source-artifact; answers with its result
+              path: $.source
+              targetPath: $.source
+              targetPipelineRtId: '67a1000000000000000b1c24'
+              awaitResult: true
+              timeoutSeconds: 60
+              resultTargetPath: $.artifact
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.artifact.result
+                  targetPath: $.result
+            - type: SetPipelineExecutionResult@1
+              path: $.result
+            - type: Project@1
+              description: Answer the caller with the result only (status, SourceArtifact rtId, slug, generation variant)
+              path: $
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
