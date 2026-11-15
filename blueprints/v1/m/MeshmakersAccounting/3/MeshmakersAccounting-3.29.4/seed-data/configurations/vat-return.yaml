@@ -1,0 +1,19 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.11.0,4.0)
+entities:
+  # --- VAT return settings (AB#7512, Feature AB#7507 VAT estimate) -----------------
+  # The tenant configuration the VAT estimate is computed for. Decided with the tax advisor
+  # (Gerald, 2026-10-26): taxation on agreed consideration (Sollbesteuerung, GmbH) - a document
+  # belongs to the VAT period of its invoice / service date, not of its payment - and a monthly
+  # return (UVA, due on the 15th of the second following month). Both attributes are
+  # isRuntimeState: these are STARTING values, a value the tenant changes survives every
+  # blueprint re-apply. Nothing reads them before AB#7515 (period assignment) / AB#7516.
+  - rtId: aa0000000000000000007512
+    ckTypeId: Meshmakers.Accounting/VatReturnSettings
+    rtWellKnownName: VatReturnSettings
+    attributes:
+      - id: Meshmakers.Accounting/VatReturnBasis
+        value: AGREEDCONSIDERATION
+      - id: Meshmakers.Accounting/VatReturnInterval
+        value: MONTHLY
