@@ -1,0 +1,294 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - Meshmakers.Accounting-[3.1.0,4.0)
+  - System.Communication-[4.5,5.0)
+  - System.Files-[1.0,2.0)
+  - System.Identity-[3.0,4.0)
+  - System.UI-[2.2,3.0)
+entities:
+  # --- Pipeline: attach-upload-to-document (AB#4874) ---
+  # Attaches one or more EXISTING inbox items (UploadedDocuments) to an EXISTING
+  # AccountingDocument as ADDITIONAL files — the non-destructive counterpart of
+  # the page editor's merge: nothing is merged, deleted or re-analyzed. POST
+  # /attachUploadToDocument with a JSON body { documentRtId, uploadRtIds: [...] }.
+  # Each upload's stored file is linked to the document via System/Related (the
+  # association the preview resolves) and the upload is advanced to COMPLETED so
+  # the inbox default filter hides it. Use case: adding a rent-increase letter to
+  # a contract's recurring master document (Dauerbeleg).
+  - rtId: 67d4a2f0b2e4d8c3a1f00150
+    ckTypeId: System.Communication/DataFlow
+    attributes:
+      - id: System/Name
+        value: Attach Upload To Document
+      - id: System/Description
+        value: Attaches inbox items to an existing accounting document as additional files
+  - rtId: 67d4a2f0b2e4d8c3a1f00151
+    ckTypeId: System.Communication/Pipeline
+    associations:
+      # AB#7800: runs as the blueprint pipeline identity (ServiceAccountConfig, AccountingManagement) instead of
+      # the adapter account octo-pipeline-sa-*; a pipeline is redeployed for a Uses edge to take effect.
+      - roleId: System.Communication/Uses
+        targetRtId: 67f0c00ec4ff02221e0b7002
+        targetCkTypeId: System.Communication/ServiceAccountConfiguration
+      - roleId: System/ParentChild
+        targetRtId: 67d4a2f0b2e4d8c3a1f00150
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: "670000000000000000000002"
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System.Communication/DeploymentState
+        value: 0
+      - id: System/Name
+        value: Attach Upload To Document Pipeline
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromHttpRequest@2
+              path: /attachUploadToDocument
+              method: POST
+              allowAnonymous: false
+              requiredRoles:
+                - AccountingManagement
+                - AccountingEmployee
+          transformations:
+            # AB#8979 write gate (the same gate as /attachDocumentFile, AB#8964). The route admits
+            # AccountingManagement AND AccountingEmployee, and the document and upload data policies
+            # (aa..322/323) ship in AuditOnly, so nothing on the platform stops an employee from linking
+            # someone else's upload to someone else's document. The verified caller of FromHttpRequest@2
+            # (bearer) is checked here BEFORE anything is written: management may link any upload of the
+            # tenant to any document of the tenant; an employee only their own uploads to their own document
+            # (OwnerUserId == their subject, the owned-only rule of aa..323). Every requested upload must
+            # exist. A malformed request, an unknown rtId, an rtId of another tenant, an ownerless document
+            # or upload for an employee and a foreign document or upload all get the SAME answer
+            # (statusCode 403 in the body, no existence leak), and no link or state is written.
+            # Tested by scripts/attach_upload_to_document_auth_test.py.
+            - type: WriteVerifiedCaller@1
+              description: AB#8979 caller identity for the write gate
+              targetPath: $.caller
+            - type: SetPrimitiveValue@1
+              description: Deny unless the gate below allows
+              targetPath: $.gate
+              value: "DENY"
+              valueType: String
+            - type: ExecuteCSharp@1
+              description: AB#8979 request shape check
+              usings:
+                - System
+                - System.Linq
+                - System.Text.Json
+                - System.Text.RegularExpressions
+              returnType: String
+              arguments:
+                - name: documentRtId
+                  valuePath: $.body.documentRtId
+                  dataType: String
+                - name: uploadRtIds
+                  valuePath: $.body.uploadRtIds
+                  dataType: RecordArray
+              targetPath: $.gateShape
+              code: |
+                // Only well-formed rtIds are looked up: one document, at least one upload.
+                Func<object, string> S = o => {
+                  if (o == null) return null;
+                  if (o is string) return (string)o;
+                  var e = o is JsonElement ? (JsonElement)o : JsonSerializer.SerializeToElement(o);
+                  return e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+                };
+                var hex = new Regex("^[0-9a-f]{24}$");
+                if (documentRtId == null || !hex.IsMatch(documentRtId)) return "BAD";
+                var ids = (uploadRtIds ?? new object[0]).Select(S).ToList();
+                if (ids.Count == 0) return "BAD";
+                return ids.All(id => id != null && hex.IsMatch(id)) ? "OK" : "BAD";
+            - type: If@1
+              description: Only a well-formed request is looked up
+              path: $.gateShape
+              operator: Equals
+              value: "OK"
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  description: Target rtId as a single-element array
+                  targetPath: $.gateDocIds
+                  valuePath: $.body.documentRtId
+                  valueType: String
+                  targetValueKind: Array
+                - type: GetRtEntitiesById@1
+                  description: Load the target document as the caller (owner for the gate)
+                  ckTypeId: Meshmakers.Accounting/AccountingDocument
+                  rtIdsPath: $.gateDocIds
+                  targetPath: $.gateDoc
+                - type: GetRtEntitiesById@1
+                  description: Load the requested uploads as the caller (owners for the gate)
+                  ckTypeId: Meshmakers.Accounting/UploadedDocument
+                  rtIdsPath: $.body.uploadRtIds
+                  targetPath: $.gateUps
+                - type: ExecuteCSharp@1
+                  description: AB#8979 attach-upload write gate
+                  usings:
+                    - System
+                    - System.Collections.Generic
+                    - System.Linq
+                    - System.Text.Json
+                  returnType: String
+                  arguments:
+                    - name: requested
+                      valuePath: $.body.documentRtId
+                      dataType: String
+                    - name: foundRtId
+                      valuePath: $.gateDoc.Items[0].RtId
+                      dataType: String
+                    - name: owner
+                      valuePath: $.gateDoc.Items[0].Attributes.OwnerUserId
+                      dataType: String
+                    - name: requestedUploads
+                      valuePath: $.body.uploadRtIds
+                      dataType: RecordArray
+                    - name: uploads
+                      valuePath: $.gateUps.Items
+                      dataType: RecordArray
+                    - name: subject
+                      valuePath: $.caller.subjectId
+                      dataType: String
+                    - name: roles
+                      valuePath: $.caller.roles
+                      dataType: StringArray
+                  targetPath: $.gate
+                  code: |
+                    Func<object, JsonElement> El = o => o is JsonElement ? (JsonElement)o : JsonSerializer.SerializeToElement(o);
+                    Func<JsonElement, string, JsonElement> Prop = (e, n) => {
+                      if (e.ValueKind == JsonValueKind.Object)
+                        foreach (var p in e.EnumerateObject())
+                          if (string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                      return default(JsonElement);
+                    };
+                    Func<object, string> S = o => {
+                      if (o == null) return null;
+                      if (o is string) return (string)o;
+                      var e = El(o);
+                      return e.ValueKind == JsonValueKind.String ? e.GetString()
+                        : (e.ValueKind == JsonValueKind.Null || e.ValueKind == JsonValueKind.Undefined) ? null : e.ToString();
+                    };
+                    if (string.IsNullOrWhiteSpace(subject)) return "DENY";
+                    if (string.IsNullOrWhiteSpace(requested) || string.IsNullOrWhiteSpace(foundRtId)) return "DENY";
+                    if (!string.Equals(requested.Trim(), foundRtId.Trim(), StringComparison.OrdinalIgnoreCase)) return "DENY";
+                    var wanted = (requestedUploads ?? new object[0]).Select(S)
+                      .Select(id => (id ?? "").Trim().ToLowerInvariant()).Distinct().ToList();
+                    if (wanted.Count == 0 || wanted.Any(id => id.Length == 0)) return "DENY";
+                    // rtId -> OwnerUserId of every upload the lookup returned.
+                    var found = new Dictionary<string, string>();
+                    foreach (var o in uploads ?? new object[0]) {
+                      if (o == null) continue;
+                      var e = El(o);
+                      var id = S(Prop(e, "RtId"));
+                      if (string.IsNullOrWhiteSpace(id)) continue;
+                      found[id.Trim().ToLowerInvariant()] = S(Prop(Prop(e, "Attributes"), "OwnerUserId"));
+                    }
+                    if (wanted.Any(id => !found.ContainsKey(id))) return "DENY";
+                    var r = roles ?? new string[0];
+                    if (r.Contains("AccountingManagement")) return "ALLOW";
+                    if (!r.Contains("AccountingEmployee")) return "DENY";
+                    var me = subject.Trim();
+                    Func<string, bool> Mine = s => !string.IsNullOrWhiteSpace(s) && string.Equals(s.Trim(), me, StringComparison.Ordinal);
+                    if (!Mine(owner)) return "DENY";
+                    return wanted.All(id => Mine(found[id])) ? "ALLOW" : "DENY";
+            - type: If@1
+              description: Gate denied - 403, nothing linked
+              path: $.gate
+              operator: NotEquals
+              value: "ALLOW"
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.statusCode
+                  value: 403
+                  valueType: Int
+                - type: SetPrimitiveValue@1
+                  targetPath: $._resultType
+                  value: "error"
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $._errorMessage
+                  value: "You are not allowed to attach these inbox items to this document."
+                  valueType: String
+            - type: If@1
+              description: Gate allowed - link the uploads
+              path: $.gate
+              operator: Equals
+              value: "ALLOW"
+              valueType: String
+              transformations:
+                - type: ForEach@1
+                  description: Link each picked upload's stored file to the target document
+                  iterationPath: $.body.uploadRtIds
+                  targetPath: $.linkResults
+                  mergePath: $.linked
+                  maxDegreeOfParallelism: 1
+                  transformations:
+                    - type: FormatString@1
+                      description: Current rtId as single-element JSON array
+                      format: '["{$.key}"]'
+                      targetPath: $.idJson
+                    - type: WriteJson@1
+                      jsonStringPath: $.idJson
+                      targetPath: $.idArr
+                    - type: GetRtEntitiesById@1
+                      description: Load the UploadedDocument to read its stored file rtId
+                      ckTypeId: Meshmakers.Accounting/UploadedDocument
+                      rtIdsPath: $.idArr
+                      targetPath: $.up
+                    - type: If@1
+                      description: Only link uploads that actually have a stored file
+                      path: $.up.Items[0].Attributes.FileRtId
+                      operator: NotEquals
+                      valueType: String
+                      transformations:
+                        - type: CreateAssociationUpdate@1
+                          description: Link the target document to the upload's stored file
+                          targetPath: $.assocs
+                          targetValueKind: Array
+                          targetValueWriteMode: Overwrite
+                          updateKind: Create
+                          originRtIdPath: $.full.body.documentRtId
+                          originCkTypeId: Meshmakers.Accounting/AccountingDocument
+                          targetRtIdPath: $.up.Items[0].Attributes.FileRtId
+                          targetCkTypeId: System.Files/FileSystemItem
+                          associationRoleId: System/Related
+                        - type: CreateUpdateInfo@1
+                          description: Mark the upload as processed (COMPLETED)
+                          targetPath: $.ups
+                          targetValueKind: Array
+                          targetValueWriteMode: Overwrite
+                          updateKind: Update
+                          ckTypeId: Meshmakers.Accounting/UploadedDocument
+                          rtIdPath: $.key
+                          attributeUpdates:
+                            - attributeName: ProcessingState
+                              attributeValueType: Enum
+                              value: COMPLETED
+                        - type: ApplyChanges@2
+                          entityUpdatesPath: $.ups
+                          associationUpdatesPath: $.assocs
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.linked
+                          value: "attached"
+                          valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $._resultType
+                  value: "attached"
+                  valueType: String
+            # Terminal response shaping (top-level, always runs - also on the deny path): rebuild the
+            # root with ONLY the result fields so the HTTP response never echoes the request headers
+            # (Authorization/Bearer) or body.
+            - type: Project@1
+              clear: true
+              fields:
+                - path: $._resultType
+                  inclusion: true
+                - path: $._errorMessage
+                  inclusion: true
+                - path: $.statusCode
+                  inclusion: true
+      - id: System.Communication/StatusMessage
