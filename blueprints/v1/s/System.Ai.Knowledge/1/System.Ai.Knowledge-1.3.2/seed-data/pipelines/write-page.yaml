@@ -1,0 +1,67 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.7,5.0)
+  - System.Communication-[4.0,5.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # The page write (W1). The ONLY pipeline that runs as knowledge-curator: a ServiceAccountConfiguration
+  # linked with Uses is the identity of the whole pipeline (and the impersonation actor list of the
+  # reconcile is derived from those edges), so the curator is linked here and nowhere else, and this
+  # pipeline holds nothing but the allowlisted tool call. Input from the generation pipelines
+  # (ToPipelineDataEvent@1, awaitResult) at $.args = the knowledge_upsert_page arguments:
+  #   slug, title, sections, citations, hallucinationFlags, sourceRtIds, origin, promptName,
+  #   promptVersion, modelId, inputTokens, outputTokens, cost, reviewerRounds, runRef, changeNote
+  # knowledge_upsert_page answers a refusal (content guard, invalid input) as a result with
+  # isSuccess false, not as an MCP error; the caller checks it and fails the run.
+  # No HTTP trigger: nothing but the generation pipelines can reach it.
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c27'
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: knowledge-write-page
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c05'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c06'
+        targetCkTypeId: System.Communication/AiConfiguration
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c01'
+        targetCkTypeId: System.Communication/ServiceAccountConfiguration
+    attributes:
+      - id: System/Name
+        value: Knowledge - Write Page (knowledge-curator)
+      - id: System/Description
+        value: >-
+          Writes one knowledge page through McpToolCall@1 -> knowledge_upsert_page as
+          knowledge-curator (content guard, versioning, Draft). Called by the generation pipelines only.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/IsDebuggingEnabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromPipelineDataEvent@1
+          transformations:
+            - type: McpToolCall@1
+              description: The only write - knowledge_upsert_page as knowledge-curator (content guard and versioning apply)
+              allowedTools:
+                - knowledge_upsert_page
+              toolName: knowledge_upsert_page
+              argumentsPath: $.args
+              aiConfigurationName: knowledge-llm-mcp
+              mcpServiceAccountConfigName: knowledge-curator
+              targetPath: $.write
+            - type: Project@1
+              description: Only the tool result goes back to the caller
+              path: $
+              clear: true
+              fields:
+                - path: $.write
+                  inclusion: true
