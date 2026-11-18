@@ -1,0 +1,91 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.7,5.0)
+  - System.Communication-[4.0,5.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Stage 1b (bronze): text artifact over HTTP - the I/O contract of the prototype (AB#3127 task
+  # 4037), unchanged. POST /knowledge-capture/ingest, JSON body:
+  #   { "title", "artifactType" (member name or key of System.Ai/ArtifactType), "sourceSystem",
+  #     "sourceUri", "content", "contentPreview", "isPiiRedacted" (bool), "capturedAt" (ISO 8601) }
+  # Only title and content are required. Requires FileManagement (same right as dropping a file
+  # into the Knowledge folder).
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c22'
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: knowledge-ingest-text
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c05'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+    attributes:
+      - id: System/Name
+        value: Knowledge - Ingest Text (HTTP)
+      - id: System/Description
+        value: >-
+          Bronze ingest endpoint for a normalized text artifact (webhooks, relays, export scripts):
+          POST /knowledge-capture/ingest -> knowledge-source-artifact.
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/IsDebuggingEnabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromHttpRequest@2
+              method: POST
+              path: /knowledge-capture/ingest
+              allowAnonymous: false
+              requiredRoles:
+                - FileManagement
+              description: Normalized artifact payload (title, artifactType, sourceSystem, sourceUri, content, ...).
+          transformations:
+            - type: SelectByPath@1
+              description: Map the prototype contract onto the bronze hand-over
+              selectPath:
+                - path: $.body.title
+                  targetPath: $.source.name
+                - path: $.body.content
+                  targetPath: $.source.content
+                - path: $.body.artifactType
+                  targetPath: $.source.artifactType
+                - path: $.body.sourceSystem
+                  targetPath: $.source.sourceSystem
+                - path: $.body.sourceUri
+                  targetPath: $.source.sourceUri
+                - path: $.body.contentPreview
+                  targetPath: $.source.contentPreview
+                - path: $.body.isPiiRedacted
+                  targetPath: $.source.isPiiRedacted
+                - path: $.body.capturedAt
+                  targetPath: $.source.capturedAt
+            - type: SetPrimitiveValue@1
+              value: NativeText
+              targetPath: $.source.extractionTier
+              valueType: String
+            - type: ToPipelineDataEvent@1
+              description: To knowledge-source-artifact; answers with its result
+              path: $.source
+              targetPath: $.source
+              targetPipelineRtId: '67a1000000000000000b1c24'
+              awaitResult: true
+              timeoutSeconds: 60
+              resultTargetPath: $.artifact
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.artifact.result
+                  targetPath: $.result
+            - type: SetPipelineExecutionResult@1
+              path: $.result
+            - type: Project@1
+              description: Answer the caller with the result only (status, SourceArtifact rtId, slug, generation variant)
+              path: $
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
