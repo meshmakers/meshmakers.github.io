@@ -1,0 +1,109 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.7,5.0)
+  - System.Communication-[4.0,5.0)
+  - System.Files-[1.0,2.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Knowledge folder (concept §4, decision G4 (B)): the tenant-wide root whose files are ingested.
+  # Only direct children of this root are ingested (knowledge-ingest-file); the raw file is never
+  # modified. The rtId is referenced by knowledge-ingest-file - change both together.
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c04'
+    ckTypeId: System.Files/FolderRoot
+    rtWellKnownName: Knowledge
+    attributes:
+      - id: System/Name
+        value: Knowledge
+
+  # ---------------------------------------------------------------------------
+  # LLM configurations. Two entities because AnthropicAiQuery@1 loads MCP tools whenever the
+  # AiConfiguration it reads carries a McpServerUrl:
+  #   knowledge-llm      no McpServerUrl - verification and the pipeline variant (no tool loop)
+  #   knowledge-llm-mcp  with McpServerUrl - the agentic generation (read tools) and the
+  #                      McpToolCall@1 page write (URL only)
+  # ApiKey is a Secret and never seeded: set the SAME key on both after the install (until AB#8659:
+  # a dedicated key whose provider-side spend limit is the hard cap). McpServerUrl is runtime state -
+  # the value below applies on a fresh install only (local stack); on a cluster set it to the
+  # installation's MCP service, e.g. https://<mcp-host>. The adapter appends /{tenantId}/mcp itself.
+  # Model, temperature and max tokens of a call come from the prompt template first (DefaultModelId,
+  # Temperature, MaxTokens), then from here.
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c03'
+    ckTypeId: System.Communication/AiConfiguration
+    rtWellKnownName: knowledge-llm
+    attributes:
+      - id: System.Communication/AiModel
+        value: claude-sonnet-4-6
+      - id: System.Communication/MaxTokens
+        value: 8192
+      - id: System.Communication/Temperature
+        value: 0.3
+  - rtId: '67a1000000000000000b1c06'
+    ckTypeId: System.Communication/AiConfiguration
+    rtWellKnownName: knowledge-llm-mcp
+    attributes:
+      - id: System.Communication/AiModel
+        value: claude-sonnet-4-6
+      - id: System.Communication/MaxTokens
+        value: 16384
+      - id: System.Communication/Temperature
+        value: 0.3
+      - id: System.Communication/McpServerUrl
+        value: https://localhost:5017
+
+  # ---------------------------------------------------------------------------
+  # Service identities (AC7, decided by construction 2026-11-09). Both are standalone pipeline
+  # service accounts: the communication controller materialises the identity client from this
+  # declaration (reconcile, AB#5111) - AssignedRoleNames [] = no roles beyond the platform baseline
+  # (octo_api scope, CommunicationManagement, StreamDataReader), AllowDelegation false = strictly
+  # client_credentials. IssuerUri/TenantId absent = this installation and this tenant (AB#5115);
+  # ClientSecret absent = the adapter obtains the account's token by impersonation (AB#5114) once
+  # the reconcile has run. ClientId is runtime state: the seed value applies on a fresh install.
+  #
+  # A ServiceAccountConfiguration linked to a pipeline with Uses is the identity of that WHOLE pipeline
+  # (and the reconcile derives the impersonation actors from those edges), so each pipeline links at
+  # most one of them:
+  # knowledge-reader: identity of the two generation pipelines and of the read-only MCP tool loop of
+  #   AnthropicAiQuery@1 (mcpToolNames: knowledge_search, knowledge_get only - no generic entity reads
+  #   until AB#8574, see generate-agentic.yaml).
+  # knowledge-curator: linked ONLY by knowledge-write-page, whose single node is McpToolCall@1 with
+  #   allowedTools [knowledge_upsert_page]. The token never reaches the model. The CK engine cannot
+  #   restrict a role to "only these types" (types without a DataPolicy are open); type-scoped write
+  #   channels are AB#8574.
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c01'
+    ckTypeId: System.Communication/ServiceAccountConfiguration
+    rtWellKnownName: knowledge-curator
+    attributes:
+      - id: System.Communication/ClientId
+        value: knowledge-curator
+      - id: System.Communication/AssignedRoleNames
+        value: []
+      - id: System.Communication/AllowDelegation
+        value: false
+  - rtId: '67a1000000000000000b1c02'
+    ckTypeId: System.Communication/ServiceAccountConfiguration
+    rtWellKnownName: knowledge-reader
+    attributes:
+      - id: System.Communication/ClientId
+        value: knowledge-reader
+      - id: System.Communication/AssignedRoleNames
+        value: []
+      - id: System.Communication/AllowDelegation
+        value: false
+
+  # ---------------------------------------------------------------------------
+  # Data flow grouping the six pipelines (ToPipelineDataEvent@1 routes only inside one data flow).
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c05'
+    ckTypeId: System.Communication/DataFlow
+    rtWellKnownName: knowledge-ingest
+    attributes:
+      - id: System/Name
+        value: Knowledge Ingest
+      - id: System/Description
+        value: >-
+          Knowledge base ingest (System.Ai.Knowledge, AB#8486): Knowledge folder or HTTP ->
+          SourceArtifact (bronze, unchanged hash = nothing further) -> generation with
+          verification -> Draft knowledge page through knowledge_upsert_page (silver).
