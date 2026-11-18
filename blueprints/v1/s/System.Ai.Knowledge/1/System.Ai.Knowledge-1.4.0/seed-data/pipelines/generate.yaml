@@ -1,0 +1,472 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Ai-[4.7,5.0)
+  - System.Communication-[4.0,5.0)
+entities:
+  # ---------------------------------------------------------------------------
+  # Stage 2 (silver), FALLBACK variant: pipeline generation - one call without tools (cheaper,
+  # thesis Kap. 5.4). Selected by the tenant setting knowledge-generation-mode = Pipeline (README).
+  # Input at $.body (from knowledge-source-artifact, or POST /knowledge-capture/generate):
+  #   { "artifactRtIds": [...], "slug": "<page slug>" }
+  # Steps: guards (slug, artifacts found, 50,000-character limit - before any LLM call) -> generation
+  # (JSON schema enforced, bounded repair, otherwise the node fails) -> verification pass
+  # (HallucinationFlags) -> Markdown normalisation -> knowledge-write-page (McpToolCall@1 ->
+  # knowledge_upsert_page as knowledge-curator; Origin Ingest, Draft, run data on the new
+  # KnowledgePageVersion). The pipeline itself runs as knowledge-reader (its only service-account
+  # Uses edge: a linked ServiceAccountConfiguration is the identity of the WHOLE pipeline). Cache tokens
+  # are counted into inputTokens of the version; the split (cache read / cache write) stays in the
+  # execution result ($.result.usage). The write tail is identical in both generation pipelines
+  # (unit test).
+  # ---------------------------------------------------------------------------
+  - rtId: '67a1000000000000000b1c26'
+    ckTypeId: System.Communication/Pipeline
+    rtWellKnownName: knowledge-generate
+    associations:
+      - roleId: System/ParentChild
+        targetRtId: '67a1000000000000000b1c05'
+        targetCkTypeId: System.Communication/DataFlow
+      - roleId: System.Communication/Executes
+        targetRtId: '670000000000000000000002'
+        targetCkTypeId: System.Communication/Adapter
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c03'
+        targetCkTypeId: System.Communication/AiConfiguration
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c02'
+        targetCkTypeId: System.Communication/ServiceAccountConfiguration
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c11'
+        targetCkTypeId: System.Ai/AiPromptTemplate
+      - roleId: System.Communication/Uses
+        targetRtId: '67a1000000000000000b1c12'
+        targetCkTypeId: System.Ai/AiPromptTemplate
+    attributes:
+      - id: System/Name
+        value: Knowledge - Generate Page (pipeline variant)
+      - id: System/Description
+        value: >-
+          Structured generation in one call without tools, verification pass, Markdown normalisation, then knowledge-write-page (Draft).
+      - id: System/Enabled
+        value: true
+      - id: System.Communication/DeploymentState
+        value: 0   # Undeployed
+      - id: System.Communication/IsDebuggingEnabled
+        value: false
+      - id: System.Communication/PipelineDefinition
+        value: |-
+          triggers:
+            - type: FromPipelineDataEvent@1
+            - type: FromHttpRequest@2
+              method: POST
+              path: /knowledge-capture/generate
+              allowAnonymous: false
+              requiredRoles:
+                - FileManagement
+              description: 'Body: { "artifactRtIds": ["<SourceArtifact rtId>", "..."], "slug": "<page slug>" } - one page from all listed artifacts'
+          transformations:
+            - type: ExecuteCSharp@1
+              description: Start of the run (AB#8719) - the latency on the page version is measured from here to the hand-over to knowledge-write-page
+              returnType: Int64
+              targetPath: $.run.startedAtMs
+              code: |-
+                // knowledge-run-start (AB#8719): Unix milliseconds, so the value survives the data context as a plain number.
+                return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            - type: GetRtEntitiesById@1
+              description: The source artifacts named in the request (bronze)
+              ckTypeId: System.Ai/SourceArtifact
+              rtIdsPath: $.body.artifactRtIds
+              targetPath: $.artifacts
+            - type: ExecuteCSharp@1
+              description: Refuse a request without a valid slug or without source artifacts
+              arguments:
+                - name: slug
+                  valuePath: $.body.slug
+                  dataType: String
+                - name: count
+                  valuePath: $.artifacts.TotalCount
+                  dataType: Int
+              returnType: Int
+              targetPath: $.artifactCount
+              code: |-
+                // knowledge-request-guard (AB#8486)
+                if (string.IsNullOrWhiteSpace(slug) || !System.Text.RegularExpressions.Regex.IsMatch(slug, "^[a-z0-9][a-z0-9._-]{1,119}$"))
+                    throw new InvalidOperationException("Knowledge generation: 'slug' is missing or not a valid page slug (lower-case letters, digits, '-', '.', '_'; 2-120 characters).");
+                if (count < 1)
+                    throw new InvalidOperationException("Knowledge generation: none of the requested SourceArtifacts was found.");
+                return count;
+            - type: ForEach@1
+              description: Never truncate silently - a source above the tool-result limit (50,000 characters) fails here, before any LLM call
+              iterationPath: $.artifacts.Items
+              targetPath: $._sizeCheck
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: ExecuteCSharp@1
+                  arguments:
+                    - name: content
+                      valuePath: $.key.Attributes.Content
+                      dataType: String
+                    - name: name
+                      valuePath: $.key.Attributes.Name
+                      dataType: String
+                  returnType: Int
+                  targetPath: $.key.contentLength
+                  code: |-
+                    // knowledge-size-guard (AB#8486): 50,000 = the node's MCP tool-result cap; a larger source would be cut when the model reads it through a tool.
+                    const int maxChars = 50000;
+                    var length = (content ?? string.Empty).Length;
+                    if (length > maxChars)
+                        throw new InvalidOperationException("Knowledge generation: source '" + name + "' has " + length + " characters, above the limit of " + maxChars + ". It was not sent to the model and no page was written. Split the document into smaller files and ingest them separately.");
+                    return length;
+            - type: GetRtEntitiesByType@1
+              description: The page this slug addresses, if it exists (before any LLM call)
+              ckTypeId: System.Ai/KnowledgePage
+              take: 1
+              fieldFilters:
+                - attributePath: RtWellKnownName
+                  operator: Equals
+                  comparisonValuePath: $.body.slug
+              targetPath: $.existingPage
+            - type: ExecuteCSharp@1
+              description: Ingest never overwrites a page that a person, a filed-back answer or a blueprint owns
+              arguments:
+                - name: count
+                  valuePath: $.existingPage.TotalCount
+                  dataType: Int
+                - name: origin
+                  valuePath: $.existingPage.Items[0].Attributes.Origin
+                  dataType: Int
+                - name: slug
+                  valuePath: $.body.slug
+                  dataType: String
+              returnType: Boolean
+              targetPath: $.pageExists
+              code: |-
+                // knowledge-page-origin-guard (AB#8486): KnowledgePageOrigin 0 = Ingest, 1 = Query, 2 = Manual, 3 = Blueprint.
+                if (count > 0 && origin != 0)
+                {
+                    var names = new[] { "Ingest", "Query", "Manual", "Blueprint" };
+                    var name = origin >= 0 && origin < names.Length ? names[origin] : origin.ToString();
+                    throw new InvalidOperationException("Knowledge generation: the page '" + slug + "' exists with Origin " + name + "; ingest only updates pages it created (Origin Ingest). Nothing was written. Rename the source document or pass another slug.");
+                }
+                return count > 0;
+            - type: AnthropicAiQuery@1
+              description: Structured generation (wiki-prompt-structured) - one call, no tools, schema-valid JSON
+              apiKeyConfigurationName: knowledge-llm
+              promptTemplateName: wiki-prompt-structured
+              path: $.artifacts.Items
+              cacheSource: true
+              responseFormat: json
+              jsonSchema: '{"type":"object","properties":{"title":{"type":"string"},"sections":{"type":"array","minItems":1,"items":{"type":"object","properties":{"heading":{"type":"string"},"sectionContent":{"type":"string"},"sortOrder":{"type":"integer"}},"required":["heading","sectionContent","sortOrder"],"additionalProperties":false}},"citations":{"type":"array","items":{"type":"object","properties":{"sectionRef":{"type":"string"},"sourceQuote":{"type":"string"},"sourceAnchor":{"type":"string"},"sourceRtId":{"type":"string"}},"required":["sectionRef","sourceQuote","sourceAnchor","sourceRtId"],"additionalProperties":false}}},"required":["title","sections","citations"],"additionalProperties":false}'
+              maxJsonRepairAttempts: 1
+              usageOutputPath: $.usage.generate
+              targetPath: $.draft
+            - type: AnthropicAiQuery@1
+              description: Verification pass before the write (wiki-prompt-verification); reviewer rounds of the same node read the source from the cache
+              apiKeyConfigurationName: knowledge-llm
+              promptTemplateName: wiki-prompt-verification
+              path: $.artifacts.Items
+              dataPaths:
+                - $.draft
+              cacheSource: true
+              responseFormat: json
+              jsonSchema: '{"type":"object","properties":{"flags":{"type":"array","items":{"type":"object","properties":{"claim":{"type":"string"},"reason":{"type":"string"},"confirmed":{"type":"boolean"}},"required":["claim","reason","confirmed"],"additionalProperties":false}}},"required":["flags"],"additionalProperties":false}'
+              maxJsonRepairAttempts: 1
+              usageOutputPath: $.usage.verify
+              targetPath: $.review
+            - type: ForEach@1
+              description: Deterministic Markdown normalisation before the write (thesis Kap. 5.4.1)
+              iterationPath: $.draft.sections
+              targetPath: $.args.sections
+              mergePath: $.key
+              maxDegreeOfParallelism: 1
+              transformations:
+                - type: ExecuteCSharp@1
+                  arguments:
+                    - name: markdown
+                      valuePath: $.key.sectionContent
+                      dataType: String
+                  returnType: String
+                  targetPath: $.key.sectionContent
+                  usings:
+                    - System.Collections.Generic
+                  code: |-
+                    // knowledge-markdown-normalize (AB#8486): a table row ('|' first) that follows a non-blank,
+                    // non-table line gets a blank line before it, so CommonMark/GFM renders a table instead of
+                    // one paragraph. Lines inside ``` / ~~~ fences are never touched. Idempotent.
+                    if (string.IsNullOrEmpty(markdown)) return markdown ?? string.Empty;
+                    var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+                    var result = new List<string>(lines.Length + 4);
+                    var inFence = false;
+                    string fence = null;
+                    for (var i = 0; i < lines.Length; i++)
+                    {
+                        var line = lines[i];
+                        var trimmed = line.TrimStart();
+                        if (trimmed.StartsWith("```") || trimmed.StartsWith("~~~"))
+                        {
+                            var marker = trimmed.Substring(0, 3);
+                            if (!inFence) { inFence = true; fence = marker; }
+                            else if (marker == fence) { inFence = false; fence = null; }
+                            result.Add(line);
+                            continue;
+                        }
+                        if (!inFence && trimmed.StartsWith("|") && result.Count > 0)
+                        {
+                            var previous = result[result.Count - 1].Trim();
+                            if (previous.Length > 0 && !previous.StartsWith("|"))
+                                result.Add(string.Empty);
+                        }
+                        result.Add(line);
+                    }
+                    return string.Join("\n", result);
+            - type: ExecuteCSharp@1
+              description: Only confirmed hallucination flags are stored (AB#8719) - a flag the verification withdrew itself is dropped
+              arguments:
+                - name: flags
+                  valuePath: $.review.flags
+                  dataType: RecordArray
+              returnType: RecordArray
+              targetPath: $.args.hallucinationFlags
+              usings:
+                - System.Collections.Generic
+                - System.Linq
+                - System.Text.Json
+                - System.Text.RegularExpressions
+              code: |-
+                // knowledge-flag-filter (AB#8719): the verification prompt (TemplateVersion 5) returns only flags it confirms and
+                // marks each with "confirmed". A flag with confirmed false is dropped; confirmed true is kept as is (its text may
+                // well talk about a feature flag being removed). Only an answer WITHOUT "confirmed" (prompt v4, kb-test CS-03,
+                // 10.11.2026) is judged by its reason: a reason that withdraws the flag ("not actually a flag, removing") drops it.
+                // The claim is never matched - it is the page's text, not the model's verdict. Only claim and reason are stored.
+                JsonElement El(object o) => o is JsonElement j ? j : JsonSerializer.SerializeToElement(o);
+                string Str(JsonElement e, string name)
+                {
+                    if (e.ValueKind != JsonValueKind.Object) return null;
+                    foreach (var p in e.EnumerateObject())
+                        if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
+                            return p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : p.Value.ValueKind == JsonValueKind.Null ? null : p.Value.ToString();
+                    return null;
+                }
+                var withdrawn = new Regex(
+                    @"\bnot\s+(?:actually\s+|really\s+|truly\s+)?an?\s+(?:real\s+|valid\s+|genuine\s+|actual\s+)?(?:hallucination\s+)?flag\b" +
+                    @"|\b(?:remov(?:e|ing)|withdraw(?:n|ing)?|retract(?:ed|ing)?|drop(?:ping)?|discard(?:ing)?)\s+(?:this\s+|the\s+|that\s+)?(?:hallucination\s+)?flag\b" +
+                    @"|(?:^\s*|\b(?:this|the)\s+)flag\s+(?:is\s+|was\s+)?(?:removed|withdrawn|retracted|dropped|discarded)\b",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                var result = new List<Dictionary<string, object>>();
+                foreach (var flag in (flags ?? new object[0]).Where(f => f != null).Select(El))
+                {
+                    var claim = Str(flag, "claim");
+                    var reason = Str(flag, "reason") ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(claim)) continue;
+                    var confirmed = Str(flag, "confirmed");
+                    if (string.Equals(confirmed, "false", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (confirmed == null && withdrawn.IsMatch(reason)) continue;
+                    result.Add(new Dictionary<string, object> { ["claim"] = claim.Trim(), ["reason"] = reason.Trim() });
+                }
+                return result;
+            - type: ExecuteCSharp@1
+              description: The page summary from the generated Summary section (AB#8719) - plain text, at most two sentences and 400 characters
+              arguments:
+                - name: sections
+                  valuePath: $.args.sections
+                  dataType: RecordArray
+              returnType: String
+              targetPath: $.args.summary
+              usings:
+                - System.Collections.Generic
+                - System.Linq
+                - System.Text.Json
+                - System.Text.RegularExpressions
+              code: |-
+                // knowledge-page-summary (AB#8719): KnowledgePage.Summary (search hits, index) was empty although the prompts
+                // always write a "Summary" section. Take that section (else the first section by sortOrder), drop Markdown
+                // markup, keep the first two sentences, at most 400 characters (cut at a word boundary with "...").
+                JsonElement El(object o) => o is JsonElement j ? j : JsonSerializer.SerializeToElement(o);
+                string Str(JsonElement e, string name)
+                {
+                    if (e.ValueKind != JsonValueKind.Object) return null;
+                    foreach (var p in e.EnumerateObject())
+                        if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
+                            return p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : p.Value.ValueKind == JsonValueKind.Null ? null : p.Value.ToString();
+                    return null;
+                }
+                int Order(JsonElement e) => int.TryParse(Str(e, "sortOrder"), out var o) ? o : int.MaxValue;
+                string Plain(JsonElement section)
+                {
+                    var text = (Str(section, "sectionContent") ?? string.Empty).Replace("\r\n", "\n");
+                    var lines = new List<string>();
+                    var inFence = false;
+                    foreach (var raw in text.Split('\n'))
+                    {
+                        var line = raw.Trim();
+                        if (line.StartsWith("```") || line.StartsWith("~~~")) { inFence = !inFence; continue; }
+                        if (inFence || line.Length == 0 || line.StartsWith("|")) continue;
+                        line = Regex.Replace(line, @"^(#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)", string.Empty);
+                        lines.Add(line);
+                    }
+                    var p = string.Join(" ", lines);
+                    p = Regex.Replace(p, @"!?\[([^\]]*)\]\([^)]*\)", "$1");
+                    p = Regex.Replace(p, @"(\*\*|__|\*|`)", string.Empty);
+                    return Regex.Replace(p, @"\s+", " ").Trim();
+                }
+                var all = (sections ?? new object[0]).Where(s => s != null).Select(El).OrderBy(Order).ToList();
+                bool IsSummary(JsonElement s) => string.Equals((Str(s, "heading") ?? string.Empty).Trim().TrimEnd(':'), "Summary", StringComparison.OrdinalIgnoreCase);
+                // A Summary section without plain text (empty, only a table or code) falls back to the first section with text.
+                var plain = all.Where(IsSummary).Select(Plain).FirstOrDefault(t => t.Length > 0)
+                            ?? all.Select(Plain).FirstOrDefault(t => t.Length > 0)
+                            ?? string.Empty;
+                if (plain.Length == 0) return string.Empty;
+                var sentences = Regex.Split(plain, @"(?<=[.!?])\s+(?=[\p{Lu}\d""'(])");
+                var summary = string.Join(" ", sentences.Take(2)).Trim();
+                const int maxLength = 400;
+                if (summary.Length > maxLength)
+                {
+                    var cut = summary.LastIndexOf(' ', maxLength - 3);
+                    summary = summary.Substring(0, cut > 0 ? cut : maxLength - 3).TrimEnd(',', ';', ':', ' ') + "...";
+                }
+                return summary;
+            - type: ExecuteCSharp@1
+              description: Prompt tokens of the run (uncached + cache read + cache write, both calls)
+              arguments:
+                - name: gIn
+                  valuePath: $.usage.generate.inputTokens
+                  dataType: Int
+                - name: gRead
+                  valuePath: $.usage.generate.cacheReadInputTokens
+                  dataType: Int
+                - name: gWrite
+                  valuePath: $.usage.generate.cacheCreationInputTokens
+                  dataType: Int
+                - name: vIn
+                  valuePath: $.usage.verify.inputTokens
+                  dataType: Int
+                - name: vRead
+                  valuePath: $.usage.verify.cacheReadInputTokens
+                  dataType: Int
+                - name: vWrite
+                  valuePath: $.usage.verify.cacheCreationInputTokens
+                  dataType: Int
+              returnType: Int
+              targetPath: $.args.inputTokens
+              code: return gIn + gRead + gWrite + vIn + vRead + vWrite;
+            - type: ExecuteCSharp@1
+              description: Output tokens of the run (both calls)
+              arguments:
+                - name: gOut
+                  valuePath: $.usage.generate.outputTokens
+                  dataType: Int
+                - name: vOut
+                  valuePath: $.usage.verify.outputTokens
+                  dataType: Int
+              returnType: Int
+              targetPath: $.args.outputTokens
+              code: return gOut + vOut;
+            - type: ExecuteCSharp@1
+              description: Estimated cost of the run in USD (both calls; adapter list prices)
+              arguments:
+                - name: gCost
+                  valuePath: $.usage.generate.estimatedCostUsd
+                  dataType: Double
+                - name: vCost
+                  valuePath: $.usage.verify.estimatedCostUsd
+                  dataType: Double
+              returnType: Double
+              targetPath: $.args.cost
+              code: return Math.Round(gCost + vCost, 6);
+            - type: SelectByPath@1
+              description: knowledge_upsert_page arguments from the generation JSON (unchanged keys)
+              selectPath:
+                - path: $.body.slug
+                  targetPath: $.args.slug
+                - path: $.draft.title
+                  targetPath: $.args.title
+                - path: $.draft.citations
+                  targetPath: $.args.citations
+                - path: $.body.artifactRtIds
+                  targetPath: $.args.sourceRtIds
+                - path: $.usage.generate.model
+                  targetPath: $.args.modelId
+            - type: SetPrimitiveValue@1
+              value: Ingest
+              targetPath: $.args.origin
+              valueType: String
+            - type: SetPrimitiveValue@1
+              value: wiki-prompt-structured
+              targetPath: $.args.promptName
+              valueType: String
+            - type: SetPrimitiveValue@1
+              value: 4
+              targetPath: $.args.promptVersion
+              valueType: Int
+            - type: SetPrimitiveValue@1
+              value: 1
+              targetPath: $.args.reviewerRounds
+              valueType: Int
+            - type: SetPrimitiveValue@1
+              value: 'knowledge ingest (pipeline)'
+              targetPath: $.args.changeNote
+              valueType: String
+            - type: FormatString@1
+              description: Run reference (interim, see README - the execution id is not reachable from the run)
+              format: 'knowledge-generate-pipeline/{$.body.artifactRtIds[0]}'
+              targetPath: $.args.runRef
+            - type: ExecuteCSharp@1
+              description: End-to-end generation latency of the run in seconds (AB#8719) - from the first node of the run to the hand-over of the write
+              arguments:
+                - name: startedAtMs
+                  valuePath: $.run.startedAtMs
+                  dataType: Int64
+              returnType: Double
+              targetPath: $.args.latencySeconds
+              code: |-
+                // knowledge-latency (AB#8719): KnowledgePageVersion.LatencySeconds; the write itself is not included.
+                var elapsedMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - startedAtMs;
+                return Math.Round(Math.Max(0, elapsedMs) / 1000.0, 1);
+            - type: ToPipelineDataEvent@1
+              description: Hand the page to knowledge-write-page, the only member of the data flow that runs as knowledge-curator and calls knowledge_upsert_page
+              path: $.args
+              targetPath: $.args
+              targetPipelineRtId: '67a1000000000000000b1c27'
+              awaitResult: true
+              timeoutSeconds: 120
+              resultTargetPath: $.written
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.written.write
+                  targetPath: $.write
+            - type: ExecuteCSharp@1
+              description: A refused write (content guard, invalid input) fails the run
+              arguments:
+                - name: isSuccess
+                  valuePath: $.write.isSuccess
+                  dataType: Boolean
+                - name: errorMessage
+                  valuePath: $.write.errorMessage
+                  dataType: String
+                - name: message
+                  valuePath: $.write.message
+                  dataType: String
+              returnType: String
+              targetPath: $.result.message
+              code: |-
+                // knowledge-write-check (AB#8486): knowledge_upsert_page answers a refusal as a result, not as an MCP error.
+                if (!isSuccess)
+                    throw new InvalidOperationException("knowledge_upsert_page refused the page: " + (errorMessage ?? "no reason given"));
+                return message ?? string.Empty;
+            - type: SelectByPath@1
+              selectPath:
+                - path: $.write.page
+                  targetPath: $.result.page
+                - path: $.usage
+                  targetPath: $.result.usage
+                - path: $.args.hallucinationFlags
+                  targetPath: $.result.hallucinationFlags
+            - type: SetPipelineExecutionResult@1
+              path: $.result
+            - type: Project@1
+              description: Answer an HTTP caller with the result only
+              path: $
+              clear: true
+              fields:
+                - path: $.result
+                  inclusion: true
