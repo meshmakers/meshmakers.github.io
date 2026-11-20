@@ -1,0 +1,121 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Identity-[3.0,4.0)
+
+# Read data policy for the energy community metering data (AB#8562, root cause in AB#8559).
+# Part of the EnergyCommunity.Base blueprint (3.3.0) - see blueprint.yaml for the full file list.
+#
+# Why: the data-policy table is a deny-list. A CK type that no DataPolicy targets is OPEN to every
+# authenticated token of the tenant (RtDataAccessEvaluator.Classify, octo-construction-kit-engine), and
+# before 3.3.0 no policy targeted any metering type - a token without any role read every metering point
+# and every stream-data value through GraphQL.
+#
+# Two policies on the same targets (a policy protects its targets for EVERY action - its actions only say what it
+# grants, RtDataAccessEvaluator.Classify; a read policy alone would refuse every write under Enforce):
+#   ec...0505 permission energycommunity.metering.read  + ec...0506 policy Read           -> Management, Reporting
+#   ec...0507 permission energycommunity.metering.write + ec...0508 policy Write, Delete  -> Management only
+#
+# Targets:
+#   Basic.Energy/MeteringPoint      abstract base of every metering point. Policies are inherited: it
+#                                   covers Basic.Energy/Consumer, Basic.Energy/Producer and the EC
+#                                   subtypes below, and any metering-point type added later.
+#   EnergyCommunity/Consumer        listed explicitly, so the EC types stay protected even if their
+#   EnergyCommunity/Producer        derivation changes.
+#   Basic.Energy/EnergyMeasurement  the measurement anchors AND the target CK type of every stream-data
+#                                   archive of Base (energy-measurements a01 with its rollups a02-a06,
+#                                   energy-measurements-legacy-daily with its rollups; Archive.TargetCkTypeId
+#                                   in seed-data/archives/*.yaml). Stream-data reads are gated per archive
+#                                   target type (DataPermissionStreamGuard, asset repository).
+#                                   NOTE: Basic.Energy is a shared model. This target covers ALL energy
+#                                   measurements of the tenant, also those another app writes into its own
+#                                   archives. Check the audit log for other apps before switching to Enforce.
+# Not targeted: Customer, OperatingFacility, ParticipationPeriod, billing types and EDA entities - they are
+# not metering data (separate decision if they need protection).
+#
+# Grants (System.Identity/GrantsPermission, declared on the role entities in roles-groups.yaml):
+#   read:  EnergyCommunityManagement (ec...0501), EnergyCommunityReporting (ec...0502)
+#   write: EnergyCommunityManagement only - Reporting stays read-only.
+#   StreamDataReader (System.Identity.Bootstrap) gets the READ permission from the runbook, not from this seed:
+#   a grant edge starts on the role, and declaring the bootstrap role in this blueprint would take the role over
+#   from System.Identity.Bootstrap (the blueprint engine re-tags an entity of another blueprint):
+#   octo-cli -c GrantDataPermission -pid energycommunity.metering.read -r StreamDataReader
+#
+# Enforcement: both seeded AuditOnly (PolicyEnforcementMode 1). Nothing is blocked; a read or write of a protected
+# type without a grant is logged as audit event DataPermissions.ReadViolation / WriteViolation (tenant
+# notification events for GraphQL, the mesh adapter log for pipelines). Stream-data reads are NOT logged in
+# AuditOnly - the stream guard only acts on Enforce. The runbook (docs/runbooks/ec-metering-data-policy.md) gives
+# every adapter pipeline service account EnergyCommunityManagement (AssignedRoleNames), grants StreamDataReader,
+# checks the audit log, and switches to Enforce only after #8564 (a tenant owner cannot hand out the EC roles
+# before) and #8563. PolicyEnforcementMode and PolicyScope are TENANT-OWNED (System.Identity 2.23.0, AB#6324):
+# this seed initialises them on the first install, UpdateBlueprint (Merge or Full) keeps the tenant value -
+# Enforce stays Enforce.
+#
+# rtIds: ec...05xx identity block (see roles-groups.yaml). 0505/0506 read, 0507/0508 write.
+entities:
+  - rtId: ec0000000000000000000505
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: EnergyCommunityMeteringReadPermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: energycommunity.metering.read
+      - id: System/Description
+        value: Read access to the energy community metering data - metering points (consumers, producers) and energy measurements including their stream data.
+
+  - rtId: ec0000000000000000000506
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: EnergyCommunityMeteringReadPolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Basic.Energy/MeteringPoint
+          - EnergyCommunity/Consumer
+          - EnergyCommunity/Producer
+          - Basic.Energy/EnergyMeasurement
+      - id: System.Identity/PolicyActions
+        value:
+          - Read
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: ec0000000000000000000505
+        targetCkTypeId: System.Identity/DataPermission
+
+  # Write/Delete (AB#8562, decision 2026-11-08): a policy that targets a type protects it for EVERY action - its
+  # actions only say what it grants (RtDataAccessEvaluator.Classify). The read policy alone would deny every write
+  # under Enforce, also to EnergyCommunityManagement. This second permission grants Write and Delete on the same
+  # targets to EnergyCommunityManagement only; EnergyCommunityReporting and StreamDataReader stay read-only. Pipeline
+  # service accounts write, so the runbook gives them EnergyCommunityManagement (AssignedRoleNames).
+  - rtId: ec0000000000000000000507
+    ckTypeId: System.Identity/DataPermission
+    rtWellKnownName: EnergyCommunityMeteringWritePermission
+    attributes:
+      - id: System.Identity/PermissionId
+        value: energycommunity.metering.write
+      - id: System/Description
+        value: Write and delete access to the energy community metering data - metering points (consumers, producers) and energy measurements including their stream data.
+
+  - rtId: ec0000000000000000000508
+    ckTypeId: System.Identity/DataPolicy
+    rtWellKnownName: EnergyCommunityMeteringWritePolicy
+    attributes:
+      - id: System.Identity/TargetCkTypeIds
+        value:
+          - Basic.Energy/MeteringPoint
+          - EnergyCommunity/Consumer
+          - EnergyCommunity/Producer
+          - Basic.Energy/EnergyMeasurement
+      - id: System.Identity/PolicyActions
+        value:
+          - Write
+          - Delete
+      - id: System.Identity/PolicyScope
+        value: 0
+      - id: System.Identity/PolicyEnforcementMode
+        value: 1
+    associations:
+      - roleId: System.Identity/PolicyPermission
+        targetRtId: ec0000000000000000000507
+        targetCkTypeId: System.Identity/DataPermission
