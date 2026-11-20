@@ -1,0 +1,507 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- EnergyCommunity-[5.0,6.0)
+- Basic.Energy-[2.0,3.0)
+# 3.31 floor, not 3.26: the send pipelines below read BankAccountIban, BankAccountHolder
+# and EmailFooterImage off EnergyCommunityConfiguration. On 3.26 those attributes simply do
+# not exist, and the resolver cannot tell an attribute the model never declared from one an
+# operator left blank - it substitutes nothing and warns, so offene-abrechnung asks a member
+# to pay into an empty account. Refusing the install is the only place that difference is
+# still visible.
+- System.Communication-[3.31,5.0)
+- System.Notification-[2.0,3.0)
+- System.UI-[2.4,3.0)
+
+# One DataFlow with its pipeline — the seed carries the pipeline definition inline.
+# Part of the EnergyCommunity.Billing blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# Source: _calculation/energy-cancel-billing-document.yaml
+- rtId: 68a83612de6bd740110e2068
+  rtCreationDateTime: 2025-08-22T09:19:14.3610000Z
+  rtChangedDateTime: 2025-08-22T12:23:36.4890000Z
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: 68a83612de6bd740110e2067
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 0
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      triggers:
+        - type: FromHttpRequest@2
+          path: /cancelBillingDocument
+          method: POST
+          # AB#5627, early phase B (AB#9303, Billing 3.3.0): a valid token of this tenant AND the role
+          # EnergyCommunityManagement (directly or through the group EnergyCommunityOperators - see
+          # docs/runbooks/ec-route-security-roles.md) are required; callers without it get 403. The route can cancel
+          # PAID invoices since 3.3.0 and a cancellation cannot be undone in the app, so a token of the
+          # tenant alone (e.g. a MeterReporter client) must not reach it. confirmPaidCancellation is the
+          # operator's confirmation, not an authorization.
+          allowAnonymous: false
+          requiredRoles: [EnergyCommunityManagement]
+
+      transformations:
+        # POST /cancelBillingDocument  { billingDocumentRtIds: [rtId, ...], confirmPaidCancellation?: true }
+        #
+        # AB#9303: cancelling is a pure state change (no credit note, no mail, the document number is kept).
+        # Every requested document gets an outcome:
+        #   - DRAFT, RELEASED, SENT            -> CANCELED
+        #   - PAID with confirmPaidCancellation: true -> CANCELED (a refund to the member is handled outside the app)
+        #   - PAID without the flag (false or absent) -> skipped, reason PAID_REQUIRES_CONFIRMATION;
+        #     a flag that is no JSON boolean (a string, a number) fails the request with HTTP 500 before
+        #     anything is written
+        #   - CANCELED                         -> skipped, reason ALREADY_CANCELED
+        #   - unknown rtId                     -> skipped, reason NOT_FOUND (no documentNumber, no state)
+        #   - a state above 4                  -> skipped, reason UNKNOWN_STATE
+        #   - planned, but not CANCELED after the write -> skipped, reason WRITE_FAILED
+        # Answer (HTTP 200): { status, message, cancelled, skipped: [{ rtId, documentNumber, state, reason }] }
+        #   status ok      every requested document was cancelled
+        #   status partial at least one requested document was skipped
+        #   status error   the request names no document (body without billingDocumentRtIds, an empty list,
+        #                  or not a JSON object; nothing changed), or no planned document was written (all
+        #                  WRITE_FAILED)
+        # An rtId that is no valid object id fails the read with HTTP 500 (GetRtEntitiesById@1), as before.
+        # Until AB#9303 the route loaded only DRAFT/RELEASED/SENT, dropped PAID and CANCELED without trace and
+        # always answered ok (SBEG Q3 2026, 18.11.: 23 PAID invoices stayed PAID behind an "ok").
+        #
+        # Built from standard nodes only (decision Markus Roider 2026-11-19, no ExecuteCSharp@1): the
+        # requested ids become objects (Map@1, Distinct@1), the documents are joined to them (Join@1 is a
+        # left join: a request without a document keeps an empty `found`), If@1 decides per document, and
+        # after the write the planned documents are read back and joined the same way (empty = WRITE_FAILED).
+        #
+        # Size: one call, no chunking. prod-2 cancelled 302 documents in 3.02 s with Billing 3.2.2
+        # (2026-11-18); the 3.3.0 version is to be measured with at least 400 documents on staging-1.
+        #
+        # Known limit: the state is read before the write, and the write sets CANCELED unconditionally. A
+        # document marked PAID in the milliseconds between both is cancelled without the flag (as before).
+
+        # Default answer: a request without documents changes nothing.
+        - type: SetPrimitiveValue@1
+          targetPath: $.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.message
+          value: "billingDocumentRtIds names no billing document; nothing was cancelled."
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.counts.cancelled
+          value: 0
+          valueType: Int
+
+        # The requested ids as objects { ids: <rtId> }, each id once. A missing list or a body that is no
+        # object gives an empty array.
+        - type: Map@1
+          description: requested ids as objects
+          path: $.body
+          targetPath: $.requests
+          selectPaths:
+            - $.billingDocumentRtIds
+        - type: Distinct@1
+          description: each requested id once
+          path: $.requests
+          distinctValuePath: $.billingDocumentRtIds
+          targetPath: $.requests
+
+        - type: If@1
+          description: the request names at least one billing document
+          path: $.requests[0].billingDocumentRtIds
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.status
+              value: ok
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.message
+              value: "Billing documents cancelled."
+              valueType: String
+            - type: Flatten@1
+              description: the requested ids as a list
+              path: $.requests[*].billingDocumentRtIds
+              targetPath: $.ids
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            # Every requested document in any state, so the answer can say why one was not cancelled.
+            - type: GetRtEntitiesById@1
+              identity: ServiceAccount  # AB#5627: run as the pipeline service account, not as the route caller
+              description: Get the requested billing documents in every state
+              targetPath: $.billingDocuments
+              rtIdsPath: $.ids
+              ckTypeId: EnergyCommunity/BillingDocument
+            # Left join: a requested id without a document keeps an empty `found` (NOT_FOUND).
+            - type: Join@1
+              description: the document of each requested id
+              path: $.requests[*]
+              keyPath: $.billingDocumentRtIds
+              joinPath: $.billingDocuments.Items[*]
+              joinKeyPath: $.RtId
+              itemPath: $.found
+
+            # One entry per requested document: `plan` (cancel it, with an update info in `_items`) or `skip`.
+            - type: ForEach@1
+              description: decide per requested document
+              iterationPath: $.requests
+              targetPath: $.decisions
+              mergePath: $.decisions
+              transformations:
+                - type: If@1
+                  description: no document with this rtId
+                  path: $.key.found[0].RtId
+                  operator: Equals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.skip.rtId
+                      valuePath: $.key.billingDocumentRtIds
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.skip.reason
+                      value: NOT_FOUND
+                      valueType: String
+                - type: If@1
+                  description: DRAFT, RELEASED or SENT - cancel
+                  path: $.key.found[0].Attributes.BillingDocumentState
+                  operator: LessThan
+                  value: 3
+                  valueType: Int
+                  transformations:
+                    - type: CreateUpdateInfo@1
+                      targetPath: $.decisions._items
+                      updateKind: UPDATE
+                      ckTypeId: EnergyCommunity/BillingDocument
+                      rtIdPath: $.key.billingDocumentRtIds
+                      attributeUpdates:
+                        - attributeName: BillingDocumentState
+                          attributeValueType: Enum
+                          value: 4 # Set to canceled state (4)
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.plan.rtId
+                      valuePath: $.key.billingDocumentRtIds
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.plan.documentNumber
+                      valuePath: $.key.found[0].Attributes.DocumentNumber
+                      valueType: String
+                    - type: DataMapping@1
+                      description: the state name for a WRITE_FAILED entry
+                      path: $.key.found[0].Attributes.BillingDocumentState
+                      targetPath: $.decisions.plan.state
+                      sourceValueType: Int
+                      targetValueType: String
+                      mappings:
+                        - sourceValue: 0
+                          targetValue: DRAFT
+                        - sourceValue: 1
+                          targetValue: RELEASED
+                        - sourceValue: 2
+                          targetValue: SENT
+                - type: If@1
+                  description: PAID
+                  path: $.key.found[0].Attributes.BillingDocumentState
+                  operator: Equals
+                  value: 3
+                  valueType: Int
+                  transformations:
+                    # Only a JSON boolean true confirms; the flag is the operator's confirmation that a
+                    # refund is handled outside the app, not an authorization (the route needs the role).
+                    - type: If@1
+                      description: PAID with confirmPaidCancellation true - cancel
+                      path: $.full.body.confirmPaidCancellation
+                      operator: Equals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                        - type: CreateUpdateInfo@1
+                          targetPath: $.decisions._items
+                          updateKind: UPDATE
+                          ckTypeId: EnergyCommunity/BillingDocument
+                          rtIdPath: $.key.billingDocumentRtIds
+                          attributeUpdates:
+                            - attributeName: BillingDocumentState
+                              attributeValueType: Enum
+                              value: 4 # Set to canceled state (4)
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.decisions.plan.rtId
+                          valuePath: $.key.billingDocumentRtIds
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.decisions.plan.documentNumber
+                          valuePath: $.key.found[0].Attributes.DocumentNumber
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.decisions.plan.state
+                          value: PAID
+                          valueType: String
+                    - type: If@1
+                      description: PAID without the confirmation - skip
+                      path: $.full.body.confirmPaidCancellation
+                      operator: NotEquals
+                      value: true
+                      valueType: Boolean
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.decisions.skip.rtId
+                          valuePath: $.key.billingDocumentRtIds
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.decisions.skip.documentNumber
+                          valuePath: $.key.found[0].Attributes.DocumentNumber
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.decisions.skip.state
+                          value: PAID
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.decisions.skip.reason
+                          value: PAID_REQUIRES_CONFIRMATION
+                          valueType: String
+                - type: If@1
+                  description: CANCELED - skip
+                  path: $.key.found[0].Attributes.BillingDocumentState
+                  operator: Equals
+                  value: 4
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.skip.rtId
+                      valuePath: $.key.billingDocumentRtIds
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.skip.documentNumber
+                      valuePath: $.key.found[0].Attributes.DocumentNumber
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.skip.state
+                      value: CANCELED
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.skip.reason
+                      value: ALREADY_CANCELED
+                      valueType: String
+                - type: If@1
+                  description: a state the route does not know - skip
+                  path: $.key.found[0].Attributes.BillingDocumentState
+                  operator: GreaterThan
+                  value: 4
+                  valueType: Int
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.skip.rtId
+                      valuePath: $.key.billingDocumentRtIds
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.skip.documentNumber
+                      valuePath: $.key.found[0].Attributes.DocumentNumber
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.decisions.skip.reason
+                      value: UNKNOWN_STATE
+                      valueType: String
+
+            - type: Flatten@1
+              description: the planned rtIds
+              path: $.decisions[*].plan.rtId
+              targetPath: $.plannedIds
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+
+            - type: If@1
+              description: at least one document is to be cancelled
+              path: $.plannedIds[0]
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: Flatten@1
+                  path: $.decisions[*]._items
+                  targetPath: $._result._items
+                  targetValueKind: Simple
+                  targetValueWriteMode: Overwrite
+                - type: ApplyChanges@2
+                  identity: ServiceAccount  # AB#5627: run as the pipeline service account, not as the route caller
+                  entityUpdatesPath: $._result._items
+                # Count what was written, not what was planned: ApplyChanges@2 logs an engine-reported write
+                # error, rolls the batch back and lets the pipeline go on. Read the planned documents again
+                # (only CANCELED ones) and join them to the plan; an empty `written` is WRITE_FAILED.
+                - type: GetRtEntitiesById@1
+                  identity: ServiceAccount
+                  description: Read the planned documents again, cancelled ones only
+                  targetPath: $.readBack
+                  rtIdsPath: $.plannedIds
+                  ckTypeId: EnergyCommunity/BillingDocument
+                  fieldFilters:
+                    - attributePath: billingDocumentState
+                      operator: Equals
+                      comparisonValue: 4
+                - type: Join@1
+                  description: the written document of each planned one
+                  path: $.decisions[*].plan
+                  keyPath: $.rtId
+                  joinPath: $.readBack.Items[*]
+                  joinKeyPath: $.RtId
+                  itemPath: $.written
+
+            # One outcome per requested document: cancelled (written), WRITE_FAILED, or the skip decided above.
+            - type: ForEach@1
+              description: outcome per requested document
+              iterationPath: $.decisions
+              targetPath: $.outcomes
+              mergePath: $.outcomes
+              transformations:
+                - type: If@1
+                  description: planned and written
+                  path: $.key.plan.written[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.outcomes.cancelled
+                      value: 1
+                      valueType: Int
+                - type: If@1
+                  description: planned, but not CANCELED after the write
+                  path: $.key.plan.rtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: If@1
+                      description: nothing written for it
+                      path: $.key.plan.written[0].RtId
+                      operator: Equals
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: SelectByPath@1
+                          description: number and state come from the plan
+                          selectPath:
+                            - path: $.key.plan.rtId
+                              targetPath: $.outcomes.skip.rtId
+                            - path: $.key.plan.documentNumber
+                              targetPath: $.outcomes.skip.documentNumber
+                            - path: $.key.plan.state
+                              targetPath: $.outcomes.skip.state
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.outcomes.skip.reason
+                          value: WRITE_FAILED
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.outcomes.writeFailed
+                          value: 1
+                          valueType: Int
+                - type: If@1
+                  description: skipped before the write
+                  path: $.key.skip.reason
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    - type: SelectByPath@1
+                      selectPath:
+                        - path: $.key.skip
+                          targetPath: $.outcomes.skip
+
+            - type: Flatten@1
+              description: the skipped documents with their reason
+              path: $.outcomes[*].skip
+              targetPath: $.skipped
+              targetValueKind: Simple
+              targetValueWriteMode: Overwrite
+            - type: SumAggregation@1
+              description: documents cancelled and read back as CANCELED
+              targetPath: $.counts.cancelled
+              aggregations:
+                - path: $.outcomes[*]
+                  aggregationPath: $.cancelled
+                  value: 1
+            - type: SumAggregation@1
+              description: planned documents not written
+              targetPath: $.counts.writeFailed
+              aggregations:
+                - path: $.outcomes[*]
+                  aggregationPath: $.writeFailed
+                  value: 1
+            - type: If@1
+              description: at least one requested document was not cancelled
+              path: $.skipped[0].reason
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: SetPrimitiveValue@1
+                  targetPath: $.status
+                  value: partial
+                  valueType: String
+                - type: SetPrimitiveValue@1
+                  targetPath: $.message
+                  value: "Some billing documents were not cancelled (see skipped)."
+                  valueType: String
+            - type: If@1
+              description: a planned write failed
+              path: $.counts.writeFailed
+              operator: GreaterThan
+              value: 0
+              valueType: Double
+              transformations:
+                - type: If@1
+                  description: and nothing was written
+                  path: $.counts.cancelled
+                  operator: Equals
+                  value: 0
+                  valueType: Double
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.status
+                      value: error
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.message
+                      value: "The billing documents could not be cancelled (see skipped, reason WRITE_FAILED)."
+                      valueType: String
+
+        # AB#5627: the adapter answers the HTTP call with the final data context verbatim -
+        # request headers, principal, body and every intermediate result. Reduce it to
+        # status, message, cancelled, skipped (missing fields are skipped).
+        - type: SetPrimitiveValue@1
+          targetPath: $.cancelled
+          valuePath: $.counts.cancelled
+          valueType: Int
+        - type: Project@1
+          description: Shape the HTTP response body
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.cancelled
+              inclusion: true
+            - path: $.skipped
+              inclusion: true
+  - id: System.Communication/StatusMessage-1
+- rtId: 68a83612de6bd740110e2067
+  rtCreationDateTime: 2025-08-22T09:19:14.3060000Z
+  rtChangedDateTime: 2025-08-22T09:19:14.3060000Z
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: energy-cancel-billing-document.yaml
+  - id: System/Description-1
