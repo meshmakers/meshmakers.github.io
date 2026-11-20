@@ -1,0 +1,346 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.5,3.0)
+- Basic.Energy-[2.0,3.0)
+- EnergyCommunity-[5.0,6.0)
+- System.Communication-[3.26,5.0)
+- System.StreamData-[1.13,2.0)
+- System.UI-[2.4,3.0)
+
+# manual-metering-entry (AB#4558) — deployed HTTP endpoint the frontend calls to
+# enter or correct metering values on stream data.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── Manual metering entry / correction pipeline (AB#4558) ───────────────
+# Deployed HTTP endpoint the Energy Community frontend (Phase 2) calls to enter
+# or correct a metering value directly on the stream data. Base owns it because
+# Base owns the raw archive (ec0000000000000000000a01).
+#
+# Contract:
+#   POST /manualMeteringEntry
+#   { "anchorRtId": "<Basic.Energy/EnergyMeasurement rtId>",
+#     "unit": "KWh",
+#     "entries": [ { "from": "<iso>", "to": "<iso>", "value": <number>, "quality": "L1|L2|L3" } ] }
+#
+# For each entry a single window is upserted into the raw archive for anchorRtId
+# with amount.value = entry.value, amount.unit = unit, dataQuality = entry.quality,
+# window = [from, to), as row origin manual (AB#7613): because the platform
+# protects manual values by default (AB#7656) it replaces the delivered value and
+# no later EDA delivery overwrites it. SaveTimeRangeStreamDataInArchive@1
+# writes via an EnergyMeasurement UPDATE update-info keyed to the EXISTING anchor
+# (no ApplyChanges — the anchor must already exist; the node hard-fails with a
+# clear error if anchorRtId is not an existing entity). The CrateDB write is an
+# UPSERT on (window_start, window_end, rtId, ckTypeId), so re-writing an existing
+# window corrects it; retroactive writes auto-schedule rollup recompute.
+#
+# Ships DeploymentState 2 (Deployed) — the frontend calls it live. Executes on the
+# default Mesh Adapter 670000000000000000000002.
+- rtId: ec0000000000000000000a31
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: manual-metering-entry
+  - id: System/Description-1
+    value: Manual entry / correction of metering values on stream data (AB#4558)
+
+- rtId: ec0000000000000000000a32
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a31
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System/Name-1
+    value: Mesh Pipeline
+  - id: System.Communication/StatusMessage-1
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/PipelineDefinition-1
+    value: |-
+      triggers:
+        - type: FromHttpRequest@2
+          path: /manualMeteringEntry
+          method: POST
+          # AB#5627: a valid token of this tenant AND the role EnergyCommunityManagement
+          # (group EnergyCommunityOperators, child of TenantOwners - see
+          # docs/runbooks/ec-route-security-roles.md) are required; others get 403.
+          allowAnonymous: false
+          requiredRoles: [EnergyCommunityManagement]
+      transformations:
+        - type: Logger@1
+          message: "Manual metering entry (AB#4558): request received on /manualMeteringEntry"
+
+        # Audit trail: the full request payload (anchorRtId, unit, entries) is
+        # dumped to the adapter log; the adapter log line carries the timestamp
+        # (when). Caller identity (who), if present, is in the request headers.
+        - type: PrintDebug@1
+          severity: Information
+
+        # Default response — overwritten with status=ok on the happy path. Bad
+        # input leaves this in place and returns HTTP 200 with a clear error body
+        # instead of a raw 500.
+        - type: SetPrimitiveValue@1
+          targetPath: $.response.status
+          value: error
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.response.message
+          value: "Invalid request: 'anchorRtId' (string) and a non-empty 'entries' array of { from, to, value, quality } are required."
+          valueType: String
+        # How many entries the archive stored; the EC app shows this count, not the request's.
+        - type: SetPrimitiveValue@1
+          targetPath: $.response.stored
+          value: 0
+          valueType: Int
+
+        # Guard 1: anchorRtId present
+        - type: If@1
+          description: anchorRtId present
+          path: $.body.anchorRtId
+          operator: NotEquals
+          value: null
+          valueType: String
+          transformations:
+            # Guard 2: at least one entry present (entries[0] carries a 'to')
+            - type: If@1
+              description: at least one entry present
+              path: $.body.entries[0].to
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                # Resolve the anchor EnergyMeasurement so its ObisCode can be
+                # carried into every write. ObisCode is a REQUIRED non-null column
+                # on the raw archive (ec0000000000000000000a01); the write fails at
+                # CrateDB (XX000 "obiscode" must not be null) if it is omitted.
+                # The anchor already carries the correct ObisCode, so preserve it.
+                - type: GetRtEntitiesById@1
+                  identity: ServiceAccount  # AB#5627: run as the pipeline service account, not as the route caller
+                  description: Resolve the anchor EnergyMeasurement (carries ObisCode)
+                  ckTypeId: Basic.Energy/EnergyMeasurement
+                  rtIdsPath: $.body.anchorRtId
+                  take: 1
+                  targetPath: $.anchor
+
+                # Guard 3: the anchor exists. An orphan anchorRtId now returns
+                # status=error (HTTP 200) instead of a null-ObisCode CrateDB 500.
+                - type: If@1
+                  description: anchor EnergyMeasurement exists
+                  path: $.anchor.Items[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    # Guard 4 (AB#7613): every entry is an object with a window from < to and
+                    # states its real quality, L1, L2 or L3. The correction is stored as origin
+                    # manual WITH that quality; there is no "Manual" quality any more
+                    # (Basic.Energy 2.0.0). One invalid entry rejects the whole request and
+                    # nothing is written, so the answer never counts an entry that was dropped.
+                    - type: ExecuteCSharp@1
+                      description: Invalid entries (not an object, no window from < to, or no quality L1, L2 or L3)
+                      targetPath: $.validation.invalidWindows
+                      returnType: String
+                      arguments:
+                        - name: entries
+                          dataType: RecordArray
+                          valuePath: $.body.entries
+                      code: |
+                        var invalid = new System.Collections.Generic.List<string>();
+                        var index = 0;
+                        foreach (var item in entries)
+                        {
+                            index++;
+                            if (item is not System.Text.Json.JsonElement entry ||
+                                entry.ValueKind != System.Text.Json.JsonValueKind.Object)
+                            {
+                                invalid.Add("entry " + index + " is no object");
+                                continue;
+                            }
+                            string quality = null;
+                            if (entry.TryGetProperty("quality", out var q) &&
+                                q.ValueKind == System.Text.Json.JsonValueKind.String) quality = q.GetString();
+                            var from = entry.TryGetProperty("from", out var f) ? f.ToString() : "?";
+                            var to = entry.TryGetProperty("to", out var t) ? t.ToString() : "?";
+                            var window = System.DateTimeOffset.TryParse(from, System.Globalization.CultureInfo.InvariantCulture,
+                                             System.Globalization.DateTimeStyles.AssumeUniversal, out var start) &&
+                                         System.DateTimeOffset.TryParse(to, System.Globalization.CultureInfo.InvariantCulture,
+                                             System.Globalization.DateTimeStyles.AssumeUniversal, out var end) &&
+                                         start < end;
+                            if (window && quality is "L1" or "L2" or "L3") continue;
+                            invalid.Add(from + " - " + to);
+                        }
+                        return string.Join(", ", invalid);
+                    - type: ExecuteCSharp@1
+                      description: Number of invalid entries
+                      targetPath: $.validation.invalidCount
+                      returnType: Int
+                      arguments:
+                        - name: windows
+                          dataType: String
+                          valuePath: $.validation.invalidWindows
+                      code: |
+                        return string.IsNullOrEmpty(windows) ? 0 : windows.Split(", ").Length;
+                    - type: FormatString@1
+                      description: Error message listing the invalid entries
+                      targetPath: $.response.message
+                      format: "Invalid request: every entry needs a window 'from' < 'to' and 'quality' L1, L2 or L3; nothing was written. Affected entries: {$.validation.invalidWindows}"
+                    - type: If@1
+                      description: all entries are valid
+                      path: $.validation.invalidCount
+                      operator: Equals
+                      value: 0
+                      valueType: Int
+                      transformations:
+                        # Build one EnergyMeasurement UPDATE update-info per entry, keyed
+                        # to the existing anchor. Guard 4 has rejected windows with from >= to;
+                        # the per-entry guard below stays as a second line of defence.
+                        - type: ForEach@1
+                          description: Build archive write items (skip entries where from >= to)
+                          maxDegreeOfParallelism: 1
+                          iterationPath: $.body.entries
+                          mergePath: $.key.updateInfo
+                          targetPath: $.writeItems
+                          transformations:
+                            - type: If@1
+                              description: Valid window (from < to)
+                              path: $.key.from
+                              operator: LessThan
+                              valuePath: $.key.to
+                              valueType: DateTime
+                              transformations:
+                                - type: Logger@1
+                                  message: "Manual metering entry: writing corrected window as origin manual with its stated quality"
+                                - type: CreateUpdateInfo@1
+                                  targetPath: $.key.updateInfo
+                                  updateKind: UPDATE
+                                  ckTypeId: Basic.Energy/EnergyMeasurement
+                                  rtIdPath: $.full.body.anchorRtId
+                                  # The archive row carries the anchor's well-known name
+                                  # (<meteringPointRtId>_<obisCode>) like every row the EDA ingest
+                                  # writes (SaveTimeRangeSeriesInArchive, wellKnownNameFormat); without
+                                  # it the manual rows had an empty rtWellKnownName column.
+                                  rtWellKnownNamePath: $.full.anchor.Items[0].RtWellKnownName
+                                  attributeUpdates:
+                                    - attributeName: Amount.Value
+                                      attributeValueType: Double
+                                      valuePath: $.key.value
+                                    - attributeName: Amount.Unit
+                                      attributeValueType: Enum
+                                      valuePath: $.full.body.unit
+                                    # The real quality the user stated (L1, L2 or L3, checked
+                                    # above). That the value was entered by hand is recorded by
+                                    # the archive as the row origin, not as a quality.
+                                    - attributeName: DataQuality
+                                      attributeValueType: Enum
+                                      valuePath: $.key.quality
+                                    - attributeName: TimeRange.From
+                                      attributeValueType: DateTime
+                                      valuePath: $.key.from
+                                    - attributeName: TimeRange.To
+                                      attributeValueType: DateTime
+                                      valuePath: $.key.to
+                                    # Preserve the anchor's ObisCode (required non-null
+                                    # archive column) so the manual/corrected window
+                                    # stays on the same OBIS meter channel.
+                                    - attributeName: ObisCode
+                                      attributeValueType: String
+                                      valuePath: $.full.anchor.Items[0].Attributes.ObisCode
+                                # Optional reason of this correction (AB#7638): it travels next to
+                                # the update-info item, not as an attribute of the EnergyMeasurement
+                                # (the CK type declares none), and the save node reads it with
+                                # manualReasonPath into the manual_reason audit column.
+                                - type: If@1
+                                  description: Entry carries a reason
+                                  path: $.key.reason
+                                  operator: NotEquals
+                                  value: null
+                                  valueType: String
+                                  transformations:
+                                    - type: SetPrimitiveValue@1
+                                      targetPath: $.key.updateInfo.manualReason
+                                      valuePath: $.key.reason
+                                      valueType: String
+
+                        # Upsert the manual/corrected windows into the raw archive as origin
+                        # MANUAL (AB#5356/AB#7596). Because the platform protects manual values by
+                        # default (AB#7656), a manual row replaces the delivered value of the
+                        # window whatever its quality, and no later EDA delivery overwrites it.
+                        # The archive records the writer (the verified caller) and the write
+                        # time itself. The node enforces that anchorRtId exists as an
+                        # EnergyMeasurement entity (orphan-row guard) and skips rows without
+                        # a usable window.
+                        #
+                        # The reason of a row is the entry's own reason when the request carries
+                        # one (manualReasonPath, relative to each item, AB#7638), otherwise the
+                        # static manualReason.
+                        #
+                        # A manual row that the archive does not apply fails this node
+                        # (AB#7598; failOnSkippedRows makes that explicit for any other skip
+                        # reason too), so the pipeline never reaches the status=ok below for
+                        # a value that was not stored. A failed node cannot be caught in a
+                        # pipeline: the mesh adapter answers it with HTTP 500 and
+                        # { errorMessage } naming the count and the reason, never success.
+                        - type: SaveTimeRangeStreamDataInArchive@1
+                          description: Upsert manual/corrected windows into the raw energy-measurements archive as origin manual
+                          path: $.writeItems
+                          archiveRtId: ec0000000000000000000a01
+                          fromAttributePath: TimeRange.From
+                          toAttributePath: TimeRange.To
+                          origin: Manual
+                          manualReasonPath: $.manualReason
+                          manualReason: "Manual correction (/manualMeteringEntry)"
+                          writeResultPath: $.writeResult
+                          failOnSkippedRows: true
+
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.response.status
+                          value: ok
+                          valueType: String
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.response.stored
+                          valuePath: $.writeResult.stored
+                          valueType: Int
+                        - type: FormatString@1
+                          targetPath: $.response.message
+                          format: "{$.writeResult.stored} manual metering entries written to the raw archive as manual corrections."
+
+        # Persist the status/message as OutputData (retrievable via
+        # GetLatestPipelineExecution) — the per-execution audit record.
+        - type: SetPipelineExecutionResult@1
+          path: $.response
+
+        # AB#5627: the adapter answers the HTTP call with the final data context verbatim -
+        # request headers, principal, body, the anchor entity and the write items. Answer with
+        # status, message and the stored count only, at the top level where the EC app reads them
+        # (manual-metering-entry.service.ts) - under $.response it never saw status=error.
+        - type: SetPrimitiveValue@1
+          targetPath: $.status
+          valuePath: $.response.status
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.message
+          valuePath: $.response.message
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.stored
+          valuePath: $.response.stored
+          valueType: Int
+        - type: Project@1
+          description: Shape the HTTP response body
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.stored
+              inclusion: true
