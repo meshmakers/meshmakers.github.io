@@ -1,0 +1,43 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: System.Ai.Builder-1.1.5
+description: |
+  Opt-in OctoMesh know-how for the tenant knowledge base (AB#8779, Feature AB#8777). Installs
+  knowledge pages in five task-oriented areas, each with an index page (AB#9082): Administer a
+  tenant (admin-, from the skill octo), Build an app (app-, octo-app-builder), Build data
+  pipelines (pipeline-, pipeline-expert), Deploy and promote (deploy-, octo-deploy) and Diagnose
+  and fix (diagnose-, octo-agent). Only tenant-relevant content: no local-stack or
+  developer-machine instructions (AB#9083/AB#9084); every page names the MCP tool of
+  octo-mcp-service next to each octo-cli command, or marks the command CLI only (AB#9147). An MCP
+  client finds the pages with knowledge_search / knowledge_get and cites them as [slug]. Renamed pages (nodes-* -> pipeline-nodes-*) keep their old slug as a
+  "Moved to" page.
+
+  The pages are generated from the skills of octo-claude-skills by tools/SkillPages (AB#8490);
+  never edit the seed by hand (docs/skill-pages.md). Every page has kind Skill, origin Blueprint
+  and status Verified, its KnowledgePageVersions (author blueprint:System.Ai.Builder-<version>,
+  DeclaredLinks = the page's LinksTo) and LinksTo associations to the pages it mentions.
+
+  Pages only: no pipeline, no LLM call, no service account, no client. The builder agent, its
+  mandate and its client are AB#8495. Not service-managed: the AI service applies only
+  System.Ai.Default; a tenant gets these pages only with InstallBlueprint, and
+  UninstallBlueprint removes them again.
+
+  Updates: the page content is TenantOwned, so a later version of this blueprint brings only new
+  KnowledgePageVersion entities; it never overwrites a page (AB#8778). The AI service switches a
+  page nobody changed to the newest version by itself, within about 15 minutes of the update, on
+  every AI tenant and without any setup (AB#9168). A page that was changed in the tenant keeps its
+  content: knowledge_list_platform_updates lists it (the knowledge lint of System.Ai.Knowledge
+  reports it as PlatformUpdateAvailable), and a person either restores the new version
+  (knowledge_restore_version) or dismisses it (knowledge_dismiss_platform_update). This blueprint
+  does not depend on System.Ai.Knowledge on purpose (that blueprint carries the LLM ingest
+  pipelines and needs an API key).
+
+  Setup, updates and limits: src/SystemAiCkModel/README.md, section "Blueprint System.Ai.Builder".
+
+# The seed needs System.Ai 4.10: KnowledgePage, KnowledgePageVersion, LinksTo/VersionOf (4.7) and
+# KnowledgePageVersion.DeclaredLinks (4.10, AB#8780). System.Ai is service-managed and already on an
+# AI tenant; the floor equals the seed's own dependency (tools/SkillPages/page-plan.yaml), tested by
+# tests/SkillPages.UnitTests (CommittedSeedTests.Manifest_*).
+ckModelDependencies:
+  - System.Ai-[4.10,5.0)
+
+seedDataPath: seed-data/knowledge-pages.yaml
