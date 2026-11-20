@@ -1,0 +1,1032 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.5,3.0)
+- Basic.Energy-[2.0,3.0)
+- EnergyCommunity-[5.0,6.0)
+- System.Communication-[3.26,5.0)
+- System.StreamData-[1.13,2.0)
+
+# metering-data-gaps (AB#8299) — read-only route: the missing metering-point-days of a period.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── metering-data-gaps (AB#8299, Feature AB#6021) ─────────────
+#
+# rtIds (Base block ec0000000000000000000a6X):
+#   …a67  DataFlow  metering-data-gaps
+#   …a68  Pipeline  metering-data-gaps
+#   …a69  Query     pipeline_gap_anchors_base         (seed-data/queries/master-data.yaml)
+#   …a6a  Query     pipeline_gap_participation_periods (seed-data/queries/master-data.yaml)
+#   …a6b  Query     pipeline_gap_open_data_requests    (seed-data/queries/master-data.yaml)
+#
+# Contract:
+#   POST /meteringDataGaps
+#   { "fromDay": "2026-10-01", "toDay": "2026-10-31",          (Vienna days, both included, at most 366)
+#     "meteringPointNumbers": ["AT..."],                        (optional, restricts the set)
+#     "skip": 0, "take": 1000 }                                 (optional, take 1..5000)
+#   -> { status, message, fromDay, toDay, checkedUpTo, derivedAt,
+#        summary: { meteringPoints, meteringPointDaysChecked, gapDays, missingValues },
+#        meteringPoints: [ { meteringPointNumber, meteringPointRtId, receiver, gapDays, missingValues,
+#                            firstGapDay, lastGapDay, openGapDays } ],
+#        gaps: [ { meteringPointNumber, meteringPointRtId, receiver, day, from, to,
+#                  registers: { "<obis>": { expected, actual } }, missingValues, ageDays,
+#                  openRequest: { rtId, from, to } | null } ],
+#        skip, take, hasMore }
+# The rule is src/blueprints/CLAUDE.md "Gap days of the energy community" (AB#5511), the same as the
+# scheduled run request-missing-consumption-reports (EdaIntegration); tests/test_gap_detection.py runs
+# both "gap days" scripts on the shared fixtures and fails when they disagree (parity, AC 5).
+# Writes nothing, starts nothing, needs no EDA: open requests are read from existing
+# Basic.Energy/EdaProcess entities (none on a Base-only tenant, openRequest always null).
+#
+# Security: FromHttpRequest@2, allowAnonymous false, requiredRoles [EnergyCommunityManagement,
+# EnergyCommunityReporting] (either; the group EnergyCommunityOperators needs one of them). A missing
+# token or role is refused by the adapter before the pipeline runs (the only answer that is not
+# HTTP 200). Every node with an identity setting runs as identity ServiceAccount (the three
+# GetQueryById@1); GetStreamData@1 has none and reads the archive through the adapter. Always HTTP 200
+# with the outcome in the body; the final Project@1 (clear + inclusion) returns only the response
+# fields - never headers, principal or the request body. No PrintDebug@1.
+#
+# Ships Enabled and DeploymentState 2 (like community-balance): the route answers once the DataFlow
+# is deployed (DeployDataFlow ec0000000000000000000a67). REQUIRES Mesh Adapter >= r3.4.119 (as
+# aggregated-energy-report: GetStreamData@1 gapsOnly, ExecuteCSharp@1 typed arguments, ForEach@1
+# errorsPath).
+#
+# Executes on the default Mesh Adapter 670000000000000000000002.
+
+- rtId: ec0000000000000000000a67
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: metering-data-gaps
+  - id: System/Description-1
+    value: >-
+      Read-only route POST /meteringDataGaps (AB#8299): the participating metering points that miss
+      quarter-hour values of a billing register on a Vienna day of a chosen period.
+
+- rtId: ec0000000000000000000a68
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a67
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: metering-data-gaps
+  - id: System/Description-1
+    value: >-
+      POST /meteringDataGaps (role EnergyCommunityManagement or EnergyCommunityReporting).
+      Read-only: the gap days of a period of at most 366 Vienna days per metering point, with
+      registers, age and open CR_REQ_PT; paged by skip/take; always HTTP 200 (AB#8299).
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      # metering-data-gaps (AB#8299, Feature AB#6021) — read-only: which participating metering points miss
+      # quarter-hour values on which Europe/Vienna day of a period the caller chooses.
+      #
+      # POST /meteringDataGaps, role EnergyCommunityManagement or EnergyCommunityReporting.
+      # Request: { "fromDay": "yyyy-MM-dd", "toDay": "yyyy-MM-dd", "meteringPointNumbers": [optional],
+      #            "skip": 0, "take": 1000 }
+      #   fromDay..toDay  Vienna calendar days, both included, at most maxDays (366)
+      #   skip/take       page of the gap list (default 0/1000, take 1..maxTake = 5000)
+      #   referenceTime   tests only: replaces "now" (ISO 8601)
+      # Days that have not ended (Vienna today and later) are not checked; checkedUpTo is the last checked
+      # day (null when none). Every wrong input answers status error with a message, never 4xx/5xx.
+      #
+      # Rule: src/blueprints/CLAUDE.md "Gap days of the energy community" (AB#5511), the same as the
+      # scheduled run request-missing-consumption-reports (EdaIntegration). A participating metering point
+      # (Vienna date of From <= D <= Vienna date of To, To inclusive, both stored forms) has a gap on day D
+      # as soon as one expected quarter-hour value (92/96/100) of one of its billing registers
+      # (1-1:2.9.0 G.03, G.01T, P.01T) is missing in the raw archive, or when it has no billing register.
+      # This pipeline carries its own "gap days" script (a pipeline cannot call one of another blueprint);
+      # tests/test_gap_detection.py runs it and the EdaIntegration one on every shared fixture and fails
+      # when they disagree on (metering point, day, missing values). Change one, change both.
+      #
+      # Reads (as the pipeline service account): the anchors (query ec0000000000000000000a69), the
+      # participation periods (…a6a), the open CR_REQ_PT (…a6b, server-filtered) and ONE coverage scan
+      # (GetStreamData@1 gapsOnly) of the raw archive over the checked days, paged over whole anchors
+      # above 100,000 expected rows. No stream-data read per day or per metering point. A scan page that
+      # fails (above maxGapScanRows 200,000) or a read of anchors or periods cut at maxRows (100,000) answers
+      # status error, never a partial list.
+      # Writes nothing, starts nothing, needs no EDA (no EdaProcess: openRequest is always null).
+      #
+      # Always HTTP 200; the outcome is in the body:
+      #   { status, message, fromDay, toDay, checkedUpTo, derivedAt, summary, meteringPoints, gaps,
+      #     skip, take, hasMore }
+      triggers:
+        - type: FromHttpRequest@2
+          path: /meteringDataGaps
+          method: Post
+          allowAnonymous: false
+          requiredRoles: [EnergyCommunityManagement, EnergyCommunityReporting]
+      transformations:
+        # ─── Configuration: the ONLY place for the limits (README "Metering data gaps") ───
+        - type: SetPrimitiveValue@1
+          description: "Longest period in days"
+          targetPath: $.config.maxDays
+          value: 366
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Page size when the request names none"
+          targetPath: $.config.defaultTake
+          value: 1000
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Largest page"
+          targetPath: $.config.maxTake
+          value: 5000
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Expected rows of one coverage scan page (anchors x days x 96)"
+          targetPath: $.config.pageRows
+          value: 100000
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Open requests the route accepts; more answer status error (never a partial check)"
+          targetPath: $.config.maxOpenRequests
+          value: 2000
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          description: "Anchors and participation periods the route accepts; more answer status error (never a partial check)"
+          targetPath: $.config.maxRows
+          value: 100000
+          valueType: Int
+
+        # ─── Input guards and the checked days ───
+        - type: ExecuteCSharp@1
+          description: "gap request"
+          targetPath: $.request
+          returnType: RecordArray
+          timeoutMs: 5000
+          usings:
+            - System.Collections.Generic
+            - System.Linq
+          arguments:
+            - name: body
+              dataType: Record
+              valuePath: $.body
+            - name: maxDays
+              dataType: Int
+              valuePath: $.config.maxDays
+            - name: defaultTake
+              dataType: Int
+              valuePath: $.config.defaultTake
+            - name: maxTake
+              dataType: Int
+              valuePath: $.config.maxTake
+          code: |
+            // Input of POST /meteringDataGaps (AB#8299 AC 1, 3). Never throws: a wrong input is answered with
+            // status error and a message. The body arrives untyped (Record), so a field of the wrong JSON kind
+            // is a message here, not a failed argument conversion (HTTP 500) before the script runs.
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var vienna = TimeZoneInfo.FindSystemTimeZoneById("Europe/Vienna");
+            var input = body is System.Text.Json.JsonElement element && element.ValueKind == System.Text.Json.JsonValueKind.Object
+                ? element : default;
+            System.Text.Json.JsonElement Field(string name) =>
+                input.ValueKind == System.Text.Json.JsonValueKind.Object && input.TryGetProperty(name, out var v) ? v : default;
+            bool Absent(System.Text.Json.JsonElement v) =>
+                v.ValueKind == System.Text.Json.JsonValueKind.Undefined || v.ValueKind == System.Text.Json.JsonValueKind.Null;
+            var errors = new List<string>();
+            DateTime? Day(string name)
+            {
+                var v = Field(name);
+                if (Absent(v))
+                {
+                    errors.Add(name + " is missing");
+                    return null;
+                }
+                if (v.ValueKind == System.Text.Json.JsonValueKind.String
+                    && DateTime.TryParseExact(v.GetString(), "yyyy-MM-dd", inv, System.Globalization.DateTimeStyles.None, out var d))
+                {
+                    return d;
+                }
+                errors.Add(name + " is not a day in the form yyyy-MM-dd");
+                return null;
+            }
+            int? Whole(string name, int fallback)
+            {
+                var v = Field(name);
+                if (Absent(v)) return fallback;
+                if (v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out var n)) return n;
+                errors.Add(name + " is not a whole number");
+                return null;
+            }
+
+            var fromDay = Day("fromDay");
+            var toDay = Day("toDay");
+            if (fromDay != null && toDay != null)
+            {
+                var length = (int)(toDay.Value - fromDay.Value).TotalDays + 1;
+                if (length < 1) errors.Add("toDay is before fromDay");
+                else if (length > maxDays) errors.Add("the period has " + length + " days; at most " + maxDays + " are allowed");
+            }
+            var skip = Whole("skip", 0);
+            if (skip != null && skip.Value < 0) errors.Add("skip must not be negative");
+            var take = Whole("take", defaultTake);
+            if (take != null && (take.Value < 1 || take.Value > maxTake)) errors.Add("take must be between 1 and " + maxTake);
+
+            string[] numbers = null;
+            var listed = Field("meteringPointNumbers");
+            if (!Absent(listed))
+            {
+                if (listed.ValueKind != System.Text.Json.JsonValueKind.Array)
+                {
+                    errors.Add("meteringPointNumbers is not a list");
+                }
+                else
+                {
+                    var found = new List<string>();
+                    foreach (var item in listed.EnumerateArray())
+                    {
+                        var text = item.ValueKind == System.Text.Json.JsonValueKind.String ? item.GetString().Trim() : "";
+                        if (text.Length == 0)
+                        {
+                            errors.Add("meteringPointNumbers may only hold metering point numbers");
+                            found.Clear();
+                            break;
+                        }
+                        found.Add(text);
+                    }
+                    if (found.Count == 0 && listed.GetArrayLength() == 0)
+                    {
+                        errors.Add("meteringPointNumbers is empty; leave it out to check every metering point");
+                    }
+                    numbers = found.Distinct(StringComparer.Ordinal).ToArray();
+                }
+            }
+
+            var derivedAt = DateTime.UtcNow;
+            var now = derivedAt;
+            var reference = Field("referenceTime");
+            if (!Absent(reference))
+            {
+                if (reference.ValueKind == System.Text.Json.JsonValueKind.String
+                    && DateTimeOffset.TryParse(reference.GetString(), inv, System.Globalization.DateTimeStyles.AssumeUniversal, out var t))
+                {
+                    now = t.UtcDateTime;
+                }
+                else
+                {
+                    errors.Add("referenceTime is not an ISO 8601 time");
+                }
+            }
+
+            // The checked days: fromDay .. min(toDay, Vienna yesterday). Today has not ended and is never checked.
+            var today = TimeZoneInfo.ConvertTimeFromUtc(now, vienna).Date;
+            string Utc(DateTime viennaMidnight) => TimeZoneInfo
+                .ConvertTimeToUtc(DateTime.SpecifyKind(viennaMidnight, DateTimeKind.Unspecified), vienna)
+                .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv);
+            var valid = errors.Count == 0;
+            string checkedUpTo = null;
+            string from = null;
+            string to = null;
+            var dayCount = 0;
+            if (valid)
+            {
+                var yesterday = today.AddDays(-1);
+                var last = toDay.Value < yesterday ? toDay.Value : yesterday;
+                dayCount = Math.Max(0, (int)(last - fromDay.Value).TotalDays + 1);
+                if (dayCount > 0) checkedUpTo = last.ToString("yyyy-MM-dd", inv);
+                from = Utc(fromDay.Value);
+                to = Utc(dayCount > 0 ? last.AddDays(1) : fromDay.Value);
+            }
+            return new object[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["Valid"] = valid,
+                    ["Message"] = valid ? null : string.Join("; ", errors) + ".",
+                    ["FromDay"] = fromDay?.ToString("yyyy-MM-dd", inv),
+                    ["ToDay"] = toDay?.ToString("yyyy-MM-dd", inv),
+                    ["CheckedUpTo"] = checkedUpTo,
+                    ["FirstDay"] = valid && dayCount > 0 ? fromDay.Value.ToString("yyyy-MM-dd", inv) : null,
+                    ["DayCount"] = dayCount,
+                    ["From"] = from,
+                    ["To"] = to,
+                    ["Today"] = today.ToString("yyyy-MM-dd", inv),
+                    ["DerivedAt"] = derivedAt.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv),
+                    ["Skip"] = skip ?? 0,
+                    ["Take"] = take ?? defaultTake,
+                    ["Numbers"] = numbers
+                }
+            };
+
+        - type: If@1
+          description: "Only a request the guards accepted reads anything"
+          path: $.request[0].Valid
+          operator: Equals
+          value: true
+          valueType: Boolean
+          transformations:
+            # ─── Reads: anchors, participation periods, one coverage scan ───
+            # take is maxRows + 1 (a node field takes no path): a read that returns more than maxRows rows
+            # was cut, and the route answers status error instead of checking a partial set.
+            - type: GetQueryById@1
+              identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+              description: "Billing anchors (G.03, G.01T, P.01T) with the number of their metering point"
+              queryRtId: ec0000000000000000000a69
+              take: 100001
+              targetPath: $.anchors
+              fieldFilters:
+                - attributePath: obisCode
+                  operator: In
+                  comparisonValue: ["1-1:2.9.0 G.03", "1-1:2.9.0 G.01T", "1-1:2.9.0 P.01T"]
+            - type: GetQueryById@1
+              identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+              description: "Participation periods (all; the script decides per day)"
+              queryRtId: ec0000000000000000000a6a
+              take: 100001
+              targetPath: $.periods
+
+            - type: ExecuteCSharp@1
+              description: "coverage scan pages"
+              targetPath: $.pages
+              returnType: RecordArray
+              timeoutMs: 5000
+              usings:
+                - System.Collections.Generic
+                - System.Linq
+              arguments:
+                - name: anchors
+                  dataType: RecordArray
+                  valuePath: $.anchors.Rows
+                - name: numbers
+                  dataType: StringArray
+                  valuePath: $.request[0].Numbers
+                - name: dayCount
+                  dataType: Int
+                  valuePath: $.request[0].DayCount
+                - name: from
+                  dataType: String
+                  valuePath: $.request[0].From
+                - name: to
+                  dataType: String
+                  valuePath: $.request[0].To
+                - name: pageRows
+                  dataType: Int
+                  valuePath: $.config.pageRows
+                - name: maxRows
+                  dataType: Int
+                  valuePath: $.config.maxRows
+              code: |
+                // The anchors of the requested metering points (all without meteringPointNumbers): one page
+                // when anchors x days x 96 <= pageRows, else pages of whole anchors (AB#5511 AC 11). A cut
+                // anchor read (more than maxRows rows) is not scanned; "gap days" answers status error.
+                if ((anchors ?? new object[0]).Length > maxRows) return new List<object>();
+                var wanted = numbers == null ? null : new HashSet<string>(numbers, StringComparer.Ordinal);
+                string NumberOf(System.Text.Json.JsonElement r) =>
+                    r.TryGetProperty("Values", out var values) && values.ValueKind == System.Text.Json.JsonValueKind.Array
+                    && values.GetArrayLength() > 0 && values[0].ValueKind == System.Text.Json.JsonValueKind.String
+                        ? values[0].GetString() : null;
+                var ids = (anchors ?? new object[0])
+                    .OfType<System.Text.Json.JsonElement>()
+                    .Where(r => r.ValueKind == System.Text.Json.JsonValueKind.Object
+                                && r.TryGetProperty("RtId", out var id) && id.ValueKind == System.Text.Json.JsonValueKind.String
+                                && (wanted == null || wanted.Contains(NumberOf(r) ?? "")))
+                    .Select(r => r.GetProperty("RtId").GetString())
+                    .Distinct()
+                    .ToArray();
+                var pages = new List<object>();
+                if (dayCount <= 0) return pages;
+                var size = Math.Max(1, pageRows / (dayCount * 96));
+                for (var i = 0; i < ids.Length; i += size)
+                {
+                    pages.Add(new Dictionary<string, object>
+                    {
+                        ["RtIds"] = ids.Skip(i).Take(size).ToArray(),
+                        ["From"] = from,
+                        ["To"] = to
+                    });
+                }
+                return pages;
+
+            # Each page is one GetStreamData@1 coverage scan of its anchors over the checked days. rtIds name
+            # the expected set, so an anchor without any row comes back as a series without coverage. Only
+            # kWh rows count (Amount.Unit = 1, integer key, on the scan itself; CLAUDE.md "Only kWh counts").
+            # A page above maxGapScanRows fails its iteration; continueOnError + errorsPath turn that into
+            # data, and the "gap days" script answers status error instead of a partial list (no HTTP 500).
+            # GetStreamData@1 has no identity setting: it reads the archive through the adapter.
+            - type: ForEach@1
+              description: "Coverage scan, one page of anchors per iteration"
+              maxDegreeOfParallelism: 1
+              iterationPath: $.pages
+              mergePath: $.gaps.Series
+              targetPath: $.scans
+              continueOnError: true
+              errorsPath: $.scanErrors
+              transformations:
+                - type: GetStreamData@1
+                  description: "Coverage of the anchors of this page (15-minute values)"
+                  archiveRtId: ec0000000000000000000a01
+                  rtIdsPath: $.key.RtIds[*]
+                  fromPath: $.key.From
+                  toPath: $.key.To
+                  fieldFilters:
+                    - attributePath: Amount.Unit
+                      operator: Equals
+                      comparisonValue: 1
+                  expectedInterval: "00:15:00"
+                  maxGapScanRows: 200000
+                  gapsOnly: true
+                  gapsTargetPath: $.gaps
+                  # Never written while gapsOnly is set; named so the default ("$") cannot clobber the key.
+                  targetPath: $.unusedGapScan
+            - type: Flatten@1
+              description: "Series of all pages"
+              path: $.scans[*][*]
+              targetPath: $.series
+
+            # ─── Open requests (AB#8137): CR_REQ_PT not finished, filtered on the server ───
+            # take is maxOpenRequests + 1 (a node field takes no path), so more than maxOpenRequests answer
+            # status error instead of a check against a cut list.
+            - type: GetQueryById@1
+              identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+              description: "Open requests: CR_REQ_PT with Finished = false (metering point, planned, stored message)"
+              queryRtId: ec0000000000000000000a6b
+              take: 2001
+              targetPath: $.openProcesses
+              fieldFilters:
+                - attributePath: name
+                  operator: Equals
+                  comparisonValue: CR_REQ_PT
+                - attributePath: finished
+                  operator: Equals
+                  comparisonValue: false
+            - type: ExecuteCSharp@1
+              description: "open requests"
+              targetPath: $.open
+              returnType: RecordArray
+              timeoutMs: 10000
+              usings:
+                - System.Collections.Generic
+                - System.Linq
+              arguments:
+                - name: processes
+                  dataType: RecordArray
+                  valuePath: $.openProcesses.Rows
+                - name: maxOpenRequests
+                  dataType: Int
+                  valuePath: $.config.maxOpenRequests
+              code: |
+                // The requested range of every open CR_REQ_PT (AB#8137) with its rtId, from the stored message:
+                // ProcessDirectory.Extension.DateTimeFromLocal.Value / DateTimeToLocal.Value (with an offset or
+                // Z; a value without a zone is read as UTC). Not an open request: a planned process, a process
+                // without a readable range, a process whose stored message is not valid JSON (listed in
+                // Unreadable; the pipeline logs it). Same reading as the script "open requests" of
+                // request-missing-consumption-reports; more than maxOpenRequests set TooMany (status error).
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                var rows = (processes ?? new object[0]).OfType<System.Text.Json.JsonElement>().ToArray();
+                var ranges = new List<object>();
+                var unreadable = new List<object>();
+                if (rows.Length > maxOpenRequests)
+                {
+                    return new object[] { new Dictionary<string, object> { ["Ranges"] = ranges, ["Unreadable"] = unreadable, ["TooMany"] = true } };
+                }
+                System.Text.Json.JsonElement Prop(System.Text.Json.JsonElement e, string name)
+                {
+                    if (e.ValueKind != System.Text.Json.JsonValueKind.Object) return default;
+                    foreach (var p in e.EnumerateObject())
+                    {
+                        if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) return p.Value;
+                    }
+                    return default;
+                }
+                System.Text.Json.JsonElement At(System.Text.Json.JsonElement row, int i)
+                {
+                    var values = Prop(row, "Values");
+                    return values.ValueKind == System.Text.Json.JsonValueKind.Array && values.GetArrayLength() > i ? values[i] : default;
+                }
+                string Str(System.Text.Json.JsonElement e) => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString() : null;
+                DateTime? Utc(System.Text.Json.JsonElement e)
+                {
+                    var s = Str(e);
+                    if (string.IsNullOrEmpty(s)) return null;
+                    return DateTimeOffset.TryParse(s, inv,
+                        System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var t)
+                        ? t.UtcDateTime : null;
+                }
+                foreach (var row in rows)
+                {
+                    var number = Str(At(row, 0));
+                    if (string.IsNullOrEmpty(number)) continue;
+                    if (At(row, 1).ValueKind == System.Text.Json.JsonValueKind.True) continue; // planned: not a request
+                    var raw = Str(At(row, 2));
+                    if (string.IsNullOrWhiteSpace(raw)) continue; // no stored message: no range
+                    System.Text.Json.JsonElement message;
+                    try
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(raw);
+                        message = doc.RootElement.Clone();
+                    }
+                    catch (System.Text.Json.JsonException)
+                    {
+                        unreadable.Add(Str(Prop(row, "RtId")) ?? number);
+                        continue;
+                    }
+                    var extension = Prop(Prop(message, "ProcessDirectory"), "Extension");
+                    var from = Utc(Prop(Prop(extension, "DateTimeFromLocal"), "Value"));
+                    var to = Utc(Prop(Prop(extension, "DateTimeToLocal"), "Value"));
+                    if (from == null || to == null || to.Value <= from.Value) continue; // no readable range
+                    ranges.Add(new Dictionary<string, object>
+                    {
+                        ["RtId"] = Str(Prop(row, "RtId")),
+                        ["MeteringPointNumber"] = number,
+                        ["From"] = from.Value.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv),
+                        ["To"] = to.Value.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv)
+                    });
+                }
+                return new object[] { new Dictionary<string, object> { ["Ranges"] = ranges, ["Unreadable"] = unreadable, ["TooMany"] = false } };
+            - type: If@1
+              description: "An open request whose stored message is not valid JSON"
+              path: $.open[0].Unreadable[0]
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: Logger@1
+                  message: "metering-data-gaps (AB#8299): the stored message of an open CR_REQ_PT is not valid JSON; it does not count as an open request for its gap days"
+            - type: Project@1
+              description: "Drop the scan pages and the open processes; the series and the ranges follow"
+              fields:
+                - path: $.pages
+                - path: $.scans
+                - path: $.openProcesses
+
+            # ─── Gap days: participation rule, completeness rule, open requests, summary and page ───
+            - type: ExecuteCSharp@1
+              description: "gap days"
+              targetPath: $.result
+              returnType: RecordArray
+              timeoutMs: 50000
+              usings:
+                - System.Collections.Generic
+                - System.Linq
+              arguments:
+                - name: series
+                  dataType: RecordArray
+                  valuePath: $.series
+                - name: anchors
+                  dataType: RecordArray
+                  valuePath: $.anchors.Rows
+                - name: periods
+                  dataType: RecordArray
+                  valuePath: $.periods.Rows
+                - name: firstDay
+                  dataType: String
+                  valuePath: $.request[0].FirstDay
+                - name: dayCount
+                  dataType: Int
+                  valuePath: $.request[0].DayCount
+                - name: numbers
+                  dataType: StringArray
+                  valuePath: $.request[0].Numbers
+                - name: openRanges
+                  dataType: RecordArray
+                  valuePath: $.open[0].Ranges
+                - name: tooManyOpen
+                  dataType: Boolean
+                  valuePath: $.open[0].TooMany
+                - name: maxOpenRequests
+                  dataType: Int
+                  valuePath: $.config.maxOpenRequests
+                - name: scanErrors
+                  dataType: RecordArray
+                  valuePath: $.scanErrors
+                - name: today
+                  dataType: String
+                  valuePath: $.request[0].Today
+                - name: skip
+                  dataType: Int
+                  valuePath: $.request[0].Skip
+                - name: take
+                  dataType: Int
+                  valuePath: $.request[0].Take
+                - name: maxRows
+                  dataType: Int
+                  valuePath: $.config.maxRows
+              code: |
+                // The rules of src/blueprints/CLAUDE.md "Gap days of the energy community" (AB#5511) for the
+                // route (AB#8299). Participation From..To with To INCLUSIVE (Vienna dates, both stored forms
+                // of To) and strict completeness over the billing anchors are those of the script "gap days" of
+                // request-missing-consumption-reports (EdaIntegration); tests/test_gap_detection.py runs both on
+                // the shared fixtures and fails when they disagree. Change one, change both.
+                // Route only: meteringPointNumbers restricts the set; a gap day carries its registers (expected
+                // and actual values per OBIS code), its age and the open request that covers it; the summary and
+                // the per-metering-point rows count every gap, the gap list is one page (by day, then number).
+                // The uncovered ranges are cut into days once per anchor instead of once per day and anchor, so a
+                // 366-day period stays linear in the number of ranges; the arithmetic per range and day is the
+                // scheduled run's. A failed scan page, a cut read of anchors or periods (more than maxRows rows),
+                // more open requests than read or a date that is not ISO 8601 answer status error: never a
+                // partial list.
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                var vienna = TimeZoneInfo.FindSystemTimeZoneById("Europe/Vienna");
+                System.Text.Json.JsonElement Prop(System.Text.Json.JsonElement e, string name) =>
+                    e.ValueKind == System.Text.Json.JsonValueKind.Object && e.TryGetProperty(name, out var v) ? v : default;
+                System.Text.Json.JsonElement At(System.Text.Json.JsonElement row, int i)
+                {
+                    var values = Prop(row, "Values");
+                    return values.ValueKind == System.Text.Json.JsonValueKind.Array && values.GetArrayLength() > i ? values[i] : default;
+                }
+                string Str(System.Text.Json.JsonElement e) => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString() : null;
+                // Dates arrive as ISO 8601 text. Anything else, also an ISO-shaped text that is no date
+                // (2026-13-01T00:00:00Z), answers status error: a period or gap read wrongly would hide gaps
+                // without a word.
+                DateTime? Utc(System.Text.Json.JsonElement e)
+                {
+                    if (e.ValueKind == System.Text.Json.JsonValueKind.Undefined || e.ValueKind == System.Text.Json.JsonValueKind.Null) return null;
+                    var s = Str(e);
+                    if (s == null || s.Length < 19 || s[4] != '-' || s[7] != '-' || s[10] != 'T'
+                        || !DateTimeOffset.TryParse(s, inv, System.Globalization.DateTimeStyles.AssumeUniversal, out var t))
+                        throw new InvalidOperationException("gap days: not an ISO 8601 date: " + e.GetRawText());
+                    return t.UtcDateTime;
+                }
+                DateTime ViennaDate(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(utc, vienna).Date;
+                DateTime ViennaMidnightUtc(DateTime day) =>
+                    TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(day, DateTimeKind.Unspecified), vienna);
+                IEnumerable<System.Text.Json.JsonElement> Elements(object[] items) =>
+                    (items ?? new object[0]).OfType<System.Text.Json.JsonElement>();
+                string Iso(DateTime utc) => utc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", inv);
+                Dictionary<string, object> Summary(int points, int pointDays, int gapDays, int missingValues) => new Dictionary<string, object>
+                {
+                    ["meteringPoints"] = points,
+                    ["meteringPointDaysChecked"] = pointDays,
+                    ["gapDays"] = gapDays,
+                    ["missingValues"] = missingValues
+                };
+                object[] Failed(string message) => new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["status"] = "error",
+                        ["message"] = message,
+                        ["summary"] = Summary(0, 0, 0, 0),
+                        ["meteringPoints"] = new List<object>(),
+                        ["gaps"] = new List<object>(),
+                        ["hasMore"] = false
+                    }
+                };
+
+                var failedPages = Elements(scanErrors).ToArray();
+                if (failedPages.Length > 0)
+                {
+                    var reason = failedPages[0].ValueKind == System.Text.Json.JsonValueKind.Object
+                        ? failedPages[0].EnumerateObject()
+                            .Where(p => string.Equals(p.Name, "message", StringComparison.OrdinalIgnoreCase))
+                            .Select(p => Str(p.Value)).FirstOrDefault()
+                        : null;
+                    return Failed("The coverage scan failed for " + failedPages.Length + " page(s) of metering points ("
+                        + (reason ?? "no reason given") + "). Nothing is listed; choose a shorter period or fewer metering points.");
+                }
+                var anchorRows = (anchors ?? new object[0]).Length;
+                var periodRows = (periods ?? new object[0]).Length;
+                if (anchorRows > maxRows || periodRows > maxRows)
+                {
+                    return Failed("More than " + maxRows + " " + (anchorRows > maxRows ? "measurement anchors" : "participation periods")
+                        + " were read; nothing is listed (the reads are not filtered by meteringPointNumbers). Raise maxRows and the take of both reads in the pipeline.");
+                }
+                if (tooManyOpen)
+                {
+                    return Failed("More than " + maxOpenRequests + " CR_REQ_PT are open; close the hanging processes "
+                        + "(README, EdaIntegration 3.1.1) and ask again.");
+                }
+
+                try
+                {
+                    var wanted = numbers == null ? null : new HashSet<string>(numbers, StringComparer.Ordinal);
+
+                    // Participation: number -> [first day, last day (null = open)]; rtId of the metering point
+                    var participation = new Dictionary<string, List<(DateTime First, DateTime? Last)>>(StringComparer.Ordinal);
+                    var pointRtId = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (var row in Elements(periods))
+                    {
+                        var number = Str(At(row, 0));
+                        if (string.IsNullOrEmpty(number) || (wanted != null && !wanted.Contains(number))) continue;
+                        var from = Utc(At(row, 1));
+                        if (from == null) continue;
+                        var to = Utc(At(row, 2));
+                        if (!participation.TryGetValue(number, out var list)) participation[number] = list = new List<(DateTime, DateTime?)>();
+                        list.Add((ViennaDate(from.Value), to == null ? null : ViennaDate(to.Value)));
+                        var rtId = Str(At(row, 3));
+                        if (!string.IsNullOrEmpty(rtId) && !pointRtId.ContainsKey(number)) pointRtId[number] = rtId;
+                    }
+
+                    // Billing anchors: number -> (anchor rtId, OBIS code)
+                    var anchorsOf = new Dictionary<string, List<(string RtId, string Obis)>>(StringComparer.Ordinal);
+                    foreach (var row in Elements(anchors))
+                    {
+                        var number = Str(At(row, 0));
+                        var rtId = Str(Prop(row, "RtId"));
+                        if (string.IsNullOrEmpty(number) || string.IsNullOrEmpty(rtId)) continue;
+                        if (!anchorsOf.TryGetValue(number, out var list)) anchorsOf[number] = list = new List<(string, string)>();
+                        list.Add((rtId, Str(At(row, 1)) ?? ""));
+                    }
+
+                    // The checked days and their UTC bounds (Vienna midnights; 23 h / 25 h on the clock changes)
+                    var days = Math.Max(dayCount, 0);
+                    var start = days > 0 ? DateTime.ParseExact(firstDay, "yyyy-MM-dd", inv) : DateTime.MinValue;
+                    var bounds = new DateTime[days + 1];
+                    for (var d = 0; d <= days && days > 0; d++) bounds[d] = ViennaMidnightUtc(start.AddDays(d));
+
+                    // Coverage: anchor rtId -> missing values per checked day (each uncovered range cut at the
+                    // Vienna midnights, rounded up to whole quarter-hours per day, as in the scheduled run)
+                    var missingOf = new Dictionary<string, int[]>(StringComparer.Ordinal);
+                    foreach (var s in Elements(series))
+                    {
+                        var rtId = Str(Prop(s, "RtId"));
+                        if (string.IsNullOrEmpty(rtId)) continue;
+                        var perDay = new int[days];
+                        var gaps = Prop(s, "Gaps");
+                        if (gaps.ValueKind == System.Text.Json.JsonValueKind.Array && days > 0)
+                        {
+                            foreach (var g in gaps.EnumerateArray())
+                            {
+                                var gf = Utc(Prop(g, "From"));
+                                var gt = Utc(Prop(g, "To"));
+                                if (gf == null || gt == null || gt.Value <= gf.Value) continue;
+                                var d = Array.BinarySearch(bounds, gf.Value);
+                                if (d < 0) d = ~d - 1;
+                                if (d < 0) d = 0;
+                                for (; d < days && bounds[d] < gt.Value; d++)
+                                {
+                                    var from = gf.Value > bounds[d] ? gf.Value : bounds[d];
+                                    var to = gt.Value < bounds[d + 1] ? gt.Value : bounds[d + 1];
+                                    if (to > from) perDay[d] += (int)Math.Ceiling((to - from).TotalSeconds / 900.0);
+                                }
+                            }
+                        }
+                        missingOf[rtId] = perDay;
+                    }
+
+                    // Open requests: number -> requested ranges (UTC) with the process rtId
+                    var openOf = new Dictionary<string, List<(string RtId, DateTime From, DateTime To)>>(StringComparer.Ordinal);
+                    foreach (var r in Elements(openRanges))
+                    {
+                        var number = Str(Prop(r, "MeteringPointNumber"));
+                        var rf = Utc(Prop(r, "From"));
+                        var rt = Utc(Prop(r, "To"));
+                        if (string.IsNullOrEmpty(number) || rf == null || rt == null) continue;
+                        if (!openOf.TryGetValue(number, out var list)) openOf[number] = list = new List<(string, DateTime, DateTime)>();
+                        list.Add((Str(Prop(r, "RtId")), rf.Value, rt.Value));
+                    }
+
+                    var todayDate = DateTime.ParseExact(today, "yyyy-MM-dd", inv);
+                    var entries = new List<(string Day, string Number, int Missing, Dictionary<string, object> Entry, bool Open)>();
+                    var checkedPoints = new HashSet<string>(StringComparer.Ordinal);
+                    var pointDays = 0;
+                    for (var d = 0; d < days; d++)
+                    {
+                        var day = start.AddDays(d);
+                        var dayFrom = bounds[d];
+                        var dayTo = bounds[d + 1];
+                        var expected = (int)Math.Round((dayTo - dayFrom).TotalSeconds / 900.0);
+                        foreach (var pair in participation)
+                        {
+                            if (!pair.Value.Any(p => p.First <= day && (p.Last == null || day <= p.Last.Value))) continue;
+                            checkedPoints.Add(pair.Key);
+                            pointDays++;
+                            var missing = 0;
+                            var registers = new SortedDictionary<string, int[]>(StringComparer.Ordinal); // OBIS -> [expected, actual]
+                            if (!anchorsOf.TryGetValue(pair.Key, out var regs))
+                            {
+                                missing = expected; // no billing register at all: the day has no value
+                            }
+                            else
+                            {
+                                foreach (var a in regs)
+                                {
+                                    // not covered by the scan: counted as missing, never as complete
+                                    var m = missingOf.TryGetValue(a.RtId, out var perDay) ? perDay[d] : expected;
+                                    missing += m;
+                                    if (!registers.TryGetValue(a.Obis, out var counts)) registers[a.Obis] = counts = new int[2];
+                                    counts[0] += expected;
+                                    counts[1] += Math.Max(0, expected - m);
+                                }
+                            }
+                            if (missing <= 0) continue;
+                            object openRequest = null;
+                            if (openOf.TryGetValue(pair.Key, out var requested))
+                            {
+                                foreach (var covering in requested.Where(q => q.From <= dayFrom && q.To >= dayTo)
+                                             .OrderBy(q => q.From).ThenBy(q => q.RtId, StringComparer.Ordinal).Take(1))
+                                {
+                                    openRequest = new Dictionary<string, object>
+                                    {
+                                        ["rtId"] = covering.RtId, ["from"] = Iso(covering.From), ["to"] = Iso(covering.To)
+                                    };
+                                }
+                            }
+                            pointRtId.TryGetValue(pair.Key, out var mpRtId);
+                            var dayText = day.ToString("yyyy-MM-dd", inv);
+                            entries.Add((dayText, pair.Key, missing, new Dictionary<string, object>
+                            {
+                                ["meteringPointNumber"] = pair.Key,
+                                ["meteringPointRtId"] = mpRtId,
+                                ["receiver"] = pair.Key.Length >= 8 ? pair.Key.Substring(0, 8) : pair.Key,
+                                ["day"] = dayText,
+                                ["from"] = Iso(dayFrom),
+                                ["to"] = Iso(dayTo),
+                                ["registers"] = registers.ToDictionary(
+                                    x => x.Key, x => (object)new Dictionary<string, object> { ["expected"] = x.Value[0], ["actual"] = x.Value[1] },
+                                    StringComparer.Ordinal),
+                                ["missingValues"] = missing,
+                                ["ageDays"] = (int)Math.Round((todayDate - day).TotalDays),
+                                ["openRequest"] = openRequest
+                            }, openRequest != null));
+                        }
+                    }
+
+                    var ordered = entries.OrderBy(x => x.Day, StringComparer.Ordinal).ThenBy(x => x.Number, StringComparer.Ordinal).ToList();
+                    var points = ordered
+                        .GroupBy(x => x.Number, StringComparer.Ordinal)
+                        .OrderBy(g => g.Key, StringComparer.Ordinal)
+                        .Select(g => (object)new Dictionary<string, object>
+                        {
+                            ["meteringPointNumber"] = g.Key,
+                            ["meteringPointRtId"] = pointRtId.TryGetValue(g.Key, out var id) ? id : null,
+                            ["receiver"] = g.Key.Length >= 8 ? g.Key.Substring(0, 8) : g.Key,
+                            ["gapDays"] = g.Count(),
+                            ["missingValues"] = g.Sum(x => x.Missing),
+                            ["firstGapDay"] = g.First().Day,
+                            ["lastGapDay"] = g.Last().Day,
+                            ["openGapDays"] = g.Count(x => x.Open)
+                        })
+                        .ToList();
+                    var first = Math.Max(skip, 0);
+                    var page = ordered.Skip(first).Take(Math.Max(take, 0)).Select(x => (object)x.Entry).ToList();
+                    return new object[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["status"] = "ok",
+                            ["message"] = "Gap days of the checked days: a participating metering point misses at least one "
+                                + "quarter-hour value of a billing register (1-1:2.9.0 G.03, G.01T, P.01T) or has none. gaps is "
+                                + "one page (by day, then number); summary and meteringPoints count every gap.",
+                            ["summary"] = Summary(checkedPoints.Count, pointDays, ordered.Count, ordered.Sum(x => x.Missing)),
+                            ["meteringPoints"] = points,
+                            ["gaps"] = page,
+                            ["hasMore"] = first + page.Count < ordered.Count
+                        }
+                    };
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Failed(ex.Message);
+                }
+            - type: Project@1
+              description: "Drop the reads; the result holds everything that follows"
+              fields:
+                - path: $.anchors
+                - path: $.periods
+                - path: $.series
+                - path: $.open
+                - path: $.scanErrors
+
+        # ─── Response: request fields + result, or status error for a refused request ───
+        - type: ExecuteCSharp@1
+          description: "gap response"
+          targetPath: $.response
+          returnType: RecordArray
+          timeoutMs: 10000
+          usings:
+            - System.Collections.Generic
+            - System.Linq
+          arguments:
+            - name: request
+              dataType: RecordArray
+              valuePath: $.request
+            - name: result
+              dataType: RecordArray
+              valuePath: $.result
+          code: |
+            // The answer of POST /meteringDataGaps (AB#8299 AC 1): the request fields, then the result of
+            // "gap days", or status error with an empty result when the guards refused the request. outcome
+            // is the answer without the two lists; it is stored as the execution result.
+            System.Text.Json.JsonElement Prop(System.Text.Json.JsonElement e, string name) =>
+                e.ValueKind == System.Text.Json.JsonValueKind.Object && e.TryGetProperty(name, out var v) ? v : default;
+            string Str(System.Text.Json.JsonElement e) => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString() : null;
+            int Int(System.Text.Json.JsonElement e) => e.ValueKind == System.Text.Json.JsonValueKind.Number ? e.GetInt32() : 0;
+            object Json(System.Text.Json.JsonElement e, object fallback) =>
+                e.ValueKind == System.Text.Json.JsonValueKind.Undefined || e.ValueKind == System.Text.Json.JsonValueKind.Null ? fallback : e;
+            var req = (request ?? new object[0]).OfType<System.Text.Json.JsonElement>().FirstOrDefault();
+            var res = (result ?? new object[0]).OfType<System.Text.Json.JsonElement>().FirstOrDefault();
+            var accepted = Prop(req, "Valid").ValueKind == System.Text.Json.JsonValueKind.True;
+            var derived = accepted && res.ValueKind == System.Text.Json.JsonValueKind.Object;
+            var status = derived ? Str(Prop(res, "status")) ?? "error" : "error";
+            var message = derived ? Str(Prop(res, "message"))
+                : accepted ? "The gap days could not be derived."
+                : Str(Prop(req, "Message")) ?? "The request could not be read.";
+            var emptySummary = new Dictionary<string, object>
+            {
+                ["meteringPoints"] = 0, ["meteringPointDaysChecked"] = 0, ["gapDays"] = 0, ["missingValues"] = 0
+            };
+            var summary = derived ? Json(Prop(res, "summary"), emptySummary) : emptySummary;
+            var hasMore = derived && Prop(res, "hasMore").ValueKind == System.Text.Json.JsonValueKind.True;
+            var outcome = new Dictionary<string, object>
+            {
+                ["status"] = status,
+                ["message"] = message,
+                ["fromDay"] = Str(Prop(req, "FromDay")),
+                ["toDay"] = Str(Prop(req, "ToDay")),
+                ["checkedUpTo"] = Str(Prop(req, "CheckedUpTo")),
+                ["derivedAt"] = Str(Prop(req, "DerivedAt")),
+                ["summary"] = summary,
+                ["skip"] = Int(Prop(req, "Skip")),
+                ["take"] = Int(Prop(req, "Take")),
+                ["hasMore"] = hasMore
+            };
+            var response = new Dictionary<string, object>(outcome)
+            {
+                ["meteringPoints"] = derived ? Json(Prop(res, "meteringPoints"), new List<object>()) : new List<object>(),
+                ["gaps"] = derived ? Json(Prop(res, "gaps"), new List<object>()) : new List<object>(),
+                ["outcome"] = outcome
+            };
+            return new object[] { response };
+
+        - type: SetPipelineExecutionResult@1
+          path: $.response[0].outcome
+
+        # The adapter answers with the final data context verbatim (headers, principal, body). Lift the
+        # response fields to the top level (SetPrimitiveValue@1 keeps a null, SelectByPath@1 would skip it),
+        # then drop everything else.
+        - type: SetPrimitiveValue@1
+          targetPath: $.status
+          valuePath: $.response[0].status
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.message
+          valuePath: $.response[0].message
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.fromDay
+          valuePath: $.response[0].fromDay
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.toDay
+          valuePath: $.response[0].toDay
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.checkedUpTo
+          valuePath: $.response[0].checkedUpTo
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.derivedAt
+          valuePath: $.response[0].derivedAt
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.skip
+          valuePath: $.response[0].skip
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          targetPath: $.take
+          valuePath: $.response[0].take
+          valueType: Int
+        - type: SetPrimitiveValue@1
+          targetPath: $.hasMore
+          valuePath: $.response[0].hasMore
+          valueType: Boolean
+        - type: SelectByPath@1
+          description: Lift summary, metering points and gaps to the response
+          selectPath:
+            - path: $.response[0].summary
+              targetPath: $.summary
+            - path: $.response[0].meteringPoints
+              targetPath: $.meteringPoints
+            - path: $.response[0].gaps
+              targetPath: $.gaps
+        - type: Project@1
+          description: Shape the HTTP response body
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.fromDay
+              inclusion: true
+            - path: $.toDay
+              inclusion: true
+            - path: $.checkedUpTo
+              inclusion: true
+            - path: $.derivedAt
+              inclusion: true
+            - path: $.summary
+              inclusion: true
+            - path: $.meteringPoints
+              inclusion: true
+            - path: $.gaps
+              inclusion: true
+            - path: $.skip
+              inclusion: true
+            - path: $.take
+              inclusion: true
+            - path: $.hasMore
+              inclusion: true
