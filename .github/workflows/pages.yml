@@ -70,7 +70,7 @@ jobs:
 
       - name: Upload artifact (repo root, served verbatim — no Jekyll)
         if: steps.guard.outputs.skip != 'true'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: '.'
 
