@@ -1,14 +1,16 @@
 # Dependabot standard configuration.
-# One entry per ecosystem and manifest directory, minor/patch updates grouped, an explicit
-# open-pull-requests-limit, and the majors we hold on purpose ignored (remove an ignore only
-# together with the story that delivers that migration).
+# One entry per ecosystem and manifest directory list, run monthly. All minor and patch updates
+# of an ecosystem arrive in one pull request per manifest directory; the low
+# open-pull-requests-limit keeps majors that are not ignored from piling up. The majors we hold
+# on purpose are ignored (remove an ignore only together with the story that delivers that
+# migration).
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     groups:
       actions:
         patterns: ["*"]
