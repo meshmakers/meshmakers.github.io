@@ -66,7 +66,7 @@ jobs:
 
       - name: Setup Pages
         if: steps.guard.outputs.skip != 'true'
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload artifact (repo root, served verbatim — no Jekyll)
         if: steps.guard.outputs.skip != 'true'
