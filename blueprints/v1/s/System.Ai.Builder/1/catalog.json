@@ -2,7 +2,7 @@
   "version": "1.0",
   "blueprintId": "System.Ai.Builder",
   "majorVersion": 1,
-  "latestVersion": "1.1.7",
+  "latestVersion": "1.1.8",
   "description": "Opt-in OctoMesh know-how for the tenant knowledge base. Installs\nknowledge pages in five task-oriented areas, each with an index page: Administer a\ntenant (admin-, from the skill octo), Build an app (app-, octo-app-builder), Build data\npipelines (pipeline-, pipeline-expert), Deploy and promote (deploy-, octo-deploy) and Diagnose\nand fix (diagnose-, octo-agent). Only tenant-relevant content: no local-stack or\ndeveloper-machine instructions; every page names the MCP tool of\nocto-mcp-service next to each octo-cli command, or marks the command CLI only. An MCP\nclient finds the pages with knowledge_search / knowledge_get and cites them as [slug]. Renamed pages (nodes-* -\u003E pipeline-nodes-*) keep their old slug as a\n\u0022Moved to\u0022 page.\n\nThe pages are generated from the skills of octo-claude-skills by tools/SkillPages;\nnever edit the seed by hand (docs/skill-pages.md). Every page has kind Skill, origin Blueprint\nand status Verified, its KnowledgePageVersions (author blueprint:System.Ai.Builder-\u003Cversion\u003E,\nDeclaredLinks = the page\u0027s LinksTo) and LinksTo associations to the pages it mentions.\n\nPages only: no pipeline, no LLM call, no service account, no client. The builder agent, its\nmandate and its client are not part of it. Not service-managed: the AI service applies only\nSystem.Ai.Default; a tenant gets these pages only with InstallBlueprint, and\nUninstallBlueprint removes them again.\n\nUpdates: the page content is TenantOwned, so a later version of this blueprint brings only new\nKnowledgePageVersion entities; it never overwrites a page. The AI service switches a\npage nobody changed to the newest version by itself, within about 15 minutes of the update, on\nevery AI tenant and without any setup. A page that was changed in the tenant keeps its\ncontent: knowledge_list_platform_updates lists it (the knowledge lint of System.Ai.Knowledge\nreports it as PlatformUpdateAvailable), and a person either restores the new version\n(knowledge_restore_version) or dismisses it (knowledge_dismiss_platform_update). This blueprint\ndoes not depend on System.Ai.Knowledge on purpose (that blueprint carries the LLM ingest\npipelines and needs an API key).\n\nSetup, updates and limits: src/SystemAiCkModel/README.md, section \u0022Blueprint System.Ai.Builder\u0022.\n",
   "versions": [
     {
@@ -29,7 +29,12 @@
       "version": "1.1.7",
       "directoryPath": "blueprints/v1/s/System.Ai.Builder/1/System.Ai.Builder-1.1.7",
       "publishedAt": "2026-11-23T02:35:52.0117347Z"
+    },
+    {
+      "version": "1.1.8",
+      "directoryPath": "blueprints/v1/s/System.Ai.Builder/1/System.Ai.Builder-1.1.8",
+      "publishedAt": "2026-11-25T02:16:50.5279357Z"
     }
   ],
-  "updatedAt": "2026-11-23T02:35:52.0125761Z"
+  "updatedAt": "2026-11-25T02:16:50.5288848Z"
 }
