@@ -1,0 +1,130 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+  - System.Identity-[3.0,4.0)
+
+# Roles and the operator group of an Energy Community tenant (AB#5627, requirement SEC-02).
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+#
+# The HTTP routes of Base, Billing and EdaIntegration are moving to FromHttpRequest@2 in two
+# phases: phase A (Base 2.9.0, Billing 2.7.0, EdaIntegration 2.10.0) requires a valid token of
+# the tenant, phase B additionally requires one of these roles. The roles are seeded one release
+# AHEAD of phase B so the assignment runbook (docs/runbooks/ec-route-security-roles.md) can run on
+# every productive tenant before any route starts answering 403.
+#
+#   EnergyCommunityManagement  operations: manual metering values (/manualMeteringEntry),
+#                              the billing routes, EDA processes, the registration decision mail.
+#   EnergyCommunityReporting   read-only reports (/aggregatedEnergyReport, /communityBalance),
+#                              typically held by the client-credentials client of a business DB.
+#   MeterReporter              self-reported metering points (Base 2.11.0, AB#5636/5637/5639):
+#                              /registerMeteringPoint, /meterReadings and /communityBalance.
+#                              Held by the client-credentials client of whoever reports its own
+#                              meters (e.g. a lab group); it can only register numbers in the
+#                              reserved self-report range and only report values for metering
+#                              points with MeteringDataSource SelfReported. Assign it directly:
+#                              octo-cli -c AddClientToRole -id <clientId> -r MeterReporter.
+#                              Tenant separation for such tokens needs the adapter check AB#5628.
+#
+# User administration is group membership: EnergyCommunityOperators carries
+# EnergyCommunityManagement via AssignedRole (same pattern as MeshmakersAccounting, AB#4677 /
+# AB#4685). Tenant owners get it automatically: the runbook makes this group a CHILD of TenantOwners
+# (AddGroupToGroup -id <TenantOwners> -cgid <EnergyCommunityOperators>) - identity resolves a
+# member's roles from its groups DOWNWARDS through ChildGroup, so that direction hands owners the
+# operator role and nothing else. The reverse (TenantOwners as a child of this group) would hand
+# every operator all tenant-owner roles. Not seeded here on purpose: the ChildGroup association
+# originates on TenantOwners, an entity of the System.Identity.Bootstrap blueprint; seeding it
+# from Base would make Base co-own that group, and uninstalling Base could take it with it.
+# Further operators are assigned one by one by the runbook script.
+#
+# Platform roles of the operator group (Base 3.4.0, AB#8925): besides EnergyCommunityManagement the
+# group carries three built-in roles of the System.Identity.Bootstrap blueprint, so an operator who is
+# in no other group can work with the app:
+#   ReportingViewer   660…0A  report viewer (billing PDF preview, octo-report-services)
+#   FileViewer        660…62  read the PDFs a release stores (System.Files; without it the billing
+#                             document returns no file and the download fails - AB#6467 baseline)
+#   StreamDataReader  660…0E  read stream data (charts and MeshBoards; today passes only because
+#                             StreamDataReadRoleEnforcement=Warn)
+# Only the AssignedRole EDGES are seeded; the roles themselves stay declared by the bootstrap blueprint
+# (declaring them here would take them over, see test_metering_data_policy.py). The import keeps an edge
+# whose target exists in the tenant and upserts edges on (role, origin, target), so a tenant whose group
+# already carries these roles by hand (sbeg, 2026-11-12) gets no duplicate, and other roles added to the
+# group by hand stay. Every tenant has the bootstrap roles: the identity service applies that blueprint
+# to each tenant before any other blueprint is installed.
+# Side effect (AB#7914 role-not-held): adding a user to this group now needs a caller who holds these
+# roles too - a tenant owner holds them through TenantOwners.
+# Service clients get their role directly (AddClientToRole). Role SubjectIds and
+# IdentityRoleIds are runtime state and preserved on blueprint re-apply, so an UpdateBlueprint does
+# not drop assignments made by the runbook.
+#
+# Data permission grants (Base 3.3.0, AB#8562, data-policy.yaml): EnergyCommunityManagement carries
+# GrantsPermission to the read permission ec…0505 and the write permission ec…0507, EnergyCommunityReporting
+# to the read permission only. The edge starts on the role, so it is declared here. MeterReporter gets no
+# grant: its routes read and write through the pipeline service account. StreamDataReader gets the read
+# grant from the runbook (docs/runbooks/ec-metering-data-policy.md).
+#
+# rtIds: the ec…05xx block is reserved for identity entities of the EC blueprints.
+#   0501 EnergyCommunityManagement, 0502 EnergyCommunityReporting, 0503 MeterReporter (Base 2.11.0)
+#   0504 reserved for SimulationOperator (SEC-02, simulation lane)
+#   0505 DataPermission energycommunity.metering.read, 0506 its DataPolicy (Read)
+#   0507 DataPermission energycommunity.metering.write, 0508 its DataPolicy (Write, Delete) - Base 3.3.0, data-policy.yaml
+#   0511 group EnergyCommunityOperators
+#   free: 0509-0510, 0512-05ff
+entities:
+  - rtId: ec0000000000000000000501
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: EnergyCommunityManagement
+    attributes:
+      - id: System/Name
+        value: EnergyCommunityManagement
+      - id: System.Identity/NormalizedName
+        value: ENERGYCOMMUNITYMANAGEMENT
+    associations:
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: ec0000000000000000000505
+        targetCkTypeId: System.Identity/DataPermission
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: ec0000000000000000000507
+        targetCkTypeId: System.Identity/DataPermission
+  - rtId: ec0000000000000000000502
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: EnergyCommunityReporting
+    attributes:
+      - id: System/Name
+        value: EnergyCommunityReporting
+      - id: System.Identity/NormalizedName
+        value: ENERGYCOMMUNITYREPORTING
+    associations:
+      - roleId: System.Identity/GrantsPermission
+        targetRtId: ec0000000000000000000505
+        targetCkTypeId: System.Identity/DataPermission
+  - rtId: ec0000000000000000000503
+    ckTypeId: System.Identity/Role
+    rtWellKnownName: MeterReporter
+    attributes:
+      - id: System/Name
+        value: MeterReporter
+      - id: System.Identity/NormalizedName
+        value: METERREPORTER
+  - rtId: ec0000000000000000000511
+    ckTypeId: System.Identity/Group
+    rtWellKnownName: EnergyCommunityOperators
+    attributes:
+      - id: System.Identity/GroupName
+        value: EnergyCommunityOperators
+      - id: System.Identity/NormalizedGroupName
+        value: ENERGYCOMMUNITYOPERATORS
+      - id: System.Identity/GroupDescription
+        value: Energy Community operators — manual metering values, billing and EDA processes.
+    associations:
+      - roleId: System.Identity/AssignedRole
+        targetRtId: ec0000000000000000000501
+        targetCkTypeId: System.Identity/Role
+      # Platform roles (Base 3.4.0, AB#8925): ReportingViewer, FileViewer, StreamDataReader.
+      - roleId: System.Identity/AssignedRole
+        targetRtId: '66000000000000000000000A'
+        targetCkTypeId: System.Identity/Role
+      - roleId: System.Identity/AssignedRole
+        targetRtId: '660000000000000000000062'
+        targetCkTypeId: System.Identity/Role
+      - roleId: System.Identity/AssignedRole
+        targetRtId: '66000000000000000000000E'
+        targetCkTypeId: System.Identity/Role
