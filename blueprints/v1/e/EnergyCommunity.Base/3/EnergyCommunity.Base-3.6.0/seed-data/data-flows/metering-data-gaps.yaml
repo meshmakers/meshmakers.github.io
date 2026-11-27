@@ -1,0 +1,486 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+dependencies:
+- Basic-[2.5,3.0)
+- Basic.Energy-[2.0,3.0)
+- EnergyCommunity-[5.0,6.0)
+- System.Communication-[3.26,5.0)
+- System.StreamData-[1.13,2.0)
+
+# metering-data-gaps (AB#8299, ranges AB#9585) — read-only route: the missing ranges of a period.
+# Part of the EnergyCommunity.Base blueprint — see blueprint.yaml for the full file list.
+entities:
+
+# ─── metering-data-gaps (AB#8299, AB#9585, Feature AB#6021) ─────────────
+#
+# rtIds (Base block ec0000000000000000000a6X):
+#   …a67  DataFlow  metering-data-gaps
+#   …a68  Pipeline  metering-data-gaps
+#   …a69  Query     pipeline_gap_anchors_base         (seed-data/queries/master-data.yaml)
+#   …a6a  Query     pipeline_gap_participation_periods (seed-data/queries/master-data.yaml)
+#   …a6b  Query     pipeline_gap_open_data_requests    (seed-data/queries/master-data.yaml)
+#
+# Contract (since Base 3.6.0, AB#9585: ranges instead of days):
+#   POST /meteringDataGaps
+#   { "from": "2026-10-01T00:00:00+02:00",                     (half-open [from, to), with UTC offset,
+#     "to": "2026-11-01T00:00:00+01:00",                         passed as received; at most 100 days)
+#     "meteringPointNumbers": ["AT..."] }                       (optional, restricts the set)
+#   -> { status, message, from, to,
+#        gaps: [ { meteringPointNumber, meteringPointRtId, from, to, missingValues,
+#                  openRequests: [ { rtId, from, to } ] } ] }    (unsorted: the consumer sorts)
+# The rule is src/blueprints/CLAUDE.md "Gap ranges of the energy community": DetectStreamDataGaps@1
+# over the raw archive (kWh only), one billing anchor per metering point (or the metering point itself)
+# as series, participation periods as validity periods; standard nodes only, no ExecuteCSharp@1. AB#9687 moves the scheduled run request-missing-consumption-reports (EdaIntegration) onto
+# the same node configuration and validity mapping; from then tests/test_gap_detection.py fails when
+# they differ. Each gaps entry is the range one CR_REQ_PT requests.
+# Writes nothing, starts nothing, needs no EDA: open requests are read from existing
+# Basic.Energy/EdaProcess entities (none on a Base-only tenant, openRequests always []).
+#
+# Security: FromHttpRequest@2, allowAnonymous false, requiredRoles [EnergyCommunityManagement,
+# EnergyCommunityReporting] (either; the group EnergyCommunityOperators needs one of them). A missing
+# token or role is refused by the adapter before the pipeline runs (the only answer that is not
+# HTTP 200). Every node with an identity setting runs as identity ServiceAccount (the three
+# GetQueryById@1); DetectStreamDataGaps@1 has none and reads the archive through the adapter. HTTP 200
+# with the outcome in the body unless the run fails (broken from/to); the final Project@1 (clear + inclusion) returns only the
+# response fields - never headers, principal or the request body. No PrintDebug@1.
+#
+# Ships Enabled and DeploymentState 2 (like community-balance): the route answers once the DataFlow
+# is deployed (DeployDataFlow ec0000000000000000000a67). REQUIRES Mesh Adapter >= 3.5.83
+# (DetectStreamDataGaps@1 with validityPeriods, AB#9590); an older adapter refuses the pipeline with an
+# unknown node type.
+#
+# Executes on the default Mesh Adapter 670000000000000000000002.
+
+- rtId: ec0000000000000000000a67
+  ckTypeId: System.Communication/DataFlow-1
+  associations: []
+  attributes:
+  - id: System/Name-1
+    value: metering-data-gaps
+  - id: System/Description-1
+    value: >-
+      Read-only route POST /meteringDataGaps (AB#8299, ranges since AB#9585): the exact time ranges in
+      which participating metering points miss quarter-hour values of a billing register in a chosen period.
+
+- rtId: ec0000000000000000000a68
+  ckTypeId: System.Communication/Pipeline-1
+  associations:
+  - roleId: System/ParentChild-1
+    targetRtId: ec0000000000000000000a67
+    targetCkTypeId: System.Communication/DataFlow-1
+    attributes: []
+  - roleId: System.Communication/Executes-1
+    targetRtId: '670000000000000000000002'
+    targetCkTypeId: System.Communication/Adapter-1
+    attributes: []
+  attributes:
+  - id: System/Name-1
+    value: metering-data-gaps
+  - id: System/Description-1
+    value: >-
+      POST /meteringDataGaps (role EnergyCommunityManagement or EnergyCommunityReporting).
+      Read-only: the gap ranges of a period [from, to) of at most 100 days per metering point (one range
+      = one CR_REQ_PT), with the open CR_REQ_PT of the metering point; found by DetectStreamDataGaps@1
+      inside the participation periods; standard nodes only (AB#8299, AB#9585).
+  - id: System/Enabled-1
+    value: true
+  - id: System.Communication/DeploymentState-1
+    value: 2
+  - id: System.Communication/StatusMessage-1
+  - id: System.Communication/PipelineDefinition-1
+    value: |
+      # metering-data-gaps (AB#8299, ranges since AB#9585, Feature AB#6021) — read-only: the exact time ranges
+      # in which participating metering points miss quarter-hour values in a period of up to 100 days.
+      #
+      # POST /meteringDataGaps, role EnergyCommunityManagement or EnergyCommunityReporting.
+      # Request: { "from": "2026-10-01T00:00:00+02:00", "to": "2026-11-01T00:00:00+01:00",
+      #            "meteringPointNumbers": [optional] }
+      #   from..to               half-open [from, to), passed to DetectStreamDataGaps@1 as received (the UTC offset
+      #                          decides the instant). The only check: more than 100 days answer status error.
+      #                          Other broken input (no from/to, to not after from, no date) fails the node.
+      #   meteringPointNumbers   optional: only these metering points; left out or empty: every participating one.
+      #
+      # Rule: src/blueprints/CLAUDE.md "Gap ranges of the energy community". Standard nodes only, no
+      # ExecuteCSharp@1 (AB#9585 AC 1). One series per participating metering point: its first billing anchor
+      # (1-1:2.9.0 G.03 or G.01T, query ec…0a69); a metering point without an anchor is checked under its own
+      # rtId, which has no rows in the archive, so its whole participation inside [from, to) is one range.
+      # Validity periods = participation periods (query ec…0a6a): from = From as stored, to = To + 1 calendar
+      # day in Europe/Vienna (To is the last day included; DateTime@1 ConvertToTimeZone, AddDays 1,
+      # ConvertFromTimeZone, so a clock-change day keeps its 23 or 25 hours), an end in year 9000 or later is
+      # passed unchanged. One
+      # DetectStreamDataGaps@1 call over the raw archive ec…0a01 (kWh only) finds the ranges; the open CR_REQ_PT
+      # of the metering point (query ec…0a6b) are listed with each range (no overlap check).
+      #
+      # Reads (as the pipeline service account): the three queries; the node reads the archive. Writes nothing,
+      # starts nothing, needs no EDA.
+      #
+      # Always HTTP 200 unless the run fails; the outcome is in the body:
+      #   { status, message, from, to, gaps: [ { meteringPointNumber, meteringPointRtId, from, to, missingValues,
+      #                                          openRequests: [ { rtId, from, to } ] } ] }
+      # gaps follow the node's series order (rtId of the series), not the metering point number: the consumer sorts.
+      triggers:
+        - type: FromHttpRequest@2
+          path: /meteringDataGaps
+          method: Post
+          allowAnonymous: false
+          requiredRoles: [EnergyCommunityManagement, EnergyCommunityReporting]
+      transformations:
+        # ─── The answer's frame: the period as received and an empty gap list ───
+        - type: SetPrimitiveValue@1
+          targetPath: $.from
+          valuePath: $.body.from
+          valueType: String
+        - type: SetPrimitiveValue@1
+          targetPath: $.to
+          valuePath: $.body.to
+          valueType: String
+        - type: WriteJson@1
+          description: "No gaps until the node found some"
+          jsonString: "[]"
+          targetPath: $.gaps
+
+        # ─── The only input check: at most 100 days ───
+        - type: DateTime@1
+          description: "Days between from and to"
+          operation: DaysBetween
+          path: $.body.from
+          valuePath: $.body.to
+          targetPath: $.days
+        - type: If@1
+          description: "Longer than 100 days: error, nothing is read"
+          path: $.days
+          operator: GreaterThan
+          value: 100
+          valueType: Int
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.status
+              value: error
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.message
+              value: "The period is longer than 100 days. Split it into several calls of at most 100 days."
+              valueType: String
+        - type: If@1
+          description: "At most 100 days: find the gap ranges"
+          path: $.days
+          operator: LessEqualsThan
+          value: 100
+          valueType: Int
+          transformations:
+            - type: SetPrimitiveValue@1
+              targetPath: $.status
+              value: ok
+              valueType: String
+            - type: SetPrimitiveValue@1
+              targetPath: $.message
+              value: "Missing quarter-hour ranges of the participating metering points inside [from, to)."
+              valueType: String
+
+            # ─── Reads: billing anchors and participation periods, all or only the requested metering points ───
+            - type: If@1
+              description: "Metering points requested: read only theirs"
+              path: $.body.meteringPointNumbers[0]
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                - type: GetQueryById@1
+                  identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+                  description: "Billing anchors (G.03, G.01T) of the requested metering points"
+                  queryRtId: ec0000000000000000000a69
+                  targetPath: $.anchors
+                  fieldFilters:
+                    - attributePath: obisCode
+                      operator: In
+                      comparisonValue: ["1-1:2.9.0 G.03", "1-1:2.9.0 G.01T"]
+                    - attributePath: parent.basicEnergyMeteringPoint->meteringPointNumber
+                      operator: In
+                      comparisonValuePath: $.body.meteringPointNumbers
+                - type: GetQueryById@1
+                  identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+                  description: "Participation periods of the requested metering points"
+                  queryRtId: ec0000000000000000000a6a
+                  targetPath: $.periods
+                  fieldFilters:
+                    - attributePath: meteringPoint.basicEnergyMeteringPoint->meteringPointNumber
+                      operator: In
+                      comparisonValuePath: $.body.meteringPointNumbers
+            - type: If@1
+              description: "No metering point requested: read all"
+              path: $.body.meteringPointNumbers[0]
+              operator: Equals
+              value: null
+              valueType: String
+              transformations:
+                - type: GetQueryById@1
+                  identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+                  description: "Billing anchors (G.03, G.01T) with the number of their metering point"
+                  queryRtId: ec0000000000000000000a69
+                  targetPath: $.anchors
+                  fieldFilters:
+                    - attributePath: obisCode
+                      operator: In
+                      comparisonValue: ["1-1:2.9.0 G.03", "1-1:2.9.0 G.01T"]
+                - type: GetQueryById@1
+                  identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+                  description: "Participation periods (number, from, to, rtId of the metering point)"
+                  queryRtId: ec0000000000000000000a6a
+                  targetPath: $.periods
+
+            - type: If@1
+              description: "At least one participation period"
+              path: $.periods.Rows[0].RtId
+              operator: NotEquals
+              value: null
+              valueType: String
+              transformations:
+                # ─── Participation -> validity periods, one series per metering point ───
+                - type: Join@1
+                  description: "Each period gets the billing anchors of its metering point"
+                  path: $.periods.Rows[*]
+                  keyPath: $.Values[0]
+                  joinPath: $.anchors.Rows[*]
+                  joinKeyPath: $.Values[0]
+                  itemPath: $.anchors
+                  allowMissingKey: true
+                - type: ForEach@1
+                  description: "Validity period { rtId, from, to } of each participation period, a fresh entry per period (the node reads exactly rtId, from, to)"
+                  iterationPath: $.periods.Rows
+                  mergePath: $.entry
+                  targetPath: $.validity
+                  transformations:
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.entry.meteringPointNumber
+                      valuePath: $.key.Values[0]
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      targetPath: $.entry.meteringPointRtId
+                      valuePath: $.key.Values[3]
+                      valueType: String
+                    - type: SetPrimitiveValue@1
+                      description: "Series (rtId of the entry): the metering point itself; no anchor = no rows = one range over the participation"
+                      targetPath: $.entry.rtId
+                      valuePath: $.key.Values[3]
+                      valueType: String
+                    - type: If@1
+                      description: "Series: the first billing anchor of the metering point"
+                      path: $.key.anchors[0].RtId
+                      operator: NotEquals
+                      value: null
+                      valueType: String
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.entry.rtId
+                          valuePath: $.key.anchors[0].RtId
+                          valueType: String
+                    - type: SetPrimitiveValue@1
+                      description: "from = From as stored"
+                      targetPath: $.entry.from
+                      valuePath: $.key.Values[1]
+                      valueType: DateTime
+                    - type: If@1
+                      description: "to = To + 1 Vienna calendar day (To is the last day included; 23 or 25 hours on a clock-change day)"
+                      path: $.key.Values[2]
+                      operator: LessThan
+                      value: "9000-01-01T00:00:00Z"
+                      valueType: DateTime
+                      transformations:
+                        - type: DateTime@1
+                          description: "To as Vienna wall clock"
+                          operation: ConvertToTimeZone
+                          path: $.key.Values[2]
+                          value: Europe/Vienna
+                          targetPath: $.key.toLocal
+                        - type: DateTime@1
+                          description: "The next Vienna day"
+                          operation: AddDays
+                          path: $.key.toLocal
+                          value: 1
+                          targetPath: $.key.toLocal
+                        - type: DateTime@1
+                          description: "Back to the UTC instant"
+                          operation: ConvertFromTimeZone
+                          path: $.key.toLocal
+                          value: Europe/Vienna
+                          targetPath: $.entry.to
+                    - type: If@1
+                      description: "An open end (year 9000 or later) stays as stored"
+                      path: $.key.Values[2]
+                      operator: GreaterEqualsThan
+                      value: "9000-01-01T00:00:00Z"
+                      valueType: DateTime
+                      transformations:
+                        - type: SetPrimitiveValue@1
+                          targetPath: $.entry.to
+                          valuePath: $.key.Values[2]
+                          valueType: DateTime
+
+                # ─── Missing ranges: one DetectStreamDataGaps@1 call (AB#9687 takes the same configuration) ───
+                # Only kWh rows count (Amount.Unit = 1, CLAUDE.md "Only kWh counts"). A series without any row in
+                # a validity period is one missing range over it.
+                - type: DetectStreamDataGaps@1
+                  description: "Missing ranges of each metering point inside its participation periods"
+                  archiveRtId: ec0000000000000000000a01
+                  rtIdsPath: $.validity[*].rtId
+                  validityPeriodsPath: $.validity
+                  fromPath: $.body.from
+                  toPath: $.body.to
+                  expectedInterval: "00:15:00"
+                  fieldFilters:
+                    - attributePath: Amount.Unit
+                      operator: Equals
+                      comparisonValue: 1
+                  targetPath: $.detection
+
+                - type: If@1
+                  description: "At least one metering point with a gap"
+                  path: $.detection.Series[0].RtId
+                  operator: NotEquals
+                  value: null
+                  valueType: String
+                  transformations:
+                    # ─── Gap ranges with their metering point ───
+                    - type: Join@1
+                      description: "Each series gets its metering point (from its validity periods)"
+                      path: $.detection.Series[*]
+                      keyPath: $.RtId
+                      joinPath: $.validity[*]
+                      joinKeyPath: $.rtId
+                      itemPath: $.points
+                    - type: ForEach@1
+                      description: "Per series: its ranges as gap entries"
+                      iterationPath: $.detection.Series
+                      targetPath: $.detection.Series
+                      transformations:
+                        - type: ForEach@1
+                          iterationPath: $.key.Ranges
+                          keyPath: $.range
+                          mergePath: $.gap
+                          targetPath: $.key.gaps
+                          transformations:
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.gap.meteringPointNumber
+                              valuePath: $.key.points[0].meteringPointNumber
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.gap.meteringPointRtId
+                              valuePath: $.key.points[0].meteringPointRtId
+                              valueType: String
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.gap.from
+                              valuePath: $.range.Start
+                              valueType: DateTime
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.gap.to
+                              valuePath: $.range.End
+                              valueType: DateTime
+                            - type: SetPrimitiveValue@1
+                              targetPath: $.gap.missingValues
+                              valuePath: $.range.MissingCount
+                              valueType: Int
+                    - type: Flatten@1
+                      description: "One list of gap ranges"
+                      path: $.detection.Series[*].gaps[*]
+                      targetPath: $.gaps
+
+                    # ─── Open requests (AB#8137): CR_REQ_PT not finished, filtered on the server ───
+                    - type: GetQueryById@1
+                      identity: ServiceAccount  # run as the pipeline service account, not as the route caller
+                      description: "Open requests: CR_REQ_PT with Finished = false (metering point, planned, stored message)"
+                      queryRtId: ec0000000000000000000a6b
+                      targetPath: $.openProcesses
+                      fieldFilters:
+                        - attributePath: name
+                          operator: Equals
+                          comparisonValue: CR_REQ_PT
+                        - attributePath: finished
+                          operator: Equals
+                          comparisonValue: false
+                    - type: ForEach@1
+                      description: "Requested range of each open request, read from its stored message"
+                      iterationPath: $.openProcesses.Rows
+                      mergePath: $.request
+                      targetPath: $.open
+                      transformations:
+                        - type: If@1
+                          description: "A planned process is no request"
+                          path: $.key.Values[1]
+                          operator: NotEquals
+                          value: true
+                          valueType: Boolean
+                          transformations:
+                            - type: If@1
+                              description: "Only a stored message that looks like one JSON object (anything else would fail the run in WriteJson@1)"
+                              path: $.key.Values[2]
+                              operator: RegexMatch
+                              value: '^\s*\{[\s\S]*\}\s*$'
+                              valueType: String
+                              transformations:
+                                - type: WriteJson@1
+                                  description: "Parse the stored message (still not valid JSON: the run fails)"
+                                  jsonStringPath: $.key.Values[2]
+                                  targetPath: $.message
+                                - type: If@1
+                                  path: $.message.ProcessDirectory.Extension.DateTimeFromLocal.Value
+                                  operator: NotEquals
+                                  value: null
+                                  valueType: String
+                                  transformations:
+                                    - type: If@1
+                                      path: $.message.ProcessDirectory.Extension.DateTimeToLocal.Value
+                                      operator: NotEquals
+                                      value: null
+                                      valueType: String
+                                      transformations:
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.request.meteringPointNumber
+                                          valuePath: $.key.Values[0]
+                                          valueType: String
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.request.rtId
+                                          valuePath: $.key.RtId
+                                          valueType: String
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.request.from
+                                          valuePath: $.message.ProcessDirectory.Extension.DateTimeFromLocal.Value
+                                          valueType: String
+                                        - type: SetPrimitiveValue@1
+                                          targetPath: $.request.to
+                                          valuePath: $.message.ProcessDirectory.Extension.DateTimeToLocal.Value
+                                          valueType: String
+                    - type: Join@1
+                      description: "Each gap range lists every open request of its metering point (no overlap check)"
+                      path: $.gaps[*]
+                      keyPath: $.meteringPointNumber
+                      joinPath: $.open[*]
+                      joinKeyPath: $.meteringPointNumber
+                      itemPath: $.openRequests
+                    - type: Project@1
+                      path: $.gaps[*].openRequests[*]
+                      clear: true
+                      fields:
+                        - path: $.rtId
+                          inclusion: true
+                        - path: $.from
+                          inclusion: true
+                        - path: $.to
+                          inclusion: true
+
+        - type: SetPipelineExecutionResult@1
+          path: $.status
+
+        # The adapter answers with the final data context verbatim (headers, principal, body): keep the answer only.
+        - type: Project@1
+          description: Shape the HTTP response body
+          clear: true
+          fields:
+            - path: $.status
+              inclusion: true
+            - path: $.message
+              inclusion: true
+            - path: $.from
+              inclusion: true
+            - path: $.to
+              inclusion: true
+            - path: $.gaps
+              inclusion: true
