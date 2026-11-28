@@ -1,0 +1,54 @@
+$schema: https://schemas.meshmakers.cloud/blueprint-meta.schema.json
+blueprintId: System.Ai.Builder-1.2.1
+description: |
+  Opt-in OctoMesh know-how for the tenant knowledge base. Installs
+  knowledge pages in five task-oriented areas, each with an index page: Administer a
+  tenant (admin-, from the skill octo), Build an app (app-, octo-app-builder), Build data
+  pipelines (pipeline-, pipeline-expert), Deploy and promote (deploy-, octo-deploy) and Diagnose
+  and fix (diagnose-, octo-agent). Only tenant-relevant content: no local-stack or
+  developer-machine instructions; every page names the MCP tool of
+  octo-mcp-service next to each octo-cli command, or marks the command CLI only. An MCP
+  client finds the pages with knowledge_search / knowledge_get and cites them as [slug]. Renamed pages (nodes-* -> pipeline-nodes-*) keep their old slug as a
+  "Moved to" page.
+
+  The pages are generated from the skills of octo-claude-skills by tools/SkillPages;
+  never edit the seed by hand (docs/skill-pages.md). Every page has kind Skill, origin Blueprint
+  and status Verified, its KnowledgePageVersions (author blueprint:System.Ai.Builder-<version>,
+  DeclaredLinks = the page's LinksTo) and LinksTo associations to the pages it mentions.
+
+  Since 1.2.0 it also seeds the builder agent: the Agent "System Builder" (autonomy ProposeOnly), its
+  Mandate (GovernedBy) and its service-account client system-ai-builder-agent. The mandate grants only the
+  CK model, pipeline, blueprint-read and knowledge-read tools of the builder, each with an explicit
+  risk class, write mode Propose (every write becomes a proposal a person confirms) and change budget
+  0. The client has grant type client_credentials, no roles and no stored secret; the agent runtime
+  issues the agent's credential. The seed carries no secret. No pipeline and no LLM call: the
+  blueprint never starts the agent. Not service-managed: the AI service applies only
+  System.Ai.Default; a tenant gets these pages only with InstallBlueprint, and
+  UninstallBlueprint removes them again, together with the agent, its mandate and its client.
+
+  Updates: the page content is TenantOwned, so a later version of this blueprint brings only new
+  KnowledgePageVersion entities; it never overwrites a page. The AI service switches a
+  page nobody changed to the newest version by itself, within about 15 minutes of the update, on
+  every AI tenant and without any setup. A page that was changed in the tenant keeps its
+  content: knowledge_list_platform_updates lists it (the knowledge lint of System.Ai.Knowledge
+  reports it as PlatformUpdateAvailable), and a person either restores the new version
+  (knowledge_restore_version) or dismisses it (knowledge_dismiss_platform_update). This blueprint
+  does not depend on System.Ai.Knowledge on purpose (that blueprint carries the LLM ingest
+  pipelines and needs an API key).
+
+  Setup, updates and limits: src/SystemAiCkModel/README.md, section "Blueprint System.Ai.Builder".
+
+# The page seed needs System.Ai 4.10: KnowledgePage, KnowledgePageVersion, LinksTo/VersionOf (4.7) and
+# KnowledgePageVersion.DeclaredLinks (4.10, AB#8780). The agent seed needs System.Ai 4.13 (Agent, Mandate,
+# AgentToolGrant, GovernedBy since 4.12, AB#8453; since 4.13 every agent administration type, AgentTrigger, Run and
+# ActionRecord included, is written only through the agent API, AB#6054) and System.Identity 3 (Client). System.Ai is service-managed and
+# already on an AI tenant. Each range is the narrowest of the two seeds' own dependencies (the page seed's
+# come from tools/SkillPages/page-plan.yaml), tested by tests/SkillPages.UnitTests (CommittedSeedTests.Manifest_*).
+ckModelDependencies:
+  - System.Ai-[4.13,5.0)
+  - System.Identity-[3.0,4.0)
+
+# The generated pages first, then the builder agent, its mandate and its client (AB#9004, written by hand).
+seedDataPaths:
+  - seed-data/knowledge-pages.yaml
+  - seed-data/builder-agent.yaml
