@@ -2,8 +2,8 @@
   "version": "1.0",
   "modelId": "System.Ai",
   "majorVersion": 4,
-  "latestVersion": "4.12.0",
-  "description": "Construction kit model for the OctoMesh AI Adapter. Defines configuration, runtime, stream and ephemeral types that back the agent-based engineering features. All AI Adapter persistence flows through these CK types - no ad-hoc MongoDB collections. Major version 3 replaced the deprecated 2.x prototype types with the agent-engineering schema documented in docs/concepts/octo-ai-adapter.md. Major version 4 carries no schema change of its own - it exists only because the System.Communication dependency moved to its 4.x major (Pool renamed to DeploymentSite, AB#4924), which ck-semver-rules.md classifies as transitively breaking. Minor 4.12.0 (AB#8453) adds the agent runtime core (Agent, Mandate, AgentTrigger, Run, ActionRecord). Placement decision - the agent types live in System.Ai, not in a separate System.Agents model - System.Ai is already service-managed by the AI service and switched on by EnableAi, and a second model would add a second enable step and a second dependency chain without any isolation gain.",
+  "latestVersion": "4.13.0",
+  "description": "Construction kit model for the OctoMesh AI Adapter. Defines configuration, runtime, stream and ephemeral types that back the agent-based engineering features. All AI Adapter persistence flows through these CK types - no ad-hoc MongoDB collections. Major version 3 replaced the deprecated 2.x prototype types with the agent-engineering schema documented in docs/concepts/octo-ai-adapter.md. Major version 4 carries no schema change of its own - it exists only because the System.Communication dependency moved to its 4.x major (Pool renamed to DeploymentSite, AB#4924), which ck-semver-rules.md classifies as transitively breaking. Minor 4.12.0 (AB#8453) adds the agent runtime core (Agent, Mandate, AgentTrigger, Run, ActionRecord); minor 4.13.0 (AB#9729) restricts writes of AgentTrigger, Run and ActionRecord to the agent API. Placement decision - the agent types live in System.Ai, not in a separate System.Agents model - System.Ai is already service-managed by the AI service and switched on by EnableAi, and a second model would add a second enable step and a second dependency chain without any isolation gain.",
   "versions": [
     {
       "version": "4.10.0",
@@ -22,6 +22,12 @@
       "fileName": "ck-system.ai-4.12.0.json",
       "filePath": "ck-models/v3/s/System.Ai/4/ck-system.ai-4.12.0.json",
       "publishedAt": "2026-11-28T09:41:29.2461155Z"
+    },
+    {
+      "version": "4.13.0",
+      "fileName": "ck-system.ai-4.13.0.json",
+      "filePath": "ck-models/v3/s/System.Ai/4/ck-system.ai-4.13.0.json",
+      "publishedAt": "2026-11-28T09:41:54.9813992Z"
     },
     {
       "version": "4.6.0",
@@ -48,5 +54,5 @@
       "publishedAt": "2026-11-11T20:11:45.7341634Z"
     }
   ],
-  "updatedAt": "2026-11-28T09:41:29.2466805Z"
+  "updatedAt": "2026-11-28T09:41:54.9818684Z"
 }
