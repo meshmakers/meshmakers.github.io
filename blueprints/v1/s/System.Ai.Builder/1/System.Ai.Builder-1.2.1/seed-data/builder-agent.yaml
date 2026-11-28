@@ -1,0 +1,180 @@
+$schema: https://schemas.meshmakers.cloud/runtime-model.schema.json
+# The builder agent of System.Ai.Builder (concept docs/concepts/tenant-builder-agent-concept.md, sections 5.1 and 5.2):
+# the Agent, its Mandate (GovernedBy) and the service-account Client it runs as. Written by hand, not by the
+# skill-page generator (that one owns knowledge-pages.yaml only); tests/SkillPages.UnitTests (BuilderAgentSeedTests)
+# checks it.
+#
+# - Mandate: exactly the tools of concept section 5.2 that exist on the MCP server (validate_blueprint included),
+#   every grant with an explicit
+#   MaxRisk (the engine does not materialise record defaults; the MCP agent tools always write it), MaxRisk = the
+#   tool's risk class, RiskCeiling High because deploy_pipeline is High, WriteMode Propose (every write becomes a
+#   proposal a person confirms), change budget 0. create_blueprint_package is not granted yet: the tool does not exist.
+#   dry_run_pipeline is not granted until the proposal flow exists: it executes the deployed pipeline with
+#   real side effects, so under WriteMode Propose the MCP mandate guard would always answer ProposeRequired.
+# - Client: client_credentials, scope octo_agent (the agent scope MCP requires; never octo_api, which would make the
+#   token a direct API key), a required secret but none stored (Secrets empty), no roles (no
+#   AssignedRole association) and not provisioned into child tenants. Nothing secret is in this file: the runtime
+#   credential of the agent comes from the agent runtime (run-scoped agent tokens), not from the seed.
+# - rtIds use the prefix 68b1 (the pages use 68b0) and never change: UpdateBlueprint finds the entities by them.
+dependencies:
+  - System.Ai-[4.13,5.0)
+  - System.Identity-[3.0,4.0)
+entities:
+  - rtId: '68b100000000000000000001'
+    ckTypeId: System.Ai/Agent
+    rtWellKnownName: builder-agent
+    attributes:
+      - id: System.Ai/Name
+        value: System Builder
+      - id: System.Ai/Instructions
+        value: |-
+          You are the OctoMesh builder of this tenant. You turn a user's brief into a CK model and data pipelines
+          (model over code): read the tenant's types and the knowledge pages first, draft the CK model and the
+          pipelines, validate them with validate_ck_model and validate_pipeline_definition, fix what the validation
+          reports (at most three rounds) and propose only drafts that validated. You cannot dry-run a pipeline: a dry
+          run executes the deployed pipeline with real side effects, so the user dry-runs it after confirming your
+          proposal. Every write is a proposal a person confirms; you never write outside your mandate and you never
+          write code or scripts.
+      - id: System.Ai/AgentVersion
+        value: 1
+      - id: System.Ai/Enabled
+        value: true
+      - id: System.Ai/AutonomyLevel
+        value: 0  # ProposeOnly
+      - id: System.Ai/ServiceAccountClientId
+        value: system-ai-builder-agent
+      - id: System.Ai/RunnerKind
+        value: 0  # AgentSdk
+    associations:
+      - roleId: System.Ai/GovernedBy
+        targetRtId: '68b100000000000000000002'
+        targetCkTypeId: System.Ai/Mandate
+
+  - rtId: '68b100000000000000000002'
+    ckTypeId: System.Ai/Mandate
+    rtWellKnownName: builder-mandate
+    attributes:
+      - id: System.Ai/Name
+        value: Builder mandate
+      - id: System.Ai/RiskCeiling
+        value: 2  # High
+      - id: System.Ai/ChangeBudgetPerRun
+        value: 0
+      - id: System.Ai/WriteMode
+        value: 0  # Propose
+      - id: System.Ai/ToolGrants
+        value:
+          # Schema and type reads
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: get_type_schema
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: search_types
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: get_available_types
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: query_entities
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          # CK model
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: validate_ck_model
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: import_ck_model
+              - id: System.Ai/MaxRisk
+                value: 1  # Medium
+          # Pipelines
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: get_pipeline_schema
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: validate_pipeline_definition
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: deploy_pipeline
+              - id: System.Ai/MaxRisk
+                value: 2  # High
+          # Blueprints (read and validate a draft)
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: list_blueprints
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: validate_blueprint
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          # Knowledge (read)
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: knowledge_search
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+          - ckRecordId: System.Ai/AgentToolGrant
+            attributes:
+              - id: System.Ai/ToolPattern
+                value: knowledge_get
+              - id: System.Ai/MaxRisk
+                value: 0  # Low
+
+  - rtId: '68b100000000000000000003'
+    ckTypeId: System.Identity/Client
+    rtWellKnownName: builder-agent-client
+    attributes:
+      - id: System/Enabled
+        value: true
+      - id: System.Identity/ClientId
+        value: system-ai-builder-agent
+      - id: System/Name
+        value: Agent Builder
+      - id: System/Description
+        value: Service account of the builder agent (System.Ai.Builder). No roles; the agent runtime issues its credential.
+      - id: System.Identity/ProtocolType
+        value: oidc
+      - id: System.Identity/RequireClientSecret
+        value: true
+      - id: System.Identity/Secrets
+        value: []
+      - id: System.Identity/AllowedGrantTypes
+        value:
+          - client_credentials
+      - id: System.Identity/AllowedScopes
+        value:
+          - octo_agent
+      - id: System.Identity/AllowOfflineAccess
+        value: false
+      - id: System.Identity/RequireConsent
+        value: false
+      - id: System.Identity/AutoProvisionInChildTenants
+        value: false
